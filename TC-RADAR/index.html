@@ -31,7 +31,6 @@
             padding: 0 20px;
         }
 
-        /* Header and Navigation */
         header {
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(10px);
@@ -74,7 +73,6 @@
             color: #3b82f6;
         }
 
-        /* Hero Section */
         .hero {
             background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
             color: white;
@@ -129,7 +127,6 @@
             opacity: 0.9;
         }
 
-        /* Sections */
         section {
             padding: 4rem 0;
         }
@@ -145,7 +142,6 @@
             text-align: center;
         }
 
-        /* Interactive Map Section */
         #map-section {
             background: white;
             padding: 0;
@@ -261,12 +257,10 @@
             touch-action: pan-y;
         }
 
-        /* Ensure popup doesn't get cut off at top */
         .leaflet-popup {
             margin-bottom: 20px;
         }
 
-        /* Better mobile popup handling */
         @media (max-width: 768px) {
             .leaflet-popup-content {
                 max-height: 60vh;
@@ -275,12 +269,9 @@
                 -webkit-overflow-scrolling: touch !important;
                 overscroll-behavior: contain;
             }
-            
             .leaflet-popup-content-wrapper {
                 border-radius: 12px;
             }
-            
-            /* Make close button more prominent on mobile */
             .leaflet-popup-close-button {
                 font-size: 24px !important;
                 padding: 8px !important;
@@ -293,18 +284,11 @@
                 top: 8px !important;
                 z-index: 1000 !important;
             }
-            
-            .popup-thumbnail {
-                max-width: 100%;
-            }
-            
-            /* Prevent text selection during scroll */
+            .popup-thumbnail { max-width: 100%; }
             .leaflet-popup-content * {
                 -webkit-user-select: none;
                 user-select: none;
             }
-            
-            /* But allow selection of text content */
             .popup-value, .popup-label, .popup-storm-name {
                 -webkit-user-select: text;
                 user-select: text;
@@ -337,9 +321,7 @@
             border-bottom: 1px solid #f3f4f6;
         }
 
-        .popup-row:last-child {
-            border-bottom: none;
-        }
+        .popup-row:last-child { border-bottom: none; }
 
         .popup-label {
             color: #6b7280;
@@ -360,7 +342,6 @@
             color: white;
         }
 
-        /* Image thumbnail in popup */
         .popup-image-container {
             margin-top: 15px;
             text-align: center;
@@ -391,11 +372,128 @@
             text-decoration: none;
         }
 
-        .view-full-image:hover {
-            text-decoration: underline;
+        .view-full-image:hover { text-decoration: underline; }
+
+        /* ---- Explorer Panel ---- */
+        .explorer-panel {
+            margin-top: 14px;
+            padding-top: 14px;
+            border-top: 2px dashed #e5e7eb;
         }
 
-        /* Modal for full-size image */
+        .explorer-panel h4 {
+            font-size: 13px;
+            font-weight: 700;
+            color: #1e3a8a;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+        }
+
+        .explorer-row {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+
+        .explorer-row label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        .explorer-select {
+            width: 100%;
+            padding: 7px 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 13px;
+            background: white;
+            color: #1f2937;
+        }
+
+        .explorer-select:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+
+        .explorer-level-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .explorer-level-row input[type="range"] {
+            flex: 1;
+            position: relative;
+            pointer-events: auto;
+            top: auto;
+            transform: none;
+        }
+
+        .explorer-level-value {
+            font-size: 13px;
+            font-weight: 700;
+            color: #1e3a8a;
+            min-width: 48px;
+            text-align: right;
+        }
+
+        .generate-btn {
+            width: 100%;
+            padding: 9px 0;
+            background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            margin-top: 4px;
+        }
+
+        .generate-btn:hover { opacity: 0.9; }
+        .generate-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .explorer-result {
+            margin-top: 10px;
+            text-align: center;
+            min-height: 0;
+        }
+
+        .explorer-result img {
+            width: 100%;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            cursor: pointer;
+        }
+
+        .explorer-status {
+            font-size: 12px;
+            color: #6b7280;
+            padding: 8px 0;
+        }
+
+        .explorer-status.loading { color: #3b82f6; }
+        .explorer-status.error   { color: #ef4444; }
+
+        .explorer-view-link {
+            display: inline-block;
+            margin-top: 6px;
+            color: #3b82f6;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .explorer-view-link:hover { text-decoration: underline; }
+        /* ---- End Explorer Panel ---- */
+
         .image-modal {
             display: none;
             position: fixed;
@@ -435,10 +533,7 @@
             z-index: 10001;
         }
 
-        .modal-close:hover,
-        .modal-close:focus {
-            color: #bbb;
-        }
+        .modal-close:hover, .modal-close:focus { color: #bbb; }
 
         .modal-caption {
             text-align: center;
@@ -448,30 +543,15 @@
         }
 
         @media (max-width: 768px) {
-            .image-modal-content {
-                width: 95%;
-                margin: 5% auto;
-            }
-
+            .image-modal-content { width: 95%; margin: 5% auto; }
             .modal-close {
-                top: 10px;
-                right: 15px;
-                font-size: 36px;
-                background: rgba(255, 255, 255, 0.9);
-                color: #333;
-                width: 40px;
-                height: 40px;
-                border-radius: 50%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
+                top: 10px; right: 15px; font-size: 36px;
+                background: rgba(255, 255, 255, 0.9); color: #333;
+                width: 40px; height: 40px; border-radius: 50%;
+                display: flex; align-items: center; justify-content: center;
                 line-height: 1;
             }
-
-            .modal-caption {
-                font-size: 12px;
-                padding: 15px 10px;
-            }
+            .modal-caption { font-size: 12px; padding: 15px 10px; }
         }
 
         #loading {
@@ -502,7 +582,6 @@
             100% { transform: rotate(360deg); }
         }
 
-        /* Filter Panel */
         #filter-panel {
             background: white;
             padding: 20px 30px;
@@ -556,9 +635,7 @@
             border-color: #3b82f6;
         }
 
-        .filter-group select {
-            min-width: 200px;
-        }
+        .filter-group select { min-width: 200px; }
 
         .slider-container {
             display: flex;
@@ -618,57 +695,41 @@
 
         input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none;
-            appearance: none;
-            width: 18px;
-            height: 18px;
+            width: 18px; height: 18px;
             background: #3b82f6;
-            border: none;
-            border-radius: 50%;
-            cursor: pointer;
-            pointer-events: auto;
+            border: none; border-radius: 50%;
+            cursor: pointer; pointer-events: auto;
             box-shadow: 0 0 0 2px white, 0 2px 6px rgba(0,0,0,0.3);
-            margin-top: -6px;  /* Centers thumb vertically on track */
+            margin-top: -6px;
         }
 
         input[type="range"]::-moz-range-thumb {
-            width: 18px;
-            height: 18px;
+            width: 18px; height: 18px;
             background: #3b82f6;
-            border: none;
-            border-radius: 50%;
-            cursor: pointer;
-            pointer-events: auto;
+            border: none; border-radius: 50%;
+            cursor: pointer; pointer-events: auto;
             box-shadow: 0 0 0 2px white, 0 2px 6px rgba(0,0,0,0.3);
         }
 
         input[type="range"]::-webkit-slider-runnable-track {
-            height: 6px;
-            background: transparent;
-            border-radius: 3px;
+            height: 6px; background: transparent; border-radius: 3px;
         }
 
         input[type="range"]::-moz-range-track {
-            height: 6px;
-            background: transparent;
-            border-radius: 3px;
+            height: 6px; background: transparent; border-radius: 3px;
         }
 
-        /* Additional fixes for consistent sizing across browsers */
         input[type="range"]::-ms-thumb {
-            width: 18px;
-            height: 18px;
+            width: 18px; height: 18px;
             background: #3b82f6;
-            border: none;
-            border-radius: 50%;
+            border: none; border-radius: 50%;
             cursor: pointer;
             box-shadow: 0 0 0 2px white, 0 2px 6px rgba(0,0,0,0.3);
         }
 
         input[type="range"]::-ms-track {
-            height: 6px;
-            background: transparent;
-            border-color: transparent;
-            color: transparent;
+            height: 6px; background: transparent;
+            border-color: transparent; color: transparent;
         }
 
         .reset-btn {
@@ -683,10 +744,7 @@
             transition: all 0.2s;
         }
 
-        .reset-btn:hover {
-            background: #e5e7eb;
-            border-color: #9ca3af;
-        }
+        .reset-btn:hover { background: #e5e7eb; border-color: #9ca3af; }
 
         .filtered-count {
             align-self: center;
@@ -698,7 +756,6 @@
             color: #1e40af;
         }
 
-        /* Feature Cards */
         .features {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -719,17 +776,9 @@
             box-shadow: 0 8px 15px rgba(30,58,138,0.2);
         }
 
-        .feature-icon {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-        }
+        .feature-icon { font-size: 3rem; margin-bottom: 1rem; }
+        .feature-card h3 { color: #1e3a8a; margin-bottom: 1rem; }
 
-        .feature-card h3 {
-            color: #1e3a8a;
-            margin-bottom: 1rem;
-        }
-
-        /* Download Section */
         .data-files {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -745,11 +794,7 @@
             text-align: center;
         }
 
-        .file-size {
-            font-size: 2rem;
-            font-weight: bold;
-            margin: 1rem 0;
-        }
+        .file-size { font-size: 2rem; font-weight: bold; margin: 1rem 0; }
 
         .download-btn {
             background: white;
@@ -766,10 +811,7 @@
             margin-top: 1rem;
         }
 
-        .download-btn:hover {
-            transform: scale(1.05);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-        }
+        .download-btn:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
 
         .usage-policy {
             max-width: 800px;
@@ -780,14 +822,8 @@
             border-left: 4px solid #ffc107;
         }
 
-        .usage-policy h3 {
-            color: #856404;
-            margin-bottom: 1rem;
-        }
-
-        .usage-policy p {
-            color: #856404;
-        }
+        .usage-policy h3 { color: #856404; margin-bottom: 1rem; }
+        .usage-policy p  { color: #856404; }
 
         .citation-box {
             background: #f8f9fa;
@@ -799,16 +835,13 @@
             font-size: 0.9rem;
         }
 
-        /* Contact Section */
         .contact-section {
             background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
             color: white;
             text-align: center;
         }
 
-        .contact-section h2 {
-            color: white;
-        }
+        .contact-section h2 { color: white; }
 
         .contact-info {
             max-width: 600px;
@@ -819,7 +852,6 @@
             backdrop-filter: blur(10px);
         }
 
-        /* Footer */
         footer {
             background: #1f2937;
             color: white;
@@ -827,29 +859,13 @@
             padding: 2rem 0;
         }
 
-        footer a {
-            color: #60a5fa;
-            text-decoration: none;
-        }
+        footer a { color: #60a5fa; text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
 
-        footer a:hover {
-            text-decoration: underline;
-        }
-
-        /* Responsive */
         @media (max-width: 768px) {
-            .hero h1 {
-                font-size: 2rem;
-            }
-            
-            .nav-links {
-                flex-direction: column;
-                gap: 1rem;
-            }
-
-            #map-container {
-                height: 400px;
-            }
+            .hero h1 { font-size: 2rem; }
+            .nav-links { flex-direction: column; gap: 1rem; }
+            #map-container { height: 400px; }
         }
     </style>
 </head>
@@ -873,24 +889,11 @@
             <h1>TC-RADAR</h1>
             <p>Tropical Cyclone Radar Archive of Doppler Analyses with Recentering</p>
             <p style="font-size: 1.1rem; opacity: 0.9;">A comprehensive database of airborne radar observations from NOAA's Hurricane Research Division</p>
-            
             <div class="hero-stats">
-                <div class="stat-card">
-                    <span class="stat-number">1,510</span>
-                    <span class="stat-label">TDR Swath Analyses</span>
-                </div>
-                <div class="stat-card">
-                    <span class="stat-number">436</span>
-                    <span class="stat-label">Merged Analyses</span>
-                </div>
-                <div class="stat-card">
-                    <span class="stat-number">1997-2024</span>
-                    <span class="stat-label">Data Coverage</span>
-                </div>
-                <div class="stat-card">
-                    <span class="stat-number">~40 GB</span>
-                    <span class="stat-label">Total Database Size</span>
-                </div>
+                <div class="stat-card"><span class="stat-number">1,510</span><span class="stat-label">TDR Swath Analyses</span></div>
+                <div class="stat-card"><span class="stat-number">436</span><span class="stat-label">Merged Analyses</span></div>
+                <div class="stat-card"><span class="stat-number">1997-2024</span><span class="stat-label">Data Coverage</span></div>
+                <div class="stat-card"><span class="stat-number">~40 GB</span><span class="stat-label">Total Database Size</span></div>
             </div>
         </div>
     </div>
@@ -901,11 +904,9 @@
             <p style="text-align: center; max-width: 800px; margin: 0 auto; font-size: 1.1rem; line-height: 1.8;">
                 TC-RADAR provides a homogeneous platform of post-processed airborne Doppler radar analyses of tropical cyclones. 
                 Developed by Dr. Michael Fischer (University of Miami) in collaboration with NOAA's Hurricane Research Division, 
-                this database enables researchers to conduct storm-to-storm 
-                comparisons and climatological analyses of TC vortex and convective characteristics across all stages of the 
-                tropical cyclone lifecycle.
+                this database enables researchers to conduct storm-to-storm comparisons and climatological analyses of TC vortex 
+                and convective characteristics across all stages of the tropical cyclone lifecycle.
             </p>
-
             <div class="features">
                 <div class="feature-card">
                     <div class="feature-icon">🌀</div>
@@ -933,7 +934,7 @@
                 <p>Explore all 1,510 TC-RADAR analyses. Click any marker to see storm details.</p>
             </div>
         </div>
-        
+
         <div id="map-stats">
             <div class="container" style="display: flex; gap: 40px; flex-wrap: wrap;">
                 <div class="map-stat-item">
@@ -954,11 +955,10 @@
                 </div>
             </div>
         </div>
-        
+
         <div id="filter-panel">
             <div class="container">
                 <div class="filter-controls">
-                    <!-- Intensity Range -->
                     <div class="filter-group slider-container">
                         <label>Intensity Range (kt)</label>
                         <div class="slider-values">
@@ -972,8 +972,6 @@
                             <input type="range" id="max-intensity" min="0" max="200" value="200" step="5">
                         </div>
                     </div>
-                    
-                    <!-- 24-h Intensity Change -->
                     <div class="filter-group slider-container">
                         <label>24-h Intensity Change (kt)</label>
                         <div class="slider-values">
@@ -987,8 +985,6 @@
                             <input type="range" id="max-vmax-change" min="-100" max="85" value="85" step="5">
                         </div>
                     </div>
-                    
-                    <!-- Tilt Magnitude -->
                     <div class="filter-group slider-container">
                         <label>Tilt Magnitude (km)</label>
                         <div class="slider-values">
@@ -1002,20 +998,14 @@
                             <input type="range" id="max-tilt" min="0" max="200" value="200" step="5">
                         </div>
                     </div>
-                    
-                    <!-- Year Range -->
                     <div class="filter-group">
                         <label>Year Range</label>
                         <div style="display: flex; gap: 10px; align-items: center;">
-                            <input type="number" id="min-year" min="1997" max="2024" value="1997" 
-                                   style="width: 80px;">
+                            <input type="number" id="min-year" min="1997" max="2024" value="1997" style="width: 80px;">
                             <span>to</span>
-                            <input type="number" id="max-year" min="1997" max="2024" value="2024" 
-                                   style="width: 80px;">
+                            <input type="number" id="max-year" min="1997" max="2024" value="2024" style="width: 80px;">
                         </div>
                     </div>
-                    
-                    <!-- Storm Name -->
                     <div class="filter-group">
                         <label>Storm Name</label>
                         <select id="storm-filter">
@@ -1023,17 +1013,15 @@
                         </select>
                     </div>
                 </div>
-                
                 <div class="filter-actions">
                     <button class="reset-btn" onclick="resetFilters()">Reset All Filters</button>
-                    
                     <div class="filtered-count">
                         Showing: <span id="filtered-count">0</span> of <span id="total-count">0</span> cases
                     </div>
                 </div>
             </div>
         </div>
-        
+
         <div id="map-container">
             <div id="loading">
                 <div class="spinner"></div>
@@ -1046,35 +1034,24 @@
     <section id="features" style="background: #f8f9fa;">
         <div class="container">
             <h2>Database Features</h2>
-            
             <div style="max-width: 800px; margin: 0 auto;">
                 <h3 style="color: #1e3a8a; margin-top: 2rem;">Available Variables</h3>
                 <ul style="column-count: 2; column-gap: 3rem; margin: 1rem 0; line-height: 2;">
-                    <li>Eastward & Northward Velocity</li>
+                    <li>Eastward &amp; Northward Velocity</li>
                     <li>Vertical Velocity</li>
                     <li>Radar Reflectivity</li>
                     <li>Wind Speed</li>
-                    <li>Tangential & Radial Velocity</li>
+                    <li>Tangential &amp; Radial Velocity</li>
                     <li>Relative Vorticity</li>
                     <li>Divergence</li>
                     <li>Vortex Tilt Profiles</li>
                     <li>Radius of Maximum Wind</li>
                 </ul>
-
                 <h3 style="color: #1e3a8a; margin-top: 3rem;">Reference Frameworks</h3>
                 <div class="features" style="margin-top: 1.5rem;">
-                    <div class="feature-card">
-                        <h4>Real-time Center Fix</h4>
-                        <p>Based on operational center position during the mission</p>
-                    </div>
-                    <div class="feature-card">
-                        <h4>2-km Recentered</h4>
-                        <p>Using WCM method at 2 km reference height</p>
-                    </div>
-                    <div class="feature-card">
-                        <h4>Vortex Tilt-Relative</h4>
-                        <p>Recentered at every vertical level for tilt analysis</p>
-                    </div>
+                    <div class="feature-card"><h4>Real-time Center Fix</h4><p>Based on operational center position during the mission</p></div>
+                    <div class="feature-card"><h4>2-km Recentered</h4><p>Using WCM method at 2 km reference height</p></div>
+                    <div class="feature-card"><h4>Vortex Tilt-Relative</h4><p>Recentered at every vertical level for tilt analysis</p></div>
                 </div>
             </div>
         </div>
@@ -1086,73 +1063,42 @@
             <p style="text-align: center; max-width: 800px; margin: 0 auto 3rem auto; font-size: 1.1rem;">
                 TC-RADAR consists of four netCDF files, grouped by data type and time period. Each file is approximately 10 GB.
             </p>
-
             <div class="data-files">
                 <div class="file-card">
-                    <h3>Swath Data</h3>
-                    <p>1997-2019</p>
+                    <h3>Swath Data</h3><p>1997-2019</p>
                     <div class="file-size">~10 GB</div>
-                    <a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/v3m_1997_2019_xy_rel_swath_ships.nc" 
-                       class="download-btn" 
-                       target="_blank">
-                        Download
-                    </a>
+                    <a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/v3m_1997_2019_xy_rel_swath_ships.nc" class="download-btn" target="_blank">Download</a>
                 </div>
                 <div class="file-card">
-                    <h3>Swath Data</h3>
-                    <p>2020-2024</p>
+                    <h3>Swath Data</h3><p>2020-2024</p>
                     <div class="file-size">~10 GB</div>
-                    <a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/v3m_2020_2024_xy_rel_swath_ships.nc" 
-                       class="download-btn" 
-                       target="_blank">
-                        Download
-                    </a>
+                    <a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/v3m_2020_2024_xy_rel_swath_ships.nc" class="download-btn" target="_blank">Download</a>
                 </div>
                 <div class="file-card">
-                    <h3>Merged Data</h3>
-                    <p>1997-2019</p>
+                    <h3>Merged Data</h3><p>1997-2019</p>
                     <div class="file-size">~10 GB</div>
-                    <a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/v3m_1997_2019_xy_rel_merged_ships.nc" 
-                       class="download-btn" 
-                       target="_blank">
-                        Download
-                    </a>
+                    <a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/v3m_1997_2019_xy_rel_merged_ships.nc" class="download-btn" target="_blank">Download</a>
                 </div>
                 <div class="file-card">
-                    <h3>Merged Data</h3>
-                    <p>2020-2024</p>
+                    <h3>Merged Data</h3><p>2020-2024</p>
                     <div class="file-size">~10 GB</div>
-                    <a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/v3m_2020_2024_xy_rel_merged_ships.nc" 
-                       class="download-btn" 
-                       target="_blank">
-                        Download
-                    </a>
+                    <a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/v3m_2020_2024_xy_rel_merged_ships.nc" class="download-btn" target="_blank">Download</a>
                 </div>
             </div>
-
             <div class="usage-policy">
                 <h3>📋 Usage Policy</h3>
-                <p>
-                    Users are free to download TC-RADAR. However, we request that you notify 
-                    <strong>Dr. Michael Fischer</strong> (<a href="mailto:mike.fischer@miami.edu" style="color: #667eea;">mike.fischer@miami.edu</a>)
-                    and NOAA's Hurricane Research Division radar team lead, <strong>Dr. Paul Reasor</strong> (<a href="mailto:paul.reasor@noaa.gov" style="color: #667eea;">paul.reasor@noaa.gov</a>), 
-                    of the nature of your research project to ensure proper usage. Users should carefully examine data and 
-                    apply additional QC consistent with their objectives.
-                </p>
+                <p>Users are free to download TC-RADAR. However, we request that you notify 
+                <strong>Dr. Michael Fischer</strong> (<a href="mailto:mike.fischer@miami.edu" style="color: #667eea;">mike.fischer@miami.edu</a>)
+                and NOAA's Hurricane Research Division radar team lead, <strong>Dr. Paul Reasor</strong> (<a href="mailto:paul.reasor@noaa.gov" style="color: #667eea;">paul.reasor@noaa.gov</a>), 
+                of the nature of your research project to ensure proper usage. Users should carefully examine data and 
+                apply additional QC consistent with their objectives.</p>
             </div>
-
             <div class="citation-box">
                 <h3 style="color: #1e3a8a; margin-bottom: 1rem;">How to Cite</h3>
-                <p style="margin-bottom: 1rem;">
-                    Fischer, M. S., R. F. Rogers, P. D. Reasor, and J. F. Gamache, 2022: An analysis of tropical cyclone 
-                    vortex and convective characteristics in relation to storm intensity using a novel airborne Doppler radar 
-                    database. Mon. Wea. Rev., 150, 2255–2278, https://doi.org/10.1175/MWR-D-21-0223.1.
-                </p>
+                <p style="margin-bottom: 1rem;">Fischer, M. S., R. F. Rogers, P. D. Reasor, and J. F. Gamache, 2022: An analysis of tropical cyclone vortex and convective characteristics in relation to storm intensity using a novel airborne Doppler radar database. Mon. Wea. Rev., 150, 2255–2278, https://doi.org/10.1175/MWR-D-21-0223.1.</p>
                 <p style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #dee2e6;">
                     <strong>For vortex tilt analyses, also cite:</strong><br>
-                    Fischer, M. S., P. D. Reasor, J. P. Dunion, and R. F. Rogers, 2024: An Observational Analysis of the 
-                    Relationship between Tropical Cyclone Vortex Tilt, Precipitation Structure, and Intensity Change. 
-                    Mon. Wea. Rev., 152, 203–225, https://doi.org/10.1175/MWR-D-23-0089.1.
+                    Fischer, M. S., P. D. Reasor, J. P. Dunion, and R. F. Rogers, 2024: An Observational Analysis of the Relationship between Tropical Cyclone Vortex Tilt, Precipitation Structure, and Intensity Change. Mon. Wea. Rev., 152, 203–225, https://doi.org/10.1175/MWR-D-23-0089.1.
                 </p>
             </div>
         </div>
@@ -1161,21 +1107,14 @@
     <section class="contact-section" id="contact">
         <div class="container">
             <h2>Get in Touch</h2>
-            <p style="font-size: 1.2rem; margin-bottom: 2rem;">
-                Questions about TC-RADAR? Contact the developer.
-            </p>
-
+            <p style="font-size: 1.2rem; margin-bottom: 2rem;">Questions about TC-RADAR? Contact the developer.</p>
             <div class="contact-info">
                 <p style="font-size: 1.2rem; margin-bottom: 1rem;"><strong>Dr. Michael Fischer</strong></p>
                 <p>TC-RADAR Developer</p>
                 <p style="margin-top: 1rem;">
-                    <a href="mailto:mike.fischer@miami.edu" style="color: white; text-decoration: underline; font-size: 1.1rem;">
-                        mike.fischer@miami.edu
-                    </a>
+                    <a href="mailto:mike.fischer@miami.edu" style="color: white; text-decoration: underline; font-size: 1.1rem;">mike.fischer@miami.edu</a>
                 </p>
-                <p style="margin-top: 2rem; font-size: 0.9rem; opacity: 0.9;">
-                    Please include details about your research project and intended use of TC-RADAR data.
-                </p>
+                <p style="margin-top: 2rem; font-size: 0.9rem; opacity: 0.9;">Please include details about your research project and intended use of TC-RADAR data.</p>
             </div>
         </div>
     </section>
@@ -1184,470 +1123,363 @@
         <div class="container">
             <p>Created by Michael S. Fischer | University of Miami</p>
             <p style="margin-top: 0.5rem; opacity: 0.8;">
-                <a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/TC_RADAR_README.pdf" 
-                   target="_blank">Full Documentation (README)</a>
+                <a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/TC_RADAR_README.pdf" target="_blank">Full Documentation (README)</a>
             </p>
         </div>
     </footer>
 
     <!-- Leaflet JS -->
-    <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
-    <!-- Leaflet MarkerCluster JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-    
+
     <script>
-        // Global variables
+        const API_BASE = 'https://tc-radar-api.onrender.com';
+
         let allData = null;
         let markers = null;
         let allMarkers = [];
-        
-        // Filter state
+
         let filters = {
-            minIntensity: 0,
-            maxIntensity: 200,
-            minVmaxChange: -100,
-            maxVmaxChange: 85,
-            minTilt: 0,
-            maxTilt: 200,
-            minYear: 1997,
-            maxYear: 2024,
+            minIntensity: 0, maxIntensity: 200,
+            minVmaxChange: -100, maxVmaxChange: 85,
+            minTilt: 0, maxTilt: 200,
+            minYear: 1997, maxYear: 2024,
             stormName: 'all'
         };
-        
-        // Initialize map
-        const map = L.map('map', {
-            center: [20, -60],
-            zoom: 4,
-            zoomControl: true,
-            tap: true,
-            tapTolerance: 15
-        });
-        
-        // Improve popup behavior on mobile
+
+        const map = L.map('map', { center: [20, -60], zoom: 4, zoomControl: true, tap: true, tapTolerance: 15 });
+
         map.on('popupopen', function(e) {
             const popup = e.popup;
             const popupElement = popup._container;
-            
             if (popupElement) {
-                // Disable map dragging when interacting with popup
-                L.DomEvent.on(popupElement, 'mousedown touchstart', function(ev) {
-                    map.dragging.disable();
-                });
-                
-                L.DomEvent.on(popupElement, 'mouseup touchend', function(ev) {
-                    map.dragging.enable();
-                });
-                
-                // Allow scrolling within popup content
+                L.DomEvent.on(popupElement, 'mousedown touchstart', function() { map.dragging.disable(); });
+                L.DomEvent.on(popupElement, 'mouseup touchend', function() { map.dragging.enable(); });
                 const popupContent = popupElement.querySelector('.leaflet-popup-content');
                 if (popupContent) {
-                    // Prevent map events but allow scrolling
-                    L.DomEvent.on(popupContent, 'touchstart', function(ev) {
-                        ev.stopPropagation();
-                    });
-                    
-                    L.DomEvent.on(popupContent, 'touchmove', function(ev) {
-                        ev.stopPropagation();
-                    });
+                    L.DomEvent.on(popupContent, 'touchstart', function(ev) { ev.stopPropagation(); });
+                    L.DomEvent.on(popupContent, 'touchmove',  function(ev) { ev.stopPropagation(); });
                 }
             }
         });
-        
-        map.on('popupclose', function(e) {
-            map.dragging.enable();
-        });
-        
-        // Add base map layer
+        map.on('popupclose', function() { map.dragging.enable(); });
+
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             maxZoom: 18
         }).addTo(map);
-        
-        // Function to get color based on intensity (Saffir-Simpson scale)
+
         function getIntensityColor(vmax) {
             if (vmax === null || vmax === undefined) return '#9ca3af';
-            if (vmax < 34) return '#3b82f6';      // Tropical Depression (blue)
-            if (vmax < 64) return '#10b981';      // Tropical Storm (green)
-            if (vmax < 83) return '#fbbf24';      // Cat 1 (yellow)
-            if (vmax < 96) return '#f97316';      // Cat 2 (orange)
-            if (vmax < 113) return '#ef4444';     // Cat 3 (red)
-            if (vmax < 137) return '#dc2626';     // Cat 4 (dark red)
-            return '#7f1d1d';                      // Cat 5 (darkest red)
+            if (vmax < 34)  return '#3b82f6';
+            if (vmax < 64)  return '#10b981';
+            if (vmax < 83)  return '#fbbf24';
+            if (vmax < 96)  return '#f97316';
+            if (vmax < 113) return '#ef4444';
+            if (vmax < 137) return '#dc2626';
+            return '#7f1d1d';
         }
-        
-        // Function to get intensity category name
+
         function getIntensityCategory(vmax) {
             if (vmax === null || vmax === undefined) return 'Unknown';
-            if (vmax < 34) return 'TD';
-            if (vmax < 64) return 'TS';
-            if (vmax < 83) return 'Cat 1';
-            if (vmax < 96) return 'Cat 2';
+            if (vmax < 34)  return 'TD';
+            if (vmax < 64)  return 'TS';
+            if (vmax < 83)  return 'Cat 1';
+            if (vmax < 96)  return 'Cat 2';
             if (vmax < 113) return 'Cat 3';
             if (vmax < 137) return 'Cat 4';
             return 'Cat 5';
         }
-        
-        // Function to create popup content
+
         function createPopupContent(caseData) {
-            const intensity = caseData.vmax_kt !== null ? `${caseData.vmax_kt} kt` : 'N/A';
-            const pressure = caseData.min_pressure_hpa !== null ? `${caseData.min_pressure_hpa} hPa` : 'N/A';
-            const rmw = caseData.rmw_km !== null ? `${caseData.rmw_km} km` : 'N/A';
-            const vmaxChange = caseData['24-h_vmax_change_kt'] !== null ? `${caseData['24-h_vmax_change_kt'] > 0 ? '+' : ''}${caseData['24-h_vmax_change_kt']} kt` : 'N/A';
-            const tiltMag = caseData.tilt_magnitude_km !== null ? `${caseData.tilt_magnitude_km.toFixed(1)} km` : 'N/A';
-            const category = getIntensityCategory(caseData.vmax_kt);
-            const categoryColor = getIntensityColor(caseData.vmax_kt);
-            
-            // Generate image URL
-            const caseIndexPadded = String(caseData.case_index).padStart(4, '0');
-            const imageUrl = `https://raw.githubusercontent.com/MichaelFischerWx/michaelfischerwx.github.io/main/TC-RADAR/images/v3m/v3m_swath_cf_${caseIndexPadded}.png`;
-            
+            const intensity  = caseData.vmax_kt !== null ? `${caseData.vmax_kt} kt` : 'N/A';
+            const pressure   = caseData.min_pressure_hpa !== null ? `${caseData.min_pressure_hpa} hPa` : 'N/A';
+            const rmw        = caseData.rmw_km !== null ? `${caseData.rmw_km} km` : 'N/A';
+            const vmaxChange = caseData['24-h_vmax_change_kt'] !== null
+                ? `${caseData['24-h_vmax_change_kt'] > 0 ? '+' : ''}${caseData['24-h_vmax_change_kt']} kt` : 'N/A';
+            const tiltMag    = caseData.tilt_magnitude_km !== null ? `${caseData.tilt_magnitude_km.toFixed(1)} km` : 'N/A';
+            const category   = getIntensityCategory(caseData.vmax_kt);
+            const catColor   = getIntensityColor(caseData.vmax_kt);
+            const idx        = caseData.case_index;
+            const padded     = String(idx + 1).padStart(4, '0');
+            const imageUrl   = `https://raw.githubusercontent.com/MichaelFischerWx/michaelfischerwx.github.io/main/TC-RADAR/images/v3m/v3m_swath_cf_${padded}.png`;
+
             return `
                 <div class="popup-header">
                     <div class="popup-storm-name">${caseData.storm_name}</div>
                     <div class="popup-mission">${caseData.mission_id}</div>
                 </div>
-                <div class="popup-row">
-                    <span class="popup-label">Date/Time:</span>
-                    <span class="popup-value">${caseData.datetime}</span>
-                </div>
+                <div class="popup-row"><span class="popup-label">Date/Time:</span><span class="popup-value">${caseData.datetime}</span></div>
                 <div class="popup-row">
                     <span class="popup-label">Intensity:</span>
                     <span class="popup-value">
-                        <span class="intensity-badge" style="background-color: ${categoryColor}">
-                            ${category}
-                        </span>
-                        ${intensity}
+                        <span class="intensity-badge" style="background-color:${catColor}">${category}</span> ${intensity}
                     </span>
                 </div>
-                <div class="popup-row">
-                    <span class="popup-label">24-h Change:</span>
-                    <span class="popup-value">${vmaxChange}</span>
-                </div>
-                <div class="popup-row">
-                    <span class="popup-label">Min Pressure:</span>
-                    <span class="popup-value">${pressure}</span>
-                </div>
-                <div class="popup-row">
-                    <span class="popup-label">RMW:</span>
-                    <span class="popup-value">${rmw}</span>
-                </div>
-                <div class="popup-row">
-                    <span class="popup-label">Tilt Magnitude:</span>
-                    <span class="popup-value">${tiltMag}</span>
-                </div>
-                <div class="popup-row">
-                    <span class="popup-label">Location:</span>
-                    <span class="popup-value">${caseData.latitude.toFixed(2)}°N, ${Math.abs(caseData.longitude).toFixed(2)}°W</span>
-                </div>
-                <div class="popup-row">
-                    <span class="popup-label">Case Index:</span>
-                    <span class="popup-value">${caseData.case_index}</span>
-                </div>
+                <div class="popup-row"><span class="popup-label">24-h Change:</span><span class="popup-value">${vmaxChange}</span></div>
+                <div class="popup-row"><span class="popup-label">Min Pressure:</span><span class="popup-value">${pressure}</span></div>
+                <div class="popup-row"><span class="popup-label">RMW:</span><span class="popup-value">${rmw}</span></div>
+                <div class="popup-row"><span class="popup-label">Tilt Magnitude:</span><span class="popup-value">${tiltMag}</span></div>
+                <div class="popup-row"><span class="popup-label">Location:</span><span class="popup-value">${caseData.latitude.toFixed(2)}°N, ${Math.abs(caseData.longitude).toFixed(2)}°W</span></div>
+                <div class="popup-row"><span class="popup-label">Case Index:</span><span class="popup-value">${idx}</span></div>
+
                 <div class="popup-image-container">
-                    <img src="${imageUrl}" 
-                         alt="Radar analysis for ${caseData.storm_name}" 
+                    <img src="${imageUrl}"
+                         alt="Radar analysis for ${caseData.storm_name}"
                          class="popup-thumbnail"
                          onclick="openImageModal('${imageUrl}', '${caseData.storm_name} - ${caseData.datetime}')"
                          onerror="this.style.display='none'; this.nextElementSibling.style.display='none';">
-                    <a href="${imageUrl}" target="_blank" class="view-full-image">
-                        Click image to enlarge or open in new tab →
-                    </a>
+                    <a href="${imageUrl}" target="_blank" class="view-full-image">Click image to enlarge or open in new tab →</a>
+                </div>
+
+                <div class="explorer-panel">
+                    <h4>🔬 Explore Data</h4>
+                    <div class="explorer-row">
+                        <label>Variable</label>
+                        <select class="explorer-select" id="explorer-var-${idx}">
+                            <optgroup label="WCM Recentered (2 km)">
+                                <option value="recentered_tangential_wind">Tangential Wind</option>
+                                <option value="recentered_radial_wind">Radial Wind</option>
+                                <option value="recentered_upward_air_velocity">Vertical Velocity</option>
+                                <option value="recentered_reflectivity">Reflectivity</option>
+                                <option value="recentered_wind_speed">Wind Speed</option>
+                                <option value="recentered_relative_vorticity">Relative Vorticity</option>
+                                <option value="recentered_divergence">Divergence</option>
+                            </optgroup>
+                            <optgroup label="Tilt-Relative">
+                                <option value="total_recentered_tangential_wind">Tangential Wind</option>
+                                <option value="total_recentered_radial_wind">Radial Wind</option>
+                                <option value="total_recentered_upward_air_velocity">Vertical Velocity</option>
+                                <option value="total_recentered_reflectivity">Reflectivity</option>
+                                <option value="total_recentered_wind_speed">Wind Speed</option>
+                            </optgroup>
+                            <optgroup label="Original Swath">
+                                <option value="swath_tangential_wind">Tangential Wind</option>
+                                <option value="swath_radial_wind">Radial Wind</option>
+                                <option value="swath_reflectivity">Reflectivity</option>
+                                <option value="swath_wind_speed">Wind Speed</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div class="explorer-row">
+                        <label>Height Level</label>
+                        <div class="explorer-level-row">
+                            <input type="range" id="explorer-level-${idx}" min="0" max="18" step="0.5" value="2"
+                                   oninput="document.getElementById('explorer-level-val-${idx}').textContent = parseFloat(this.value).toFixed(1) + ' km'">
+                            <span class="explorer-level-value" id="explorer-level-val-${idx}">2.0 km</span>
+                        </div>
+                    </div>
+                    <button class="generate-btn" id="explorer-btn-${idx}" onclick="generateCustomPlot(${idx})">
+                        Generate Plot
+                    </button>
+                    <div class="explorer-result" id="explorer-result-${idx}"></div>
                 </div>
             `;
         }
-        
-        // Function to check if case passes filters
+
+        function generateCustomPlot(caseIndex) {
+            const variable  = document.getElementById(`explorer-var-${caseIndex}`).value;
+            const level_km  = document.getElementById(`explorer-level-${caseIndex}`).value;
+            const resultDiv = document.getElementById(`explorer-result-${caseIndex}`);
+            const btn       = document.getElementById(`explorer-btn-${caseIndex}`);
+
+            btn.disabled = true;
+            btn.textContent = 'Generating…';
+            resultDiv.innerHTML = `<div class="explorer-status loading">⏳ Fetching data from AOML and rendering… (may take ~30s if service is waking up)</div>`;
+
+            const url = `${API_BASE}/plot?case_index=${caseIndex}&variable=${variable}&level_km=${level_km}&data_type=swath`;
+
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => { throw new Error(err.detail || `HTTP ${response.status}`); });
+                    }
+                    return response.blob();
+                })
+                .then(blob => {
+                    const imgUrl   = URL.createObjectURL(blob);
+                    const sel      = document.getElementById(`explorer-var-${caseIndex}`);
+                    const varLabel = sel.options[sel.selectedIndex].text;
+                    const caption  = `${varLabel} @ ${parseFloat(level_km).toFixed(1)} km`;
+                    resultDiv.innerHTML = `
+                        <img src="${imgUrl}" alt="${caption}"
+                             onclick="openImageModal('${imgUrl}', '${caption}')"
+                             title="Click to enlarge">
+                        <br>
+                        <a class="explorer-view-link" onclick="openImageModal('${imgUrl}', '${caption}')">Click to enlarge →</a>
+                    `;
+                })
+                .catch(err => {
+                    resultDiv.innerHTML = `<div class="explorer-status error">⚠️ ${err.message}</div>`;
+                })
+                .finally(() => {
+                    btn.disabled = false;
+                    btn.textContent = 'Generate Plot';
+                });
+        }
+
         function passesFilters(caseData) {
-            // Intensity filter (handle null values)
             const vmax = caseData.vmax_kt !== null ? caseData.vmax_kt : 0;
-            if (vmax < filters.minIntensity || vmax > filters.maxIntensity) {
-                return false;
-            }
-            
-            // 24-h Vmax Change filter
-            // Only include cases with data if filter has been adjusted from defaults
+            if (vmax < filters.minIntensity || vmax > filters.maxIntensity) return false;
             const vmaxChangeAdjusted = (filters.minVmaxChange !== -100 || filters.maxVmaxChange !== 85);
             if (vmaxChangeAdjusted) {
-                // Filter is active - exclude cases without data
-                if (caseData['24-h_vmax_change_kt'] === null) {
-                    return false;
-                }
-                const vmaxChange = caseData['24-h_vmax_change_kt'];
-                if (vmaxChange < filters.minVmaxChange || vmaxChange > filters.maxVmaxChange) {
-                    return false;
-                }
+                if (caseData['24-h_vmax_change_kt'] === null) return false;
+                const vc = caseData['24-h_vmax_change_kt'];
+                if (vc < filters.minVmaxChange || vc > filters.maxVmaxChange) return false;
             }
-            
-            // Tilt Magnitude filter
-            // Only include cases with data if filter has been adjusted from defaults
             const tiltAdjusted = (filters.minTilt !== 0 || filters.maxTilt !== 200);
             if (tiltAdjusted) {
-                // Filter is active - exclude cases without data
-                if (caseData.tilt_magnitude_km === null) {
-                    return false;
-                }
-                const tilt = caseData.tilt_magnitude_km;
-                if (tilt < filters.minTilt || tilt > filters.maxTilt) {
-                    return false;
-                }
+                if (caseData.tilt_magnitude_km === null) return false;
+                const t = caseData.tilt_magnitude_km;
+                if (t < filters.minTilt || t > filters.maxTilt) return false;
             }
-            
-            // Year filter
-            if (caseData.year < filters.minYear || caseData.year > filters.maxYear) {
-                return false;
-            }
-            
-            // Storm name filter
-            if (filters.stormName !== 'all' && caseData.storm_name !== filters.stormName) {
-                return false;
-            }
-            
+            if (caseData.year < filters.minYear || caseData.year > filters.maxYear) return false;
+            if (filters.stormName !== 'all' && caseData.storm_name !== filters.stormName) return false;
             return true;
         }
-        
-        // Function to update markers based on filters
+
         function updateMarkers() {
             if (!markers || !allData) return;
-            
-            // Clear existing markers
             markers.clearLayers();
-            
-            // Filter and add markers
             let filteredCount = 0;
             allData.cases.forEach(caseData => {
                 if (passesFilters(caseData)) {
-                    const markerData = allMarkers.find(m => m.caseIndex === caseData.case_index);
-                    if (markerData) {
-                        markers.addLayer(markerData.marker);
-                        filteredCount++;
-                    }
+                    const m = allMarkers.find(m => m.caseIndex === caseData.case_index);
+                    if (m) { markers.addLayer(m.marker); filteredCount++; }
                 }
             });
-            
-            // Update filtered count
             document.getElementById('filtered-count').textContent = filteredCount;
         }
-        
-        // Intensity slider functions
+
         function updateIntensitySlider() {
-            const minSlider = document.getElementById('min-intensity');
-            const maxSlider = document.getElementById('max-intensity');
-            const minValue = parseInt(minSlider.value);
-            const maxValue = parseInt(maxSlider.value);
-            
-            // Ensure min doesn't exceed max
-            if (minValue > maxValue) {
-                minSlider.value = maxValue;
-            }
-            
-            // Update displayed values
-            filters.minIntensity = parseInt(minSlider.value);
-            filters.maxIntensity = parseInt(maxSlider.value);
-            
+            const min = parseInt(document.getElementById('min-intensity').value);
+            const max = parseInt(document.getElementById('max-intensity').value);
+            if (min > max) document.getElementById('min-intensity').value = max;
+            filters.minIntensity = parseInt(document.getElementById('min-intensity').value);
+            filters.maxIntensity = max;
             document.getElementById('min-intensity-value').textContent = filters.minIntensity + ' kt';
             document.getElementById('max-intensity-value').textContent = filters.maxIntensity + ' kt';
-            
-            // Update visual range
-            const percent1 = (filters.minIntensity / 200) * 100;
-            const percent2 = (filters.maxIntensity / 200) * 100;
-            const rangeFill = document.getElementById('intensity-range-fill');
-            rangeFill.style.left = percent1 + '%';
-            rangeFill.style.width = (percent2 - percent1) + '%';
-            
+            const p1 = (filters.minIntensity / 200) * 100;
+            const p2 = (filters.maxIntensity / 200) * 100;
+            const rf = document.getElementById('intensity-range-fill');
+            rf.style.left = p1 + '%'; rf.style.width = (p2 - p1) + '%';
             updateMarkers();
         }
-        
-        // Vmax Change slider functions
+
         function updateVmaxChangeSlider() {
-            const minSlider = document.getElementById('min-vmax-change');
-            const maxSlider = document.getElementById('max-vmax-change');
-            const minValue = parseInt(minSlider.value);
-            const maxValue = parseInt(maxSlider.value);
-            
-            // Ensure min doesn't exceed max
-            if (minValue > maxValue) {
-                minSlider.value = maxValue;
-            }
-            
-            // Update displayed values
-            filters.minVmaxChange = parseInt(minSlider.value);
-            filters.maxVmaxChange = parseInt(maxSlider.value);
-            
+            const min = parseInt(document.getElementById('min-vmax-change').value);
+            const max = parseInt(document.getElementById('max-vmax-change').value);
+            if (min > max) document.getElementById('min-vmax-change').value = max;
+            filters.minVmaxChange = parseInt(document.getElementById('min-vmax-change').value);
+            filters.maxVmaxChange = max;
             document.getElementById('min-vmax-change-value').textContent = filters.minVmaxChange + ' kt';
             document.getElementById('max-vmax-change-value').textContent = filters.maxVmaxChange + ' kt';
-            
-            // Update visual range (offset by 100 since range is -100 to 85, total 185)
-            const percent1 = ((filters.minVmaxChange + 100) / 185) * 100;
-            const percent2 = ((filters.maxVmaxChange + 100) / 185) * 100;
-            const rangeFill = document.getElementById('vmax-change-range-fill');
-            rangeFill.style.left = percent1 + '%';
-            rangeFill.style.width = (percent2 - percent1) + '%';
-            
+            const p1 = ((filters.minVmaxChange + 100) / 185) * 100;
+            const p2 = ((filters.maxVmaxChange + 100) / 185) * 100;
+            const rf = document.getElementById('vmax-change-range-fill');
+            rf.style.left = p1 + '%'; rf.style.width = (p2 - p1) + '%';
             updateMarkers();
         }
-        
-        // Tilt Magnitude slider functions
+
         function updateTiltSlider() {
-            const minSlider = document.getElementById('min-tilt');
-            const maxSlider = document.getElementById('max-tilt');
-            const minValue = parseInt(minSlider.value);
-            const maxValue = parseInt(maxSlider.value);
-            
-            // Ensure min doesn't exceed max
-            if (minValue > maxValue) {
-                minSlider.value = maxValue;
-            }
-            
-            // Update displayed values
-            filters.minTilt = parseInt(minSlider.value);
-            filters.maxTilt = parseInt(maxSlider.value);
-            
+            const min = parseInt(document.getElementById('min-tilt').value);
+            const max = parseInt(document.getElementById('max-tilt').value);
+            if (min > max) document.getElementById('min-tilt').value = max;
+            filters.minTilt = parseInt(document.getElementById('min-tilt').value);
+            filters.maxTilt = max;
             document.getElementById('min-tilt-value').textContent = filters.minTilt + ' km';
             document.getElementById('max-tilt-value').textContent = filters.maxTilt + ' km';
-            
-            // Update visual range
-            const percent1 = (filters.minTilt / 200) * 100;
-            const percent2 = (filters.maxTilt / 200) * 100;
-            const rangeFill = document.getElementById('tilt-range-fill');
-            rangeFill.style.left = percent1 + '%';
-            rangeFill.style.width = (percent2 - percent1) + '%';
-            
+            const p1 = (filters.minTilt / 200) * 100;
+            const p2 = (filters.maxTilt / 200) * 100;
+            const rf = document.getElementById('tilt-range-fill');
+            rf.style.left = p1 + '%'; rf.style.width = (p2 - p1) + '%';
             updateMarkers();
         }
-        
-        // Year filter functions
+
         function updateYearFilter() {
-            const minYear = parseInt(document.getElementById('min-year').value);
-            const maxYear = parseInt(document.getElementById('max-year').value);
-            
-            // Ensure valid range
-            if (minYear > maxYear) {
-                document.getElementById('min-year').value = maxYear;
-                filters.minYear = maxYear;
-            } else {
-                filters.minYear = minYear;
-            }
-            filters.maxYear = maxYear;
-            
+            const min = parseInt(document.getElementById('min-year').value);
+            const max = parseInt(document.getElementById('max-year').value);
+            if (min > max) { document.getElementById('min-year').value = max; filters.minYear = max; }
+            else { filters.minYear = min; }
+            filters.maxYear = max;
             updateMarkers();
         }
-        
-        // Storm name filter function
+
         function updateStormFilter() {
             filters.stormName = document.getElementById('storm-filter').value;
             updateMarkers();
         }
-        
-        // Reset filters function
+
         function resetFilters() {
-            // Reset intensity
-            filters.minIntensity = 0;
-            filters.maxIntensity = 200;
+            filters.minIntensity = 0; filters.maxIntensity = 200;
             document.getElementById('min-intensity').value = 0;
             document.getElementById('max-intensity').value = 200;
             updateIntensitySlider();
-            
-            // Reset vmax change
-            filters.minVmaxChange = -100;
-            filters.maxVmaxChange = 85;
+
+            filters.minVmaxChange = -100; filters.maxVmaxChange = 85;
             document.getElementById('min-vmax-change').value = -100;
             document.getElementById('max-vmax-change').value = 85;
             updateVmaxChangeSlider();
-            
-            // Reset tilt
-            filters.minTilt = 0;
-            filters.maxTilt = 200;
+
+            filters.minTilt = 0; filters.maxTilt = 200;
             document.getElementById('min-tilt').value = 0;
             document.getElementById('max-tilt').value = 200;
             updateTiltSlider();
-            
-            // Reset year
-            filters.minYear = 1997;
-            filters.maxYear = 2024;
+
+            filters.minYear = 1997; filters.maxYear = 2024;
             document.getElementById('min-year').value = 1997;
             document.getElementById('max-year').value = 2024;
-            
-            // Reset storm
+
             filters.stormName = 'all';
             document.getElementById('storm-filter').value = 'all';
-            
             updateMarkers();
         }
-        
-        // Initialize filter controls
+
         function initializeFilters() {
-            // Intensity sliders
             document.getElementById('min-intensity').addEventListener('input', updateIntensitySlider);
             document.getElementById('max-intensity').addEventListener('input', updateIntensitySlider);
-            
-            // Vmax change sliders
             document.getElementById('min-vmax-change').addEventListener('input', updateVmaxChangeSlider);
             document.getElementById('max-vmax-change').addEventListener('input', updateVmaxChangeSlider);
-            
-            // Tilt sliders
             document.getElementById('min-tilt').addEventListener('input', updateTiltSlider);
             document.getElementById('max-tilt').addEventListener('input', updateTiltSlider);
-            
-            // Year inputs
             document.getElementById('min-year').addEventListener('change', updateYearFilter);
             document.getElementById('max-year').addEventListener('change', updateYearFilter);
-            
-            // Storm select
             document.getElementById('storm-filter').addEventListener('change', updateStormFilter);
-            
-            // Initialize slider displays
             updateIntensitySlider();
             updateVmaxChangeSlider();
             updateTiltSlider();
         }
-        
-        // Load and display data from external JSON file
+
         fetch('tc_radar_metadata.json')
             .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                 return response.json();
             })
             .then(data => {
-                // Store data globally
                 allData = data;
-                
-                // Hide loading indicator
                 document.getElementById('loading').style.display = 'none';
-                
-                // Update statistics
-                document.getElementById('total-cases').textContent = data.total_cases.toLocaleString();
-                document.getElementById('total-count').textContent = data.total_cases.toLocaleString();
+                document.getElementById('total-cases').textContent   = data.total_cases.toLocaleString();
+                document.getElementById('total-count').textContent   = data.total_cases.toLocaleString();
                 document.getElementById('filtered-count').textContent = data.total_cases.toLocaleString();
-                
+
                 const uniqueStorms = new Set(data.cases.map(c => c.storm_name)).size;
                 document.getElementById('unique-storms').textContent = uniqueStorms.toLocaleString();
-                
+
                 const years = data.cases.map(c => c.year);
-                const yearRange = `${Math.min(...years)} - ${Math.max(...years)}`;
-                document.getElementById('year-range').textContent = yearRange;
-                
+                document.getElementById('year-range').textContent = `${Math.min(...years)} - ${Math.max(...years)}`;
+
                 const validVmax = data.cases.filter(c => c.vmax_kt !== null).map(c => c.vmax_kt);
-                if (validVmax.length > 0) {
-                    const intensityRange = `${Math.min(...validVmax).toFixed(0)} - ${Math.max(...validVmax).toFixed(0)} kt`;
-                    document.getElementById('intensity-range').textContent = intensityRange;
-                } else {
-                    document.getElementById('intensity-range').textContent = 'N/A';
-                }
-                
-                // Populate storm name filter
+                document.getElementById('intensity-range').textContent = validVmax.length > 0
+                    ? `${Math.min(...validVmax).toFixed(0)} - ${Math.max(...validVmax).toFixed(0)} kt` : 'N/A';
+
                 const storms = [...new Set(data.cases.map(c => c.storm_name))].sort();
                 const stormSelect = document.getElementById('storm-filter');
                 storms.forEach(storm => {
-                    const option = document.createElement('option');
-                    option.value = storm;
-                    option.textContent = storm;
-                    stormSelect.appendChild(option);
+                    const opt = document.createElement('option');
+                    opt.value = storm; opt.textContent = storm;
+                    stormSelect.appendChild(opt);
                 });
-                
-                // Create marker cluster group
+
                 markers = L.markerClusterGroup({
                     maxClusterRadius: 30,
                     disableClusteringAtZoom: 10,
@@ -1655,182 +1487,94 @@
                     showCoverageOnHover: false,
                     zoomToBoundsOnClick: true,
                     iconCreateFunction: function(cluster) {
-                        const childCount = cluster.getChildCount();
-                        
-                        // Green gradient based on cluster size (matplotlib Greens style)
+                        const c = cluster.getChildCount();
                         let color, textColor;
-                        if (childCount < 10) {
-                            color = '#c7e9c0';  // Light green
-                            textColor = '#006d2c';
-                        } else if (childCount < 50) {
-                            color = '#74c476';  // Medium-light green
-                            textColor = '#ffffff';
-                        } else if (childCount < 100) {
-                            color = '#31a354';  // Medium green
-                            textColor = '#ffffff';
-                        } else if (childCount < 200) {
-                            color = '#238b45';  // Medium-dark green
-                            textColor = '#ffffff';
-                        } else {
-                            color = '#006d2c';  // Dark green
-                            textColor = '#ffffff';
-                        }
-                        
+                        if (c < 10)       { color = '#c7e9c0'; textColor = '#006d2c'; }
+                        else if (c < 50)  { color = '#74c476'; textColor = '#ffffff'; }
+                        else if (c < 100) { color = '#31a354'; textColor = '#ffffff'; }
+                        else if (c < 200) { color = '#238b45'; textColor = '#ffffff'; }
+                        else              { color = '#006d2c'; textColor = '#ffffff'; }
                         return L.divIcon({
-                            html: `<div style="background-color: ${color}; color: ${textColor}; 
-                                   width: 40px; height: 40px; border-radius: 50%; 
-                                   display: flex; align-items: center; justify-content: center;
-                                   font-weight: bold; font-size: 14px; 
-                                   border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
-                                   ${childCount}
-                                   </div>`,
+                            html: `<div style="background-color:${color};color:${textColor};width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:14px;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);">${c}</div>`,
                             className: 'custom-cluster-icon',
                             iconSize: L.point(40, 40)
                         });
                     }
                 });
-                
-                // Add markers for each case and store them
+
                 data.cases.forEach(caseData => {
                     const color = getIntensityColor(caseData.vmax_kt);
-                    
-                    // Create custom icon
-                    const icon = L.divIcon({
+                    const icon  = L.divIcon({
                         className: 'custom-div-icon',
-                        html: `<div class="custom-marker" style="background-color: ${color}; width: 12px; height: 12px;"></div>`,
-                        iconSize: [12, 12],
-                        iconAnchor: [6, 6]
+                        html: `<div class="custom-marker" style="background-color:${color};width:12px;height:12px;"></div>`,
+                        iconSize: [12, 12], iconAnchor: [6, 6]
                     });
-                    
-                    // Create marker
-                    const marker = L.marker([caseData.latitude, caseData.longitude], { icon: icon });
-                    
-                    // Bind popup with mobile-friendly options
+                    const marker = L.marker([caseData.latitude, caseData.longitude], { icon });
                     marker.bindPopup(createPopupContent(caseData), {
-                        maxWidth: 400,
-                        minWidth: 300,
-                        maxHeight: 600,
-                        autoPan: true,
-                        autoPanPadding: [50, 50],
+                        maxWidth: 400, minWidth: 320, maxHeight: 650,
+                        autoPan: true, autoPanPadding: [50, 50],
                         autoPanPaddingTopLeft: [50, 150],
-                        keepInView: true,
-                        closeButton: true,
-                        closeOnEscapeKey: true,
-                        className: 'custom-popup'
+                        keepInView: true, closeButton: true, closeOnEscapeKey: true
                     });
-                    
-                    // Store marker with case index
-                    allMarkers.push({
-                        caseIndex: caseData.case_index,
-                        marker: marker
-                    });
-                    
-                    // Add to cluster group
+                    allMarkers.push({ caseIndex: caseData.case_index, marker });
                     markers.addLayer(marker);
                 });
-                
-                // Add markers to map
+
                 map.addLayer(markers);
-                
-                // Add legend
+
                 const legend = L.control({ position: 'bottomright' });
-                
-                legend.onAdd = function(map) {
+                legend.onAdd = function() {
                     const div = L.DomUtil.create('div', 'intensity-legend');
                     div.innerHTML = `
                         <h4>Intensity (kt)</h4>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #3b82f6;"></div>
-                            <span>TD (&lt;34)</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #10b981;"></div>
-                            <span>TS (34-63)</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #fbbf24;"></div>
-                            <span>Cat 1 (64-82)</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #f97316;"></div>
-                            <span>Cat 2 (83-95)</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #ef4444;"></div>
-                            <span>Cat 3 (96-112)</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #dc2626;"></div>
-                            <span>Cat 4 (113-136)</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #7f1d1d;"></div>
-                            <span>Cat 5 (137+)</span>
-                        </div>
+                        <div class="legend-item"><div class="legend-color" style="background:#3b82f6;"></div><span>TD (&lt;34)</span></div>
+                        <div class="legend-item"><div class="legend-color" style="background:#10b981;"></div><span>TS (34-63)</span></div>
+                        <div class="legend-item"><div class="legend-color" style="background:#fbbf24;"></div><span>Cat 1 (64-82)</span></div>
+                        <div class="legend-item"><div class="legend-color" style="background:#f97316;"></div><span>Cat 2 (83-95)</span></div>
+                        <div class="legend-item"><div class="legend-color" style="background:#ef4444;"></div><span>Cat 3 (96-112)</span></div>
+                        <div class="legend-item"><div class="legend-color" style="background:#dc2626;"></div><span>Cat 4 (113-136)</span></div>
+                        <div class="legend-item"><div class="legend-color" style="background:#7f1d1d;"></div><span>Cat 5 (137+)</span></div>
                     `;
                     return div;
                 };
-                
                 legend.addTo(map);
-                
-                // Initialize filters
+
                 initializeFilters();
             })
             .catch(error => {
                 console.error('Error loading data:', error);
                 document.getElementById('loading').innerHTML = `
-                    <div style="color: #ef4444;">
+                    <div style="color:#ef4444;">
                         <strong>Error loading data</strong><br>
                         <small>${error.message}</small><br><br>
-                        <small style="color: #6b7280;">
-                            Make sure tc_radar_metadata.json is in the same directory.
-                        </small>
-                    </div>
-                `;
+                        <small style="color:#6b7280;">Make sure tc_radar_metadata.json is in the same directory.</small>
+                    </div>`;
             });
 
-        // Smooth scrolling for navigation
         document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function (e) {
+            anchor.addEventListener('click', function(e) {
                 e.preventDefault();
                 const target = document.querySelector(this.getAttribute('href'));
-                if (target) {
-                    target.scrollIntoView({
-                        behavior: 'smooth',
-                        block: 'start'
-                    });
-                }
+                if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
             });
         });
 
-        // Image modal functions
         function openImageModal(imageUrl, caption) {
-            const modal = document.getElementById('imageModal');
-            const modalImg = document.getElementById('modalImage');
-            const captionText = document.getElementById('modalCaption');
-            
-            modal.style.display = 'block';
-            modalImg.src = imageUrl;
-            captionText.textContent = caption;
+            document.getElementById('imageModal').style.display = 'block';
+            document.getElementById('modalImage').src = imageUrl;
+            document.getElementById('modalCaption').textContent = caption;
         }
 
         function closeImageModal() {
             document.getElementById('imageModal').style.display = 'none';
         }
 
-        // Close modal when clicking outside the image
-        document.addEventListener('click', function(event) {
-            const modal = document.getElementById('imageModal');
-            if (event.target === modal) {
-                closeImageModal();
-            }
+        document.addEventListener('click', function(e) {
+            if (e.target === document.getElementById('imageModal')) closeImageModal();
         });
 
-        // Close modal with Escape key
-        document.addEventListener('keydown', function(event) {
-            if (event.key === 'Escape') {
-                closeImageModal();
-            }
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeImageModal();
         });
     </script>
 
