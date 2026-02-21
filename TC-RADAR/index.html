@@ -882,6 +882,11 @@
             updateIntensitySlider(); updateVmaxChangeSlider(); updateTiltSlider();
         }
 
+        // ── Pre-warm the Render API on page load ─────────────────────
+        // Render free tier sleeps after 15 min; this wakes it early so
+        // plots load faster when the user eventually clicks "Generate".
+        fetch(`${API_BASE}/health`).catch(() => {});
+
         // ── Load data ────────────────────────────────────────────────
         fetch('tc_radar_metadata.json')
             .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
