@@ -352,6 +352,7 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
 
     <script>
         const API_BASE = 'https://tc-radar-api.onrender.com';
@@ -460,27 +461,89 @@
 
             btn.disabled = true;
             btn.textContent = 'Generating…';
-            resultDiv.innerHTML = `<div class="explorer-status loading">⏳ Fetching from API & rendering… (may take ~30s if service is waking up)</div>`;
+            resultDiv.innerHTML = `<div class="explorer-status loading">⏳ Fetching data from API… (may take ~30s if service is waking up)</div>`;
 
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 90000);
 
-            fetch(`${API_BASE}/plot?case_index=${currentCaseIndex}&variable=${variable}&level_km=${level_km}&data_type=swath`, { signal: controller.signal })
+            fetch(`${API_BASE}/data?case_index=${currentCaseIndex}&variable=${variable}&level_km=${level_km}&data_type=swath`, { signal: controller.signal })
                 .then(r => {
                     if (!r.ok) return r.json().then(e => { throw new Error(e.detail || `HTTP ${r.status}`); });
-                    return r.blob();
+                    return r.json();
                 })
-                .then(blob => {
-                    const imgUrl  = URL.createObjectURL(blob);
-                    const sel     = document.getElementById('ep-var');
-                    const varLbl  = sel.options[sel.selectedIndex].text;
-                    const caption = `${varLbl} @ ${parseFloat(level_km).toFixed(1)} km`;
-                    resultDiv.innerHTML = `
-                        <img src="${imgUrl}" alt="${caption}"
-                             onclick="openImageModal('${imgUrl}','${caption}')"
-                             title="Click to enlarge">
-                        <br><a class="explorer-view-link" onclick="openImageModal('${imgUrl}','${caption}')">Click to enlarge →</a>
-                    `;
+                .then(json => {
+                    // Build the Plotly container
+                    resultDiv.innerHTML = `<div id="plotly-chart" style="width:100%;height:360px;border-radius:6px;overflow:hidden;"></div>
+                        <div style="font-size:11px;color:#9ca3af;text-align:center;margin-top:4px;">Hover for values · scroll to zoom · drag to pan</div>`;
+
+                    const { data: zData, x, y, variable: varInfo, case_meta: meta } = json;
+
+                    // Title
+                    const vmaxStr = meta.vmax_kt ? ` | Vmax = ${meta.vmax_kt} kt` : '';
+                    const title = `${meta.storm_name} | ${meta.datetime}${vmaxStr}<br>${varInfo.display_name} @ ${json.actual_level_km.toFixed(1)} km`;
+
+                    // Heatmap trace
+                    const heatmap = {
+                        z: zData,
+                        x: x,
+                        y: y,
+                        type: 'heatmap',
+                        colorscale: varInfo.colorscale,
+                        zmin: varInfo.vmin,
+                        zmax: varInfo.vmax,
+                        colorbar: {
+                            title: { text: varInfo.units, font: { color: '#ccc', size: 10 } },
+                            tickfont: { color: '#ccc', size: 9 },
+                            thickness: 12, len: 0.85,
+                        },
+                        hovertemplate:
+                            `<b>${varInfo.display_name}</b>: %{z:.2f} ${varInfo.units}<br>` +
+                            'X: %{x:.0f} km<br>Y: %{y:.0f} km<extra></extra>',
+                        hoverongaps: false,
+                    };
+
+                    // RMW circle overlay
+                    const shapes = [];
+                    if (meta.rmw_km && !isNaN(meta.rmw_km)) {
+                        shapes.push({
+                            type: 'circle',
+                            xref: 'x', yref: 'y',
+                            x0: -meta.rmw_km, y0: -meta.rmw_km,
+                            x1:  meta.rmw_km, y1:  meta.rmw_km,
+                            line: { color: 'white', width: 1.5, dash: 'dash' },
+                        });
+                    }
+
+                    const layout = {
+                        title: { text: title, font: { color: '#e5e7eb', size: 11 }, y: 0.98, x: 0.5, xanchor: 'center' },
+                        paper_bgcolor: '#0e1117',
+                        plot_bgcolor: '#0e1117',
+                        xaxis: {
+                            title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } },
+                            tickfont: { color: '#aaa', size: 9 },
+                            gridcolor: 'rgba(255,255,255,0.05)',
+                            zeroline: false,
+                            scaleanchor: 'y',
+                        },
+                        yaxis: {
+                            title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } },
+                            tickfont: { color: '#aaa', size: 9 },
+                            gridcolor: 'rgba(255,255,255,0.05)',
+                            zeroline: false,
+                        },
+                        shapes: shapes,
+                        margin: { l: 52, r: 16, t: 50, b: 44 },
+                        hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 11 } },
+                    };
+
+                    const config = {
+                        responsive: true,
+                        displayModeBar: true,
+                        modeBarButtonsToRemove: ['lasso2d', 'select2d', 'toggleSpikelines'],
+                        displaylogo: false,
+                    };
+
+                    Plotly.newPlot('plotly-chart', [heatmap], layout, config);
                 })
                 .catch(err => {
                     const msg = err.name === 'AbortError'
@@ -761,7 +824,7 @@
             document.getElementById('imageModal').style.display = 'none';
         }
         document.addEventListener('click', e => { if (e.target===document.getElementById('imageModal')) closeImageModal(); });
-        document.addEventListener('keydown', e => { if (e.key==='Escape') closeImageModal(); });
+               document.addEventListener('keydown', e => { if (e.key==='Escape') closeImageModal(); });
     </script>
 
     <div id="imageModal" class="image-modal" onclick="closeImageModal()">
