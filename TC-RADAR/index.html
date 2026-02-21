@@ -533,10 +533,10 @@
             <h2>Download Database Files</h2>
             <p style="text-align:center;max-width:800px;margin:0 auto 3rem auto;font-size:1.1rem;">TC-RADAR consists of four netCDF files, grouped by data type and time period. Each file is approximately 10 GB.</p>
             <div class="data-files">
-                <div class="file-card"><h3>Swath Data</h3><p>1997-2019</p><div class="file-size">~10 GB</div><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/v3m_1997_2019_xy_rel_swath_ships.nc" class="download-btn" target="_blank">Download</a></div>
-                <div class="file-card"><h3>Swath Data</h3><p>2020-2024</p><div class="file-size">~10 GB</div><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/v3m_2020_2024_xy_rel_swath_ships.nc" class="download-btn" target="_blank">Download</a></div>
-                <div class="file-card"><h3>Merged Data</h3><p>1997-2019</p><div class="file-size">~10 GB</div><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/v3m_1997_2019_xy_rel_merged_ships.nc" class="download-btn" target="_blank">Download</a></div>
-                <div class="file-card"><h3>Merged Data</h3><p>2020-2024</p><div class="file-size">~10 GB</div><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/v3m_2020_2024_xy_rel_merged_ships.nc" class="download-btn" target="_blank">Download</a></div>
+                <div class="file-card"><h3>Swath Data</h3><p>1997-2019</p><div class="file-size">~10 GB</div><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/tc_radar_v3m_1997_2019_xy_rel_swath_ships.nc" class="download-btn" target="_blank">Download</a></div>
+                <div class="file-card"><h3>Swath Data</h3><p>2020-2024</p><div class="file-size">~10 GB</div><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/tc_radar_v3m_2020_2024_xy_rel_swath_ships.nc" class="download-btn" target="_blank">Download</a></div>
+                <div class="file-card"><h3>Merged Data</h3><p>1997-2019</p><div class="file-size">~10 GB</div><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/tc_radar_v3m_1997_2019_xy_rel_merge_ships.nc" class="download-btn" target="_blank">Download</a></div>
+                <div class="file-card"><h3>Merged Data</h3><p>2020-2024</p><div class="file-size">~10 GB</div><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/tc_radar_v3m_2020_2024_xy_rel_merge_ships.nc" class="download-btn" target="_blank">Download</a></div>
             </div>
             <div class="usage-policy">
                 <h3>📋 Usage Policy</h3>
@@ -600,7 +600,7 @@
         function openSidePanel(caseData) {
             currentCaseIndex = caseData.case_index;
             const idx     = caseData.case_index;
-            const padded  = String(idx + 1).padStart(4, '0');
+            const padded  = String(idx).padStart(4, '0');
             const imageUrl = `https://raw.githubusercontent.com/MichaelFischerWx/michaelfischerwx.github.io/main/TC-RADAR/images/v3m/v3m_swath_cf_${padded}.png`;
             const catColor = getIntensityColor(caseData.vmax_kt);
             const category = getIntensityCategory(caseData.vmax_kt);
@@ -680,9 +680,12 @@
 
             btn.disabled = true;
             btn.textContent = 'Generating…';
-            resultDiv.innerHTML = `<div class="explorer-status loading">⏳ Fetching from AOML & rendering… (may take ~30s if service is waking up)</div>`;
+            resultDiv.innerHTML = `<div class="explorer-status loading">⏳ Fetching from API & rendering… (may take ~30s if service is waking up)</div>`;
 
-            fetch(`${API_BASE}/plot?case_index=${currentCaseIndex}&variable=${variable}&level_km=${level_km}&data_type=swath`)
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 90000);
+
+            fetch(`${API_BASE}/plot?case_index=${currentCaseIndex}&variable=${variable}&level_km=${level_km}&data_type=swath`, { signal: controller.signal })
                 .then(r => {
                     if (!r.ok) return r.json().then(e => { throw new Error(e.detail || `HTTP ${r.status}`); });
                     return r.blob();
@@ -700,9 +703,13 @@
                     `;
                 })
                 .catch(err => {
-                    resultDiv.innerHTML = `<div class="explorer-status error">⚠️ ${err.message}</div>`;
+                    const msg = err.name === 'AbortError'
+                        ? '⚠️ Request timed out (90s). The API may be cold-starting — try again in a minute.'
+                        : `⚠️ ${err.message}`;
+                    resultDiv.innerHTML = `<div class="explorer-status error">${msg}</div>`;
                 })
                 .finally(() => {
+                    clearTimeout(timeout);
                     btn.disabled = false;
                     btn.textContent = 'Generate Plot';
                 });
@@ -757,7 +764,7 @@
                 <div class="popup-row"><span class="popup-label">Min Pressure:</span><span class="popup-value">${pressure}</span></div>
                 <div class="popup-row"><span class="popup-label">RMW:</span><span class="popup-value">${rmw}</span></div>
                 <div class="popup-row"><span class="popup-label">Tilt Magnitude:</span><span class="popup-value">${tiltMag}</span></div>
-                <div class="popup-row"><span class="popup-label">Location:</span><span class="popup-value">${caseData.latitude.toFixed(2)}°N, ${Math.abs(caseData.longitude).toFixed(2)}°W</span></div>
+                <div class="popup-row"><span class="popup-label">Location:</span><span class="popup-value">${Math.abs(caseData.latitude).toFixed(2)}°${caseData.latitude >= 0 ? 'N' : 'S'}, ${Math.abs(caseData.longitude).toFixed(2)}°${caseData.longitude < 0 ? 'W' : 'E'}</span></div>
                 <button class="popup-explore-btn" onclick="openSidePanelById(${idx})">🔬 View Radar & Explore Data →</button>
             `;
         }
@@ -970,14 +977,14 @@
             document.getElementById('imageModal').style.display = 'none';
         }
         document.addEventListener('click', e => { if (e.target===document.getElementById('imageModal')) closeImageModal(); });
-        document.addEventListener('keydown', e => { if (e.key==='Escape') closeImageModal(); });
     </script>
 
-    <div id="imageModal" class="image-modal" onclick="closeImageModal()">
-        <div class="image-modal-content" onclick="event.stopPropagation()">
+    <!-- Image modal -->
+    <div id="imageModal" class="image-modal">
+        <div class="image-modal-content">
             <span class="modal-close" onclick="closeImageModal()">&times;</span>
-            <img id="modalImage" class="modal-image" alt="Full size radar analysis">
-            <div id="modalCaption" class="modal-caption"></div>
+            <img class="modal-image" id="modalImage" alt="Full size radar analysis">
+            <div class="modal-caption" id="modalCaption"></div>
         </div>
     </div>
 </body>
