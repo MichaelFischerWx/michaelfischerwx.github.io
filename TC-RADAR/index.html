@@ -77,6 +77,28 @@
         .explorer-status { font-size:12px; color:#6b7280; padding:8px 0; }
         .explorer-status.loading { color:#3b82f6; }
         .explorer-status.error { color:#ef4444; }
+
+        /* Fullscreen plot modal */
+        .plot-modal-overlay {
+            display:none; position:fixed; inset:0; z-index:10000;
+            background:rgba(0,0,0,0.88); backdrop-filter:blur(4px);
+            align-items:center; justify-content:center;
+        }
+        .plot-modal-overlay.active { display:flex; }
+        .plot-modal-box {
+            width:92vw; height:90vh; background:#0e1117;
+            border-radius:10px; position:relative; overflow:hidden;
+            box-shadow:0 8px 40px rgba(0,0,0,0.5);
+        }
+        .plot-modal-close {
+            position:absolute; top:10px; right:14px; z-index:10001;
+            background:rgba(255,255,255,0.1); border:none; color:#ccc;
+            font-size:22px; width:36px; height:36px; border-radius:50%;
+            cursor:pointer; display:flex; align-items:center; justify-content:center;
+            transition:background 0.2s;
+        }
+        .plot-modal-close:hover { background:rgba(255,255,255,0.25); color:#fff; }
+        #plotly-fullscreen { width:100%; height:100%; }
         .explorer-view-link { display:inline-block; margin-top:6px; color:#3b82f6; font-size:12px; font-weight:600; cursor:pointer; }
         .explorer-view-link:hover { text-decoration:underline; }
 
@@ -410,6 +432,7 @@
                             <option value="recentered_upward_air_velocity">Vertical Velocity</option>
                             <option value="recentered_reflectivity">Reflectivity</option>
                             <option value="recentered_wind_speed">Wind Speed</option>
+                            <option value="recentered_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>
                             <option value="recentered_relative_vorticity">Relative Vorticity</option>
                             <option value="recentered_divergence">Divergence</option>
                         </optgroup>
@@ -419,12 +442,14 @@
                             <option value="total_recentered_upward_air_velocity">Vertical Velocity</option>
                             <option value="total_recentered_reflectivity">Reflectivity</option>
                             <option value="total_recentered_wind_speed">Wind Speed</option>
+                            <option value="total_recentered_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>
                         </optgroup>
                         <optgroup label="Original Swath">
                             <option value="swath_tangential_wind">Tangential Wind</option>
                             <option value="swath_radial_wind">Radial Wind</option>
                             <option value="swath_reflectivity">Reflectivity</option>
                             <option value="swath_wind_speed">Wind Speed</option>
+                            <option value="swath_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>
                         </optgroup>
                     </select>
                 </div>
@@ -472,9 +497,17 @@
                     return r.json();
                 })
                 .then(json => {
-                    // Build the Plotly container
-                    resultDiv.innerHTML = `<div id="plotly-chart" style="width:100%;height:360px;border-radius:6px;overflow:hidden;"></div>
-                        <div style="font-size:11px;color:#9ca3af;text-align:center;margin-top:4px;">Hover for values · scroll to zoom · drag to pan</div>`;
+                    // Build the Plotly container with expand button
+                    resultDiv.innerHTML = `<div style="position:relative;">
+                        <div id="plotly-chart" style="width:100%;height:360px;border-radius:6px;overflow:hidden;"></div>
+                        <button onclick="openPlotModal()" title="Expand to fullscreen"
+                            style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.12);
+                            border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;
+                            cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;"
+                            onmouseover="this.style.background='rgba(255,255,255,0.28)'"
+                            onmouseout="this.style.background='rgba(255,255,255,0.12)'">⛶</button>
+                    </div>
+                    <div style="font-size:11px;color:#9ca3af;text-align:center;margin-top:4px;">Hover for values · scroll to zoom · drag to pan · ⛶ expand</div>`;
 
                     const { data: zData, x, y, variable: varInfo, case_meta: meta } = json;
 
@@ -482,7 +515,7 @@
                     const vmaxStr = meta.vmax_kt ? ` | Vmax = ${meta.vmax_kt} kt` : '';
                     const title = `${meta.storm_name} | ${meta.datetime}${vmaxStr}<br>${varInfo.display_name} @ ${json.actual_level_km.toFixed(1)} km`;
 
-                    // Heatmap trace
+                    // Build reusable trace + layout + config
                     const heatmap = {
                         z: zData,
                         x: x,
@@ -514,26 +547,24 @@
                         });
                     }
 
-                    const layout = {
-                        title: { text: title, font: { color: '#e5e7eb', size: 11 }, y: 0.98, x: 0.5, xanchor: 'center' },
+                    const baseLayout = {
                         paper_bgcolor: '#0e1117',
                         plot_bgcolor: '#0e1117',
                         xaxis: {
-                            title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } },
-                            tickfont: { color: '#aaa', size: 9 },
+                            title: { text: 'Eastward distance (km)', font: { color: '#aaa' } },
+                            tickfont: { color: '#aaa' },
                             gridcolor: 'rgba(255,255,255,0.05)',
                             zeroline: false,
                             scaleanchor: 'y',
                         },
                         yaxis: {
-                            title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } },
-                            tickfont: { color: '#aaa', size: 9 },
+                            title: { text: 'Northward distance (km)', font: { color: '#aaa' } },
+                            tickfont: { color: '#aaa' },
                             gridcolor: 'rgba(255,255,255,0.05)',
                             zeroline: false,
                         },
                         shapes: shapes,
-                        margin: { l: 52, r: 16, t: 50, b: 44 },
-                        hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 11 } },
+                        hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 12 } },
                     };
 
                     const config = {
@@ -543,7 +574,17 @@
                         displaylogo: false,
                     };
 
-                    Plotly.newPlot('plotly-chart', [heatmap], layout, config);
+                    // Small chart
+                    const smallLayout = Object.assign({}, baseLayout, {
+                        title: { text: title, font: { color: '#e5e7eb', size: 11 }, y: 0.98, x: 0.5, xanchor: 'center' },
+                        margin: { l: 52, r: 16, t: 50, b: 44 },
+                        xaxis: Object.assign({}, baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }),
+                        yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }),
+                    });
+                    Plotly.newPlot('plotly-chart', [heatmap], smallLayout, config);
+
+                    // Store for fullscreen re-render
+                    window._lastPlotlyData = { heatmap, baseLayout, title, config };
                 })
                 .catch(err => {
                     const msg = err.name === 'AbortError'
@@ -814,6 +855,37 @@
             });
         });
 
+        // ── Fullscreen plot modal ─────────────────────────────────────
+        function openPlotModal() {
+            if (!window._lastPlotlyData) return;
+            const modal = document.getElementById('plotModal');
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+
+            const { heatmap, baseLayout, title, config } = window._lastPlotlyData;
+            const fullLayout = Object.assign({}, baseLayout, {
+                title: { text: title, font: { color: '#e5e7eb', size: 15 }, y: 0.97, x: 0.5, xanchor: 'center' },
+                margin: { l: 65, r: 30, t: 60, b: 55 },
+                xaxis: Object.assign({}, baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }),
+                yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }),
+            });
+            // Scale up colorbar for fullscreen
+            const fullHeatmap = Object.assign({}, heatmap, {
+                colorbar: Object.assign({}, heatmap.colorbar, {
+                    title: { text: heatmap.colorbar.title.text, font: { color: '#ccc', size: 13 } },
+                    tickfont: { color: '#ccc', size: 11 },
+                    thickness: 16, len: 0.85,
+                }),
+            });
+            Plotly.newPlot('plotly-fullscreen', [fullHeatmap], fullLayout, config);
+        }
+        function closePlotModal() {
+            const modal = document.getElementById('plotModal');
+            modal.classList.remove('active');
+            document.body.style.overflow = '';
+            Plotly.purge('plotly-fullscreen');
+        }
+
         // ── Image modal ──────────────────────────────────────────────
         function openImageModal(url, caption) {
             document.getElementById('imageModal').style.display = 'block';
@@ -824,7 +896,7 @@
             document.getElementById('imageModal').style.display = 'none';
         }
         document.addEventListener('click', e => { if (e.target===document.getElementById('imageModal')) closeImageModal(); });
-               document.addEventListener('keydown', e => { if (e.key==='Escape') closeImageModal(); });
+               document.addEventListener('keydown', e => { if (e.key==='Escape') { closeImageModal(); closePlotModal(); } });
     </script>
 
     <div id="imageModal" class="image-modal" onclick="closeImageModal()">
@@ -832,6 +904,13 @@
             <span class="modal-close" onclick="closeImageModal()">&times;</span>
             <img id="modalImage" class="modal-image" alt="Full size radar analysis">
             <div id="modalCaption" class="modal-caption"></div>
+        </div>
+    </div>
+    <!-- Fullscreen plot modal -->
+    <div id="plotModal" class="plot-modal-overlay" onclick="closePlotModal()">
+        <div class="plot-modal-box" onclick="event.stopPropagation()">
+            <button class="plot-modal-close" onclick="closePlotModal()" title="Close (Esc)">&times;</button>
+            <div id="plotly-fullscreen"></div>
         </div>
     </div>
 </body>
