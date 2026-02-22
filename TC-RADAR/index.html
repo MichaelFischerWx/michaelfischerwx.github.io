@@ -592,7 +592,6 @@
 
         function generateCustomPlot(callback) {
             if (currentCaseIndex === null) return;
-            _hoverTarget = 'shaded';  // reset hover target for new plot
             const variable  = document.getElementById('ep-var').value;
             const level_km  = document.getElementById('ep-level').value;
             const overlay   = (document.getElementById('ep-overlay') || {}).value || '';
@@ -696,7 +695,6 @@
                         hovertemplate: `<b>${ov.display_name}</b>: %{z:.2f} ${ov.units}<extra>contour</extra>`,
                         name: `${ov.display_name} (+)`,
                         showlegend: false,
-                        hoverinfo: 'skip',
                     }));
                 }
 
@@ -710,7 +708,6 @@
                         hovertemplate: `<b>${ov.display_name}</b>: %{z:.2f} ${ov.units}<extra>contour</extra>`,
                         name: `${ov.display_name} (−)`,
                         showlegend: false,
-                        hoverinfo: 'skip',
                     }));
                 }
 
@@ -719,34 +716,6 @@
                 console.warn('Contour overlay error:', e);
                 return [];
             }
-        }
-
-        // Hover target: 'shaded' (default) or 'contour'
-        let _hoverTarget = 'shaded';
-
-        function toggleHoverTarget(e) {
-            if (e) e.preventDefault();
-            _hoverTarget = (_hoverTarget === 'shaded') ? 'contour' : 'shaded';
-
-            // Apply to all visible Plotly charts that have overlay traces
-            ['plotly-chart', 'plotly-fullscreen', 'cs-fullscreen'].forEach(id => {
-                const plotDiv = document.getElementById(id);
-                if (!plotDiv || !plotDiv.data || plotDiv.data.length < 2) return;
-                const overlayIndices = [];
-                for (let i = 1; i < plotDiv.data.length; i++) overlayIndices.push(i);
-                if (_hoverTarget === 'shaded') {
-                    Plotly.restyle(plotDiv, { hoverinfo: 'all' }, [0]);
-                    Plotly.restyle(plotDiv, { hoverinfo: 'skip' }, overlayIndices);
-                } else {
-                    Plotly.restyle(plotDiv, { hoverinfo: 'skip' }, [0]);
-                    Plotly.restyle(plotDiv, { hoverinfo: 'all' }, overlayIndices);
-                }
-            });
-
-            // Update all toggle links on the page
-            document.querySelectorAll('.hover-toggle-link').forEach(link => {
-                link.innerHTML = _hoverTarget === 'shaded' ? '<b>Shaded</b>' : '<b>Contour</b>';
-            });
         }
 
         // ── Colormap switcher (instant, no API call) ─────────────────
@@ -863,36 +832,19 @@
                 yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }),
             });
 
-            // Build traces: heatmap first (always visible), then overlay contours added separately
-            let overlayTraces = buildOverlayContours(json, x, y);
+            // Render: heatmap + optional overlay contours in one call
+            const overlayTraces = buildOverlayContours(json, x, y);
+            const traces = [heatmap, ...overlayTraces];
+            Plotly.newPlot('plotly-chart', traces, smallLayout, config);
 
-            Plotly.newPlot('plotly-chart', [heatmap], smallLayout, config)
-                .then(() => {
-                    // Add contour overlay traces on top of the heatmap
-                    if (overlayTraces.length > 0) {
-                        return Plotly.addTraces('plotly-chart', overlayTraces).catch(err => {
-                            console.warn('Failed to add overlay contours (heatmap still visible):', err);
-                            overlayTraces = [];
-                        });
-                    }
-                })
-                .then(() => {
-                    // Update hint text with hover toggle if overlay present
-                    const hasOverlay = overlayTraces.length > 0;
-                    const hintDiv = resultDiv.querySelector('div:last-child');
-                    if (hintDiv && hasOverlay) {
-                        hintDiv.innerHTML = `Hover: <a href="#" class="hover-toggle-link" onclick="toggleHoverTarget(event)" style="color:#60a5fa;text-decoration:underline;cursor:pointer;"><b>Shaded</b></a> · scroll to zoom · drag to pan · ⛶ expand`;
-                    }
+            // Store for fullscreen re-render
+            window._lastPlotlyData = { heatmap, overlayTraces, baseLayout, title, config };
 
-                    // Store for fullscreen re-render
-                    window._lastPlotlyData = { heatmap, overlayTraces, baseLayout, title, config, hasOverlay, overlayName: hasOverlay ? json.overlay.display_name : '' };
-
-                    // Enable cross-section button & attach click handler
-                    const csBtn = document.getElementById('cs-btn');
-                    if (csBtn) csBtn.disabled = false;
-                    const plotDiv = document.getElementById('plotly-chart');
-                    plotDiv.on('plotly_click', handlePlotClick);
-                });
+            // Enable cross-section button & attach click handler
+            const csBtn = document.getElementById('cs-btn');
+            if (csBtn) csBtn.disabled = false;
+            const plotDiv = document.getElementById('plotly-chart');
+            plotDiv.on('plotly_click', handlePlotClick);
         }
 
         // ── Height animation ─────────────────────────────────────────
@@ -1093,14 +1045,8 @@
                 modeBarButtonsToRemove: ['lasso2d', 'select2d', 'toggleSpikelines'],
             };
 
-            Plotly.newPlot(targetId, [heatmap], layout, csConfig)
-                .then(() => {
-                    if (csOverlayTraces.length > 0) {
-                        return Plotly.addTraces(targetId, csOverlayTraces).catch(err => {
-                            console.warn('Failed to add cross-section overlay contours:', err);
-                        });
-                    }
-                });
+            const csTraces = [heatmap, ...csOverlayTraces];
+            Plotly.newPlot(targetId, csTraces, layout, csConfig);
         }
 
         // ── Intensity helpers ────────────────────────────────────────
@@ -1396,16 +1342,6 @@
             });
             const fullTraces = [fullHeatmap, ...(overlayTraces || [])];
             Plotly.newPlot('plotly-fullscreen', fullTraces, fullLayout, config);
-
-            // Sync hover target state to fullscreen plot
-            if (overlayTraces && overlayTraces.length > 0) {
-                if (_hoverTarget === 'contour') {
-                    const ovIdx = [];
-                    for (let i = 1; i <= overlayTraces.length; i++) ovIdx.push(i);
-                    Plotly.restyle('plotly-fullscreen', { hoverinfo: 'skip' }, [0]);
-                    Plotly.restyle('plotly-fullscreen', { hoverinfo: 'all' }, ovIdx);
-                }
-            }
 
             // Render cross-section in fullscreen if provided
             if (hasCrossSection) {
