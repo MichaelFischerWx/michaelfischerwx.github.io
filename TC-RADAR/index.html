@@ -653,55 +653,71 @@
             const ovData = isCS ? ov.cross_section : ov.data;
             if (!ovData) return [];
 
-            // Get user-specified contour interval, or auto-compute
-            const intInput = document.getElementById('ep-contour-int');
-            let interval = intInput ? parseFloat(intInput.value) : NaN;
-            if (isNaN(interval) || interval <= 0) {
-                // Auto: ~10 contour levels spanning the data range
-                const flat = ovData.flat().filter(v => v !== null && !isNaN(v));
-                if (flat.length === 0) return [];
-                const mn = Math.min(...flat), mx = Math.max(...flat);
-                interval = parseFloat(((mx - mn) / 10).toPrecision(1));
-                if (interval <= 0) interval = 1;
+            try {
+                // Get user-specified contour interval, or auto-compute
+                const intInput = document.getElementById('ep-contour-int');
+                let interval = intInput ? parseFloat(intInput.value) : NaN;
+                if (isNaN(interval) || interval <= 0) {
+                    // Auto: ~10 contour levels spanning the data range
+                    const flat = ovData.flat().filter(v => v !== null && !isNaN(v));
+                    if (flat.length === 0) return [];
+                    // Use reduce instead of Math.min/max(...spread) to avoid stack overflow on large arrays
+                    let mn = Infinity, mx = -Infinity;
+                    for (let i = 0; i < flat.length; i++) {
+                        if (flat[i] < mn) mn = flat[i];
+                        if (flat[i] > mx) mx = flat[i];
+                    }
+                    interval = parseFloat(((mx - mn) / 10).toPrecision(1));
+                    if (interval <= 0) interval = 1;
+                }
+
+                const xCoord = isCS ? json.distance_km : x;
+                const yCoord = isCS ? json.height_km : y;
+
+                const baseContour = {
+                    z: ovData, x: xCoord, y: yCoord,
+                    type: 'contour',
+                    showscale: false,
+                    hoverongaps: false,
+                    contours: { coloring: 'none', showlabels: true,
+                        labelfont: { size: 9, color: 'rgba(255,255,255,0.8)' } },
+                };
+
+                const traces = [];
+
+                // Positive contours: solid black (only if range is valid)
+                if (ov.vmax > interval) {
+                    traces.push(Object.assign({}, baseContour, {
+                        contours: Object.assign({}, baseContour.contours, {
+                            start: interval, end: ov.vmax, size: interval,
+                        }),
+                        line: { color: 'rgba(0,0,0,0.7)', width: 1.2, dash: 'solid' },
+                        hovertemplate: `<b>${ov.display_name}</b>: %{z:.2f} ${ov.units}<extra>contour</extra>`,
+                        name: `${ov.display_name} (+)`,
+                        showlegend: false,
+                        hoverinfo: 'skip',
+                    }));
+                }
+
+                // Negative contours: dashed black (only if range is valid)
+                if (ov.vmin < -interval) {
+                    traces.push(Object.assign({}, baseContour, {
+                        contours: Object.assign({}, baseContour.contours, {
+                            start: ov.vmin, end: -interval, size: interval,
+                        }),
+                        line: { color: 'rgba(0,0,0,0.7)', width: 1.2, dash: 'dash' },
+                        hovertemplate: `<b>${ov.display_name}</b>: %{z:.2f} ${ov.units}<extra>contour</extra>`,
+                        name: `${ov.display_name} (−)`,
+                        showlegend: false,
+                        hoverinfo: 'skip',
+                    }));
+                }
+
+                return traces;
+            } catch (e) {
+                console.warn('Contour overlay error:', e);
+                return [];
             }
-
-            const xCoord = isCS ? json.distance_km : x;
-            const yCoord = isCS ? json.height_km : y;
-
-            const baseContour = {
-                z: ovData, x: xCoord, y: yCoord,
-                type: 'contour',
-                showscale: false,
-                hoverongaps: false,
-                contours: { coloring: 'none', showlabels: true,
-                    labelfont: { size: 9, color: 'rgba(255,255,255,0.8)' } },
-            };
-
-            // Positive contours: solid black
-            const posTrace = Object.assign({}, baseContour, {
-                contours: Object.assign({}, baseContour.contours, {
-                    start: interval, end: ov.vmax, size: interval,
-                }),
-                line: { color: 'rgba(0,0,0,0.7)', width: 1.2, dash: 'solid' },
-                hovertemplate: `<b>${ov.display_name}</b>: %{z:.2f} ${ov.units}<extra>contour</extra>`,
-                name: `${ov.display_name} (+)`,
-                showlegend: false,
-                hoverinfo: 'skip',
-            });
-
-            // Negative contours: dashed black
-            const negTrace = Object.assign({}, baseContour, {
-                contours: Object.assign({}, baseContour.contours, {
-                    start: ov.vmin, end: -interval, size: interval,
-                }),
-                line: { color: 'rgba(0,0,0,0.7)', width: 1.2, dash: 'dash' },
-                hovertemplate: `<b>${ov.display_name}</b>: %{z:.2f} ${ov.units}<extra>contour</extra>`,
-                name: `${ov.display_name} (−)`,
-                showlegend: false,
-                hoverinfo: 'skip',
-            });
-
-            return [posTrace, negTrace];
         }
 
         // Hover target: 'shaded' (default) or 'contour'
@@ -715,12 +731,14 @@
             ['plotly-chart', 'plotly-fullscreen', 'cs-fullscreen'].forEach(id => {
                 const plotDiv = document.getElementById(id);
                 if (!plotDiv || !plotDiv.data || plotDiv.data.length < 2) return;
+                const overlayIndices = [];
+                for (let i = 1; i < plotDiv.data.length; i++) overlayIndices.push(i);
                 if (_hoverTarget === 'shaded') {
                     Plotly.restyle(plotDiv, { hoverinfo: 'all' }, [0]);
-                    Plotly.restyle(plotDiv, { hoverinfo: 'skip' }, [1, 2]);
+                    Plotly.restyle(plotDiv, { hoverinfo: 'skip' }, overlayIndices);
                 } else {
                     Plotly.restyle(plotDiv, { hoverinfo: 'skip' }, [0]);
-                    Plotly.restyle(plotDiv, { hoverinfo: 'all' }, [1, 2]);
+                    Plotly.restyle(plotDiv, { hoverinfo: 'all' }, overlayIndices);
                 }
             });
 
@@ -1360,8 +1378,10 @@
             // Sync hover target state to fullscreen plot
             if (overlayTraces && overlayTraces.length > 0) {
                 if (_hoverTarget === 'contour') {
+                    const ovIdx = [];
+                    for (let i = 1; i <= overlayTraces.length; i++) ovIdx.push(i);
                     Plotly.restyle('plotly-fullscreen', { hoverinfo: 'skip' }, [0]);
-                    Plotly.restyle('plotly-fullscreen', { hoverinfo: 'all' }, [1, 2]);
+                    Plotly.restyle('plotly-fullscreen', { hoverinfo: 'all' }, ovIdx);
                 }
             }
 
