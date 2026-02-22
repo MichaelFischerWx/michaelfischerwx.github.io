@@ -67,6 +67,8 @@
         .explorer-level-row { display:flex; align-items:center; gap:10px; }
         .explorer-level-row input[type="range"] { flex:1; -webkit-appearance:none; appearance:none; height:6px; background:#e5e7eb; border-radius:3px; position:static; pointer-events:auto; transform:none; top:auto; width:auto; }
         .explorer-level-row input[type="range"]::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; background:#3b82f6; border-radius:50%; cursor:pointer; box-shadow:0 0 0 2px white,0 2px 6px rgba(0,0,0,0.3); margin-top:-6px; }
+        .az-cov-slider { flex:1; -webkit-appearance:none; appearance:none; height:6px; background:#e5e7eb; border-radius:3px; position:static !important; pointer-events:auto !important; transform:none !important; top:auto !important; width:auto !important; }
+        .az-cov-slider::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; background:#3b82f6; border-radius:50%; cursor:pointer; pointer-events:auto; box-shadow:0 0 0 2px white,0 2px 6px rgba(0,0,0,0.3); margin-top:-6px; }
         .explorer-level-value { font-size:13px; font-weight:700; color:#1e3a8a; min-width:48px; text-align:right; }
 
         .generate-btn { width:100%; padding:9px 0; background:linear-gradient(135deg,#1e3a8a 0%,#3b82f6 100%); color:white; border:none; border-radius:6px; font-size:13px; font-weight:700; cursor:pointer; transition:opacity 0.2s; margin-top:4px; }
@@ -603,7 +605,7 @@
                     <label>Coverage Threshold</label>
                     <div style="display:flex;align-items:center;gap:8px;">
                         <input type="range" id="az-coverage" min="0" max="100" step="5" value="50"
-                               style="flex:1;"
+                               class="az-cov-slider"
                                oninput="document.getElementById('az-cov-val').textContent = this.value+'%'">
                         <span style="font-size:12px;font-weight:600;color:#1e3a8a;min-width:36px;" id="az-cov-val">50%</span>
                     </div>
@@ -1220,7 +1222,16 @@
             };
 
             if (!fullsize) {
-                el.innerHTML = `<div id="az-chart" style="width:100%;height:${plotHeight};border-radius:6px;overflow:hidden;"></div>`;
+                el.innerHTML = `<div style="position:relative;">
+                    <div id="az-chart" style="width:100%;height:${plotHeight};border-radius:6px;overflow:hidden;"></div>
+                    <button onclick="openPlotModal()" title="Expand to fullscreen"
+                        style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.12);
+                        border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;
+                        cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;"
+                        onmouseover="this.style.background='rgba(255,255,255,0.28)'"
+                        onmouseout="this.style.background='rgba(255,255,255,0.12)'">⛶</button>
+                </div>
+                <div style="font-size:11px;color:#9ca3af;text-align:center;margin-top:4px;">Hover for values · scroll to zoom · drag to pan · ⛶ expand</div>`;
                 Plotly.newPlot('az-chart', [heatmap, ...azOverlayTraces], layout, {
                     responsive: true, displayModeBar: false, displaylogo: false,
                 });
