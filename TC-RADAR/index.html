@@ -103,6 +103,7 @@
         .plot-modal-box.split { overflow-y:auto; }
         .plot-modal-box.split #plotly-fullscreen { height:55%; min-height:300px; }
         .plot-modal-box.split #cs-fullscreen { height:40%; min-height:220px; width:100%; }
+        .plot-modal-box.split #az-fullscreen { height:40%; min-height:220px; width:100%; }
         .cs-full-divider { height:1px; background:rgba(255,255,255,0.1); margin:4px 16px; }
 
         /* Animation controls */
@@ -220,6 +221,7 @@
             .plot-modal-box { width:98vw; height:95vh; border-radius:6px; }
             .plot-modal-box.split #plotly-fullscreen { height:50%; min-height:200px; }
             .plot-modal-box.split #cs-fullscreen { height:45%; min-height:180px; }
+            .plot-modal-box.split #az-fullscreen { height:45%; min-height:180px; }
             .plot-modal-close { top:6px; right:8px; width:32px; height:32px; font-size:20px; }
             .panel-image-wrap { max-height:160px; }
             .anim-btn { width:36px; height:34px; font-size:14px; }
@@ -596,9 +598,20 @@
 
                 <button class="generate-btn" id="ep-btn" onclick="generateCustomPlot()">Generate Plot</button>
                 <button class="cs-btn" id="cs-btn" onclick="toggleCrossSection()" disabled>✂ Draw Cross Section</button>
+                <button class="cs-btn" id="az-btn" onclick="fetchAzimuthalMean()" disabled style="margin-top:4px;">⟳ Azimuthal Mean</button>
+                <div class="explorer-row" id="az-controls" style="margin-top:6px;">
+                    <label>Coverage Threshold</label>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <input type="range" id="az-coverage" min="0" max="100" step="5" value="50"
+                               style="flex:1;"
+                               oninput="document.getElementById('az-cov-val').textContent = this.value+'%'">
+                        <span style="font-size:12px;font-weight:600;color:#1e3a8a;min-width:36px;" id="az-cov-val">50%</span>
+                    </div>
+                </div>
                 <div class="cs-status" id="cs-status"></div>
                 <div class="explorer-result" id="ep-result"></div>
                 <div class="cs-result" id="cs-result"></div>
+                <div class="az-result" id="az-result"></div>
             `;
 
             document.getElementById('side-panel').classList.add('open');
@@ -623,6 +636,7 @@
 
         function generateCustomPlot(callback) {
             if (currentCaseIndex === null) return;
+            _lastAzJson = null;  // reset azimuthal mean for new plot
             const variable  = document.getElementById('ep-var').value;
             const level_km  = document.getElementById('ep-level').value;
             const overlay   = (document.getElementById('ep-overlay') || {}).value || '';
@@ -766,7 +780,7 @@
             try { colorscale = JSON.parse(cs); } catch { colorscale = cs; }
 
             // Restyle heatmap (trace 0) on all visible plots instantly
-            ['plotly-chart', 'plotly-fullscreen', 'cs-fullscreen'].forEach(id => {
+            ['plotly-chart', 'plotly-fullscreen', 'cs-fullscreen', 'az-chart', 'az-fullscreen'].forEach(id => {
                 const plotDiv = document.getElementById(id);
                 if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
                 Plotly.restyle(plotDiv, { colorscale: [colorscale] }, [0]);
@@ -875,6 +889,8 @@
             // Enable cross-section button & attach click handler
             const csBtn = document.getElementById('cs-btn');
             if (csBtn) csBtn.disabled = false;
+            const azBtn = document.getElementById('az-btn');
+            if (azBtn) azBtn.disabled = false;
             const plotDiv = document.getElementById('plotly-chart');
             plotDiv.on('plotly_click', handlePlotClick);
         }
@@ -1082,6 +1098,198 @@
 
             const csTraces = [heatmap, ...csOverlayTraces];
             Plotly.newPlot(targetId, csTraces, layout, csConfig);
+        }
+
+        // ── Azimuthal Mean ─────────────────────────────────────────────
+        let _lastAzJson = null;
+
+        function fetchAzimuthalMean() {
+            if (currentCaseIndex === null) return;
+            const variable  = document.getElementById('ep-var').value;
+            const overlay   = (document.getElementById('ep-overlay') || {}).value || '';
+            const covSlider = document.getElementById('az-coverage');
+            const coverage  = covSlider ? (parseInt(covSlider.value) / 100) : 0.5;
+            const resultDiv = document.getElementById('az-result');
+            const btn       = document.getElementById('az-btn');
+
+            resultDiv.innerHTML = '<div class="explorer-status">Computing azimuthal mean…</div>';
+            btn.disabled = true;
+            btn.textContent = '⟳ Computing…';
+
+            const apiBase = 'https://tc-radar-api.onrender.com';
+            let url = `${apiBase}/azimuthal_mean?case_index=${currentCaseIndex}&variable=${variable}&data_type=swath&coverage_min=${coverage}`;
+            if (overlay && overlay !== 'none') url += `&overlay=${overlay}`;
+
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 90000);
+
+            fetch(url, { signal: controller.signal })
+                .then(r => {
+                    if (!r.ok) return r.json().then(e => { throw new Error(e.detail || `HTTP ${r.status}`); });
+                    return r.json();
+                })
+                .then(json => {
+                    _lastAzJson = json;
+                    renderAzimuthalMeanInto('az-result', json, false);
+                })
+                .catch(err => {
+                    const msg = err.name === 'AbortError'
+                        ? '⚠️ Request timed out (90s).'
+                        : `⚠️ ${err.message}`;
+                    resultDiv.innerHTML = `<div class="explorer-status error">${msg}</div>`;
+                })
+                .finally(() => {
+                    clearTimeout(timeout);
+                    btn.disabled = false;
+                    btn.textContent = '⟳ Azimuthal Mean';
+                });
+        }
+
+        function renderAzimuthalMeanInto(targetId, json, fullsize) {
+            const el = document.getElementById(targetId);
+            if (!el) return;
+
+            const { azimuthal_mean: azData, radius_km, height_km, variable: varInfo, case_meta: meta } = json;
+            const fontSize = fullsize ? { title: 13, axis: 12, tick: 10, cbar: 12, cbarTick: 10, hover: 13 }
+                                      : { title: 10, axis: 9,  tick: 8,  cbar: 9,  cbarTick: 8,  hover: 11 };
+            const cbarThick = fullsize ? 14 : 10;
+            const plotHeight = fullsize ? '100%' : '340px';
+
+            // Apply user-selected colormap if set
+            let csColorscale = varInfo.colorscale;
+            const cmapSel = document.getElementById('ep-cmap');
+            if (cmapSel && cmapSel.value) {
+                try { csColorscale = JSON.parse(cmapSel.value); } catch { csColorscale = cmapSel.value; }
+            }
+
+            const heatmap = {
+                z: azData,
+                x: radius_km,
+                y: height_km,
+                type: 'heatmap',
+                colorscale: csColorscale,
+                zmin: varInfo.vmin, zmax: varInfo.vmax,
+                colorbar: {
+                    title: { text: varInfo.units, font: { color: '#ccc', size: fontSize.cbar } },
+                    tickfont: { color: '#ccc', size: fontSize.cbarTick },
+                    thickness: cbarThick, len: 0.85,
+                },
+                hovertemplate:
+                    `<b>${varInfo.display_name}</b>: %{z:.2f} ${varInfo.units}<br>` +
+                    'Radius: %{x:.0f} km<br>Height: %{y:.1f} km<extra></extra>',
+                hoverongaps: false,
+            };
+
+            // Build overlay contours for azimuthal mean
+            const azOverlayTraces = buildAzOverlayContours(json, radius_km, height_km);
+
+            const vmaxStr = meta.vmax_kt ? ` | Vmax = ${meta.vmax_kt} kt` : '';
+            const covPct = Math.round((json.coverage_min || 0.5) * 100);
+            const overlayLabel = json.overlay ? `<br><span style="font-size:0.85em;color:#9ca3af;">Contours: ${json.overlay.display_name} (${json.overlay.units})</span>` : '';
+            const title = `${meta.storm_name} | ${meta.datetime}${vmaxStr}<br>Azimuthal Mean: ${varInfo.display_name} (≥${covPct}% coverage)${overlayLabel}`;
+
+            // RMW line
+            const shapes = [];
+            if (meta.rmw_km && !isNaN(meta.rmw_km)) {
+                shapes.push({
+                    type: 'line', xref: 'x', yref: 'paper',
+                    x0: meta.rmw_km, x1: meta.rmw_km, y0: 0, y1: 1,
+                    line: { color: 'white', width: 1.5, dash: 'dash' },
+                });
+            }
+
+            const layout = {
+                title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' },
+                paper_bgcolor: '#0e1117', plot_bgcolor: '#0e1117',
+                xaxis: {
+                    title: { text: 'Radius (km)', font: { color: '#aaa', size: fontSize.axis } },
+                    tickfont: { color: '#aaa', size: fontSize.tick },
+                    gridcolor: 'rgba(255,255,255,0.05)', zeroline: false,
+                },
+                yaxis: {
+                    title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } },
+                    tickfont: { color: '#aaa', size: fontSize.tick },
+                    gridcolor: 'rgba(255,255,255,0.05)', zeroline: false,
+                },
+                margin: fullsize
+                    ? { l: 55, r: 24, t: json.overlay ? 66 : 50, b: 46 }
+                    : { l: 45, r: 12, t: json.overlay ? 56 : 42, b: 38 },
+                shapes: shapes,
+                hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: fontSize.hover } },
+                showlegend: false,
+            };
+
+            if (!fullsize) {
+                el.innerHTML = `<div id="az-chart" style="width:100%;height:${plotHeight};border-radius:6px;overflow:hidden;"></div>`;
+                Plotly.newPlot('az-chart', [heatmap, ...azOverlayTraces], layout, {
+                    responsive: true, displayModeBar: false, displaylogo: false,
+                });
+            } else {
+                Plotly.newPlot(targetId, [heatmap, ...azOverlayTraces], layout, {
+                    responsive: true, displayModeBar: true, displaylogo: false,
+                    modeBarButtonsToRemove: ['lasso2d', 'select2d', 'toggleSpikelines'],
+                });
+            }
+        }
+
+        function buildAzOverlayContours(json, radius_km, height_km) {
+            if (!json.overlay) return [];
+            const ov = json.overlay;
+            const ovData = ov.azimuthal_mean;
+            if (!ovData) return [];
+
+            try {
+                const intInput = document.getElementById('ep-contour-int');
+                let interval = intInput ? parseFloat(intInput.value) : NaN;
+                if (isNaN(interval) || interval <= 0) {
+                    const flat = ovData.flat().filter(v => v !== null && !isNaN(v));
+                    if (flat.length === 0) return [];
+                    let mn = Infinity, mx = -Infinity;
+                    for (let i = 0; i < flat.length; i++) {
+                        if (flat[i] < mn) mn = flat[i];
+                        if (flat[i] > mx) mx = flat[i];
+                    }
+                    interval = parseFloat(((mx - mn) / 10).toPrecision(1));
+                    if (!isFinite(interval) || interval <= 0) interval = (mx - mn) / 10 || 1;
+                }
+
+                const baseContour = {
+                    z: ovData, x: radius_km, y: height_km,
+                    type: 'contour',
+                    showscale: false,
+                    hoverongaps: false,
+                    contours: { coloring: 'none', showlabels: true,
+                        labelfont: { size: 9, color: 'rgba(255,255,255,0.8)' } },
+                };
+
+                const traces = [];
+                if (ov.vmax > interval) {
+                    traces.push(Object.assign({}, baseContour, {
+                        contours: Object.assign({}, baseContour.contours, {
+                            start: interval, end: ov.vmax, size: interval,
+                        }),
+                        line: { color: 'rgba(0,0,0,0.7)', width: 1.2, dash: 'solid' },
+                        hovertemplate: `<b>${ov.display_name}</b>: %{z:.2f} ${ov.units}<extra>contour</extra>`,
+                        name: `${ov.display_name} (+)`,
+                        showlegend: false,
+                    }));
+                }
+                if (ov.vmin < -interval) {
+                    traces.push(Object.assign({}, baseContour, {
+                        contours: Object.assign({}, baseContour.contours, {
+                            start: ov.vmin, end: -interval, size: interval,
+                        }),
+                        line: { color: 'rgba(0,0,0,0.7)', width: 1.2, dash: 'dash' },
+                        hovertemplate: `<b>${ov.display_name}</b>: %{z:.2f} ${ov.units}<extra>contour</extra>`,
+                        name: `${ov.display_name} (−)`,
+                        showlegend: false,
+                    }));
+                }
+                return traces;
+            } catch (e) {
+                console.warn('Az overlay contour error:', e);
+                return [];
+            }
         }
 
         // ── Intensity helpers ────────────────────────────────────────
@@ -1347,19 +1555,43 @@
             const box   = document.getElementById('plotModalBox');
             const csFull = document.getElementById('cs-fullscreen');
             const csDivider = document.getElementById('cs-full-divider');
+            const azFull = document.getElementById('az-fullscreen');
+            const azDivider = document.getElementById('az-full-divider');
             modal.classList.add('active');
             document.body.style.overflow = 'hidden';
 
             const hasCrossSection = !!csJson;
-            if (hasCrossSection) {
+            const hasAzMean = !!_lastAzJson;
+            const hasSub = hasCrossSection || hasAzMean;
+
+            if (hasSub) {
                 box.classList.add('split');
+            } else {
+                box.classList.remove('split');
+            }
+
+            // Cross-section
+            if (hasCrossSection) {
                 csFull.style.display = 'block';
                 csDivider.style.display = 'block';
             } else {
-                box.classList.remove('split');
                 csFull.style.display = 'none';
                 csDivider.style.display = 'none';
             }
+
+            // Azimuthal mean
+            if (hasAzMean) {
+                azFull.style.display = 'block';
+                azDivider.style.display = 'block';
+            } else {
+                azFull.style.display = 'none';
+                azDivider.style.display = 'none';
+            }
+
+            // Adjust plan view height when multiple sub-panels
+            const subCount = (hasCrossSection ? 1 : 0) + (hasAzMean ? 1 : 0);
+            const planHeight = subCount === 0 ? '100%' : subCount === 1 ? '55%' : '40%';
+            document.getElementById('plotly-fullscreen').style.height = planHeight;
 
             const { heatmap, overlayTraces, baseLayout, title, config } = window._lastPlotlyData;
             const fullLayout = Object.assign({}, baseLayout, {
@@ -1382,6 +1614,11 @@
             if (hasCrossSection) {
                 renderCrossSectionInto('cs-fullscreen', csJson, true);
             }
+
+            // Render azimuthal mean in fullscreen if available
+            if (hasAzMean) {
+                renderAzimuthalMeanInto('az-fullscreen', _lastAzJson, true);
+            }
         }
         function closePlotModal() {
             const modal = document.getElementById('plotModal');
@@ -1393,6 +1630,9 @@
             const csFull = document.getElementById('cs-fullscreen');
             if (csFull) { Plotly.purge('cs-fullscreen'); csFull.style.display = 'none'; }
             document.getElementById('cs-full-divider').style.display = 'none';
+            const azFull = document.getElementById('az-fullscreen');
+            if (azFull) { Plotly.purge('az-fullscreen'); azFull.style.display = 'none'; }
+            document.getElementById('az-full-divider').style.display = 'none';
         }
 
         // ── Image modal ──────────────────────────────────────────────
@@ -1422,6 +1662,8 @@
             <div id="plotly-fullscreen"></div>
             <div class="cs-full-divider" id="cs-full-divider" style="display:none;"></div>
             <div id="cs-fullscreen" style="display:none;"></div>
+            <div class="cs-full-divider" id="az-full-divider" style="display:none;"></div>
+            <div id="az-fullscreen" style="display:none;"></div>
         </div>
     </div>
 </body>
