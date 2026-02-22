@@ -478,6 +478,44 @@
                 </div>
 
                 <div class="explorer-row">
+                    <label>Contour Overlay <span style="font-weight:400;color:#9ca3af;">(optional)</span></label>
+                    <select class="explorer-select" id="ep-overlay" style="font-size:11px;">
+                        <option value="">None</option>
+                        <optgroup label="WCM Recentered (2 km)">
+                            <option value="recentered_tangential_wind">Tangential Wind</option>
+                            <option value="recentered_radial_wind">Radial Wind</option>
+                            <option value="recentered_upward_air_velocity">Vertical Velocity</option>
+                            <option value="recentered_reflectivity">Reflectivity</option>
+                            <option value="recentered_wind_speed">Wind Speed</option>
+                            <option value="recentered_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>
+                            <option value="recentered_relative_vorticity">Relative Vorticity</option>
+                            <option value="recentered_divergence">Divergence</option>
+                        </optgroup>
+                        <optgroup label="Tilt-Relative">
+                            <option value="total_recentered_tangential_wind">Tangential Wind</option>
+                            <option value="total_recentered_radial_wind">Radial Wind</option>
+                            <option value="total_recentered_upward_air_velocity">Vertical Velocity</option>
+                            <option value="total_recentered_reflectivity">Reflectivity</option>
+                            <option value="total_recentered_wind_speed">Wind Speed</option>
+                            <option value="total_recentered_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>
+                        </optgroup>
+                        <optgroup label="Original Swath">
+                            <option value="swath_tangential_wind">Tangential Wind</option>
+                            <option value="swath_radial_wind">Radial Wind</option>
+                            <option value="swath_reflectivity">Reflectivity</option>
+                            <option value="swath_wind_speed">Wind Speed</option>
+                            <option value="swath_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>
+                        </optgroup>
+                    </select>
+                    <div style="display:flex;align-items:center;gap:6px;margin-top:3px;">
+                        <label style="font-size:10px;white-space:nowrap;margin:0;">Interval:</label>
+                        <input type="number" id="ep-contour-int" value="" placeholder="auto"
+                            style="width:60px;padding:3px 5px;font-size:11px;border:1px solid #d1d5db;border-radius:4px;">
+                        <span style="font-size:10px;color:#9ca3af;" id="ep-contour-units"></span>
+                    </div>
+                </div>
+
+                <div class="explorer-row">
                     <label>Height Level</label>
                     <div class="explorer-level-row">
                         <input type="range" id="ep-level" min="0" max="18" step="0.5" value="2"
@@ -523,6 +561,7 @@
             if (currentCaseIndex === null) return;
             const variable  = document.getElementById('ep-var').value;
             const level_km  = document.getElementById('ep-level').value;
+            const overlay   = (document.getElementById('ep-overlay') || {}).value || '';
             const resultDiv = document.getElementById('ep-result');
             const btn       = document.getElementById('ep-btn');
 
@@ -533,7 +572,7 @@
             }
 
             // Check cache first
-            const cacheKey = `${currentCaseIndex}_${variable}_${level_km}`;
+            const cacheKey = `${currentCaseIndex}_${variable}_${level_km}_${overlay}`;
             if (_dataCache[cacheKey]) {
                 renderPlotFromJSON(_dataCache[cacheKey], resultDiv);
                 btn.disabled = false;
@@ -545,7 +584,10 @@
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 90000);
 
-            fetch(`${API_BASE}/data?case_index=${currentCaseIndex}&variable=${variable}&level_km=${level_km}&data_type=swath`, { signal: controller.signal })
+            let url = `${API_BASE}/data?case_index=${currentCaseIndex}&variable=${variable}&level_km=${level_km}&data_type=swath`;
+            if (overlay) url += `&overlay=${overlay}`;
+
+            fetch(url, { signal: controller.signal })
                 .then(r => {
                     if (!r.ok) return r.json().then(e => { throw new Error(e.detail || `HTTP ${r.status}`); });
                     return r.json();
@@ -567,6 +609,61 @@
                     btn.disabled = false;
                     btn.textContent = 'Generate Plot';
                 });
+        }
+
+        // ── Contour overlay helper ────────────────────────────────────
+        function buildOverlayContours(json, x, y, isCS) {
+            // json.overlay is present if the API returned an overlay variable
+            if (!json.overlay) return [];
+            const ov = json.overlay;
+            const ovData = isCS ? ov.cross_section : ov.data;
+            if (!ovData) return [];
+
+            // Get user-specified contour interval, or auto-compute
+            const intInput = document.getElementById('ep-contour-int');
+            let interval = intInput ? parseFloat(intInput.value) : NaN;
+            if (isNaN(interval) || interval <= 0) {
+                // Auto: ~10 contour levels spanning the data range
+                const flat = ovData.flat().filter(v => v !== null && !isNaN(v));
+                if (flat.length === 0) return [];
+                const mn = Math.min(...flat), mx = Math.max(...flat);
+                interval = parseFloat(((mx - mn) / 10).toPrecision(1));
+                if (interval <= 0) interval = 1;
+            }
+
+            const xCoord = isCS ? json.distance_km : x;
+            const yCoord = isCS ? json.height_km : y;
+
+            const baseContour = {
+                z: ovData, x: xCoord, y: yCoord,
+                type: 'contour',
+                showscale: false,
+                hoverongaps: false,
+                contours: { coloring: 'none', showlabels: true,
+                    labelfont: { size: 9, color: 'rgba(255,255,255,0.8)' } },
+            };
+
+            // Positive contours: solid black
+            const posTrace = Object.assign({}, baseContour, {
+                contours: Object.assign({}, baseContour.contours, {
+                    start: interval, end: ov.vmax, size: interval,
+                }),
+                line: { color: 'rgba(0,0,0,0.7)', width: 1.2, dash: 'solid' },
+                hovertemplate: `<b>${ov.display_name}</b>: %{z:.2f} ${ov.units}<extra>contour</extra>`,
+                name: `${ov.display_name} (+)`,
+            });
+
+            // Negative contours: dashed black
+            const negTrace = Object.assign({}, baseContour, {
+                contours: Object.assign({}, baseContour.contours, {
+                    start: ov.vmin, end: -interval, size: interval,
+                }),
+                line: { color: 'rgba(0,0,0,0.7)', width: 1.2, dash: 'dash' },
+                hovertemplate: `<b>${ov.display_name}</b>: %{z:.2f} ${ov.units}<extra>contour</extra>`,
+                name: `${ov.display_name} (−)`,
+            });
+
+            return [posTrace, negTrace];
         }
 
         function renderPlotFromJSON(json, resultDiv) {
@@ -644,10 +741,16 @@
                 xaxis: Object.assign({}, baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }),
                 yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }),
             });
-            Plotly.newPlot('plotly-chart', [heatmap], smallLayout, config);
+
+            // Build traces: heatmap + optional contour overlay
+            const traces = [heatmap];
+            const overlayTraces = buildOverlayContours(json, x, y);
+            traces.push(...overlayTraces);
+
+            Plotly.newPlot('plotly-chart', traces, smallLayout, config);
 
             // Store for fullscreen re-render
-            window._lastPlotlyData = { heatmap, baseLayout, title, config };
+            window._lastPlotlyData = { heatmap, overlayTraces, baseLayout, title, config };
 
             // Enable cross-section button & attach click handler
             const csBtn = document.getElementById('cs-btn');
@@ -769,11 +872,13 @@
 
         function fetchCrossSection(a, b) {
             const variable  = document.getElementById('ep-var').value;
+            const overlay   = (document.getElementById('ep-overlay') || {}).value || '';
             const csResult  = document.getElementById('cs-result');
             if (!csResult) return;
             csResult.innerHTML = `<div class="explorer-status loading">⏳ Computing cross-section…</div>`;
 
-            const url = `${API_BASE}/cross_section?case_index=${currentCaseIndex}&variable=${variable}&data_type=swath&x0=${a.x}&y0=${a.y}&x1=${b.x}&y1=${b.y}&n_points=150`;
+            let url = `${API_BASE}/cross_section?case_index=${currentCaseIndex}&variable=${variable}&data_type=swath&x0=${a.x}&y0=${a.y}&x1=${b.x}&y1=${b.y}&n_points=150`;
+            if (overlay) url += `&overlay=${overlay}`;
 
             fetch(url)
                 .then(r => {
@@ -837,7 +942,12 @@
                 hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: fontSize.hover } },
             };
 
-            Plotly.newPlot(targetId, [heatmap], layout, {
+            // Build traces: heatmap + optional contour overlay
+            const csTraces = [heatmap];
+            const csOverlayTraces = buildOverlayContours(json, null, null, true);
+            csTraces.push(...csOverlayTraces);
+
+            Plotly.newPlot(targetId, csTraces, layout, {
                 responsive: true, displayModeBar: fullsize, displaylogo: false,
                 modeBarButtonsToRemove: ['lasso2d', 'select2d', 'toggleSpikelines'],
             });
@@ -1120,7 +1230,7 @@
                 csDivider.style.display = 'none';
             }
 
-            const { heatmap, baseLayout, title, config } = window._lastPlotlyData;
+            const { heatmap, overlayTraces, baseLayout, title, config } = window._lastPlotlyData;
             const fullLayout = Object.assign({}, baseLayout, {
                 title: { text: title, font: { color: '#e5e7eb', size: 15 }, y: 0.97, x: 0.5, xanchor: 'center' },
                 margin: { l: 65, r: 30, t: 60, b: 55 },
@@ -1134,7 +1244,8 @@
                     thickness: 16, len: 0.85,
                 }),
             });
-            Plotly.newPlot('plotly-fullscreen', [fullHeatmap], fullLayout, config);
+            const fullTraces = [fullHeatmap, ...(overlayTraces || [])];
+            Plotly.newPlot('plotly-fullscreen', fullTraces, fullLayout, config);
 
             // Render cross-section in fullscreen if provided
             if (hasCrossSection) {
