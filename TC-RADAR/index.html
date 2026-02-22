@@ -668,7 +668,8 @@
                         if (flat[i] > mx) mx = flat[i];
                     }
                     interval = parseFloat(((mx - mn) / 10).toPrecision(1));
-                    if (interval <= 0) interval = 1;
+                    if (!isFinite(interval) || interval <= 0) interval = (mx - mn) / 10 || 1;
+                    console.log('Overlay contour:', ov.display_name, 'range:', mn, mx, 'interval:', interval, 'vmin:', ov.vmin, 'vmax:', ov.vmax);
                 }
 
                 const xCoord = isCS ? json.distance_km : x;
@@ -863,27 +864,32 @@
             });
 
             // Build traces: heatmap + optional contour overlay
-            const traces = [heatmap];
-            const overlayTraces = buildOverlayContours(json, x, y);
-            traces.push(...overlayTraces);
+            let overlayTraces = buildOverlayContours(json, x, y);
+            const allTraces = [heatmap, ...overlayTraces];
 
-            Plotly.newPlot('plotly-chart', traces, smallLayout, config);
+            Plotly.newPlot('plotly-chart', allTraces, smallLayout, config)
+                .catch(err => {
+                    console.warn('Plotly render failed with overlay, falling back to heatmap only:', err);
+                    overlayTraces = [];
+                    return Plotly.newPlot('plotly-chart', [heatmap], smallLayout, config);
+                })
+                .then(() => {
+                    // Update hint text with hover toggle if overlay present
+                    const hasOverlay = overlayTraces.length > 0;
+                    const hintDiv = resultDiv.querySelector('div:last-child');
+                    if (hintDiv && hasOverlay) {
+                        hintDiv.innerHTML = `Hover: <a href="#" class="hover-toggle-link" onclick="toggleHoverTarget(event)" style="color:#60a5fa;text-decoration:underline;cursor:pointer;"><b>Shaded</b></a> · scroll to zoom · drag to pan · ⛶ expand`;
+                    }
 
-            // Update hint text with hover toggle if overlay present
-            const hasOverlay = overlayTraces.length > 0;
-            const hintDiv = resultDiv.querySelector('div:last-child');
-            if (hintDiv && hasOverlay) {
-                hintDiv.innerHTML = `Hover: <a href="#" class="hover-toggle-link" onclick="toggleHoverTarget(event)" style="color:#60a5fa;text-decoration:underline;cursor:pointer;"><b>Shaded</b></a> · scroll to zoom · drag to pan · ⛶ expand`;
-            }
+                    // Store for fullscreen re-render
+                    window._lastPlotlyData = { heatmap, overlayTraces, baseLayout, title, config, hasOverlay, overlayName: hasOverlay ? json.overlay.display_name : '' };
 
-            // Store for fullscreen re-render
-            window._lastPlotlyData = { heatmap, overlayTraces, baseLayout, title, config, hasOverlay, overlayName: hasOverlay ? json.overlay.display_name : '' };
-
-            // Enable cross-section button & attach click handler
-            const csBtn = document.getElementById('cs-btn');
-            if (csBtn) csBtn.disabled = false;
-            const plotDiv = document.getElementById('plotly-chart');
-            plotDiv.on('plotly_click', handlePlotClick);
+                    // Enable cross-section button & attach click handler
+                    const csBtn = document.getElementById('cs-btn');
+                    if (csBtn) csBtn.disabled = false;
+                    const plotDiv = document.getElementById('plotly-chart');
+                    plotDiv.on('plotly_click', handlePlotClick);
+                });
         }
 
         // ── Height animation ─────────────────────────────────────────
