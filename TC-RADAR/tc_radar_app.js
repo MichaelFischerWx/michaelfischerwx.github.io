@@ -129,6 +129,7 @@ function exploreCaseGo() {
 // ── Side panel ───────────────────────────────────────────────
 function openSidePanel(caseData, fromQuickSelect) {
     currentCaseIndex = caseData.case_index;
+    _currentSddc = (caseData.sddc !== null && caseData.sddc !== undefined && caseData.sddc !== 9999) ? caseData.sddc : null;
     const idx = caseData.case_index;
     const padded = String(idx).padStart(4, '0');
     const imageUrl = 'images/v3m/v3m_swath_cf_' + padded + '.png';
@@ -157,11 +158,13 @@ function openSidePanel(caseData, fromQuickSelect) {
                     '<div class="explorer-result" id="ep-result"></div>' +
                     '<div class="cs-result" id="cs-result"></div>' +
                     '<div class="az-result" id="az-result"></div>' +
+                    '<div class="sq-result" id="sq-result"></div>' +
                     '<div class="cs-status" id="cs-status"></div>' +
                 '</div>' +
                 '<div class="display-actions">' +
                     '<button class="cs-btn" id="cs-btn" onclick="toggleCrossSection()" disabled>\u2702 Cross Section</button>' +
                     '<button class="cs-btn" id="az-btn" onclick="fetchAzimuthalMean()" disabled>\u27F3 Azim. Mean</button>' +
+                    '<button class="cs-btn" id="sq-btn" onclick="fetchShearQuadrants()" disabled>\u25D1 Shear Quads</button>' +
                 '</div>' +
             '</div>' +
 
@@ -310,6 +313,8 @@ var _dataCache = {};
 var _csMode = false;
 var _csPointA = null;
 var _csMouseHandler = null;
+var _currentSddc = null;
+var _lastSqJson = null;
 
 function _startRubberBand(plotDiv, pxA, pyA) {
     var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -349,6 +354,7 @@ function _removeRubberBand() {
 function generateCustomPlot(callback) {
     if (currentCaseIndex === null) return;
     _lastAzJson = null;
+    _lastSqJson = null;
     var variable = document.getElementById('ep-var').value;
     var level_km = document.getElementById('ep-level').value;
     var overlay = (document.getElementById('ep-overlay') || {}).value || '';
@@ -417,7 +423,7 @@ function applyCmap() {
     var cs = sel.value;
     if (!cs && _defaultColorscale) cs = _defaultColorscale; if (!cs) return;
     var colorscale; try { colorscale = JSON.parse(cs); } catch(e) { colorscale = cs; }
-    ['plotly-chart','plotly-fullscreen','cs-fullscreen','az-chart','az-fullscreen'].forEach(function(id) {
+    ['plotly-chart','plotly-fullscreen','cs-fullscreen','az-chart','az-fullscreen','sq-chart','sq-fullscreen'].forEach(function(id) {
         var plotDiv = document.getElementById(id);
         if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
         Plotly.restyle(plotDiv, { colorscale: [colorscale] }, [0]);
@@ -430,7 +436,7 @@ function _getActiveVmax() { var inp = document.getElementById('ep-vmax'); if (in
 
 function applyColorRange() {
     var zmin = _getActiveVmin(), zmax = _getActiveVmax(); if (zmin === null || zmax === null) return;
-    ['plotly-chart','plotly-fullscreen','cs-fullscreen','az-chart','az-fullscreen'].forEach(function(id) {
+    ['plotly-chart','plotly-fullscreen','cs-fullscreen','az-chart','az-fullscreen','sq-chart','sq-fullscreen'].forEach(function(id) {
         var plotDiv = document.getElementById(id);
         if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
         Plotly.restyle(plotDiv, { zmin: [zmin], zmax: [zmax] }, [0]);
@@ -442,7 +448,7 @@ function resetColorRange() {
     var vminInput = document.getElementById('ep-vmin'), vmaxInput = document.getElementById('ep-vmax');
     if (vminInput) vminInput.value = ''; if (vmaxInput) vmaxInput.value = '';
     if (_defaultVmin !== null && _defaultVmax !== null) {
-        ['plotly-chart','plotly-fullscreen','cs-fullscreen','az-chart','az-fullscreen'].forEach(function(id) {
+        ['plotly-chart','plotly-fullscreen','cs-fullscreen','az-chart','az-fullscreen','sq-chart','sq-fullscreen'].forEach(function(id) {
             var plotDiv = document.getElementById(id);
             if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
             Plotly.restyle(plotDiv, { zmin: [_defaultVmin], zmax: [_defaultVmax] }, [0]);
@@ -528,6 +534,7 @@ function renderPlotFromJSON(json, resultDiv) {
     if (panelInner) panelInner.scrollTop = 0;
 
     var zData = json.data, x = json.x, y = json.y, varInfo = json.variable, meta = json.case_meta;
+    _currentSddc = (meta.sddc !== undefined && meta.sddc !== null && meta.sddc !== 9999) ? meta.sddc : null;
     _defaultColorscale = varInfo.colorscale; _defaultVmin = varInfo.vmin; _defaultVmax = varInfo.vmax;
     var vminInput = document.getElementById('ep-vmin'), vmaxInput = document.getElementById('ep-vmax');
     if (vminInput) vminInput.placeholder = varInfo.vmin; if (vmaxInput) vmaxInput.placeholder = varInfo.vmax;
@@ -567,10 +574,22 @@ function renderPlotFromJSON(json, resultDiv) {
         }
     }
 
+    // Shear vector inset
+    var shearInset = buildShearInset(_currentSddc, false);
+    if (shearInset.shapes.length) {
+        smallLayout.shapes = (smallLayout.shapes || []).concat(shearInset.shapes);
+        baseLayout.shapes = (baseLayout.shapes || []).concat(shearInset.shapes);
+    }
+    if (shearInset.annotations.length) {
+        smallLayout.annotations = (smallLayout.annotations || []).concat(shearInset.annotations);
+        baseLayout.annotations = (baseLayout.annotations || []).concat(shearInset.annotations);
+    }
+
     Plotly.newPlot('plotly-chart', [heatmap].concat(overlayTraces).concat(maxTraces), smallLayout, config);
     window._lastPlotlyData = { heatmap: heatmap, overlayTraces: overlayTraces, maxTraces: maxTraces, baseLayout: baseLayout, title: title, config: config };
     var csBtn = document.getElementById('cs-btn'); if (csBtn) csBtn.disabled = false;
     var azBtn = document.getElementById('az-btn'); if (azBtn) azBtn.disabled = false;
+    var sqBtn = document.getElementById('sq-btn'); if (sqBtn) sqBtn.disabled = false;
     document.getElementById('plotly-chart').on('plotly_click', handlePlotClick);
 
     // Auto-scroll the side panel to show the plot (skip during animation)
@@ -669,6 +688,11 @@ function renderCrossSectionInto(targetId, json, fullsize) {
         }
     }
 
+    // Shear vector inset for cross-section
+    var csShearInset = buildShearInsetCS(_currentSddc, fullsize);
+    if (csShearInset.annotations.length) layout.annotations = (layout.annotations || []).concat(csShearInset.annotations);
+    if (csShearInset.shapes.length) layout.shapes = (layout.shapes || []).concat(csShearInset.shapes);
+
     Plotly.newPlot(targetId, [heatmap].concat(csOverlayTraces).concat(csMaxTraces), layout, { responsive: true, displayModeBar: fullsize, displaylogo: false, modeBarButtonsToRemove: ['lasso2d','select2d','toggleSpikelines'] });
 }
 
@@ -698,6 +722,7 @@ function fetchAzimuthalMean() {
 function renderAzimuthalMeanInto(targetId, json, fullsize) {
     var el = document.getElementById(targetId); if (!el) return;
     var azData = json.azimuthal_mean, radius_km = json.radius_km, height_km = json.height_km, varInfo = json.variable, meta = json.case_meta;
+    if (meta.sddc !== undefined && meta.sddc !== null && meta.sddc !== 9999) _currentSddc = meta.sddc;
     var fontSize = fullsize ? { title:13,axis:12,tick:10,cbar:12,cbarTick:10,hover:13 } : { title:10,axis:9,tick:8,cbar:9,cbarTick:8,hover:11 };
     var csColorscale = varInfo.colorscale;
     var cmapSel = document.getElementById('ep-cmap');
@@ -726,6 +751,11 @@ function renderAzimuthalMeanInto(targetId, json, fullsize) {
         }
     }
 
+    // Shear vector inset for azimuthal mean
+    var azShearInset = buildShearInsetCS(_currentSddc, fullsize);
+    if (azShearInset.annotations.length) layout.annotations = (layout.annotations || []).concat(azShearInset.annotations);
+    if (azShearInset.shapes.length) layout.shapes = (layout.shapes || []).concat(azShearInset.shapes);
+
     if (!fullsize) {
         var thumbWrap = document.getElementById('thumbnail-wrap');
         if (thumbWrap) thumbWrap.style.display = 'none';
@@ -751,6 +781,301 @@ function buildAzOverlayContours(json, radius_km, height_km) {
     } catch(e) { console.warn('Az overlay contour error:',e); return []; }
 }
 
+// ── Shear vector inset ──────────────────────────────────────────
+function buildShearInset(sddc, isFullsize) {
+    if (sddc === null || sddc === undefined || sddc === 9999) return { shapes: [], annotations: [] };
+    // Convert SDDC (met heading: 0=N,90=E) to math angle (CCW from east)
+    var theta = (90 - sddc) * Math.PI / 180;
+    // Inset center position (paper coords) - top-left corner
+    var cx = isFullsize ? 0.08 : 0.10;
+    var cy = isFullsize ? 0.92 : 0.90;
+    var r = isFullsize ? 0.045 : 0.055;
+    var arrowLen = r * 0.82;
+    var dx = arrowLen * Math.cos(theta);
+    var dy = arrowLen * Math.sin(theta);
+    // Aspect ratio correction: paper coords are not square, estimate from typical plots
+    var aspect = 1.0; // for square axes with scaleanchor this is ~1
+    var shapes = [
+        // Background circle
+        { type:'circle', xref:'paper', yref:'paper',
+          x0: cx-r, y0: cy-r, x1: cx+r, y1: cy+r,
+          fillcolor:'rgba(10,22,40,0.85)', line:{ color:'rgba(255,255,255,0.25)', width:1 } },
+        // Shear arrow shaft
+        { type:'line', xref:'paper', yref:'paper',
+          x0: cx - dx*0.3, y0: cy - dy*0.3, x1: cx + dx, y1: cy + dy,
+          line:{ color:'#f59e0b', width: isFullsize?2.5:2 } }
+    ];
+    // Arrowhead using two short lines
+    var headLen = arrowLen * 0.35;
+    var headAngle = 25 * Math.PI / 180;
+    var ha1 = theta + Math.PI - headAngle;
+    var ha2 = theta + Math.PI + headAngle;
+    var tipX = cx + dx, tipY = cy + dy;
+    shapes.push({ type:'line', xref:'paper', yref:'paper',
+        x0: tipX, y0: tipY, x1: tipX + headLen*Math.cos(ha1), y1: tipY + headLen*Math.sin(ha1),
+        line:{ color:'#f59e0b', width: isFullsize?2.5:2 } });
+    shapes.push({ type:'line', xref:'paper', yref:'paper',
+        x0: tipX, y0: tipY, x1: tipX + headLen*Math.cos(ha2), y1: tipY + headLen*Math.sin(ha2),
+        line:{ color:'#f59e0b', width: isFullsize?2.5:2 } });
+    // Small dot at center
+    var dotR = r * 0.08;
+    shapes.push({ type:'circle', xref:'paper', yref:'paper',
+        x0: cx-dotR, y0: cy-dotR, x1: cx+dotR, y1: cy+dotR,
+        fillcolor:'rgba(255,255,255,0.5)', line:{ width:0 } });
+    var annotations = [
+        { text:'<b>SHR</b>', xref:'paper', yref:'paper', x: cx, y: cy + r + (isFullsize?0.025:0.03),
+          showarrow:false, font:{ color:'#f59e0b', size: isFullsize?10:8, family:'JetBrains Mono, monospace' },
+          bgcolor:'rgba(10,22,40,0.7)', borderpad:1 },
+        { text: sddc.toFixed(0) + '\u00b0', xref:'paper', yref:'paper', x: cx, y: cy - r - (isFullsize?0.02:0.025),
+          showarrow:false, font:{ color:'rgba(245,158,11,0.7)', size: isFullsize?8:7, family:'JetBrains Mono, monospace' } }
+    ];
+    return { shapes: shapes, annotations: annotations };
+}
+
+// Build shear inset for cross-section (simpler: just show direction label)
+function buildShearInsetCS(sddc, isFullsize) {
+    if (sddc === null || sddc === undefined || sddc === 9999) return { shapes: [], annotations: [] };
+    var annotations = [
+        { text:'<b>SHR: ' + sddc.toFixed(0) + '\u00b0</b>',
+          xref:'paper', yref:'paper', x: 0.01, y: 1.0,
+          xanchor:'left', yanchor:'bottom', showarrow:false,
+          font:{ color:'#f59e0b', size: isFullsize?10:8, family:'JetBrains Mono, monospace' },
+          bgcolor:'rgba(10,22,40,0.8)', borderpad:2, bordercolor:'rgba(245,158,11,0.3)', borderwidth:1 }
+    ];
+    return { shapes: [], annotations: annotations };
+}
+
+// ── Shear-Relative Quadrant Means ───────────────────────────────
+function fetchShearQuadrants() {
+    if (currentCaseIndex === null) return;
+    var variable = document.getElementById('ep-var').value;
+    var overlay = (document.getElementById('ep-overlay') || {}).value || '';
+    var covSlider = document.getElementById('az-coverage');
+    var coverage = covSlider ? (parseInt(covSlider.value) / 100) : 0.5;
+    var resultDiv = document.getElementById('sq-result'), btn = document.getElementById('sq-btn');
+    resultDiv.innerHTML = '<div class="explorer-status loading">\u23F3 Computing shear-relative quadrant means\u2026</div>';
+    btn.disabled = true; btn.textContent = '\u25D1 Computing\u2026';
+    var url = API_BASE + '/quadrant_mean?case_index=' + currentCaseIndex + '&variable=' + variable + '&data_type=swath&coverage_min=' + coverage;
+    if (overlay && overlay !== 'none') url += '&overlay=' + overlay;
+    var controller = new AbortController();
+    var timeout = setTimeout(function() { controller.abort(); }, 90000);
+    fetch(url, { signal: controller.signal })
+        .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
+        .then(function(json) {
+            _lastSqJson = json;
+            if (json.case_meta && json.case_meta.sddc !== undefined) _currentSddc = (json.case_meta.sddc !== 9999) ? json.case_meta.sddc : null;
+            renderQuadrantMeansInto('sq-result', json, false);
+            openPlotModal();
+        })
+        .catch(function(err) { resultDiv.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + (err.name === 'AbortError' ? 'Request timed out (90s).' : err.message) + '</div>'; })
+        .finally(function() { clearTimeout(timeout); btn.disabled = false; btn.textContent = '\u25D1 Shear Quads'; });
+}
+
+function renderQuadrantMeansInto(targetId, json, fullsize) {
+    var el = document.getElementById(targetId); if (!el) return;
+    var quads = json.quadrant_means; // { DSL: {data:...}, DSR: ..., USL: ..., USR: ... }
+    var radius_km = json.radius_km, height_km = json.height_km, varInfo = json.variable, meta = json.case_meta;
+    var sddc = (meta.sddc !== undefined && meta.sddc !== 9999) ? meta.sddc : null;
+    var fontSize = fullsize ? { title:14,axis:11,tick:10,cbar:11,cbarTick:10,hover:12,panel:12 } : { title:11,axis:9,tick:8,cbar:9,cbarTick:8,hover:10,panel:10 };
+
+    var csColorscale = varInfo.colorscale;
+    var cmapSel = document.getElementById('ep-cmap');
+    if (cmapSel && cmapSel.value) { try { csColorscale = JSON.parse(cmapSel.value); } catch(e) { csColorscale = cmapSel.value; } }
+    var av = _getActiveVmin(), avx = _getActiveVmax();
+    var zmin = av !== null ? av : varInfo.vmin;
+    var zmax = avx !== null ? avx : varInfo.vmax;
+
+    // 4-panel layout: USL(top-left), DSL(top-right), USR(bottom-left), DSR(bottom-right)
+    // This orients as if shear is westerly: downshear=right, left-of-shear=top
+    var panelOrder = [
+        { key: 'USL', label: 'Upshear Left', row: 0, col: 0, xaxis: 'x', yaxis: 'y' },
+        { key: 'DSL', label: 'Downshear Left', row: 0, col: 1, xaxis: 'x2', yaxis: 'y2' },
+        { key: 'USR', label: 'Upshear Right', row: 1, col: 0, xaxis: 'x3', yaxis: 'y3' },
+        { key: 'DSR', label: 'Downshear Right', row: 1, col: 1, xaxis: 'x4', yaxis: 'y4' }
+    ];
+
+    var traces = [];
+    var annotations = [];
+    var shapes = [];
+
+    // Panel spacing
+    var gap = fullsize ? 0.08 : 0.10;
+    var cbarW = 0.04;
+    var leftM = 0.06, rightM = 0.02 + cbarW + 0.02;
+    var topM = fullsize ? 0.10 : 0.12;
+    var botM = 0.06;
+    var pw = (1 - leftM - rightM - gap) / 2;
+    var ph = (1 - topM - botM - gap) / 2;
+
+    // Quadrant panel colors for subtle border highlighting
+    var quadColors = { DSL: '#f59e0b', DSR: '#f59e0b', USL: '#60a5fa', USR: '#60a5fa' };
+
+    panelOrder.forEach(function(p, i) {
+        var qData = quads[p.key];
+        if (!qData || !qData.data) return;
+        var x0 = leftM + p.col * (pw + gap);
+        var x1 = x0 + pw;
+        var y0 = botM + (1 - p.row) * (ph + gap); // row 0 = top
+        var y1 = y0 + ph;
+        // Adjust: row 0 should be higher y
+        var yBottom = 1 - topM - (p.row + 1) * ph - p.row * gap;
+        var yTop = 1 - topM - p.row * ph - p.row * gap;
+
+        var axSuffix = i === 0 ? '' : String(i + 1);
+        var showCbar = (i === 1); // only show colorbar on top-right panel
+
+        traces.push({
+            z: qData.data, x: radius_km, y: height_km,
+            type: 'heatmap', colorscale: csColorscale, zmin: zmin, zmax: zmax,
+            xaxis: 'x' + axSuffix, yaxis: 'y' + axSuffix,
+            showscale: showCbar,
+            colorbar: showCbar ? {
+                title: { text: varInfo.units, font: { color: '#ccc', size: fontSize.cbar } },
+                tickfont: { color: '#ccc', size: fontSize.cbarTick },
+                thickness: fullsize ? 14 : 10, len: 0.85,
+                x: 1.02, y: 0.5
+            } : undefined,
+            hovertemplate: '<b>' + p.label + '</b><br>' + varInfo.display_name + ': %{z:.2f} ' + varInfo.units + '<br>Radius: %{x:.0f} km<br>Height: %{y:.1f} km<extra></extra>',
+            hoverongaps: false
+        });
+
+        // Panel title annotation
+        annotations.push({
+            text: '<b>' + p.label + '</b>',
+            xref: 'paper', yref: 'paper',
+            x: (x0 + x1) / 2, y: yTop + 0.005,
+            xanchor: 'center', yanchor: 'bottom', showarrow: false,
+            font: { color: quadColors[p.key] || '#ccc', size: fontSize.panel, family: 'JetBrains Mono, monospace' },
+            bgcolor: 'rgba(10,22,40,0.7)', borderpad: 2
+        });
+
+        // RMW line
+        if (meta.rmw_km && !isNaN(meta.rmw_km)) {
+            shapes.push({ type:'line', xref: 'x' + axSuffix, yref: 'y' + axSuffix,
+                x0: meta.rmw_km, x1: meta.rmw_km, y0: height_km[0], y1: height_km[height_km.length-1],
+                line:{ color:'white', width:1, dash:'dash' } });
+        }
+    });
+
+    // Build axes
+    var plotBg = '#0a1628';
+    var layout = {
+        paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+        margin: fullsize ? { l:55, r:70, t:70, b:50 } : { l:45, r:55, t:62, b:42 },
+        showlegend: false,
+        annotations: annotations,
+        shapes: shapes,
+        hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: fontSize.hover } }
+    };
+
+    // Define axes for each panel
+    var axConfigs = [
+        { x0: leftM, x1: leftM + pw, y0: 1-topM-ph, y1: 1-topM },           // top-left (USL)
+        { x0: leftM+pw+gap, x1: leftM+2*pw+gap, y0: 1-topM-ph, y1: 1-topM }, // top-right (DSL)
+        { x0: leftM, x1: leftM+pw, y0: botM, y1: botM+ph },                    // bottom-left (USR)
+        { x0: leftM+pw+gap, x1: leftM+2*pw+gap, y0: botM, y1: botM+ph }        // bottom-right (DSR)
+    ];
+
+    panelOrder.forEach(function(p, i) {
+        var axSuffix = i === 0 ? '' : String(i + 1);
+        var ac = axConfigs[i];
+        var showXLabel = (p.row === 1); // only bottom row
+        var showYLabel = (p.col === 0); // only left column
+        layout['xaxis' + axSuffix] = {
+            domain: [ac.x0, ac.x1],
+            title: showXLabel ? { text: 'Radius (km)', font: { color: '#aaa', size: fontSize.axis } } : undefined,
+            tickfont: { color: '#aaa', size: fontSize.tick },
+            gridcolor: 'rgba(255,255,255,0.04)', zeroline: false,
+            anchor: 'y' + axSuffix
+        };
+        layout['yaxis' + axSuffix] = {
+            domain: [ac.y0, ac.y1],
+            title: showYLabel ? { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } } : undefined,
+            tickfont: { color: '#aaa', size: fontSize.tick },
+            gridcolor: 'rgba(255,255,255,0.04)', zeroline: false,
+            anchor: 'x' + axSuffix
+        };
+    });
+
+    // Main title
+    var vmaxStr = meta.vmax_kt ? ' | Vmax = ' + meta.vmax_kt + ' kt' : '';
+    var shearStr = sddc !== null ? ' | Shear: ' + sddc.toFixed(0) + '\u00b0' : '';
+    var covPct = Math.round((json.coverage_min || 0.5) * 100);
+    var overlayLabel = json.overlay ? '<br><span style="font-size:0.85em;color:#9ca3af;">Contours: ' + json.overlay.display_name + ' (' + json.overlay.units + ')</span>' : '';
+    layout.title = {
+        text: meta.storm_name + ' | ' + meta.datetime + vmaxStr + shearStr + '<br>Shear-Relative Quadrant Mean: ' + varInfo.display_name + ' (\u2265' + covPct + '% cov.)' + overlayLabel,
+        font: { color: '#e5e7eb', size: fontSize.title }, y: 0.99, x: 0.5, xanchor: 'center'
+    };
+
+    // Add shear vector inset between the 4 panels (center)
+    if (sddc !== null) {
+        var insetCx = leftM + pw + gap/2;
+        var insetCy = botM + ph + gap/2;
+        var insetR = Math.min(gap, 0.06) * 0.55;
+        var theta = (90 - sddc) * Math.PI / 180;
+        var arrowLen = insetR * 0.8;
+        var adx = arrowLen * Math.cos(theta);
+        var ady = arrowLen * Math.sin(theta);
+        // Background circle
+        shapes.push({ type:'circle', xref:'paper', yref:'paper',
+            x0:insetCx-insetR, y0:insetCy-insetR, x1:insetCx+insetR, y1:insetCy+insetR,
+            fillcolor:'rgba(10,22,40,0.9)', line:{color:'rgba(245,158,11,0.4)',width:1.5} });
+        // Arrow shaft
+        shapes.push({ type:'line', xref:'paper', yref:'paper',
+            x0:insetCx - adx*0.3, y0:insetCy - ady*0.3, x1:insetCx + adx, y1:insetCy + ady,
+            line:{color:'#f59e0b',width:2.5} });
+        // Arrowhead
+        var headLen2 = arrowLen * 0.35, headAngle2 = 25 * Math.PI / 180;
+        var tipX2 = insetCx + adx, tipY2 = insetCy + ady;
+        shapes.push({ type:'line', xref:'paper', yref:'paper',
+            x0:tipX2, y0:tipY2, x1:tipX2+headLen2*Math.cos(theta+Math.PI-headAngle2), y1:tipY2+headLen2*Math.sin(theta+Math.PI-headAngle2),
+            line:{color:'#f59e0b',width:2.5} });
+        shapes.push({ type:'line', xref:'paper', yref:'paper',
+            x0:tipX2, y0:tipY2, x1:tipX2+headLen2*Math.cos(theta+Math.PI+headAngle2), y1:tipY2+headLen2*Math.sin(theta+Math.PI+headAngle2),
+            line:{color:'#f59e0b',width:2.5} });
+        // "DS" label at arrowhead
+        annotations.push({ text:'DS', xref:'paper', yref:'paper',
+            x:insetCx + adx*1.6, y:insetCy + ady*1.6,
+            showarrow:false, font:{color:'#f59e0b',size:fullsize?9:7,family:'JetBrains Mono,monospace'} });
+    }
+
+    // Add overlay contours for each quadrant if present
+    if (json.overlay && json.overlay.quadrant_means) {
+        var intInput = document.getElementById('ep-contour-int');
+        var interval = intInput ? parseFloat(intInput.value) : NaN;
+        panelOrder.forEach(function(p, i) {
+            var ovQ = json.overlay.quadrant_means[p.key];
+            if (!ovQ || !ovQ.data) return;
+            if (isNaN(interval) || interval <= 0) {
+                var flat = ovQ.data.flat().filter(function(v){return v!==null&&!isNaN(v);});
+                if (flat.length === 0) return;
+                var mn=Infinity,mx=-Infinity;
+                for(var k=0;k<flat.length;k++){if(flat[k]<mn)mn=flat[k];if(flat[k]>mx)mx=flat[k];}
+                interval=parseFloat(((mx-mn)/10).toPrecision(1));
+                if(!isFinite(interval)||interval<=0) interval=(mx-mn)/10||1;
+            }
+            var axSuffix = i === 0 ? '' : String(i+1);
+            var baseContour = { z:ovQ.data, x:radius_km, y:height_km, type:'contour', xaxis:'x'+axSuffix, yaxis:'y'+axSuffix, showscale:false, hoverongaps:false, contours:{coloring:'none',showlabels:true,labelfont:{size:8,color:'rgba(255,255,255,0.7)'}} };
+            if (json.overlay.vmax > interval) traces.push(Object.assign({},baseContour,{contours:Object.assign({},baseContour.contours,{start:interval,end:json.overlay.vmax,size:interval}),line:{color:'rgba(0,0,0,0.6)',width:1,dash:'solid'},showlegend:false}));
+            if (json.overlay.vmin < -interval) traces.push(Object.assign({},baseContour,{contours:Object.assign({},baseContour.contours,{start:json.overlay.vmin,end:-interval,size:interval}),line:{color:'rgba(0,0,0,0.6)',width:1,dash:'dash'},showlegend:false}));
+        });
+    }
+
+    layout.shapes = shapes;
+    layout.annotations = annotations;
+
+    if (!fullsize) {
+        var thumbWrap = document.getElementById('thumbnail-wrap');
+        if (thumbWrap) thumbWrap.style.display = 'none';
+        el.innerHTML = '<div style="position:relative;"><div id="sq-chart" style="width:100%;height:400px;border-radius:6px;overflow:hidden;"></div><button onclick="openPlotModal()" title="Expand to fullscreen" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">\u26F6</button></div><div style="font-size:11px;color:var(--slate);text-align:center;margin-top:4px;">Hover \u00b7 zoom \u00b7 pan \u00b7 \u26F6 expand</div>';
+        Plotly.newPlot('sq-chart', traces, layout, { responsive:true, displayModeBar:false, displaylogo:false });
+        var panelInner = document.getElementById('side-panel-inner');
+        if (panelInner) panelInner.scrollTop = 0;
+    } else {
+        Plotly.newPlot(targetId, traces, layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
+    }
+}
+
 // ── Intensity helpers ────────────────────────────────────────
 function getIntensityColor(vmax) {
     if (!vmax) return '#6b7280'; if (vmax<34) return '#60a5fa'; if (vmax<64) return '#34d399';
@@ -769,6 +1094,7 @@ function createPopupContent(caseData) {
     var rmw = caseData.rmw_km !== null ? caseData.rmw_km + ' km' : 'N/A';
     var vmaxChange = caseData['24-h_vmax_change_kt'] !== null ? (caseData['24-h_vmax_change_kt']>0?'+':'') + caseData['24-h_vmax_change_kt'] + ' kt' : 'N/A';
     var tiltMag = caseData.tilt_magnitude_km !== null ? caseData.tilt_magnitude_km.toFixed(1) + ' km' : 'N/A';
+    var shearDir = (caseData.sddc !== null && caseData.sddc !== undefined && caseData.sddc !== 9999) ? caseData.sddc.toFixed(0) + '\u00b0' : 'N/A';
     var category = getIntensityCategory(caseData.vmax_kt);
     var catColor = getIntensityColor(caseData.vmax_kt);
     var idx = caseData.case_index;
@@ -779,6 +1105,7 @@ function createPopupContent(caseData) {
         '<div class="popup-row"><span class="popup-label">Min Pressure:</span><span class="popup-value">' + pressure + '</span></div>' +
         '<div class="popup-row"><span class="popup-label">RMW:</span><span class="popup-value">' + rmw + '</span></div>' +
         '<div class="popup-row"><span class="popup-label">Tilt Magnitude:</span><span class="popup-value">' + tiltMag + '</span></div>' +
+        '<div class="popup-row"><span class="popup-label">Shear Dir:</span><span class="popup-value">' + shearDir + '</span></div>' +
         '<div class="popup-row"><span class="popup-label">Location:</span><span class="popup-value">' + Math.abs(caseData.latitude).toFixed(2) + '\u00b0' + (caseData.latitude>=0?'N':'S') + ', ' + Math.abs(caseData.longitude).toFixed(2) + '\u00b0' + (caseData.longitude<0?'W':'E') + '</span></div>' +
         '<button class="popup-explore-btn" onclick="openSidePanelById(' + idx + ')">\uD83D\uDD2C View Radar & Explore Data \u2192</button>';
 }
@@ -914,13 +1241,42 @@ function openPlotModal(csJson) {
     var modal = document.getElementById('plotModal'), box = document.getElementById('plotModalBox');
     var csFull = document.getElementById('cs-fullscreen'), csDivider = document.getElementById('cs-full-divider');
     var azFull = document.getElementById('az-fullscreen'), azDivider = document.getElementById('az-full-divider');
+    // Dynamically create sq-fullscreen and sq-full-divider if they don't exist
+    var sqFull = document.getElementById('sq-fullscreen');
+    var sqDivider = document.getElementById('sq-full-divider');
+    if (!sqFull) {
+        sqDivider = document.createElement('div'); sqDivider.id = 'sq-full-divider';
+        sqDivider.style.cssText = 'height:1px;background:rgba(255,255,255,0.1);margin:8px 0;display:none;';
+        sqFull = document.createElement('div'); sqFull.id = 'sq-fullscreen';
+        sqFull.style.cssText = 'width:100%;display:none;';
+        var container = azFull ? azFull.parentElement : csFull.parentElement;
+        container.appendChild(sqDivider); container.appendChild(sqFull);
+    }
     modal.classList.add('active'); document.body.style.overflow = 'hidden';
-    var hasCrossSection = !!csJson, hasAzMean = !!_lastAzJson, hasSub = hasCrossSection || hasAzMean;
+    var hasCrossSection = !!csJson, hasAzMean = !!_lastAzJson, hasShearQuads = !!_lastSqJson;
+    var hasSub = hasCrossSection || hasAzMean || hasShearQuads;
     if (hasSub) box.classList.add('split'); else box.classList.remove('split');
     csFull.style.display = hasCrossSection?'block':'none'; csDivider.style.display = hasCrossSection?'block':'none';
     azFull.style.display = hasAzMean?'block':'none'; azDivider.style.display = hasAzMean?'block':'none';
-    var subCount = (hasCrossSection?1:0)+(hasAzMean?1:0);
-    document.getElementById('plotly-fullscreen').style.height = subCount===0?'100%':subCount===1?'55%':'40%';
+    sqFull.style.display = hasShearQuads?'block':'none'; sqDivider.style.display = hasShearQuads?'block':'none';
+    var subCount = (hasCrossSection?1:0)+(hasAzMean?1:0)+(hasShearQuads?1:0);
+    // Adjust heights based on what's being shown
+    if (hasShearQuads && subCount === 1) {
+        // Shear quads only: give it most of the space (it's a 4-panel plot)
+        document.getElementById('plotly-fullscreen').style.height = '45%';
+        sqFull.style.height = '52%';
+    } else if (subCount === 0) {
+        document.getElementById('plotly-fullscreen').style.height = '100%';
+    } else if (subCount === 1) {
+        document.getElementById('plotly-fullscreen').style.height = '55%';
+        if (hasShearQuads) sqFull.style.height = '42%';
+    } else if (subCount === 2) {
+        document.getElementById('plotly-fullscreen').style.height = '40%';
+        if (hasShearQuads) sqFull.style.height = '38%';
+    } else {
+        document.getElementById('plotly-fullscreen').style.height = '30%';
+        if (hasShearQuads) sqFull.style.height = '32%';
+    }
 
     var d = window._lastPlotlyData;
     var fullLayout = Object.assign({}, d.baseLayout, { title: { text: d.title, font: { color: '#e5e7eb', size: 15 }, y: 0.97, x: 0.5, xanchor: 'center' }, margin: { l:65,r:30,t:d.overlayTraces&&d.overlayTraces.length?76:60,b:55 }, xaxis: Object.assign({}, d.baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }), yaxis: Object.assign({}, d.baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }) });
@@ -930,10 +1286,18 @@ function openPlotModal(csJson) {
             return Object.assign({}, a, { font: Object.assign({}, a.font, { size: 11 }) });
         });
     }
+    // Scale up shear inset shapes for fullscreen
+    var fsShearInset = buildShearInset(_currentSddc, true);
+    if (fsShearInset.shapes.length) fullLayout.shapes = (fullLayout.shapes || []).filter(function(s){return !s._shearInset;}).concat(fsShearInset.shapes);
+    if (fsShearInset.annotations.length) {
+        var nonShear = (fullLayout.annotations || []).filter(function(a){return a.text && a.text.indexOf('SHR') === -1 && a.text.indexOf('\u00b0') === -1 || !a.text;});
+        fullLayout.annotations = nonShear.concat(fsShearInset.annotations);
+    }
     var fullHeatmap = Object.assign({}, d.heatmap, { colorbar: Object.assign({}, d.heatmap.colorbar, { title: { text: d.heatmap.colorbar.title.text, font: { color: '#ccc', size: 13 } }, tickfont: { color: '#ccc', size: 11 }, thickness: 16, len: 0.85 }) });
     Plotly.newPlot('plotly-fullscreen', [fullHeatmap].concat(d.overlayTraces||[]).concat(d.maxTraces||[]), fullLayout, d.config);
     if (hasCrossSection) renderCrossSectionInto('cs-fullscreen', csJson, true);
     if (hasAzMean) renderAzimuthalMeanInto('az-fullscreen', _lastAzJson, true);
+    if (hasShearQuads) renderQuadrantMeansInto('sq-fullscreen', _lastSqJson, true);
 }
 
 function closePlotModal() {
@@ -945,6 +1309,8 @@ function closePlotModal() {
     document.getElementById('cs-full-divider').style.display='none';
     var azFull = document.getElementById('az-fullscreen'); if (azFull) { Plotly.purge('az-fullscreen'); azFull.style.display='none'; }
     document.getElementById('az-full-divider').style.display='none';
+    var sqFull = document.getElementById('sq-fullscreen'); if (sqFull) { Plotly.purge('sq-fullscreen'); sqFull.style.display='none'; }
+    var sqDiv = document.getElementById('sq-full-divider'); if (sqDiv) sqDiv.style.display='none';
 }
 
 // ── Image modal ──────────────────────────────────────────────
