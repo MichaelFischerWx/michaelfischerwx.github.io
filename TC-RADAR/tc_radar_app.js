@@ -130,7 +130,7 @@ function openSidePanel(caseData, fromQuickSelect) {
     currentCaseIndex = caseData.case_index;
     const idx = caseData.case_index;
     const padded = String(idx).padStart(4, '0');
-    const imageUrl = 'https://raw.githubusercontent.com/MichaelFischerWx/michaelfischerwx.github.io/main/TC-RADAR/images/v3m/v3m_swath_cf_' + padded + '.png';
+    const imageUrl = 'images/v3m/v3m_swath_cf_' + padded + '.png';
 
     var backBtnHtml = _focusMode ?
         '<button class="focus-back-btn" onclick="exitFocusMode();closeSidePanel();">' +
