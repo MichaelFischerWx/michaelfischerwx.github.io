@@ -46,8 +46,8 @@
         #map { height:100%; width:100%; }
 
         #side-panel { width:0; overflow:hidden; background:#fff; border-left:none; transition:width 0.35s ease,border 0.35s ease; display:flex; flex-direction:column; position:relative; z-index:500; }
-        #side-panel.open { width:380px; border-left:2px solid #e5e7eb; }
-        #side-panel-inner { width:380px; height:100%; overflow-y:auto; overflow-x:hidden; padding:16px; display:flex; flex-direction:column; }
+        #side-panel.open { width:420px; border-left:2px solid #e5e7eb; }
+        #side-panel-inner { width:420px; height:100%; overflow-y:auto; overflow-x:hidden; padding:16px; display:flex; flex-direction:column; }
         #side-panel-close { position:absolute; top:10px; right:10px; background:#f3f4f6; border:none; border-radius:50%; width:28px; height:28px; font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#6b7280; z-index:10; line-height:1; }
         #side-panel-close:hover { background:#e5e7eb; color:#1f2937; }
 
@@ -201,11 +201,42 @@
 
         @media (max-width:768px) {
             .hero h1 { font-size:2rem; }
+            .hero p { font-size:0.95rem; }
             .nav-links { flex-direction:column; gap:1rem; }
             #map-wrapper { height:auto; flex-direction:column; }
-            #map-container { height:400px; }
-            #side-panel.open { width:100%; border-left:none; border-top:2px solid #e5e7eb; height:500px; }
-            #side-panel-inner { width:100%; }
+            #map-container { height:350px; }
+            #side-panel.open { width:100%; border-left:none; border-top:2px solid #e5e7eb; height:auto; max-height:70vh; }
+            #side-panel-inner { width:100%; padding:12px; }
+            .explorer-select { font-size:14px !important; padding:8px 10px !important; }
+            .explorer-row label { font-size:12px; }
+            .generate-btn { padding:12px 0; font-size:14px; }
+            .cs-btn { padding:10px 0; font-size:13px; }
+            .leaflet-popup-content { min-width:200px; max-width:260px; }
+            #filter-panel { padding:14px 16px; }
+            .filter-controls { grid-template-columns:1fr; gap:12px; }
+            .filter-group select { min-width:0; width:100%; }
+            .slider-container { min-width:0; }
+            .filter-actions { flex-direction:column; gap:10px; }
+            .plot-modal-box { width:98vw; height:95vh; border-radius:6px; }
+            .plot-modal-box.split #plotly-fullscreen { height:50%; min-height:200px; }
+            .plot-modal-box.split #cs-fullscreen { height:45%; min-height:180px; }
+            .plot-modal-close { top:6px; right:8px; width:32px; height:32px; font-size:20px; }
+            .panel-image-wrap { max-height:160px; }
+            .anim-btn { width:36px; height:34px; font-size:14px; }
+        }
+        @media (max-width:480px) {
+            .hero h1 { font-size:1.5rem; }
+            .hero p { font-size:0.85rem; }
+            .container { padding:0 12px; }
+            #map-container { height:260px; }
+            #side-panel.open { max-height:75vh; }
+            #side-panel-inner { padding:10px; }
+            .panel-storm-name { font-size:18px; }
+            .explorer-row { margin-bottom:6px; }
+            .explorer-row label { font-size:11px; }
+            .leaflet-popup-content { min-width:170px; max-width:220px; font-size:12px; }
+            .popup-explore-btn { padding:10px 0; font-size:14px; }
+            .plot-modal-box { width:100vw; height:100vh; border-radius:0; }
         }
     </style>
 </head>
