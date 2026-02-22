@@ -559,6 +559,7 @@
 
         function generateCustomPlot(callback) {
             if (currentCaseIndex === null) return;
+            _hoverTarget = 'shaded';  // reset hover target for new plot
             const variable  = document.getElementById('ep-var').value;
             const level_km  = document.getElementById('ep-level').value;
             const overlay   = (document.getElementById('ep-overlay') || {}).value || '';
@@ -651,6 +652,8 @@
                 line: { color: 'rgba(0,0,0,0.7)', width: 1.2, dash: 'solid' },
                 hovertemplate: `<b>${ov.display_name}</b>: %{z:.2f} ${ov.units}<extra>contour</extra>`,
                 name: `${ov.display_name} (+)`,
+                showlegend: false,
+                hoverinfo: 'skip',
             });
 
             // Negative contours: dashed black
@@ -661,9 +664,37 @@
                 line: { color: 'rgba(0,0,0,0.7)', width: 1.2, dash: 'dash' },
                 hovertemplate: `<b>${ov.display_name}</b>: %{z:.2f} ${ov.units}<extra>contour</extra>`,
                 name: `${ov.display_name} (−)`,
+                showlegend: false,
+                hoverinfo: 'skip',
             });
 
             return [posTrace, negTrace];
+        }
+
+        // Hover target: 'shaded' (default) or 'contour'
+        let _hoverTarget = 'shaded';
+
+        function toggleHoverTarget(e) {
+            if (e) e.preventDefault();
+            _hoverTarget = (_hoverTarget === 'shaded') ? 'contour' : 'shaded';
+
+            // Apply to all visible Plotly charts that have overlay traces
+            ['plotly-chart', 'plotly-fullscreen', 'cs-fullscreen'].forEach(id => {
+                const plotDiv = document.getElementById(id);
+                if (!plotDiv || !plotDiv.data || plotDiv.data.length < 2) return;
+                if (_hoverTarget === 'shaded') {
+                    Plotly.restyle(plotDiv, { hoverinfo: 'all' }, [0]);
+                    Plotly.restyle(plotDiv, { hoverinfo: 'skip' }, [1, 2]);
+                } else {
+                    Plotly.restyle(plotDiv, { hoverinfo: 'skip' }, [0]);
+                    Plotly.restyle(plotDiv, { hoverinfo: 'all' }, [1, 2]);
+                }
+            });
+
+            // Update all toggle links on the page
+            document.querySelectorAll('.hover-toggle-link').forEach(link => {
+                link.innerHTML = _hoverTarget === 'shaded' ? '<b>Shaded</b>' : '<b>Contour</b>';
+            });
         }
 
         function renderPlotFromJSON(json, resultDiv) {
@@ -727,6 +758,7 @@
                 },
                 shapes: shapes,
                 hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 12 } },
+                showlegend: false,
             };
 
             const config = {
@@ -749,8 +781,15 @@
 
             Plotly.newPlot('plotly-chart', traces, smallLayout, config);
 
+            // Update hint text with hover toggle if overlay present
+            const hasOverlay = overlayTraces.length > 0;
+            const hintDiv = resultDiv.querySelector('div:last-child');
+            if (hintDiv && hasOverlay) {
+                hintDiv.innerHTML = `Hover: <a href="#" class="hover-toggle-link" onclick="toggleHoverTarget(event)" style="color:#60a5fa;text-decoration:underline;cursor:pointer;"><b>Shaded</b></a> · scroll to zoom · drag to pan · ⛶ expand`;
+            }
+
             // Store for fullscreen re-render
-            window._lastPlotlyData = { heatmap, overlayTraces, baseLayout, title, config };
+            window._lastPlotlyData = { heatmap, overlayTraces, baseLayout, title, config, hasOverlay, overlayName: hasOverlay ? json.overlay.display_name : '' };
 
             // Enable cross-section button & attach click handler
             const csBtn = document.getElementById('cs-btn');
@@ -940,6 +979,7 @@
                 },
                 margin: fullsize ? { l: 55, r: 24, t: 40, b: 46 } : { l: 45, r: 12, t: 36, b: 38 },
                 hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: fontSize.hover } },
+                showlegend: false,
             };
 
             // Build traces: heatmap + optional contour overlay
@@ -1246,6 +1286,14 @@
             });
             const fullTraces = [fullHeatmap, ...(overlayTraces || [])];
             Plotly.newPlot('plotly-fullscreen', fullTraces, fullLayout, config);
+
+            // Sync hover target state to fullscreen plot
+            if (overlayTraces && overlayTraces.length > 0) {
+                if (_hoverTarget === 'contour') {
+                    Plotly.restyle('plotly-fullscreen', { hoverinfo: 'skip' }, [0]);
+                    Plotly.restyle('plotly-fullscreen', { hoverinfo: 'all' }, [1, 2]);
+                }
+            }
 
             // Render cross-section in fullscreen if provided
             if (hasCrossSection) {
