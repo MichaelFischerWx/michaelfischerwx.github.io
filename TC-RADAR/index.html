@@ -803,7 +803,8 @@
 
             // Title
             const vmaxStr = meta.vmax_kt ? ` | Vmax = ${meta.vmax_kt} kt` : '';
-            const title = `${meta.storm_name} | ${meta.datetime}${vmaxStr}<br>${varInfo.display_name} @ ${json.actual_level_km.toFixed(1)} km`;
+            const overlayLabel = json.overlay ? `<br><span style="font-size:0.85em;color:#9ca3af;">Contours: ${json.overlay.display_name} (${json.overlay.units})</span>` : '';
+            const title = `${meta.storm_name} | ${meta.datetime}${vmaxStr}<br>${varInfo.display_name} @ ${json.actual_level_km.toFixed(1)} km${overlayLabel}`;
 
             // Build reusable trace + layout + config
             const heatmap = {
@@ -858,7 +859,7 @@
 
             const smallLayout = Object.assign({}, baseLayout, {
                 title: { text: title, font: { color: '#e5e7eb', size: 11 }, y: 0.98, x: 0.5, xanchor: 'center' },
-                margin: { l: 52, r: 16, t: 50, b: 44 },
+                margin: { l: 52, r: 16, t: json.overlay ? 66 : 50, b: 44 },
                 xaxis: Object.assign({}, baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }),
                 yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }),
             });
@@ -1049,7 +1050,8 @@
                 hoverongaps: false,
             };
 
-            const title = `Cross Section: (${ep.x0.toFixed(0)},${ep.y0.toFixed(0)}) → (${ep.x1.toFixed(0)},${ep.y1.toFixed(0)}) km`;
+            const csOverlayLabel = json.overlay ? `<br><span style="font-size:0.85em;color:#9ca3af;">Contours: ${json.overlay.display_name} (${json.overlay.units})</span>` : '';
+            const title = `Cross Section: (${ep.x0.toFixed(0)},${ep.y0.toFixed(0)}) → (${ep.x1.toFixed(0)},${ep.y1.toFixed(0)}) km${csOverlayLabel}`;
 
             const layout = {
                 title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' },
@@ -1064,7 +1066,9 @@
                     tickfont: { color: '#aaa', size: fontSize.tick },
                     gridcolor: 'rgba(255,255,255,0.05)', zeroline: false,
                 },
-                margin: fullsize ? { l: 55, r: 24, t: 40, b: 46 } : { l: 45, r: 12, t: 36, b: 38 },
+                margin: fullsize
+                    ? { l: 55, r: 24, t: json.overlay ? 56 : 40, b: 46 }
+                    : { l: 45, r: 12, t: json.overlay ? 50 : 36, b: 38 },
                 hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: fontSize.hover } },
                 showlegend: false,
             };
@@ -1360,7 +1364,7 @@
             const { heatmap, overlayTraces, baseLayout, title, config } = window._lastPlotlyData;
             const fullLayout = Object.assign({}, baseLayout, {
                 title: { text: title, font: { color: '#e5e7eb', size: 15 }, y: 0.97, x: 0.5, xanchor: 'center' },
-                margin: { l: 65, r: 30, t: 60, b: 55 },
+                margin: { l: 65, r: 30, t: window._lastPlotlyData?.overlayTraces?.length ? 76 : 60, b: 55 },
                 xaxis: Object.assign({}, baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }),
                 yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }),
             });
