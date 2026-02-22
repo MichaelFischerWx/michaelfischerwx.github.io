@@ -584,6 +584,21 @@
                 </div>
 
                 <div class="explorer-row">
+                    <label>Color Range <span style="font-weight:400;color:#9ca3af;">(override)</span></label>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <input type="number" id="ep-vmin" placeholder="min" step="any"
+                            style="width:70px;padding:3px 5px;font-size:11px;border:1px solid #d1d5db;border-radius:4px;"
+                            onchange="applyColorRange()">
+                        <span style="font-size:11px;color:#9ca3af;">to</span>
+                        <input type="number" id="ep-vmax" placeholder="max" step="any"
+                            style="width:70px;padding:3px 5px;font-size:11px;border:1px solid #d1d5db;border-radius:4px;"
+                            onchange="applyColorRange()">
+                        <button onclick="resetColorRange()" title="Reset to variable default"
+                            style="padding:2px 6px;font-size:10px;border:1px solid #d1d5db;border-radius:4px;background:#f3f4f6;cursor:pointer;color:#6b7280;">↺</button>
+                    </div>
+                </div>
+
+                <div class="explorer-row">
                     <label>Height Level</label>
                     <div class="explorer-level-row">
                         <input type="range" id="ep-level" min="0" max="18" step="0.5" value="2"
@@ -814,6 +829,8 @@
 
         // ── Colormap switcher (instant, no API call) ─────────────────
         let _defaultColorscale = null;  // stored from API response
+        let _defaultVmin = null;        // stored from API response
+        let _defaultVmax = null;        // stored from API response
 
         function applyCmap() {
             const sel = document.getElementById('ep-cmap');
@@ -841,6 +858,53 @@
             }
         }
 
+        function _getActiveVmin() {
+            const inp = document.getElementById('ep-vmin');
+            if (inp && inp.value !== '') return parseFloat(inp.value);
+            return _defaultVmin;
+        }
+        function _getActiveVmax() {
+            const inp = document.getElementById('ep-vmax');
+            if (inp && inp.value !== '') return parseFloat(inp.value);
+            return _defaultVmax;
+        }
+
+        function applyColorRange() {
+            const zmin = _getActiveVmin();
+            const zmax = _getActiveVmax();
+            if (zmin === null || zmax === null) return;
+
+            ['plotly-chart', 'plotly-fullscreen', 'cs-fullscreen', 'az-chart', 'az-fullscreen'].forEach(id => {
+                const plotDiv = document.getElementById(id);
+                if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
+                Plotly.restyle(plotDiv, { zmin: [zmin], zmax: [zmax] }, [0]);
+            });
+
+            // Update stored data so fullscreen re-render uses it
+            if (window._lastPlotlyData) {
+                window._lastPlotlyData.heatmap.zmin = zmin;
+                window._lastPlotlyData.heatmap.zmax = zmax;
+            }
+        }
+
+        function resetColorRange() {
+            const vminInput = document.getElementById('ep-vmin');
+            const vmaxInput = document.getElementById('ep-vmax');
+            if (vminInput) vminInput.value = '';
+            if (vmaxInput) vmaxInput.value = '';
+            if (_defaultVmin !== null && _defaultVmax !== null) {
+                ['plotly-chart', 'plotly-fullscreen', 'cs-fullscreen', 'az-chart', 'az-fullscreen'].forEach(id => {
+                    const plotDiv = document.getElementById(id);
+                    if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
+                    Plotly.restyle(plotDiv, { zmin: [_defaultVmin], zmax: [_defaultVmax] }, [0]);
+                });
+                if (window._lastPlotlyData) {
+                    window._lastPlotlyData.heatmap.zmin = _defaultVmin;
+                    window._lastPlotlyData.heatmap.zmax = _defaultVmax;
+                }
+            }
+        }
+
         function renderPlotFromJSON(json, resultDiv) {
             // Build the Plotly container with expand button
             resultDiv.innerHTML = `<div style="position:relative;">
@@ -856,13 +920,27 @@
 
             const { data: zData, x, y, variable: varInfo, case_meta: meta } = json;
 
-            // Store API-provided colorscale as default, apply user override if selected
+            // Store API-provided defaults
             _defaultColorscale = varInfo.colorscale;
+            _defaultVmin = varInfo.vmin;
+            _defaultVmax = varInfo.vmax;
+
+            // Update color range placeholders to show current defaults
+            const vminInput = document.getElementById('ep-vmin');
+            const vmaxInput = document.getElementById('ep-vmax');
+            if (vminInput) vminInput.placeholder = varInfo.vmin;
+            if (vmaxInput) vmaxInput.placeholder = varInfo.vmax;
+
+            // Apply user colormap override if selected
             const cmapSel = document.getElementById('ep-cmap');
             let activeColorscale = varInfo.colorscale;
             if (cmapSel && cmapSel.value) {
                 try { activeColorscale = JSON.parse(cmapSel.value); } catch { activeColorscale = cmapSel.value; }
             }
+
+            // Apply user color range override if set
+            const activeVmin = _getActiveVmin();
+            const activeVmax = _getActiveVmax();
 
             // Title
             const vmaxStr = meta.vmax_kt ? ` | Vmax = ${meta.vmax_kt} kt` : '';
@@ -874,7 +952,7 @@
                 z: zData, x: x, y: y,
                 type: 'heatmap',
                 colorscale: activeColorscale,
-                zmin: varInfo.vmin, zmax: varInfo.vmax,
+                zmin: activeVmin, zmax: activeVmax,
                 colorbar: {
                     title: { text: varInfo.units, font: { color: '#ccc', size: 10 } },
                     tickfont: { color: '#ccc', size: 9 },
@@ -1111,7 +1189,7 @@
                 y: height_km,
                 type: 'heatmap',
                 colorscale: csColorscale,
-                zmin: varInfo.vmin, zmax: varInfo.vmax,
+                zmin: _getActiveVmin() ?? varInfo.vmin, zmax: _getActiveVmax() ?? varInfo.vmax,
                 colorbar: {
                     title: { text: varInfo.units, font: { color: '#ccc', size: fontSize.cbar } },
                     tickfont: { color: '#ccc', size: fontSize.cbarTick },
@@ -1226,7 +1304,7 @@
                 y: height_km,
                 type: 'heatmap',
                 colorscale: csColorscale,
-                zmin: varInfo.vmin, zmax: varInfo.vmax,
+                zmin: _getActiveVmin() ?? varInfo.vmin, zmax: _getActiveVmax() ?? varInfo.vmax,
                 colorbar: {
                     title: { text: varInfo.units, font: { color: '#ccc', size: fontSize.cbar } },
                     tickfont: { color: '#ccc', size: fontSize.cbarTick },
