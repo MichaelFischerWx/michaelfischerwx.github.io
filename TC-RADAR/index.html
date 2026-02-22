@@ -8,1782 +8,462 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
-        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
         :root {
-            --navy: #0c1b3a;
-            --navy-mid: #142952;
-            --blue: #2563eb;
-            --blue-light: #3b82f6;
-            --sky: #60a5fa;
-            --ice: #dbeafe;
-            --slate: #64748b;
-            --slate-light: #94a3b8;
-            --surface: #f8fafc;
-            --white: #ffffff;
-            --text: #1e293b;
-            --text-muted: #64748b;
-            --border: #e2e8f0;
-            --radius: 10px;
-            --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
-            --shadow-md: 0 4px 16px rgba(0,0,0,0.10);
-            --shadow-lg: 0 8px 32px rgba(0,0,0,0.14);
+            --navy: #0c1d3d;
+            --navy-mid: #142a52;
+            --navy-light: #1b3a6b;
+            --blue: #2e7dff;
+            --blue-light: #5a9cff;
+            --blue-glow: rgba(46, 125, 255, 0.25);
+            --cyan: #00d4ff;
+            --slate: #8b9ec2;
+            --text: #e2e8f0;
+            --text-dim: #94a3b8;
+            --surface: #0f2140;
+            --surface-raised: #162d54;
+            --border: rgba(255,255,255,0.08);
+            --border-light: rgba(255,255,255,0.12);
+            --radius: 8px;
+            --radius-lg: 12px;
         }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         html { scroll-behavior: smooth; }
-        body { font-family:'DM Sans',system-ui,-apple-system,sans-serif; line-height:1.6; color:var(--text); background:var(--surface); }
+        body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; color: var(--text); background: var(--navy); }
 
-        /* ── Header ─────────────────────────────────────── */
-        header {
-            position:fixed; top:0; left:0; right:0; z-index:2000;
-            background:rgba(12,27,58,0.92); backdrop-filter:blur(14px);
-            border-bottom:1px solid rgba(255,255,255,0.06);
-        }
-        .header-inner {
-            max-width:1440px; margin:0 auto; padding:0 24px;
-            display:flex; justify-content:space-between; align-items:center; height:54px;
-        }
-        .logo {
-            font-size:1.35rem; font-weight:700; letter-spacing:-0.02em; color:var(--white);
-            display:flex; align-items:center; gap:8px;
-        }
-        .logo-dot { width:8px; height:8px; border-radius:50%; background:var(--blue-light); box-shadow:0 0 8px var(--blue-light); }
-        .nav-links { display:flex; gap:1.5rem; list-style:none; }
-        .nav-links a { color:rgba(255,255,255,0.7); text-decoration:none; font-size:0.85rem; font-weight:500; transition:color 0.2s; letter-spacing:0.01em; }
-        .nav-links a:hover { color:var(--white); }
-        .version-pill {
-            font-size:0.7rem; font-weight:600; color:var(--sky);
-            background:rgba(96,165,250,0.12); padding:3px 10px; border-radius:20px;
-            letter-spacing:0.03em;
-        }
+        /* ── Top bar ─────────────────────────────────────── */
+        .topbar { background: var(--navy); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 1000; backdrop-filter: blur(12px); }
+        .topbar-inner { max-width: 100%; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; height: 52px; }
+        .topbar-brand { display: flex; align-items: center; gap: 14px; }
+        .topbar-logo { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em; background: linear-gradient(135deg, var(--blue) 0%, var(--cyan) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .topbar-divider { width: 1px; height: 22px; background: var(--border-light); }
+        .topbar-subtitle { font-size: 0.72rem; color: var(--slate); letter-spacing: 0.04em; text-transform: uppercase; font-weight: 500; }
+        .topbar-stats { display: flex; gap: 28px; align-items: center; }
+        .topbar-stat { display: flex; flex-direction: column; align-items: center; line-height: 1.15; }
+        .topbar-stat-val { font-size: 0.95rem; font-weight: 700; color: var(--text); font-family: 'JetBrains Mono', monospace; }
+        .topbar-stat-label { font-size: 0.6rem; color: var(--slate); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; }
+        .topbar-nav { display: flex; gap: 6px; list-style: none; align-items: center; }
+        .topbar-nav a { color: var(--slate); text-decoration: none; font-weight: 500; font-size: 0.8rem; padding: 6px 12px; border-radius: 6px; transition: all 0.2s; }
+        .topbar-nav a:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+        .topbar-version { font-size: 0.65rem; color: var(--navy); background: var(--cyan); padding: 2px 8px; border-radius: 20px; font-weight: 600; letter-spacing: 0.02em; }
 
-        /* ── Map Hero Section ───────────────────────────── */
-        #map-hero {
-            position:relative; width:100%;
-            height:calc(100vh - 54px); min-height:600px;
-            margin-top:54px; /* header height */
-            display:flex; flex-direction:column;
-            background:var(--navy);
-        }
+        /* ── Map section (hero) ──────────────────────────── */
+        #map-section { display: flex; flex-direction: column; height: calc(100vh - 52px); min-height: 600px; background: var(--navy); }
 
-        /* Overlay title bar on top of map */
-        .map-title-bar {
-            position:absolute; top:0; left:0; right:0; z-index:800;
-            background:linear-gradient(180deg, rgba(12,27,58,0.88) 0%, rgba(12,27,58,0.4) 80%, transparent 100%);
-            padding:20px 28px 32px 28px;
-            pointer-events:none;
-        }
-        .map-title-bar > * { pointer-events:auto; }
-        .map-title-row {
-            display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap;
-        }
-        .map-title-left h1 {
-            font-size:1.6rem; font-weight:700; color:var(--white); letter-spacing:-0.02em; line-height:1.2; margin-bottom:2px;
-        }
-        .map-title-left p { font-size:0.82rem; color:rgba(255,255,255,0.6); font-weight:400; }
-        .map-stats-row { display:flex; gap:24px; flex-wrap:wrap; }
-        .map-stat { text-align:right; }
-        .map-stat-val { font-size:1.15rem; font-weight:700; color:var(--white); font-family:'JetBrains Mono',monospace; line-height:1.2; }
-        .map-stat-lbl { font-size:0.65rem; color:rgba(255,255,255,0.5); text-transform:uppercase; letter-spacing:0.06em; font-weight:500; }
+        /* ── Toolbar row ────────────────────────────────── */
+        .map-toolbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 10px 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; z-index: 600; }
+        .toolbar-group { display: flex; align-items: center; gap: 8px; }
+        .toolbar-label { font-size: 0.68rem; color: var(--slate); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; white-space: nowrap; }
+        .toolbar-select { background: var(--navy); color: var(--text); border: 1px solid var(--border-light); border-radius: 6px; padding: 5px 10px; font-size: 0.8rem; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: border-color 0.2s; }
+        .toolbar-select:focus { outline: none; border-color: var(--blue); }
+        .toolbar-select option { background: var(--navy); color: var(--text); }
+        .toolbar-sep { width: 1px; height: 24px; background: var(--border-light); margin: 0 4px; }
 
-        /* Map container fills remaining space */
-        .map-body { flex:1; display:flex; position:relative; min-height:0; }
-        #map-container { flex:1; position:relative; min-width:0; transition:flex 0.35s ease; }
-        #map { height:100%; width:100%; }
+        .case-select-wrap { position: relative; flex: 0 1 340px; min-width: 200px; }
+        .case-select-wrap::before { content: '\01F52C'; position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 14px; pointer-events: none; z-index: 2; }
+        #case-quick-select { width: 100%; background: var(--navy-mid); color: var(--text); border: 1px solid var(--blue); border-radius: 6px; padding: 7px 10px 7px 32px; font-size: 0.82rem; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all 0.2s; box-shadow: 0 0 0 2px var(--blue-glow); }
+        #case-quick-select:focus { outline: none; border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(0,212,255,0.2); }
 
-        /* ── Quick-Select & Filter Toggle ────────────── */
-        .map-controls-bar {
-            position:absolute; bottom:0; left:0; right:0; z-index:800;
-            pointer-events:none;
-        }
-        .map-controls-inner {
-            pointer-events:auto;
-            background:rgba(12,27,58,0.92); backdrop-filter:blur(12px);
-            border-top:1px solid rgba(255,255,255,0.08);
-            padding:0;
-        }
-        .controls-row {
-            max-width:1440px; margin:0 auto; padding:10px 24px;
-            display:flex; align-items:center; gap:12px; flex-wrap:wrap;
-        }
-        .qs-label {
-            font-size:0.72rem; font-weight:600; color:rgba(255,255,255,0.5);
-            text-transform:uppercase; letter-spacing:0.06em; white-space:nowrap;
-        }
-        .qs-select {
-            padding:6px 10px; border:1px solid rgba(255,255,255,0.15); border-radius:6px;
-            font-size:0.82rem; font-family:'DM Sans',sans-serif;
-            background:rgba(255,255,255,0.06); color:var(--white);
-            min-width:170px; max-width:240px; cursor:pointer; transition:border-color 0.2s;
-        }
-        .qs-select:focus { outline:none; border-color:var(--blue-light); }
-        .qs-select option { background:var(--navy); color:var(--white); }
-        .qs-go-btn {
-            padding:6px 16px; border:none; border-radius:6px;
-            font-size:0.82rem; font-weight:600; font-family:'DM Sans',sans-serif;
-            background:var(--blue); color:var(--white); cursor:pointer; transition:background 0.2s;
-            white-space:nowrap;
-        }
-        .qs-go-btn:hover { background:#1d4ed8; }
-        .qs-go-btn:disabled { opacity:0.4; cursor:not-allowed; }
-        .qs-divider { width:1px; height:24px; background:rgba(255,255,255,0.12); margin:0 4px; }
+        .toolbar-count { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--blue-light); white-space: nowrap; }
+        .toolbar-reset { background: transparent; border: 1px solid var(--border-light); color: var(--slate); border-radius: 6px; padding: 5px 12px; font-size: 0.75rem; cursor: pointer; font-family: 'DM Sans', sans-serif; font-weight: 500; transition: all 0.2s; }
+        .toolbar-reset:hover { border-color: var(--blue); color: var(--text); }
+        .filter-toggle-btn { background: transparent; border: 1px solid var(--border-light); color: var(--slate); border-radius: 6px; padding: 5px 12px; font-size: 0.75rem; cursor: pointer; font-family: 'DM Sans', sans-serif; font-weight: 500; transition: all 0.2s; display: flex; align-items: center; gap: 5px; }
+        .filter-toggle-btn:hover { border-color: var(--blue); color: var(--text); }
+        .filter-toggle-btn.active { background: var(--blue); color: white; border-color: var(--blue); }
 
-        .toggle-filters-btn {
-            padding:6px 12px; border:1px solid rgba(255,255,255,0.15); border-radius:6px;
-            font-size:0.78rem; font-weight:500; font-family:'DM Sans',sans-serif;
-            background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.7);
-            cursor:pointer; transition:all 0.2s; white-space:nowrap;
-        }
-        .toggle-filters-btn:hover { background:rgba(255,255,255,0.12); color:var(--white); }
-        .toggle-filters-btn.active { background:var(--blue); color:var(--white); border-color:var(--blue); }
+        /* ── Filter drawer ───────────────────────────────── */
+        .filter-drawer { background: var(--surface-raised); border-bottom: 1px solid var(--border); max-height: 0; overflow: hidden; transition: max-height 0.35s ease, padding 0.35s ease; padding: 0 20px; }
+        .filter-drawer.open { max-height: 260px; padding: 16px 20px; }
+        .filter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+        .filter-group { display: flex; flex-direction: column; gap: 6px; }
+        .filter-group label { font-size: 0.7rem; font-weight: 600; color: var(--slate); text-transform: uppercase; letter-spacing: 0.05em; }
+        .filter-group input[type="number"] { background: var(--navy); color: var(--text); border: 1px solid var(--border-light); border-radius: 6px; padding: 5px 8px; font-size: 0.85rem; width: 72px; font-family: 'JetBrains Mono', monospace; }
+        .filter-group input[type="number"]:focus { outline: none; border-color: var(--blue); }
+        .slider-values { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--blue-light); font-family: 'JetBrains Mono', monospace; font-weight: 500; }
+        .slider-wrapper { position: relative; height: 28px; display: flex; align-items: center; }
+        .slider-track { position: absolute; width: 100%; height: 4px; background: var(--navy); border-radius: 2px; top: 50%; transform: translateY(-50%); }
+        .slider-range { position: absolute; height: 4px; background: linear-gradient(90deg, var(--blue), var(--cyan)); border-radius: 2px; top: 50%; transform: translateY(-50%); }
+        input[type="range"] { position: absolute; width: 100%; height: 4px; background: transparent; pointer-events: none; -webkit-appearance: none; appearance: none; margin: 0; padding: 0; top: 50%; transform: translateY(-50%); }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; background: var(--blue); border: 2px solid white; border-radius: 50%; cursor: pointer; pointer-events: auto; box-shadow: 0 1px 4px rgba(0,0,0,0.4); margin-top: -6px; }
+        input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; background: var(--blue); border: 2px solid white; border-radius: 50%; cursor: pointer; pointer-events: auto; box-shadow: 0 1px 4px rgba(0,0,0,0.4); }
+        input[type="range"]::-webkit-slider-runnable-track { height: 4px; background: transparent; border-radius: 2px; }
+        input[type="range"]::-moz-range-track { height: 4px; background: transparent; border-radius: 2px; }
 
-        .filter-count-badge {
-            font-size:0.78rem; font-weight:600; color:var(--sky);
-            font-family:'JetBrains Mono',monospace; margin-left:auto; white-space:nowrap;
-        }
+        /* ── Map + side panel ────────────────────────────── */
+        #map-wrapper { flex: 1; display: flex; position: relative; min-height: 0; }
+        #map-container { flex: 1; position: relative; min-width: 0; transition: flex 0.35s ease; }
+        #map { height: 100%; width: 100%; }
+        .leaflet-container { background: #0a1628; }
 
-        /* ── Filter Panel (collapsible, slides down above controls bar) */
-        .filter-panel-wrap {
-            pointer-events:auto;
-            max-height:0; overflow:hidden; transition:max-height 0.35s ease;
-            background:rgba(12,27,58,0.95); backdrop-filter:blur(14px);
-            border-top:1px solid rgba(255,255,255,0.06);
-        }
-        .filter-panel-wrap.open { max-height:320px; }
-        .filter-panel-inner {
-            max-width:1440px; margin:0 auto; padding:16px 24px;
-            display:grid; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); gap:16px;
-        }
-        .filter-group { display:flex; flex-direction:column; gap:6px; }
-        .filter-group label {
-            font-size:0.7rem; font-weight:600; color:rgba(255,255,255,0.5);
-            text-transform:uppercase; letter-spacing:0.05em;
-        }
-        .filter-group select,
-        .filter-group input[type="number"] {
-            padding:6px 10px; border:1px solid rgba(255,255,255,0.15); border-radius:6px;
-            font-size:0.82rem; font-family:'DM Sans',sans-serif;
-            background:rgba(255,255,255,0.06); color:var(--white); transition:border-color 0.2s;
-        }
-        .filter-group select:focus,
-        .filter-group input[type="number"]:focus { outline:none; border-color:var(--blue-light); }
-        .filter-group select option { background:var(--navy); color:var(--white); }
-        .slider-values { display:flex; justify-content:space-between; font-size:0.75rem; color:rgba(255,255,255,0.5); font-weight:500; font-family:'JetBrains Mono',monospace; }
-        .slider-wrapper { position:relative; height:28px; display:flex; align-items:center; }
-        .slider-track { position:absolute; width:100%; height:4px; background:rgba(255,255,255,0.1); border-radius:2px; top:50%; transform:translateY(-50%); }
-        .slider-range { position:absolute; height:4px; background:var(--blue); border-radius:2px; top:50%; transform:translateY(-50%); }
-        input[type="range"] { position:absolute; width:100%; height:4px; background:transparent; pointer-events:none; -webkit-appearance:none; appearance:none; margin:0; padding:0; top:50%; transform:translateY(-50%); }
-        input[type="range"]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; height:16px; background:var(--white); border:2px solid var(--blue); border-radius:50%; cursor:pointer; pointer-events:auto; box-shadow:0 1px 4px rgba(0,0,0,0.3); margin-top:-6px; }
-        input[type="range"]::-moz-range-thumb { width:16px; height:16px; background:var(--white); border:2px solid var(--blue); border-radius:50%; cursor:pointer; pointer-events:auto; }
-        input[type="range"]::-webkit-slider-runnable-track { height:4px; background:transparent; }
-        input[type="range"]::-moz-range-track { height:4px; background:transparent; }
+        #side-panel { width: 0; overflow: hidden; background: var(--surface); border-left: none; transition: width 0.35s ease, border 0.35s ease; display: flex; flex-direction: column; position: relative; z-index: 500; }
+        #side-panel.open { width: 420px; border-left: 1px solid var(--border-light); }
 
-        .filter-actions-row {
-            grid-column:1/-1; display:flex; align-items:center; gap:12px; padding-top:8px;
-            border-top:1px solid rgba(255,255,255,0.06);
+        /* Focus mode: map shrinks, panel dominates */
+        #map-wrapper.focus-mode #map-container { flex: 0 0 30%; max-width: 30%; }
+        #map-wrapper.focus-mode #side-panel.open { width: 70%; }
+        #map-wrapper.focus-mode #side-panel-inner { width: 100%; }
+        .focus-back-btn {
+            display: flex; align-items: center; gap: 6px; width: 100%; padding: 8px 12px; margin-bottom: 12px;
+            background: var(--navy-mid); color: var(--slate); border: 1px solid var(--border-light); border-radius: 6px;
+            font-size: 0.78rem; font-weight: 600; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all 0.2s;
         }
-        .reset-btn {
-            padding:6px 16px; border:1px solid rgba(255,255,255,0.2); border-radius:6px;
-            font-size:0.78rem; font-weight:500; font-family:'DM Sans',sans-serif;
-            background:transparent; color:rgba(255,255,255,0.6); cursor:pointer; transition:all 0.2s;
-        }
-        .reset-btn:hover { background:rgba(255,255,255,0.08); color:var(--white); }
+        .focus-back-btn:hover { background: var(--blue); color: white; border-color: var(--blue); }
+        .focus-back-btn svg { width: 14px; height: 14px; }
+        #side-panel-inner { width: 420px; height: 100%; overflow-y: auto; overflow-x: hidden; padding: 16px; display: flex; flex-direction: column; }
+        #side-panel-close { position: absolute; top: 10px; right: 10px; background: var(--navy-mid); border: 1px solid var(--border-light); border-radius: 50%; width: 28px; height: 28px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--slate); z-index: 10; line-height: 1; transition: all 0.2s; }
+        #side-panel-close:hover { background: var(--blue); color: white; border-color: var(--blue); }
 
-        /* ── Side Panel ─────────────────────────────────── */
-        #side-panel {
-            width:0; overflow:hidden; background:var(--white);
-            border-left:none; transition:width 0.35s ease, border 0.35s ease;
-            display:flex; flex-direction:column; position:relative; z-index:500;
-        }
-        #side-panel.open { width:420px; border-left:2px solid var(--border); }
-        #side-panel-inner {
-            width:420px; height:100%; overflow-y:auto; overflow-x:hidden;
-            padding:16px; display:flex; flex-direction:column;
-        }
-        #side-panel-close {
-            position:absolute; top:10px; right:10px; background:var(--surface); border:none;
-            border-radius:50%; width:28px; height:28px; font-size:16px; cursor:pointer;
-            display:flex; align-items:center; justify-content:center; color:var(--slate); z-index:10; line-height:1;
-        }
-        #side-panel-close:hover { background:var(--border); color:var(--text); }
+        .panel-storm-name { font-size: 17px; font-weight: 700; color: var(--text); padding-right: 32px; margin-bottom: 2px; }
+        .panel-mission { font-size: 11px; color: var(--slate); font-family: 'JetBrains Mono', monospace; margin-bottom: 12px; }
+        .panel-image-wrap { width: 100%; margin-bottom: 14px; border-radius: var(--radius); overflow: hidden; background: var(--navy); cursor: pointer; border: 1px solid var(--border); }
+        .panel-image-wrap img { width: 100%; height: auto; display: block; transition: opacity 0.2s; }
+        .panel-image-wrap img:hover { opacity: 0.9; }
+        .panel-image-label { font-size: 11px; color: var(--slate); text-align: center; margin-bottom: 14px; margin-top: -8px; }
 
-        .panel-storm-name { font-size:1.05rem; font-weight:700; color:var(--text); padding-right:32px; margin-bottom:2px; }
-        .panel-mission { font-size:0.7rem; color:var(--slate-light); font-family:'JetBrains Mono',monospace; margin-bottom:12px; }
-        .panel-image-wrap { width:100%; margin-bottom:14px; border-radius:8px; overflow:hidden; background:#0e1117; cursor:pointer; }
-        .panel-image-wrap img { width:100%; height:auto; display:block; transition:opacity 0.2s; }
-        .panel-image-wrap img:hover { opacity:0.9; }
-        .panel-image-label { font-size:0.68rem; color:var(--slate-light); text-align:center; margin-bottom:14px; margin-top:-8px; }
+        .explorer-divider { border: none; border-top: 1px solid var(--border-light); margin-bottom: 14px; }
+        .explorer-title { font-size: 0.7rem; font-weight: 700; color: var(--cyan); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+        .explorer-row { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
+        .explorer-row label { font-size: 0.65rem; font-weight: 600; color: var(--slate); text-transform: uppercase; letter-spacing: 0.04em; }
+        .explorer-select { width: 100%; padding: 7px 10px; border: 1px solid var(--border-light); border-radius: 6px; font-size: 13px; background: var(--navy); color: var(--text); font-family: 'DM Sans', sans-serif; }
+        .explorer-select:focus { outline: none; border-color: var(--blue); }
+        .explorer-select option { background: var(--navy); }
+        .explorer-select optgroup { color: var(--blue-light); }
+        .explorer-level-row { display: flex; align-items: center; gap: 10px; }
+        .explorer-level-row input[type="range"] { flex: 1; -webkit-appearance: none; appearance: none; height: 4px; background: var(--navy); border-radius: 2px; position: static; pointer-events: auto; transform: none; top: auto; width: auto; }
+        .explorer-level-row input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; background: var(--blue); border: 2px solid white; border-radius: 50%; cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.4); margin-top: -6px; }
+        .az-cov-slider { flex: 1; -webkit-appearance: none; appearance: none; height: 4px; background: var(--navy); border-radius: 2px; position: static !important; pointer-events: auto !important; transform: none !important; top: auto !important; width: auto !important; }
+        .az-cov-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; background: var(--blue); border: 2px solid white; border-radius: 50%; cursor: pointer; pointer-events: auto; box-shadow: 0 1px 4px rgba(0,0,0,0.4); margin-top: -6px; }
+        .explorer-level-value { font-size: 13px; font-weight: 700; color: var(--cyan); min-width: 48px; text-align: right; font-family: 'JetBrains Mono', monospace; }
 
-        .explorer-divider { border:none; border-top:2px dashed var(--border); margin-bottom:14px; }
-        .explorer-title { font-size:0.72rem; font-weight:700; color:var(--blue); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:12px; }
-        .explorer-row { display:flex; flex-direction:column; gap:5px; margin-bottom:10px; }
-        .explorer-row label { font-size:0.68rem; font-weight:600; color:var(--slate); text-transform:uppercase; letter-spacing:0.04em; }
-        .explorer-select {
-            width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:6px;
-            font-size:0.82rem; font-family:'DM Sans',sans-serif; background:var(--white); color:var(--text);
-        }
-        .explorer-select:focus { outline:none; border-color:var(--blue); }
-        .explorer-level-row { display:flex; align-items:center; gap:10px; }
-        .explorer-level-row input[type="range"] {
-            flex:1; -webkit-appearance:none; appearance:none; height:4px; background:var(--border);
-            border-radius:2px; position:static; pointer-events:auto; transform:none; top:auto; width:auto;
-        }
-        .explorer-level-row input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance:none; width:16px; height:16px; background:var(--blue);
-            border-radius:50%; cursor:pointer; box-shadow:0 0 0 2px white, 0 2px 6px rgba(0,0,0,0.2); margin-top:-6px;
-        }
-        .az-cov-slider {
-            flex:1; -webkit-appearance:none; appearance:none; height:4px; background:var(--border);
-            border-radius:2px; position:static !important; pointer-events:auto !important;
-            transform:none !important; top:auto !important; width:auto !important;
-        }
-        .az-cov-slider::-webkit-slider-thumb {
-            -webkit-appearance:none; width:16px; height:16px; background:var(--blue);
-            border-radius:50%; cursor:pointer; pointer-events:auto;
-            box-shadow:0 0 0 2px white, 0 2px 6px rgba(0,0,0,0.2); margin-top:-6px;
-        }
-        .explorer-level-value { font-size:0.82rem; font-weight:700; color:var(--blue); min-width:48px; text-align:right; font-family:'JetBrains Mono',monospace; }
+        .generate-btn { width: 100%; padding: 9px 0; background: linear-gradient(135deg, var(--blue) 0%, var(--cyan) 100%); color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: 700; cursor: pointer; transition: opacity 0.2s; margin-top: 4px; font-family: 'DM Sans', sans-serif; }
+        .generate-btn:hover { opacity: 0.9; }
+        .generate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .explorer-status { font-size: 12px; color: var(--slate); padding: 8px 0; }
+        .explorer-status.loading { color: var(--blue-light); }
+        .explorer-status.error { color: #f87171; }
 
-        .generate-btn {
-            width:100%; padding:9px 0; background:var(--blue); color:white; border:none;
-            border-radius:6px; font-size:0.82rem; font-weight:700; cursor:pointer;
-            font-family:'DM Sans',sans-serif; transition:background 0.2s; margin-top:4px;
-        }
-        .generate-btn:hover { background:#1d4ed8; }
-        .generate-btn:disabled { opacity:0.5; cursor:not-allowed; }
+        .anim-controls { display: flex; align-items: center; gap: 4px; margin-top: 6px; }
+        .anim-btn { width: 30px; height: 28px; border: 1px solid var(--border-light); border-radius: 5px; background: var(--navy); font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--slate); transition: all 0.15s; padding: 0; }
+        .anim-btn:hover { background: var(--navy-mid); border-color: var(--blue); color: var(--blue-light); }
+        .anim-btn.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+        .anim-speed { font-size: 10px; color: var(--slate); margin-left: auto; }
 
-        .anim-controls { display:flex; align-items:center; gap:4px; margin-top:6px; }
-        .anim-btn {
-            width:30px; height:28px; border:1px solid var(--border); border-radius:5px;
-            background:var(--white); font-size:0.82rem; cursor:pointer;
-            display:flex; align-items:center; justify-content:center;
-            color:var(--text); transition:all 0.15s; padding:0;
-        }
-        .anim-btn:hover { background:var(--ice); border-color:var(--blue); color:var(--navy); }
-        .anim-btn.active { background:var(--blue); color:var(--white); border-color:var(--blue); }
-        .anim-speed { font-size:0.62rem; color:var(--slate-light); margin-left:auto; font-family:'JetBrains Mono',monospace; }
+        .cs-btn { width: 100%; padding: 8px 0; background: var(--navy); color: var(--blue-light); border: 1px solid var(--blue); border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s; margin-top: 6px; font-family: 'DM Sans', sans-serif; }
+        .cs-btn:hover { background: var(--navy-mid); }
+        .cs-btn.active { background: var(--blue); color: #fff; }
+        .cs-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .cs-status { font-size: 11px; color: var(--slate); text-align: center; margin-top: 4px; }
+        .cs-result { margin-top: 10px; }
+        .explorer-result { margin-top: 12px; text-align: center; }
 
-        .cs-btn {
-            width:100%; padding:8px 0; background:var(--white); color:var(--blue);
-            border:2px solid var(--blue); border-radius:6px; font-size:0.75rem; font-weight:700;
-            font-family:'DM Sans',sans-serif; cursor:pointer; transition:all 0.2s; margin-top:6px;
-        }
-        .cs-btn:hover { background:var(--ice); }
-        .cs-btn.active { background:var(--blue); color:var(--white); }
-        .cs-btn:disabled { opacity:0.5; cursor:not-allowed; }
-        .cs-status { font-size:0.68rem; color:var(--slate); text-align:center; margin-top:4px; }
-        .cs-result { margin-top:10px; }
-        .explorer-status { font-size:0.75rem; color:var(--slate); padding:8px 0; }
-        .explorer-status.loading { color:var(--blue); }
-        .explorer-status.error { color:#ef4444; }
-        .explorer-result { margin-top:12px; text-align:center; }
+        /* ── Plot modals ─────────────────────────────────── */
+        .plot-modal-overlay { display: none; position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,0.92); backdrop-filter: blur(6px); align-items: center; justify-content: center; }
+        .plot-modal-overlay.active { display: flex; }
+        .plot-modal-box { width: 94vw; height: 92vh; background: var(--navy); border-radius: var(--radius-lg); position: relative; overflow: hidden; box-shadow: 0 8px 40px rgba(0,0,0,0.5); border: 1px solid var(--border-light); }
+        .plot-modal-close { position: absolute; top: 10px; right: 14px; z-index: 10001; background: rgba(255,255,255,0.08); border: none; color: #ccc; font-size: 22px; width: 36px; height: 36px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }
+        .plot-modal-close:hover { background: rgba(255,255,255,0.2); color: #fff; }
+        #plotly-fullscreen { width: 100%; height: 100%; }
+        .plot-modal-box.split { overflow-y: auto; }
+        .plot-modal-box.split #plotly-fullscreen { height: 55%; min-height: 300px; }
+        .plot-modal-box.split #cs-fullscreen { height: 40%; min-height: 220px; width: 100%; }
+        .plot-modal-box.split #az-fullscreen { height: 40%; min-height: 220px; width: 100%; }
+        .cs-full-divider { height: 1px; background: var(--border); margin: 4px 16px; }
 
-        /* ── Leaflet overrides ──────────────────────────── */
-        .leaflet-popup-content-wrapper { border-radius:var(--radius); box-shadow:var(--shadow-md); font-family:'DM Sans',sans-serif; }
-        .leaflet-popup-content { margin:14px; font-size:0.82rem; min-width:240px; max-width:300px; }
-        .leaflet-popup { margin-bottom:20px; }
-        .popup-header { border-bottom:2px solid var(--blue); padding-bottom:8px; margin-bottom:10px; }
-        .popup-storm-name { font-size:1rem; font-weight:600; color:var(--text); margin-bottom:2px; }
-        .popup-mission { font-size:0.68rem; color:var(--slate); font-family:'JetBrains Mono',monospace; }
-        .popup-row { display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid var(--surface); }
-        .popup-row:last-child { border-bottom:none; }
-        .popup-label { color:var(--slate); font-weight:500; }
-        .popup-value { color:var(--text); font-weight:600; }
-        .intensity-badge { display:inline-block; padding:3px 8px; border-radius:10px; font-size:0.68rem; font-weight:600; color:white; }
-        .popup-explore-btn {
-            display:block; width:100%; margin-top:12px; padding:8px 0;
-            background:var(--blue); color:white; border:none; border-radius:6px;
-            font-size:0.82rem; font-weight:700; cursor:pointer; text-align:center;
-            font-family:'DM Sans',sans-serif; transition:background 0.2s;
-        }
-        .popup-explore-btn:hover { background:#1d4ed8; }
+        /* ── Leaflet popups (dark) ────────────────────────── */
+        .leaflet-popup-content-wrapper { border-radius: var(--radius-lg); box-shadow: 0 8px 24px rgba(0,0,0,0.4); background: var(--surface-raised); color: var(--text); }
+        .leaflet-popup-tip { background: var(--surface-raised); }
+        .leaflet-popup-content { margin: 14px; font-size: 13px; min-width: 240px; max-width: 300px; }
+        .leaflet-popup { margin-bottom: 20px; }
+        .leaflet-popup-close-button { color: var(--slate) !important; }
+        .leaflet-popup-close-button:hover { color: var(--text) !important; }
+        .popup-header { border-bottom: 2px solid var(--blue); padding-bottom: 8px; margin-bottom: 10px; }
+        .popup-storm-name { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+        .popup-mission { font-size: 11px; color: var(--slate); font-family: 'JetBrains Mono', monospace; }
+        .popup-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--border); }
+        .popup-row:last-child { border-bottom: none; }
+        .popup-label { color: var(--slate); font-weight: 500; }
+        .popup-value { color: var(--text); font-weight: 600; }
+        .intensity-badge { display: inline-block; padding: 3px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; color: white; }
+        .popup-explore-btn { display: block; width: 100%; margin-top: 12px; padding: 8px 0; background: linear-gradient(135deg, var(--blue) 0%, var(--cyan) 100%); color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: 700; cursor: pointer; text-align: center; transition: opacity 0.2s; font-family: 'DM Sans', sans-serif; }
+        .popup-explore-btn:hover { opacity: 0.9; }
 
-        .intensity-legend {
-            background:rgba(255,255,255,0.95); backdrop-filter:blur(8px);
-            padding:12px 14px; border-radius:var(--radius); box-shadow:var(--shadow-md);
-            font-size:0.78rem; line-height:1.5; font-family:'DM Sans',sans-serif;
-        }
-        .intensity-legend h4 { margin:0 0 8px 0; font-size:0.78rem; font-weight:700; color:var(--text); }
-        .legend-item { display:flex; align-items:center; margin:4px 0; }
-        .legend-color { width:14px; height:14px; border-radius:50%; margin-right:8px; border:2px solid rgba(0,0,0,0.15); }
-        .custom-marker { border-radius:50%; border:2px solid rgba(0,0,0,0.3); cursor:pointer; }
+        /* ── Legend ──────────────────────────────────────── */
+        .intensity-legend { background: var(--surface-raised); padding: 14px; border-radius: var(--radius); box-shadow: 0 2px 12px rgba(0,0,0,0.3); font-size: 12px; line-height: 1.6; border: 1px solid var(--border); color: var(--text); }
+        .intensity-legend h4 { margin: 0 0 8px 0; font-size: 12px; font-weight: 600; color: var(--slate); text-transform: uppercase; letter-spacing: 0.04em; }
+        .legend-item { display: flex; align-items: center; margin: 4px 0; }
+        .legend-color { width: 14px; height: 14px; border-radius: 50%; margin-right: 8px; border: 2px solid rgba(255,255,255,0.15); }
+        .custom-marker { border-radius: 50%; border: 2px solid rgba(255,255,255,0.3); cursor: pointer; }
 
-        #loading {
-            position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
-            background:rgba(255,255,255,0.95); backdrop-filter:blur(8px);
-            padding:24px 32px; border-radius:var(--radius); box-shadow:var(--shadow-lg);
-            z-index:1000; text-align:center; font-size:0.85rem; color:var(--text);
-        }
-        .spinner { border:3px solid var(--border); border-top:3px solid var(--blue); border-radius:50%; width:32px; height:32px; animation:spin 0.8s linear infinite; margin:0 auto 12px; }
+        /* ── Loading ─────────────────────────────────────── */
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); background: var(--surface-raised); padding: 30px 40px; border-radius: var(--radius-lg); box-shadow: 0 4px 20px rgba(0,0,0,0.4); z-index: 1000; text-align: center; color: var(--text); border: 1px solid var(--border); }
+        .spinner { border: 3px solid var(--navy); border-top: 3px solid var(--cyan); border-radius: 50%; width: 36px; height: 36px; animation: spin 1s linear infinite; margin: 0 auto 12px; }
         @keyframes spin { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
 
-        /* ── Scroll-down indicator ──────────────────────── */
-        .scroll-hint {
-            position:absolute; bottom:70px; left:50%; transform:translateX(-50%); z-index:700;
-            display:flex; flex-direction:column; align-items:center; gap:4px;
-            color:rgba(255,255,255,0.4); font-size:0.65rem; font-weight:500;
-            letter-spacing:0.06em; text-transform:uppercase; animation:bounce 2s infinite;
-            pointer-events:none;
-        }
-        .scroll-hint svg { width:20px; height:20px; opacity:0.4; }
-        @keyframes bounce { 0%,100%{transform:translateX(-50%) translateY(0)} 50%{transform:translateX(-50%) translateY(6px)} }
+        /* ── Below-fold sections ─────────────────────────── */
+        .content-section { max-width: 1100px; margin: 0 auto; padding: 5rem 24px; }
+        .section-bg { background: var(--surface); }
+        .section-title { font-size: 1.8rem; font-weight: 700; color: var(--text); margin-bottom: 1.5rem; text-align: center; letter-spacing: -0.02em; }
+        .section-title .accent { color: var(--cyan); }
+        .section-desc { text-align: center; max-width: 700px; margin: 0 auto 2.5rem auto; font-size: 1rem; color: var(--slate); line-height: 1.8; }
 
-        /* ── Content Sections ───────────────────────────── */
-        .container { max-width:1100px; margin:0 auto; padding:0 24px; }
-        section { padding:4.5rem 0; }
-        section:nth-child(even) { background:var(--white); }
-        .section-title {
-            font-size:1.7rem; font-weight:700; color:var(--navy); text-align:center;
-            margin-bottom:0.5rem; letter-spacing:-0.02em;
-        }
-        .section-subtitle {
-            text-align:center; color:var(--slate); font-size:0.95rem; max-width:680px;
-            margin:0 auto 2.5rem auto; line-height:1.7;
-        }
+        .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 1.5rem; }
+        .feature-card { padding: 2rem; border-radius: var(--radius-lg); background: var(--surface-raised); border: 1px solid var(--border); transition: transform 0.3s, border-color 0.3s; }
+        .feature-card:hover { transform: translateY(-3px); border-color: var(--blue); }
+        .feature-icon { font-size: 2rem; margin-bottom: 0.75rem; }
+        .feature-card h3 { color: var(--text); margin-bottom: 0.5rem; font-size: 1.05rem; }
+        .feature-card p { color: var(--slate); font-size: 0.9rem; }
 
-        /* About section */
-        .about-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1.5rem; margin-top:2rem; }
-        .about-card {
-            padding:1.75rem; border-radius:var(--radius); background:var(--white);
-            border:1px solid var(--border); transition:box-shadow 0.25s, transform 0.25s;
-        }
-        .about-card:hover { box-shadow:var(--shadow-md); transform:translateY(-3px); }
-        .about-card-icon { font-size:1.8rem; margin-bottom:0.75rem; }
-        .about-card h3 { font-size:0.95rem; font-weight:700; color:var(--navy); margin-bottom:0.5rem; }
-        .about-card p { font-size:0.85rem; color:var(--slate); line-height:1.6; }
+        .variables-list { column-count: 2; column-gap: 3rem; margin: 1.5rem 0; line-height: 2.2; list-style: none; }
+        .variables-list li { color: var(--text); font-size: 0.95rem; }
+        .variables-list li::before { content: '\2192'; color: var(--cyan); margin-right: 8px; font-weight: 700; }
 
-        /* Features section */
-        .features-cols { display:grid; grid-template-columns:1fr 1fr; gap:2.5rem; max-width:900px; margin:0 auto; }
-        .features-cols h3 { font-size:1rem; font-weight:700; color:var(--navy); margin-bottom:0.75rem; }
-        .features-cols ul { list-style:none; }
-        .features-cols li {
-            padding:6px 0; font-size:0.88rem; color:var(--text);
-            border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px;
-        }
-        .features-cols li::before { content:''; width:5px; height:5px; border-radius:50%; background:var(--blue); flex-shrink:0; }
-        .ref-cards { display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; margin-top:1rem; }
-        .ref-card {
-            padding:1.25rem; border-radius:var(--radius); background:var(--surface);
-            border:1px solid var(--border);
-        }
-        .ref-card h4 { font-size:0.85rem; font-weight:700; color:var(--navy); margin-bottom:4px; }
-        .ref-card p { font-size:0.78rem; color:var(--slate); line-height:1.5; }
+        .ref-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); gap: 1.25rem; margin-top: 1.5rem; }
+        .ref-card { padding: 1.5rem; border-radius: var(--radius); background: var(--navy-mid); border: 1px solid var(--border); }
+        .ref-card h4 { color: var(--blue-light); margin-bottom: 0.5rem; font-size: 0.95rem; }
+        .ref-card p { color: var(--slate); font-size: 0.85rem; }
 
-        /* Download section */
-        .dl-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:1.25rem; margin-top:2rem; }
-        .dl-card {
-            background:var(--navy); color:var(--white); padding:1.5rem; border-radius:var(--radius);
-            text-align:center; transition:transform 0.2s;
-        }
-        .dl-card:hover { transform:translateY(-3px); }
-        .dl-card h3 { font-size:0.95rem; font-weight:700; margin-bottom:2px; }
-        .dl-card .dl-period { font-size:0.82rem; opacity:0.7; }
-        .dl-card .dl-size { font-size:1.6rem; font-weight:700; margin:0.75rem 0; font-family:'JetBrains Mono',monospace; }
-        .dl-card a {
-            display:inline-block; padding:8px 20px; background:var(--white); color:var(--navy);
-            font-weight:700; font-size:0.82rem; border-radius:50px; text-decoration:none;
-            font-family:'DM Sans',sans-serif; transition:transform 0.2s;
-        }
-        .dl-card a:hover { transform:scale(1.05); }
-        .policy-box {
-            max-width:800px; margin:2.5rem auto 0; padding:1.5rem;
-            background:#fef9c3; border-radius:var(--radius); border-left:4px solid #eab308;
-            font-size:0.88rem; line-height:1.7; color:#713f12;
-        }
-        .policy-box h3 { font-size:0.9rem; font-weight:700; margin-bottom:0.5rem; color:#854d0e; }
-        .policy-box a { color:#92400e; }
-        .cite-box {
-            max-width:800px; margin:1.5rem auto 0; padding:1.5rem;
-            background:var(--surface); border-radius:var(--radius); border-left:4px solid var(--navy);
-            font-size:0.82rem; line-height:1.7; font-family:'JetBrains Mono',monospace; color:var(--text);
-        }
-        .cite-box h3 { font-size:0.85rem; font-weight:700; color:var(--navy); margin-bottom:0.75rem; font-family:'DM Sans',sans-serif; }
+        .data-files { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px,1fr)); gap: 1.25rem; margin-top: 2rem; }
+        .file-card { background: var(--surface-raised); border: 1px solid var(--border); padding: 2rem; border-radius: var(--radius-lg); text-align: center; transition: border-color 0.3s; }
+        .file-card:hover { border-color: var(--blue); }
+        .file-card h3 { color: var(--text); font-size: 1rem; }
+        .file-card .file-period { color: var(--slate); font-size: 0.85rem; margin-top: 4px; }
+        .file-size { font-size: 1.8rem; font-weight: 700; color: var(--cyan); margin: 1rem 0; font-family: 'JetBrains Mono', monospace; }
+        .download-btn { background: linear-gradient(135deg, var(--blue) 0%, var(--cyan) 100%); color: white; padding: 10px 24px; border: none; border-radius: 50px; font-size: 0.85rem; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-block; transition: opacity 0.3s, transform 0.3s; font-family: 'DM Sans', sans-serif; }
+        .download-btn:hover { opacity: 0.9; transform: scale(1.03); }
 
-        /* Contact section */
-        .contact-section { background:var(--navy); color:var(--white); text-align:center; }
-        .contact-section .section-title { color:var(--white); }
-        .contact-section .section-subtitle { color:rgba(255,255,255,0.6); }
-        .contact-card {
-            max-width:480px; margin:0 auto; background:rgba(255,255,255,0.06);
-            padding:2rem; border-radius:var(--radius); backdrop-filter:blur(8px);
-            border:1px solid rgba(255,255,255,0.08);
-        }
-        .contact-card p { margin-bottom:0.5rem; }
-        .contact-card a { color:var(--sky); text-decoration:underline; }
+        .usage-policy { max-width: 750px; margin: 3rem auto; padding: 1.5rem 2rem; background: rgba(251, 191, 36, 0.08); border-radius: var(--radius); border-left: 3px solid #fbbf24; }
+        .usage-policy h3 { color: #fbbf24; margin-bottom: 0.75rem; font-size: 1rem; }
+        .usage-policy p { color: var(--slate); font-size: 0.9rem; }
+        .usage-policy a { color: var(--blue-light); }
 
-        /* Footer */
-        footer { background:#0a1628; color:rgba(255,255,255,0.5); text-align:center; padding:1.5rem 0; font-size:0.78rem; }
-        footer a { color:var(--sky); text-decoration:none; }
-        footer a:hover { text-decoration:underline; }
+        .citation-box { background: var(--navy-mid); padding: 1.5rem 2rem; border-radius: var(--radius); border-left: 3px solid var(--blue); margin: 2rem 0; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--slate); line-height: 1.8; }
+        .citation-box h3 { color: var(--blue-light); margin-bottom: 0.75rem; font-family: 'DM Sans', sans-serif; }
 
-        /* ── Fullscreen plot modal ──────────────────────── */
-        .plot-modal-overlay {
-            display:none; position:fixed; inset:0; z-index:10000;
-            background:rgba(0,0,0,0.88); backdrop-filter:blur(4px);
-            align-items:center; justify-content:center;
-        }
-        .plot-modal-overlay.active { display:flex; }
-        .plot-modal-box {
-            width:92vw; height:90vh; background:#0e1117;
-            border-radius:var(--radius); position:relative; overflow:hidden;
-            box-shadow:0 8px 40px rgba(0,0,0,0.5);
-        }
-        .plot-modal-close {
-            position:absolute; top:10px; right:14px; z-index:10001;
-            background:rgba(255,255,255,0.1); border:none; color:#ccc;
-            font-size:22px; width:36px; height:36px; border-radius:50%;
-            cursor:pointer; display:flex; align-items:center; justify-content:center;
-            transition:background 0.2s;
-        }
-        .plot-modal-close:hover { background:rgba(255,255,255,0.25); color:#fff; }
-        #plotly-fullscreen { width:100%; height:100%; }
-        .plot-modal-box.split { overflow-y:auto; }
-        .plot-modal-box.split #plotly-fullscreen { height:55%; min-height:300px; }
-        .plot-modal-box.split #cs-fullscreen { height:40%; min-height:220px; width:100%; }
-        .plot-modal-box.split #az-fullscreen { height:40%; min-height:220px; width:100%; }
-        .cs-full-divider { height:1px; background:rgba(255,255,255,0.1); margin:4px 16px; }
+        .contact-section { background: linear-gradient(135deg, var(--navy-light) 0%, var(--blue) 100%); text-align: center; padding: 4rem 24px; color: white; }
+        .contact-section .section-title { color: white; }
+        .contact-info { max-width: 500px; margin: 2rem auto; background: rgba(255,255,255,0.08); padding: 2rem; border-radius: var(--radius-lg); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.12); }
+        .contact-info a { color: var(--cyan); }
 
-        /* ── Image modal ────────────────────────────────── */
-        .image-modal { display:none; position:fixed; z-index:10000; left:0; top:0; width:100%; height:100%; background-color:rgba(0,0,0,0.9); overflow:auto; }
-        .image-modal-content { position:relative; margin:2% auto; padding:0; width:90%; max-width:1200px; }
-        .modal-image { width:100%; height:auto; border-radius:4px; }
-        .modal-close { position:absolute; top:15px; right:35px; color:#f1f1f1; font-size:40px; font-weight:bold; cursor:pointer; transition:0.3s; z-index:10001; }
-        .modal-close:hover { color:#bbb; }
-        .modal-caption { text-align:center; color:#ccc; padding:10px 0; font-size:0.85rem; }
+        footer { background: var(--navy); border-top: 1px solid var(--border); text-align: center; padding: 2rem 0; color: var(--slate); font-size: 0.85rem; }
+        footer a { color: var(--blue-light); text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
 
-        /* ── Responsive ─────────────────────────────────── */
-        @media (max-width:768px) {
-            .header-inner { padding:0 16px; }
-            .nav-links { gap:1rem; }
-            .nav-links a { font-size:0.78rem; }
-            .version-pill { display:none; }
-            #map-hero { height:calc(100vh - 46px); min-height:500px; }
-            .map-title-bar { padding:14px 16px 24px; }
-            .map-title-left h1 { font-size:1.2rem; }
-            .map-stats-row { gap:14px; }
-            .map-stat-val { font-size:0.95rem; }
-            .controls-row { padding:8px 16px; }
-            .qs-select { min-width:120px; font-size:0.78rem; }
-            .map-body { flex-direction:column; }
-            #side-panel.open { width:100%; border-left:none; border-top:2px solid var(--border); height:auto; max-height:70vh; }
-            #side-panel-inner { width:100%; padding:12px; }
-            .about-grid { grid-template-columns:1fr; }
-            .features-cols { grid-template-columns:1fr; }
-            .ref-cards { grid-template-columns:1fr; }
-            .dl-grid { grid-template-columns:1fr 1fr; }
-            .scroll-hint { display:none; }
-            .filter-panel-inner { grid-template-columns:1fr; }
-            .plot-modal-box { width:98vw; height:95vh; border-radius:6px; }
-            .plot-modal-box.split #plotly-fullscreen { height:50%; min-height:200px; }
-            .plot-modal-box.split #cs-fullscreen { height:45%; min-height:180px; }
-            .plot-modal-box.split #az-fullscreen { height:45%; min-height:180px; }
+        .image-modal { display: none; position: fixed; z-index: 10000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.92); overflow: auto; }
+        .image-modal-content { position: relative; margin: 2% auto; padding: 0; width: 90%; max-width: 1200px; }
+        .modal-image { width: 100%; height: auto; border-radius: 6px; }
+        .modal-close { position: absolute; top: 15px; right: 35px; color: #f1f1f1; font-size: 40px; font-weight: bold; cursor: pointer; transition: 0.3s; z-index: 10001; }
+        .modal-close:hover { color: #bbb; }
+        .modal-caption { text-align: center; color: var(--slate); padding: 10px 0; font-size: 14px; }
+
+        .scroll-prompt { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 600; display: flex; flex-direction: column; align-items: center; gap: 4px; opacity: 0.5; transition: opacity 0.3s; pointer-events: none; }
+        .scroll-prompt span { font-size: 0.65rem; color: var(--slate); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; }
+        .scroll-prompt .arrow { width: 20px; height: 20px; border-right: 2px solid var(--slate); border-bottom: 2px solid var(--slate); transform: rotate(45deg); animation: bobDown 2s infinite; }
+        @keyframes bobDown { 0%, 100% { transform: rotate(45deg) translateY(0); } 50% { transform: rotate(45deg) translateY(4px); } }
+
+        @media (max-width: 900px) { .topbar-stats { display: none; } .topbar-subtitle { display: none; } }
+        @media (max-width: 768px) {
+            .topbar-inner { height: 46px; padding: 0 14px; }
+            .topbar-logo { font-size: 1.15rem; }
+            .topbar-nav a { font-size: 0.7rem; padding: 5px 8px; }
+            .topbar-version { display: none; }
+            #map-section { height: calc(100vh - 46px); min-height: 500px; }
+            .map-toolbar { padding: 8px 12px; gap: 8px; }
+            .case-select-wrap { flex: 1 1 100%; min-width: 0; }
+            .toolbar-sep { display: none; }
+            .filter-drawer.open { max-height: 400px; }
+            .filter-grid { grid-template-columns: 1fr; }
+            #map-wrapper { flex-direction: column; }
+            #map-container { min-height: 300px; }
+            #side-panel.open { width: 100%; border-left: none; border-top: 1px solid var(--border-light); height: auto; max-height: 65vh; }
+            #side-panel-inner { width: 100%; padding: 12px; }
+            #map-wrapper.focus-mode #map-container { flex: 0 0 200px; max-width: 100%; }
+            #map-wrapper.focus-mode #side-panel.open { width: 100%; }
+            .content-section { padding: 3rem 16px; }
+            .section-title { font-size: 1.4rem; }
+            .plot-modal-box { width: 98vw; height: 96vh; border-radius: 6px; }
+            .plot-modal-box.split #plotly-fullscreen { height: 50%; min-height: 200px; }
+            .plot-modal-box.split #cs-fullscreen { height: 45%; min-height: 180px; }
+            .plot-modal-box.split #az-fullscreen { height: 45%; min-height: 180px; }
         }
-        @media (max-width:480px) {
-            .nav-links { gap:0.6rem; }
-            .map-title-left h1 { font-size:1rem; }
-            .map-title-left p { display:none; }
-            .map-stats-row { gap:10px; }
-            .map-stat-val { font-size:0.85rem; }
-            .qs-divider { display:none; }
-            .controls-row { flex-wrap:wrap; gap:8px; }
-            .dl-grid { grid-template-columns:1fr; }
-            .plot-modal-box { width:100vw; height:100vh; border-radius:0; }
+        @media (max-width: 480px) {
+            .topbar-nav { gap: 2px; }
+            .topbar-nav a { padding: 4px 6px; font-size: 0.65rem; }
+            #map-container { min-height: 250px; }
+            #side-panel.open { max-height: 70vh; }
+            .plot-modal-box { width: 100vw; height: 100vh; border-radius: 0; }
+            .leaflet-popup-content { min-width: 180px; max-width: 240px; font-size: 12px; }
         }
     </style>
 </head>
 <body>
-
-<!-- ═══════════════ HEADER ═══════════════ -->
-<header>
-    <div class="header-inner">
-        <div class="logo"><span class="logo-dot"></span> TC-RADAR</div>
-        <ul class="nav-links">
-            <li><a href="#about">About</a></li>
-            <li><a href="#features">Features</a></li>
-            <li><a href="#download">Download</a></li>
-            <li><a href="#contact">Contact</a></li>
-        </ul>
-        <span class="version-pill">v3m · Aug 2025</span>
-    </div>
-</header>
-
-<!-- ═══════════════ MAP HERO ═══════════════ -->
-<section id="map-hero">
-
-    <!-- Gradient overlay with title + stats -->
-    <div class="map-title-bar">
-        <div class="map-title-row">
-            <div class="map-title-left">
-                <h1>Tropical Cyclone Radar Archive</h1>
-                <p>Airborne Doppler radar analyses · 1997–2024 · Click a marker or select a case below</p>
+    <header class="topbar">
+        <div class="topbar-inner">
+            <div class="topbar-brand">
+                <div class="topbar-logo">TC-RADAR</div>
+                <div class="topbar-divider"></div>
+                <div class="topbar-subtitle">Tropical Cyclone Radar Archive</div>
             </div>
-            <div class="map-stats-row">
-                <div class="map-stat"><div class="map-stat-val" id="total-cases">–</div><div class="map-stat-lbl">Analyses</div></div>
-                <div class="map-stat"><div class="map-stat-val" id="unique-storms">–</div><div class="map-stat-lbl">Storms</div></div>
-                <div class="map-stat"><div class="map-stat-val" id="year-range">–</div><div class="map-stat-lbl">Years</div></div>
-                <div class="map-stat"><div class="map-stat-val" id="intensity-range">–</div><div class="map-stat-lbl">Intensity</div></div>
+            <div class="topbar-stats">
+                <div class="topbar-stat"><span class="topbar-stat-val" id="total-cases">&mdash;</span><span class="topbar-stat-label">Analyses</span></div>
+                <div class="topbar-stat"><span class="topbar-stat-val" id="unique-storms">&mdash;</span><span class="topbar-stat-label">Storms</span></div>
+                <div class="topbar-stat"><span class="topbar-stat-val" id="year-range">&mdash;</span><span class="topbar-stat-label">Coverage</span></div>
+                <span class="topbar-version">v3m</span>
             </div>
+            <ul class="topbar-nav">
+                <li><a href="#about">About</a></li>
+                <li><a href="#features">Features</a></li>
+                <li><a href="#download">Download</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
         </div>
-    </div>
+    </header>
 
-    <!-- Map + side panel -->
-    <div class="map-body">
-        <div id="map-container">
-            <div id="loading"><div class="spinner"></div><div>Loading TC-RADAR data…</div></div>
-            <div id="map"></div>
-        </div>
-        <div id="side-panel">
-            <div id="side-panel-inner">
-                <button id="side-panel-close" onclick="closeSidePanel()">✕</button>
+    <section id="map-section">
+        <div class="map-toolbar">
+            <div class="case-select-wrap">
+                <select id="case-quick-select" class="toolbar-select"><option value="">Select a case to explore&hellip;</option></select>
             </div>
+            <div class="toolbar-sep"></div>
+            <div class="toolbar-group">
+                <span class="toolbar-label">Storm</span>
+                <select id="storm-filter" class="toolbar-select" style="max-width:160px;"><option value="all">All Storms</option></select>
+            </div>
+            <div class="toolbar-sep"></div>
+            <button class="filter-toggle-btn" id="filter-toggle" onclick="toggleFilterDrawer()"><span style="font-size:13px;">&#9881;</span> Filters</button>
+            <button class="toolbar-reset" onclick="resetFilters()">Reset</button>
+            <span class="toolbar-count"><span id="filtered-count">0</span> / <span id="total-count">0</span> cases</span>
         </div>
-    </div>
-
-    <!-- Scroll-down hint -->
-    <div class="scroll-hint">
-        <span>Scroll for details</span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-    </div>
-
-    <!-- Bottom controls bar (Quick Select + Filters) -->
-    <div class="map-controls-bar">
-        <div class="filter-panel-wrap" id="filterPanel">
-            <div class="filter-panel-inner">
+        <div class="filter-drawer" id="filter-drawer">
+            <div class="filter-grid">
                 <div class="filter-group">
                     <label>Intensity Range (kt)</label>
                     <div class="slider-values"><span id="min-intensity-value">0</span><span id="max-intensity-value">200</span></div>
-                    <div class="slider-wrapper">
-                        <div class="slider-track"></div><div class="slider-range" id="intensity-range-fill"></div>
-                        <input type="range" id="min-intensity" min="0" max="200" value="0" step="5">
-                        <input type="range" id="max-intensity" min="0" max="200" value="200" step="5">
-                    </div>
+                    <div class="slider-wrapper"><div class="slider-track"></div><div class="slider-range" id="intensity-range-fill"></div><input type="range" id="min-intensity" min="0" max="200" value="0" step="5"><input type="range" id="max-intensity" min="0" max="200" value="200" step="5"></div>
                 </div>
                 <div class="filter-group">
                     <label>24-h Intensity Change (kt)</label>
                     <div class="slider-values"><span id="min-vmax-change-value">-100</span><span id="max-vmax-change-value">85</span></div>
-                    <div class="slider-wrapper">
-                        <div class="slider-track"></div><div class="slider-range" id="vmax-change-range-fill"></div>
-                        <input type="range" id="min-vmax-change" min="-100" max="85" value="-100" step="5">
-                        <input type="range" id="max-vmax-change" min="-100" max="85" value="85" step="5">
-                    </div>
+                    <div class="slider-wrapper"><div class="slider-track"></div><div class="slider-range" id="vmax-change-range-fill"></div><input type="range" id="min-vmax-change" min="-100" max="85" value="-100" step="5"><input type="range" id="max-vmax-change" min="-100" max="85" value="85" step="5"></div>
                 </div>
                 <div class="filter-group">
                     <label>Tilt Magnitude (km)</label>
                     <div class="slider-values"><span id="min-tilt-value">0</span><span id="max-tilt-value">200</span></div>
-                    <div class="slider-wrapper">
-                        <div class="slider-track"></div><div class="slider-range" id="tilt-range-fill"></div>
-                        <input type="range" id="min-tilt" min="0" max="200" value="0" step="5">
-                        <input type="range" id="max-tilt" min="0" max="200" value="200" step="5">
-                    </div>
+                    <div class="slider-wrapper"><div class="slider-track"></div><div class="slider-range" id="tilt-range-fill"></div><input type="range" id="min-tilt" min="0" max="200" value="0" step="5"><input type="range" id="max-tilt" min="0" max="200" value="200" step="5"></div>
                 </div>
                 <div class="filter-group">
                     <label>Year Range</label>
-                    <div style="display:flex;gap:8px;align-items:center;">
-                        <input type="number" id="min-year" min="1997" max="2024" value="1997" style="width:72px;">
-                        <span style="color:rgba(255,255,255,0.4);font-size:0.82rem;">to</span>
-                        <input type="number" id="max-year" min="1997" max="2024" value="2024" style="width:72px;">
+                    <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
+                        <input type="number" id="min-year" min="1997" max="2024" value="1997">
+                        <span style="color:var(--slate);font-size:0.8rem;">to</span>
+                        <input type="number" id="max-year" min="1997" max="2024" value="2024">
                     </div>
                 </div>
-                <div class="filter-group">
-                    <label>Storm Name (filter map)</label>
-                    <select id="storm-filter"><option value="all">All Storms</option></select>
-                </div>
-                <div class="filter-actions-row">
-                    <button class="reset-btn" onclick="resetFilters()">Reset All Filters</button>
-                </div>
             </div>
         </div>
-        <div class="map-controls-inner">
-            <div class="controls-row">
-                <span class="qs-label">Quick Select</span>
-                <select class="qs-select" id="qs-storm" title="Choose a storm">
-                    <option value="">Storm name…</option>
-                </select>
-                <select class="qs-select" id="qs-case" title="Choose a specific case" disabled>
-                    <option value="">Select storm first</option>
-                </select>
-                <button class="qs-go-btn" id="qs-go" onclick="quickSelectGo()" disabled>Explore →</button>
+        <div id="map-wrapper">
+            <div id="map-container">
+                <div id="loading"><div class="spinner"></div><div>Loading TC-RADAR data&hellip;</div></div>
+                <div id="map"></div>
+                <div class="scroll-prompt"><span>Scroll for details</span><div class="arrow"></div></div>
+            </div>
+            <div id="side-panel"><div id="side-panel-inner"><button id="side-panel-close" onclick="closeSidePanel()">&times;</button></div></div>
+        </div>
+    </section>
 
-                <div class="qs-divider"></div>
-
-                <button class="toggle-filters-btn" id="toggle-filters-btn" onclick="toggleFilterPanel()">⚙ Filters</button>
-
-                <span class="filter-count-badge">Showing <span id="filtered-count">0</span> / <span id="total-count">0</span></span>
+    <section id="about">
+        <div class="content-section">
+            <h2 class="section-title">About <span class="accent">TC-RADAR</span></h2>
+            <p class="section-desc">TC-RADAR provides a homogeneous platform of post-processed airborne Doppler radar analyses of tropical cyclones. Developed by Dr. Michael Fischer (University of Miami) in collaboration with NOAA's Hurricane Research Division, this database enables researchers to conduct storm-to-storm comparisons and climatological analyses of TC vortex and convective characteristics across all stages of the tropical cyclone lifecycle.</p>
+            <div class="feature-grid">
+                <div class="feature-card"><div class="feature-icon">&#127744;</div><h3>Storm-Centered Grids</h3><p>All analyses use a weighted circulation maximization (WCM) method for precise TC center identification, enabling accurate vortex-relative analyses.</p></div>
+                <div class="feature-card"><div class="feature-icon">&#128202;</div><h3>Rich Metadata</h3><p>Includes best-track information and environmental diagnostics from the operational SHIPS model for comprehensive storm context.</p></div>
+                <div class="feature-card"><div class="feature-icon">&#127919;</div><h3>High Resolution</h3><p>2.0 km horizontal grid spacing, 0.5 km vertical grid spacing, spanning 0-18 km in height for detailed 3D structure analysis.</p></div>
             </div>
         </div>
-    </div>
-</section>
+    </section>
 
-<!-- ═══════════════ ABOUT ═══════════════ -->
-<section id="about">
-    <div class="container">
-        <h2 class="section-title">About TC-RADAR</h2>
-        <p class="section-subtitle">
-            TC-RADAR provides a homogeneous platform of post-processed airborne Doppler radar analyses of tropical cyclones.
-            Developed by Dr. Michael Fischer (University of Miami) in collaboration with NOAA's Hurricane Research Division,
-            this database enables storm-to-storm comparisons and climatological analyses across all stages of the TC lifecycle.
-        </p>
-        <div class="about-grid">
-            <div class="about-card">
-                <div class="about-card-icon">🌀</div>
-                <h3>Storm-Centered Grids</h3>
-                <p>All analyses use a weighted circulation maximization (WCM) method for precise TC center identification, enabling accurate vortex-relative analyses.</p>
-            </div>
-            <div class="about-card">
-                <div class="about-card-icon">📊</div>
-                <h3>Rich Metadata</h3>
-                <p>Includes best-track information and environmental diagnostics from the operational SHIPS model for comprehensive storm context.</p>
-            </div>
-            <div class="about-card">
-                <div class="about-card-icon">🎯</div>
-                <h3>High Resolution</h3>
-                <p>2.0 km horizontal grid spacing, 0.5 km vertical grid spacing, spanning 0–18 km in height for detailed 3D structure analysis.</p>
-            </div>
-        </div>
-    </div>
-</section>
-
-<!-- ═══════════════ FEATURES ═══════════════ -->
-<section id="features" style="background:var(--white);">
-    <div class="container">
-        <h2 class="section-title">Database Features</h2>
-        <div class="features-cols">
-            <div>
-                <h3>Available Variables</h3>
-                <ul>
-                    <li>Eastward &amp; Northward Velocity</li>
-                    <li>Vertical Velocity</li>
-                    <li>Radar Reflectivity</li>
-                    <li>Wind Speed</li>
-                    <li>Tangential &amp; Radial Velocity</li>
-                    <li>Relative Vorticity</li>
-                    <li>Divergence</li>
-                    <li>Vortex Tilt Profiles</li>
-                    <li>Radius of Maximum Wind</li>
+    <section id="features" class="section-bg">
+        <div class="content-section">
+            <h2 class="section-title">Database <span class="accent">Features</span></h2>
+            <div style="max-width:800px;margin:0 auto;">
+                <h3 style="color:var(--blue-light);margin-bottom:0.5rem;font-size:1.1rem;">Available Variables</h3>
+                <ul class="variables-list">
+                    <li>Eastward &amp; Northward Velocity</li><li>Vertical Velocity</li>
+                    <li>Radar Reflectivity</li><li>Wind Speed</li>
+                    <li>Tangential &amp; Radial Velocity</li><li>Relative Vorticity</li>
+                    <li>Divergence</li><li>Vortex Tilt Profiles</li><li>Radius of Maximum Wind</li>
                 </ul>
-            </div>
-            <div>
-                <h3>Reference Frameworks</h3>
-                <div class="ref-cards">
+                <h3 style="color:var(--blue-light);margin-top:2.5rem;margin-bottom:0.75rem;font-size:1.1rem;">Reference Frameworks</h3>
+                <div class="ref-grid">
                     <div class="ref-card"><h4>Real-time Center Fix</h4><p>Based on operational center position during the mission</p></div>
                     <div class="ref-card"><h4>2-km Recentered</h4><p>Using WCM method at 2 km reference height</p></div>
                     <div class="ref-card"><h4>Vortex Tilt-Relative</h4><p>Recentered at every vertical level for tilt analysis</p></div>
                 </div>
             </div>
         </div>
-    </div>
-</section>
+    </section>
 
-<!-- ═══════════════ DOWNLOAD ═══════════════ -->
-<section id="download">
-    <div class="container">
-        <h2 class="section-title">Download Database Files</h2>
-        <p class="section-subtitle">TC-RADAR consists of four netCDF files, grouped by data type and time period. Each file is approximately 10 GB.</p>
-        <div class="dl-grid">
-            <div class="dl-card"><h3>Swath Data</h3><p class="dl-period">1997–2019</p><div class="dl-size">~10 GB</div><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/tc_radar_v3m_1997_2019_xy_rel_swath_ships.nc" target="_blank">Download</a></div>
-            <div class="dl-card"><h3>Swath Data</h3><p class="dl-period">2020–2024</p><div class="dl-size">~10 GB</div><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/tc_radar_v3m_2020_2024_xy_rel_swath_ships.nc" target="_blank">Download</a></div>
-            <div class="dl-card"><h3>Merged Data</h3><p class="dl-period">1997–2019</p><div class="dl-size">~10 GB</div><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/tc_radar_v3m_1997_2019_xy_rel_merge_ships.nc" target="_blank">Download</a></div>
-            <div class="dl-card"><h3>Merged Data</h3><p class="dl-period">2020–2024</p><div class="dl-size">~10 GB</div><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/tc_radar_v3m_2020_2024_xy_rel_merge_ships.nc" target="_blank">Download</a></div>
+    <section id="download">
+        <div class="content-section">
+            <h2 class="section-title">Download <span class="accent">Database Files</span></h2>
+            <p class="section-desc">TC-RADAR consists of four netCDF files, grouped by data type and time period. Each file is approximately 10 GB.</p>
+            <div class="data-files">
+                <div class="file-card"><h3>Swath Data</h3><p class="file-period">1997&ndash;2019</p><div class="file-size">~10 GB</div><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/tc_radar_v3m_1997_2019_xy_rel_swath_ships.nc" class="download-btn" target="_blank">Download</a></div>
+                <div class="file-card"><h3>Swath Data</h3><p class="file-period">2020&ndash;2024</p><div class="file-size">~10 GB</div><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/tc_radar_v3m_2020_2024_xy_rel_swath_ships.nc" class="download-btn" target="_blank">Download</a></div>
+                <div class="file-card"><h3>Merged Data</h3><p class="file-period">1997&ndash;2019</p><div class="file-size">~10 GB</div><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/tc_radar_v3m_1997_2019_xy_rel_merge_ships.nc" class="download-btn" target="_blank">Download</a></div>
+                <div class="file-card"><h3>Merged Data</h3><p class="file-period">2020&ndash;2024</p><div class="file-size">~10 GB</div><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/tc_radar_v3m_2020_2024_xy_rel_merge_ships.nc" class="download-btn" target="_blank">Download</a></div>
+            </div>
+            <div class="usage-policy">
+                <h3>&#128203; Usage Policy</h3>
+                <p>Users are free to download TC-RADAR. However, we request that you notify <strong>Dr. Michael Fischer</strong> (<a href="mailto:mike.fischer@miami.edu">mike.fischer@miami.edu</a>) and NOAA's Hurricane Research Division radar team lead, <strong>Dr. Paul Reasor</strong> (<a href="mailto:paul.reasor@noaa.gov">paul.reasor@noaa.gov</a>), of the nature of your research project to ensure proper usage. Users should carefully examine data and apply additional QC consistent with their objectives.</p>
+            </div>
+            <div class="citation-box">
+                <h3>How to Cite</h3>
+                <p style="margin-bottom:1rem;">Fischer, M. S., R. F. Rogers, P. D. Reasor, and J. F. Gamache, 2022: An analysis of tropical cyclone vortex and convective characteristics in relation to storm intensity using a novel airborne Doppler radar database. Mon. Wea. Rev., 150, 2255-2278, https://doi.org/10.1175/MWR-D-21-0223.1.</p>
+                <p style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid var(--border);"><strong style="color:var(--blue-light);">For vortex tilt analyses, also cite:</strong><br>Fischer, M. S., P. D. Reasor, J. P. Dunion, and R. F. Rogers, 2024: An Observational Analysis of the Relationship between Tropical Cyclone Vortex Tilt, Precipitation Structure, and Intensity Change. Mon. Wea. Rev., 152, 203-225, https://doi.org/10.1175/MWR-D-23-0089.1.</p>
+            </div>
         </div>
-        <div class="policy-box">
-            <h3>📋 Usage Policy</h3>
-            <p>Users are free to download TC-RADAR. However, we request that you notify <strong>Dr. Michael Fischer</strong> (<a href="mailto:mike.fischer@miami.edu">mike.fischer@miami.edu</a>) and NOAA's Hurricane Research Division radar team lead, <strong>Dr. Paul Reasor</strong> (<a href="mailto:paul.reasor@noaa.gov">paul.reasor@noaa.gov</a>), of the nature of your research project to ensure proper usage. Users should carefully examine data and apply additional QC consistent with their objectives.</p>
-        </div>
-        <div class="cite-box">
-            <h3>How to Cite</h3>
-            <p>Fischer, M. S., R. F. Rogers, P. D. Reasor, and J. F. Gamache, 2022: An analysis of tropical cyclone vortex and convective characteristics in relation to storm intensity using a novel airborne Doppler radar database. Mon. Wea. Rev., 150, 2255–2278, https://doi.org/10.1175/MWR-D-21-0223.1.</p>
-            <p style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid var(--border);"><strong style="font-family:'DM Sans',sans-serif;">For vortex tilt analyses, also cite:</strong><br>Fischer, M. S., P. D. Reasor, J. P. Dunion, and R. F. Rogers, 2024: An Observational Analysis of the Relationship between Tropical Cyclone Vortex Tilt, Precipitation Structure, and Intensity Change. Mon. Wea. Rev., 152, 203–225, https://doi.org/10.1175/MWR-D-23-0089.1.</p>
-        </div>
-    </div>
-</section>
+    </section>
 
-<!-- ═══════════════ CONTACT ═══════════════ -->
-<section class="contact-section" id="contact">
-    <div class="container">
-        <h2 class="section-title" style="color:var(--white);">Get in Touch</h2>
-        <p class="section-subtitle">Questions about TC-RADAR? Contact the developer.</p>
-        <div class="contact-card">
-            <p style="font-size:1.1rem;font-weight:700;">Dr. Michael Fischer</p>
-            <p style="opacity:0.7;">TC-RADAR Developer</p>
+    <section class="contact-section" id="contact">
+        <h2 class="section-title" style="color:white;">Get in Touch</h2>
+        <p style="font-size:1.1rem;margin-bottom:2rem;opacity:0.9;">Questions about TC-RADAR? Contact the developer.</p>
+        <div class="contact-info">
+            <p style="font-size:1.15rem;margin-bottom:0.75rem;"><strong>Dr. Michael Fischer</strong></p>
+            <p style="opacity:0.85;">TC-RADAR Developer</p>
             <p style="margin-top:1rem;"><a href="mailto:mike.fischer@miami.edu" style="font-size:1rem;">mike.fischer@miami.edu</a></p>
-            <p style="margin-top:1.25rem;font-size:0.82rem;opacity:0.5;">Please include details about your research project and intended use of TC-RADAR data.</p>
+            <p style="margin-top:1.5rem;font-size:0.85rem;opacity:0.75;">Please include details about your research project and intended use of TC-RADAR data.</p>
+        </div>
+    </section>
+
+    <footer>
+        <div>Created by Michael S. Fischer &middot; University of Miami</div>
+        <div style="margin-top:6px;"><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/TC_RADAR_README.pdf" target="_blank">Full Documentation (README)</a></div>
+    </footer>
+
+    <div id="imageModal" class="image-modal" onclick="closeImageModal()">
+        <div class="image-modal-content" onclick="event.stopPropagation()">
+            <span class="modal-close" onclick="closeImageModal()">&times;</span>
+            <img id="modalImage" class="modal-image" alt="Full size radar analysis">
+            <div id="modalCaption" class="modal-caption"></div>
         </div>
     </div>
-</section>
-
-<footer>
-    <div class="container">
-        <p>Created by Michael S. Fischer · University of Miami</p>
-        <p style="margin-top:4px;"><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/TC_RADAR_README.pdf" target="_blank">Full Documentation (README)</a></p>
+    <div id="plotModal" class="plot-modal-overlay" onclick="closePlotModal()">
+        <div class="plot-modal-box" id="plotModalBox" onclick="event.stopPropagation()">
+            <button class="plot-modal-close" onclick="closePlotModal()" title="Close (Esc)">&times;</button>
+            <div id="plotly-fullscreen"></div>
+            <div class="cs-full-divider" id="cs-full-divider" style="display:none;"></div>
+            <div id="cs-fullscreen" style="display:none;"></div>
+            <div class="cs-full-divider" id="az-full-divider" style="display:none;"></div>
+            <div id="az-fullscreen" style="display:none;"></div>
+        </div>
     </div>
-</footer>
 
-<!-- ═══════════════ MODALS ═══════════════ -->
-<div id="imageModal" class="image-modal" onclick="closeImageModal()">
-    <div class="image-modal-content" onclick="event.stopPropagation()">
-        <span class="modal-close" onclick="closeImageModal()">&times;</span>
-        <img id="modalImage" class="modal-image" alt="Full size radar analysis">
-        <div id="modalCaption" class="modal-caption"></div>
-    </div>
-</div>
-<div id="plotModal" class="plot-modal-overlay" onclick="closePlotModal()">
-    <div class="plot-modal-box" id="plotModalBox" onclick="event.stopPropagation()">
-        <button class="plot-modal-close" onclick="closePlotModal()" title="Close (Esc)">&times;</button>
-        <div id="plotly-fullscreen"></div>
-        <div class="cs-full-divider" id="cs-full-divider" style="display:none;"></div>
-        <div id="cs-fullscreen" style="display:none;"></div>
-        <div class="cs-full-divider" id="az-full-divider" style="display:none;"></div>
-        <div id="az-fullscreen" style="display:none;"></div>
-    </div>
-</div>
-
-<!-- ═══════════════ SCRIPTS ═══════════════ -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-<script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
-
-<script>
-const API_BASE = 'https://tc-radar-api.onrender.com';
-
-let allData = null;
-let markers = null;
-let allMarkers = [];
-let currentCaseIndex = null;
-
-const filters = {
-    minIntensity:0, maxIntensity:200,
-    minVmaxChange:-100, maxVmaxChange:85,
-    minTilt:0, maxTilt:200,
-    minYear:1997, maxYear:2024,
-    stormName:'all'
-};
-
-const map = L.map('map', { center:[20,-60], zoom:4, zoomControl:true, tap:true, tapTolerance:15 });
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · <a href="https://carto.com/">CARTO</a>',
-    maxZoom:18
-}).addTo(map);
-
-/* ═══ Quick Select logic ══════════════════════════════════ */
-function populateQuickSelect() {
-    if (!allData) return;
-    const qsStorm = document.getElementById('qs-storm');
-    const storms = [...new Set(allData.cases.map(c => c.storm_name))].sort();
-    storms.forEach(s => {
-        const o = document.createElement('option'); o.value = s; o.textContent = s;
-        qsStorm.appendChild(o);
-    });
-    qsStorm.addEventListener('change', onQsStormChange);
-    document.getElementById('qs-case').addEventListener('change', onQsCaseChange);
-}
-
-function onQsStormChange() {
-    const storm = document.getElementById('qs-storm').value;
-    const qsCase = document.getElementById('qs-case');
-    qsCase.innerHTML = '';
-    if (!storm) {
-        qsCase.innerHTML = '<option value="">Select storm first</option>';
-        qsCase.disabled = true;
-        document.getElementById('qs-go').disabled = true;
-        return;
-    }
-    const cases = allData.cases.filter(c => c.storm_name === storm);
-    qsCase.disabled = false;
-    qsCase.innerHTML = '<option value="">Choose a case…</option>';
-    cases.forEach(c => {
-        const o = document.createElement('option');
-        o.value = c.case_index;
-        const cat = getIntensityCategory(c.vmax_kt);
-        const vmax = c.vmax_kt !== null ? ` · ${c.vmax_kt} kt (${cat})` : '';
-        o.textContent = `${c.datetime}${vmax}`;
-        qsCase.appendChild(o);
-    });
-}
-
-function onQsCaseChange() {
-    const val = document.getElementById('qs-case').value;
-    document.getElementById('qs-go').disabled = !val;
-}
-
-function quickSelectGo() {
-    const idx = parseInt(document.getElementById('qs-case').value);
-    if (isNaN(idx) || !allData) return;
-    const caseData = allData.cases.find(c => c.case_index === idx);
-    if (!caseData) return;
-    // Pan map to the marker location
-    map.setView([caseData.latitude, caseData.longitude], 7, { animate:true });
-    openSidePanel(caseData);
-}
-
-/* ═══ Filter panel toggle ═════════════════════════════════ */
-function toggleFilterPanel() {
-    const panel = document.getElementById('filterPanel');
-    const btn = document.getElementById('toggle-filters-btn');
-    panel.classList.toggle('open');
-    btn.classList.toggle('active');
-}
-
-/* ═══ Side panel ══════════════════════════════════════════ */
-function openSidePanel(caseData) {
-    currentCaseIndex = caseData.case_index;
-    const idx     = caseData.case_index;
-    const padded  = String(idx).padStart(4, '0');
-    const imageUrl = `https://raw.githubusercontent.com/MichaelFischerWx/michaelfischerwx.github.io/main/TC-RADAR/images/v3m/v3m_swath_cf_${padded}.png`;
-
-    document.getElementById('side-panel-inner').innerHTML = `
-        <button id="side-panel-close" onclick="closeSidePanel()">✕</button>
-
-        <div class="panel-storm-name">${caseData.storm_name}</div>
-        <div class="panel-mission">${caseData.mission_id} &nbsp;·&nbsp; ${caseData.datetime}</div>
-
-        <div class="panel-image-wrap" onclick="openImageModal('${imageUrl}','${caseData.storm_name} – ${caseData.datetime}')">
-            <img src="${imageUrl}" alt="Quick-look: ${caseData.storm_name}"
-                 onerror="this.parentElement.style.display='none'">
-        </div>
-        <div class="panel-image-label">Quick-look (2-km V<sub>t</sub>, WCM) · click to enlarge</div>
-
-        <hr class="explorer-divider">
-        <div class="explorer-title">🔬 Explore Data</div>
-
-        <div class="explorer-row">
-            <label>Variable</label>
-            <select class="explorer-select" id="ep-var">
-                <optgroup label="WCM Recentered (2 km)">
-                    <option value="recentered_tangential_wind">Tangential Wind</option>
-                    <option value="recentered_radial_wind">Radial Wind</option>
-                    <option value="recentered_upward_air_velocity">Vertical Velocity</option>
-                    <option value="recentered_reflectivity">Reflectivity</option>
-                    <option value="recentered_wind_speed">Wind Speed</option>
-                    <option value="recentered_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>
-                    <option value="recentered_relative_vorticity">Relative Vorticity</option>
-                    <option value="recentered_divergence">Divergence</option>
-                </optgroup>
-                <optgroup label="Tilt-Relative">
-                    <option value="total_recentered_tangential_wind">Tangential Wind</option>
-                    <option value="total_recentered_radial_wind">Radial Wind</option>
-                    <option value="total_recentered_upward_air_velocity">Vertical Velocity</option>
-                    <option value="total_recentered_reflectivity">Reflectivity</option>
-                    <option value="total_recentered_wind_speed">Wind Speed</option>
-                    <option value="total_recentered_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>
-                </optgroup>
-                <optgroup label="Original Swath">
-                    <option value="swath_tangential_wind">Tangential Wind</option>
-                    <option value="swath_radial_wind">Radial Wind</option>
-                    <option value="swath_reflectivity">Reflectivity</option>
-                    <option value="swath_wind_speed">Wind Speed</option>
-                    <option value="swath_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>
-                </optgroup>
-            </select>
-        </div>
-
-        <div class="explorer-row">
-            <label>Contour Overlay <span style="font-weight:400;color:var(--slate-light);">(optional)</span></label>
-            <select class="explorer-select" id="ep-overlay" style="font-size:0.72rem;">
-                <option value="">None</option>
-                <optgroup label="WCM Recentered (2 km)">
-                    <option value="recentered_tangential_wind">Tangential Wind</option>
-                    <option value="recentered_radial_wind">Radial Wind</option>
-                    <option value="recentered_upward_air_velocity">Vertical Velocity</option>
-                    <option value="recentered_reflectivity">Reflectivity</option>
-                    <option value="recentered_wind_speed">Wind Speed</option>
-                    <option value="recentered_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>
-                    <option value="recentered_relative_vorticity">Relative Vorticity</option>
-                    <option value="recentered_divergence">Divergence</option>
-                </optgroup>
-                <optgroup label="Tilt-Relative">
-                    <option value="total_recentered_tangential_wind">Tangential Wind</option>
-                    <option value="total_recentered_radial_wind">Radial Wind</option>
-                    <option value="total_recentered_upward_air_velocity">Vertical Velocity</option>
-                    <option value="total_recentered_reflectivity">Reflectivity</option>
-                    <option value="total_recentered_wind_speed">Wind Speed</option>
-                    <option value="total_recentered_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>
-                </optgroup>
-                <optgroup label="Original Swath">
-                    <option value="swath_tangential_wind">Tangential Wind</option>
-                    <option value="swath_radial_wind">Radial Wind</option>
-                    <option value="swath_reflectivity">Reflectivity</option>
-                    <option value="swath_wind_speed">Wind Speed</option>
-                    <option value="swath_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>
-                </optgroup>
-            </select>
-            <div style="display:flex;align-items:center;gap:6px;margin-top:3px;">
-                <label style="font-size:0.62rem;white-space:nowrap;margin:0;">Interval:</label>
-                <input type="number" id="ep-contour-int" value="" placeholder="auto"
-                    style="width:60px;padding:3px 5px;font-size:0.72rem;border:1px solid var(--border);border-radius:4px;">
-                <span style="font-size:0.62rem;color:var(--slate-light);" id="ep-contour-units"></span>
-            </div>
-        </div>
-
-        <div class="explorer-row">
-            <label>Colormap</label>
-            <select class="explorer-select" id="ep-cmap" style="font-size:0.72rem;" onchange="applyCmap()">
-                <option value="">Default (from variable)</option>
-                <optgroup label="Sequential">
-                    <option value="Viridis">Viridis</option><option value="Inferno">Inferno</option>
-                    <option value="Magma">Magma</option><option value="Plasma">Plasma</option>
-                    <option value="Cividis">Cividis</option><option value="Hot">Hot</option>
-                    <option value="YlOrRd">YlOrRd</option><option value="YlGnBu">YlGnBu</option>
-                    <option value="Blues">Blues</option><option value="Reds">Reds</option>
-                    <option value="Greys">Greys</option>
-                </optgroup>
-                <optgroup label="Diverging">
-                    <option value="RdBu">RdBu (red-blue)</option>
-                    <option value='[[0,"rgb(5,10,172)"],[0.5,"rgb(255,255,255)"],[1,"rgb(178,10,28)"]]'>BuWtRd (blue-white-red)</option>
-                    <option value="Picnic">Picnic</option><option value="Portland">Portland</option>
-                </optgroup>
-                <optgroup label="Other">
-                    <option value="Jet">Jet</option><option value="Rainbow">Rainbow</option>
-                    <option value="Electric">Electric</option><option value="Earth">Earth</option>
-                    <option value="Blackbody">Blackbody</option>
-                </optgroup>
-            </select>
-        </div>
-
-        <div class="explorer-row">
-            <label>Color Range <span style="font-weight:400;color:var(--slate-light);">(override)</span></label>
-            <div style="display:flex;align-items:center;gap:6px;">
-                <input type="number" id="ep-vmin" placeholder="min" step="any"
-                    style="width:70px;padding:3px 5px;font-size:0.72rem;border:1px solid var(--border);border-radius:4px;"
-                    onchange="applyColorRange()">
-                <span style="font-size:0.72rem;color:var(--slate-light);">to</span>
-                <input type="number" id="ep-vmax" placeholder="max" step="any"
-                    style="width:70px;padding:3px 5px;font-size:0.72rem;border:1px solid var(--border);border-radius:4px;"
-                    onchange="applyColorRange()">
-                <button onclick="resetColorRange()" title="Reset to variable default"
-                    style="padding:2px 6px;font-size:0.62rem;border:1px solid var(--border);border-radius:4px;background:var(--surface);cursor:pointer;color:var(--slate);">↺</button>
-            </div>
-        </div>
-
-        <div class="explorer-row">
-            <label>Height Level</label>
-            <div class="explorer-level-row">
-                <input type="range" id="ep-level" min="0" max="18" step="0.5" value="2"
-                       oninput="document.getElementById('ep-level-val').textContent = parseFloat(this.value).toFixed(1)+' km'">
-                <span class="explorer-level-value" id="ep-level-val">2.0 km</span>
-            </div>
-            <div class="anim-controls">
-                <button class="anim-btn" onclick="animStep(-1)" title="Previous level">◀</button>
-                <button class="anim-btn" id="anim-play-btn" onclick="animToggle()" title="Play/Pause">▶</button>
-                <button class="anim-btn" onclick="animStep(1)" title="Next level">▶▶</button>
-                <span class="anim-speed" id="anim-speed-label">0.8s / level</span>
-            </div>
-        </div>
-
-        <button class="generate-btn" id="ep-btn" onclick="generateCustomPlot()">Generate Plot</button>
-        <button class="cs-btn" id="cs-btn" onclick="toggleCrossSection()" disabled>✂ Draw Cross Section</button>
-        <button class="cs-btn" id="az-btn" onclick="fetchAzimuthalMean()" disabled style="margin-top:4px;">⟳ Azimuthal Mean</button>
-        <div class="explorer-row" id="az-controls" style="margin-top:6px;">
-            <label>Coverage Threshold</label>
-            <div style="display:flex;align-items:center;gap:8px;">
-                <input type="range" id="az-coverage" min="0" max="100" step="5" value="50"
-                       class="az-cov-slider"
-                       oninput="document.getElementById('az-cov-val').textContent = this.value+'%'">
-                <span style="font-size:0.75rem;font-weight:600;color:var(--blue);min-width:36px;" id="az-cov-val">50%</span>
-            </div>
-        </div>
-        <div class="cs-status" id="cs-status"></div>
-        <div class="explorer-result" id="ep-result"></div>
-        <div class="cs-result" id="cs-result"></div>
-        <div class="az-result" id="az-result"></div>
-    `;
-
-    document.getElementById('side-panel').classList.add('open');
-    setTimeout(() => map.invalidateSize(), 360);
-}
-
-function closeSidePanel() {
-    document.getElementById('side-panel').classList.remove('open');
-    currentCaseIndex = null;
-    animStop();
-    _csMode = false;
-    _csPointA = null;
-    _removeRubberBand();
-    setTimeout(() => map.invalidateSize(), 360);
-}
-
-/* ═══ Animation & cross-section state ═════════════════════ */
-let _animTimer = null;
-let _animPlaying = false;
-const _dataCache = {};
-let _csMode = false;
-let _csPointA = null;
-let _csMouseHandler = null;
-
-function _startRubberBand(plotDiv, pxA, pyA) {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.id = 'cs-rubber-band';
-    svg.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:5;';
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    line.setAttribute('stroke', '#ef4444');
-    line.setAttribute('stroke-width', '2');
-    line.setAttribute('stroke-dasharray', '6,4');
-    line.setAttribute('x1', pxA); line.setAttribute('y1', pyA);
-    svg.appendChild(line);
-    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    circle.setAttribute('r', '4');
-    circle.setAttribute('fill', 'rgba(239,68,68,0.5)');
-    circle.setAttribute('stroke', 'white');
-    circle.setAttribute('stroke-width', '1');
-    svg.appendChild(circle);
-    plotDiv.parentElement.style.position = 'relative';
-    plotDiv.parentElement.appendChild(svg);
-    _csMouseHandler = function(e) {
-        const rect = plotDiv.getBoundingClientRect();
-        const mx = e.clientX - rect.left;
-        const my = e.clientY - rect.top;
-        line.setAttribute('x2', mx); line.setAttribute('y2', my);
-        circle.setAttribute('cx', mx); circle.setAttribute('cy', my);
-    };
-    plotDiv.addEventListener('mousemove', _csMouseHandler);
-}
-
-function _removeRubberBand() {
-    const svg = document.getElementById('cs-rubber-band');
-    if (svg) svg.remove();
-    if (_csMouseHandler) {
-        const plotDiv = document.getElementById('plotly-chart');
-        if (plotDiv) plotDiv.removeEventListener('mousemove', _csMouseHandler);
-        _csMouseHandler = null;
-    }
-}
-
-function generateCustomPlot(callback) {
-    if (currentCaseIndex === null) return;
-    _lastAzJson = null;
-    const variable  = document.getElementById('ep-var').value;
-    const level_km  = document.getElementById('ep-level').value;
-    const overlay   = (document.getElementById('ep-overlay') || {}).value || '';
-    const resultDiv = document.getElementById('ep-result');
-    const btn       = document.getElementById('ep-btn');
-
-    btn.disabled = true; btn.textContent = 'Generating…';
-    if (!_animPlaying) {
-        resultDiv.innerHTML = `<div class="explorer-status loading">⏳ Fetching data from API… (may take ~30s if service is waking up)</div>`;
-    }
-
-    const cacheKey = `${currentCaseIndex}_${variable}_${level_km}_${overlay}`;
-    if (_dataCache[cacheKey]) {
-        renderPlotFromJSON(_dataCache[cacheKey], resultDiv);
-        btn.disabled = false; btn.textContent = 'Generate Plot';
-        if (callback) callback();
-        return;
-    }
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 90000);
-
-    let url = `${API_BASE}/data?case_index=${currentCaseIndex}&variable=${variable}&level_km=${level_km}&data_type=swath`;
-    if (overlay) url += `&overlay=${overlay}`;
-
-    fetch(url, { signal: controller.signal })
-        .then(r => { if (!r.ok) return r.json().then(e => { throw new Error(e.detail || `HTTP ${r.status}`); }); return r.json(); })
-        .then(json => { _dataCache[cacheKey] = json; renderPlotFromJSON(json, resultDiv); if (callback) callback(); })
-        .catch(err => {
-            const msg = err.name === 'AbortError' ? '⚠️ Request timed out (90s). The API may be cold-starting — try again in a minute.' : `⚠️ ${err.message}`;
-            resultDiv.innerHTML = `<div class="explorer-status error">${msg}</div>`; animStop();
-        })
-        .finally(() => { clearTimeout(timeout); btn.disabled = false; btn.textContent = 'Generate Plot'; });
-}
-
-/* ═══ Contour overlay helper ══════════════════════════════ */
-function buildOverlayContours(json, x, y, isCS) {
-    if (!json.overlay) return [];
-    const ov = json.overlay;
-    const ovData = isCS ? ov.cross_section : ov.data;
-    if (!ovData) return [];
-    try {
-        const intInput = document.getElementById('ep-contour-int');
-        let interval = intInput ? parseFloat(intInput.value) : NaN;
-        if (isNaN(interval) || interval <= 0) {
-            const flat = ovData.flat().filter(v => v !== null && !isNaN(v));
-            if (flat.length === 0) return [];
-            let mn = Infinity, mx = -Infinity;
-            for (let i = 0; i < flat.length; i++) { if (flat[i] < mn) mn = flat[i]; if (flat[i] > mx) mx = flat[i]; }
-            interval = parseFloat(((mx - mn) / 10).toPrecision(1));
-            if (!isFinite(interval) || interval <= 0) interval = (mx - mn) / 10 || 1;
-        }
-        const xCoord = isCS ? json.distance_km : x;
-        const yCoord = isCS ? json.height_km : y;
-        const baseContour = { z: ovData, x: xCoord, y: yCoord, type: 'contour', showscale: false, hoverongaps: false,
-            contours: { coloring: 'none', showlabels: true, labelfont: { size: 9, color: 'rgba(255,255,255,0.8)' } } };
-        const traces = [];
-        if (ov.vmax > interval) {
-            traces.push(Object.assign({}, baseContour, {
-                contours: Object.assign({}, baseContour.contours, { start: interval, end: ov.vmax, size: interval }),
-                line: { color: 'rgba(0,0,0,0.7)', width: 1.2, dash: 'solid' },
-                hovertemplate: `<b>${ov.display_name}</b>: %{z:.2f} ${ov.units}<extra>contour</extra>`,
-                name: `${ov.display_name} (+)`, showlegend: false,
-            }));
-        }
-        if (ov.vmin < -interval) {
-            traces.push(Object.assign({}, baseContour, {
-                contours: Object.assign({}, baseContour.contours, { start: ov.vmin, end: -interval, size: interval }),
-                line: { color: 'rgba(0,0,0,0.7)', width: 1.2, dash: 'dash' },
-                hovertemplate: `<b>${ov.display_name}</b>: %{z:.2f} ${ov.units}<extra>contour</extra>`,
-                name: `${ov.display_name} (−)`, showlegend: false,
-            }));
-        }
-        return traces;
-    } catch (e) { console.warn('Contour overlay error:', e); return []; }
-}
-
-/* ═══ Colormap switcher ═══════════════════════════════════ */
-let _defaultColorscale = null;
-let _defaultVmin = null;
-let _defaultVmax = null;
-
-function applyCmap() {
-    const sel = document.getElementById('ep-cmap');
-    if (!sel) return;
-    let cs = sel.value;
-    if (!cs && _defaultColorscale) cs = _defaultColorscale;
-    if (!cs) return;
-    let colorscale;
-    try { colorscale = JSON.parse(cs); } catch { colorscale = cs; }
-    ['plotly-chart', 'plotly-fullscreen', 'cs-fullscreen', 'az-chart', 'az-fullscreen'].forEach(id => {
-        const plotDiv = document.getElementById(id);
-        if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
-        Plotly.restyle(plotDiv, { colorscale: [colorscale] }, [0]);
-    });
-    if (window._lastPlotlyData) window._lastPlotlyData.heatmap.colorscale = colorscale;
-}
-
-function _getActiveVmin() { const inp = document.getElementById('ep-vmin'); if (inp && inp.value !== '') return parseFloat(inp.value); return _defaultVmin; }
-function _getActiveVmax() { const inp = document.getElementById('ep-vmax'); if (inp && inp.value !== '') return parseFloat(inp.value); return _defaultVmax; }
-
-function applyColorRange() {
-    const zmin = _getActiveVmin(), zmax = _getActiveVmax();
-    if (zmin === null || zmax === null) return;
-    ['plotly-chart', 'plotly-fullscreen', 'cs-fullscreen', 'az-chart', 'az-fullscreen'].forEach(id => {
-        const plotDiv = document.getElementById(id);
-        if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
-        Plotly.restyle(plotDiv, { zmin: [zmin], zmax: [zmax] }, [0]);
-    });
-    if (window._lastPlotlyData) { window._lastPlotlyData.heatmap.zmin = zmin; window._lastPlotlyData.heatmap.zmax = zmax; }
-}
-
-function resetColorRange() {
-    const vminInput = document.getElementById('ep-vmin'), vmaxInput = document.getElementById('ep-vmax');
-    if (vminInput) vminInput.value = ''; if (vmaxInput) vmaxInput.value = '';
-    if (_defaultVmin !== null && _defaultVmax !== null) {
-        ['plotly-chart', 'plotly-fullscreen', 'cs-fullscreen', 'az-chart', 'az-fullscreen'].forEach(id => {
-            const plotDiv = document.getElementById(id);
-            if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
-            Plotly.restyle(plotDiv, { zmin: [_defaultVmin], zmax: [_defaultVmax] }, [0]);
-        });
-        if (window._lastPlotlyData) { window._lastPlotlyData.heatmap.zmin = _defaultVmin; window._lastPlotlyData.heatmap.zmax = _defaultVmax; }
-    }
-}
-
-function renderPlotFromJSON(json, resultDiv) {
-    resultDiv.innerHTML = `<div style="position:relative;">
-        <div id="plotly-chart" style="width:100%;height:360px;border-radius:6px;overflow:hidden;"></div>
-        <button onclick="openPlotModal()" title="Expand to fullscreen"
-            style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.12);
-            border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;
-            cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;"
-            onmouseover="this.style.background='rgba(255,255,255,0.28)'"
-            onmouseout="this.style.background='rgba(255,255,255,0.12)'">⛶</button>
-    </div>
-    <div style="font-size:0.68rem;color:var(--slate-light);text-align:center;margin-top:4px;">Hover for values · scroll to zoom · drag to pan · ⛶ expand</div>`;
-
-    const { data: zData, x, y, variable: varInfo, case_meta: meta } = json;
-    _defaultColorscale = varInfo.colorscale; _defaultVmin = varInfo.vmin; _defaultVmax = varInfo.vmax;
-    const vminInput = document.getElementById('ep-vmin'), vmaxInput = document.getElementById('ep-vmax');
-    if (vminInput) vminInput.placeholder = varInfo.vmin; if (vmaxInput) vmaxInput.placeholder = varInfo.vmax;
-
-    const cmapSel = document.getElementById('ep-cmap');
-    let activeColorscale = varInfo.colorscale;
-    if (cmapSel && cmapSel.value) { try { activeColorscale = JSON.parse(cmapSel.value); } catch { activeColorscale = cmapSel.value; } }
-    const activeVmin = _getActiveVmin(), activeVmax = _getActiveVmax();
-
-    const vmaxStr = meta.vmax_kt ? ` | Vmax = ${meta.vmax_kt} kt` : '';
-    const overlayLabel = json.overlay ? `<br><span style="font-size:0.85em;color:#9ca3af;">Contours: ${json.overlay.display_name} (${json.overlay.units})</span>` : '';
-    const title = `${meta.storm_name} | ${meta.datetime}${vmaxStr}<br>${varInfo.display_name} @ ${json.actual_level_km.toFixed(1)} km${overlayLabel}`;
-
-    const heatmap = {
-        z: zData, x: x, y: y, type: 'heatmap', colorscale: activeColorscale,
-        zmin: activeVmin, zmax: activeVmax,
-        colorbar: { title: { text: varInfo.units, font: { color: '#ccc', size: 10 } }, tickfont: { color: '#ccc', size: 9 }, thickness: 12, len: 0.85 },
-        hovertemplate: `<b>${varInfo.display_name}</b>: %{z:.2f} ${varInfo.units}<br>X: %{x:.0f} km<br>Y: %{y:.0f} km<extra></extra>`,
-        hoverongaps: false,
-    };
-
-    const shapes = [];
-    if (meta.rmw_km && !isNaN(meta.rmw_km)) {
-        shapes.push({ type: 'circle', xref: 'x', yref: 'y', x0: -meta.rmw_km, y0: -meta.rmw_km, x1: meta.rmw_km, y1: meta.rmw_km, line: { color: 'white', width: 1.5, dash: 'dash' } });
-    }
-
-    const baseLayout = {
-        paper_bgcolor: '#0e1117', plot_bgcolor: '#0e1117',
-        xaxis: { title: { text: 'Eastward distance (km)', font: { color: '#aaa' } }, tickfont: { color: '#aaa' }, gridcolor: 'rgba(255,255,255,0.05)', zeroline: false, scaleanchor: 'y' },
-        yaxis: { title: { text: 'Northward distance (km)', font: { color: '#aaa' } }, tickfont: { color: '#aaa' }, gridcolor: 'rgba(255,255,255,0.05)', zeroline: false },
-        shapes: shapes,
-        hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 12 } },
-        showlegend: false,
-    };
-
-    const config = { responsive: true, displayModeBar: true, modeBarButtonsToRemove: ['lasso2d', 'select2d', 'toggleSpikelines'], displaylogo: false };
-
-    const smallLayout = Object.assign({}, baseLayout, {
-        title: { text: title, font: { color: '#e5e7eb', size: 11 }, y: 0.98, x: 0.5, xanchor: 'center' },
-        margin: { l: 52, r: 16, t: json.overlay ? 66 : 50, b: 44 },
-        xaxis: Object.assign({}, baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }),
-        yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }),
-    });
-
-    const overlayTraces = buildOverlayContours(json, x, y);
-    Plotly.newPlot('plotly-chart', [heatmap, ...overlayTraces], smallLayout, config);
-    window._lastPlotlyData = { heatmap, overlayTraces, baseLayout, title, config };
-
-    const csBtn = document.getElementById('cs-btn'); if (csBtn) csBtn.disabled = false;
-    const azBtn = document.getElementById('az-btn'); if (azBtn) azBtn.disabled = false;
-    document.getElementById('plotly-chart').on('plotly_click', handlePlotClick);
-}
-
-/* ═══ Height animation ════════════════════════════════════ */
-function animToggle() { if (_animPlaying) { animStop(); } else { animStart(); } }
-function animStart() {
-    _animPlaying = true;
-    const btn = document.getElementById('anim-play-btn');
-    if (btn) { btn.textContent = '⏸'; btn.classList.add('active'); }
-    animTick();
-}
-function animStop() {
-    _animPlaying = false;
-    if (_animTimer) { clearTimeout(_animTimer); _animTimer = null; }
-    const btn = document.getElementById('anim-play-btn');
-    if (btn) { btn.textContent = '▶'; btn.classList.remove('active'); }
-}
-function animTick() {
-    if (!_animPlaying) return;
-    generateCustomPlot(() => { if (!_animPlaying) return; _animTimer = setTimeout(() => { animStep(1); animTick(); }, 800); });
-}
-function animStep(dir) {
-    const slider = document.getElementById('ep-level'); if (!slider) return;
-    let val = parseFloat(slider.value) + dir * 0.5;
-    if (val > 18) val = 0; if (val < 0) val = 18;
-    slider.value = val;
-    document.getElementById('ep-level-val').textContent = val.toFixed(1) + ' km';
-    if (!_animPlaying) generateCustomPlot();
-}
-
-/* ═══ Cross-section ═══════════════════════════════════════ */
-function toggleCrossSection() {
-    _csMode = !_csMode; _csPointA = null; _removeRubberBand();
-    const btn = document.getElementById('cs-btn'), status = document.getElementById('cs-status');
-    if (_csMode) { btn.classList.add('active'); btn.textContent = '✂ Click point A on plot…'; if (status) status.textContent = 'Click the starting point on the plan view above'; }
-    else { btn.classList.remove('active'); btn.textContent = '✂ Draw Cross Section'; if (status) status.textContent = ''; }
-}
-
-function handlePlotClick(eventData) {
-    if (!_csMode || !eventData.points || !eventData.points.length) return;
-    const pt = eventData.points[0];
-    const x = pt.x, y = pt.y;
-    const status = document.getElementById('cs-status');
-    const plotDiv = document.getElementById('plotly-chart');
-
-    if (!_csPointA) {
-        _csPointA = { x, y };
-        const btn = document.getElementById('cs-btn');
-        if (btn) btn.textContent = '✂ Click point B on plot…';
-        if (status) status.textContent = `A: (${x.toFixed(0)}, ${y.toFixed(0)}) km — now click the end point`;
-        const currentShapes = (plotDiv.layout.shapes || []).slice();
-        currentShapes.push({ type: 'circle', xref: 'x', yref: 'y', x0: x-4, y0: y-4, x1: x+4, y1: y+4, fillcolor: '#ef4444', line: { color: 'white', width: 1.5 } });
-        Plotly.relayout(plotDiv, { shapes: currentShapes });
-        const rect = plotDiv.getBoundingClientRect();
-        _startRubberBand(plotDiv, eventData.event.clientX - rect.left, eventData.event.clientY - rect.top);
-    } else {
-        const a = _csPointA, b = { x, y };
-        _csMode = false; _csPointA = null; _removeRubberBand();
-        const btn = document.getElementById('cs-btn');
-        if (btn) { btn.classList.remove('active'); btn.textContent = '✂ Draw Cross Section'; }
-        if (status) status.textContent = `A→B: (${a.x.toFixed(0)},${a.y.toFixed(0)}) → (${b.x.toFixed(0)},${b.y.toFixed(0)}) km`;
-        const currentShapes = (plotDiv.layout.shapes || []).slice();
-        const csShapes = [
-            { type: 'line', xref: 'x', yref: 'y', x0: a.x, y0: a.y, x1: b.x, y1: b.y, line: { color: '#ef4444', width: 2.5 } },
-            { type: 'circle', xref: 'x', yref: 'y', x0: b.x-4, y0: b.y-4, x1: b.x+4, y1: b.y+4, fillcolor: '#ef4444', line: { color: 'white', width: 1.5 } },
-        ];
-        Plotly.relayout(plotDiv, { shapes: [...currentShapes, ...csShapes] });
-        if (window._lastPlotlyData) {
-            const baseShapes = window._lastPlotlyData.baseLayout.shapes || [];
-            window._lastPlotlyData.baseLayout.shapes = [...baseShapes, ...csShapes,
-                { type: 'circle', xref: 'x', yref: 'y', x0: a.x-4, y0: a.y-4, x1: a.x+4, y1: a.y+4, fillcolor: '#ef4444', line: { color: 'white', width: 1.5 } }];
-        }
-        fetchCrossSection(a, b);
-    }
-}
-
-function fetchCrossSection(a, b) {
-    const variable = document.getElementById('ep-var').value;
-    const overlay = (document.getElementById('ep-overlay') || {}).value || '';
-    const csResult = document.getElementById('cs-result'); if (!csResult) return;
-    csResult.innerHTML = `<div class="explorer-status loading">⏳ Computing cross-section…</div>`;
-    let url = `${API_BASE}/cross_section?case_index=${currentCaseIndex}&variable=${variable}&data_type=swath&x0=${a.x}&y0=${a.y}&x1=${b.x}&y1=${b.y}&n_points=150`;
-    if (overlay) url += `&overlay=${overlay}`;
-    fetch(url)
-        .then(r => { if (!r.ok) return r.json().then(e => { throw new Error(e.detail || `HTTP ${r.status}`); }); return r.json(); })
-        .then(json => { csResult.innerHTML = `<div class="explorer-status" style="color:#10b981;">✓ Cross-section ready — opening expanded view</div>`; openPlotModal(json); })
-        .catch(err => { csResult.innerHTML = `<div class="explorer-status error">⚠️ ${err.message}</div>`; });
-}
-
-function renderCrossSectionInto(targetId, json, fullsize) {
-    const el = document.getElementById(targetId); if (!el) return;
-    const { cross_section: csData, distance_km, height_km, variable: varInfo, case_meta: meta, endpoints: ep } = json;
-    const fontSize = fullsize ? { title:13,axis:12,tick:10,cbar:12,cbarTick:10,hover:13 } : { title:10,axis:9,tick:8,cbar:9,cbarTick:8,hover:11 };
-    let csColorscale = varInfo.colorscale;
-    const cmapSel = document.getElementById('ep-cmap');
-    if (cmapSel && cmapSel.value) { try { csColorscale = JSON.parse(cmapSel.value); } catch { csColorscale = cmapSel.value; } }
-    const heatmap = {
-        z: csData, x: distance_km, y: height_km, type: 'heatmap', colorscale: csColorscale,
-        zmin: _getActiveVmin() ?? varInfo.vmin, zmax: _getActiveVmax() ?? varInfo.vmax,
-        colorbar: { title: { text: varInfo.units, font: { color: '#ccc', size: fontSize.cbar } }, tickfont: { color: '#ccc', size: fontSize.cbarTick }, thickness: fullsize?14:10, len: 0.85 },
-        hovertemplate: `<b>${varInfo.display_name}</b>: %{z:.2f} ${varInfo.units}<br>Distance: %{x:.0f} km<br>Height: %{y:.1f} km<extra></extra>`,
-        hoverongaps: false,
-    };
-    const csOverlayLabel = json.overlay ? `<br><span style="font-size:0.85em;color:#9ca3af;">Contours: ${json.overlay.display_name} (${json.overlay.units})</span>` : '';
-    const title = `Cross Section: (${ep.x0.toFixed(0)},${ep.y0.toFixed(0)}) → (${ep.x1.toFixed(0)},${ep.y1.toFixed(0)}) km${csOverlayLabel}`;
-    const layout = {
-        title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' },
-        paper_bgcolor: '#0e1117', plot_bgcolor: '#0e1117',
-        xaxis: { title: { text: 'Distance along line (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.05)', zeroline: false },
-        yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.05)', zeroline: false },
-        margin: fullsize ? { l:55,r:24,t:json.overlay?56:40,b:46 } : { l:45,r:12,t:json.overlay?50:36,b:38 },
-        hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: fontSize.hover } }, showlegend: false,
-    };
-    const csOverlayTraces = buildOverlayContours(json, null, null, true);
-    Plotly.newPlot(targetId, [heatmap, ...csOverlayTraces], layout, {
-        responsive: true, displayModeBar: fullsize, displaylogo: false,
-        modeBarButtonsToRemove: ['lasso2d', 'select2d', 'toggleSpikelines'],
-    });
-}
-
-/* ═══ Azimuthal Mean ══════════════════════════════════════ */
-let _lastAzJson = null;
-
-function fetchAzimuthalMean() {
-    if (currentCaseIndex === null) return;
-    const variable = document.getElementById('ep-var').value;
-    const overlay = (document.getElementById('ep-overlay') || {}).value || '';
-    const covSlider = document.getElementById('az-coverage');
-    const coverage = covSlider ? (parseInt(covSlider.value) / 100) : 0.5;
-    const resultDiv = document.getElementById('az-result');
-    const btn = document.getElementById('az-btn');
-    resultDiv.innerHTML = '<div class="explorer-status loading">⏳ Computing azimuthal mean…</div>';
-    btn.disabled = true; btn.textContent = '⟳ Computing…';
-    let url = `${API_BASE}/azimuthal_mean?case_index=${currentCaseIndex}&variable=${variable}&data_type=swath&coverage_min=${coverage}`;
-    if (overlay && overlay !== 'none') url += `&overlay=${overlay}`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 90000);
-    fetch(url, { signal: controller.signal })
-        .then(r => { if (!r.ok) return r.json().then(e => { throw new Error(e.detail || `HTTP ${r.status}`); }); return r.json(); })
-        .then(json => { _lastAzJson = json; renderAzimuthalMeanInto('az-result', json, false); openPlotModal(); })
-        .catch(err => {
-            const msg = err.name === 'AbortError' ? '⚠️ Request timed out (90s).' : `⚠️ ${err.message}`;
-            resultDiv.innerHTML = `<div class="explorer-status error">${msg}</div>`;
-        })
-        .finally(() => { clearTimeout(timeout); btn.disabled = false; btn.textContent = '⟳ Azimuthal Mean'; });
-}
-
-function renderAzimuthalMeanInto(targetId, json, fullsize) {
-    const el = document.getElementById(targetId); if (!el) return;
-    const { azimuthal_mean: azData, radius_km, height_km, variable: varInfo, case_meta: meta } = json;
-    const fontSize = fullsize ? { title:13,axis:12,tick:10,cbar:12,cbarTick:10,hover:13 } : { title:10,axis:9,tick:8,cbar:9,cbarTick:8,hover:11 };
-    let csColorscale = varInfo.colorscale;
-    const cmapSel = document.getElementById('ep-cmap');
-    if (cmapSel && cmapSel.value) { try { csColorscale = JSON.parse(cmapSel.value); } catch { csColorscale = cmapSel.value; } }
-    const heatmap = {
-        z: azData, x: radius_km, y: height_km, type: 'heatmap', colorscale: csColorscale,
-        zmin: _getActiveVmin() ?? varInfo.vmin, zmax: _getActiveVmax() ?? varInfo.vmax,
-        colorbar: { title: { text: varInfo.units, font: { color: '#ccc', size: fontSize.cbar } }, tickfont: { color: '#ccc', size: fontSize.cbarTick }, thickness: fullsize?14:10, len: 0.85 },
-        hovertemplate: `<b>${varInfo.display_name}</b>: %{z:.2f} ${varInfo.units}<br>Radius: %{x:.0f} km<br>Height: %{y:.1f} km<extra></extra>`,
-        hoverongaps: false,
-    };
-    const azOverlayTraces = buildAzOverlayContours(json, radius_km, height_km);
-    const vmaxStr = meta.vmax_kt ? ` | Vmax = ${meta.vmax_kt} kt` : '';
-    const covPct = Math.round((json.coverage_min || 0.5) * 100);
-    const overlayLabel = json.overlay ? `<br><span style="font-size:0.85em;color:#9ca3af;">Contours: ${json.overlay.display_name} (${json.overlay.units})</span>` : '';
-    const title = `${meta.storm_name} | ${meta.datetime}${vmaxStr}<br>Azimuthal Mean: ${varInfo.display_name} (≥${covPct}% coverage)${overlayLabel}`;
-    const shapes = [];
-    if (meta.rmw_km && !isNaN(meta.rmw_km)) {
-        shapes.push({ type: 'line', xref: 'x', yref: 'paper', x0: meta.rmw_km, x1: meta.rmw_km, y0: 0, y1: 1, line: { color: 'white', width: 1.5, dash: 'dash' } });
-    }
-    const layout = {
-        title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' },
-        paper_bgcolor: '#0e1117', plot_bgcolor: '#0e1117',
-        xaxis: { title: { text: 'Radius (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.05)', zeroline: false },
-        yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.05)', zeroline: false },
-        margin: fullsize ? { l:55,r:24,t:json.overlay?66:50,b:46 } : { l:45,r:12,t:json.overlay?56:42,b:38 },
-        shapes: shapes, hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: fontSize.hover } }, showlegend: false,
-    };
-    if (!fullsize) {
-        el.innerHTML = `<div style="position:relative;">
-            <div id="az-chart" style="width:100%;height:340px;border-radius:6px;overflow:hidden;"></div>
-            <button onclick="openPlotModal()" title="Expand to fullscreen"
-                style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.12);
-                border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;
-                cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;"
-                onmouseover="this.style.background='rgba(255,255,255,0.28)'"
-                onmouseout="this.style.background='rgba(255,255,255,0.12)'">⛶</button>
-        </div>
-        <div style="font-size:0.68rem;color:var(--slate-light);text-align:center;margin-top:4px;">Hover for values · scroll to zoom · drag to pan · ⛶ expand</div>`;
-        Plotly.newPlot('az-chart', [heatmap, ...azOverlayTraces], layout, { responsive: true, displayModeBar: false, displaylogo: false });
-    } else {
-        Plotly.newPlot(targetId, [heatmap, ...azOverlayTraces], layout, { responsive: true, displayModeBar: true, displaylogo: false, modeBarButtonsToRemove: ['lasso2d', 'select2d', 'toggleSpikelines'] });
-    }
-}
-
-function buildAzOverlayContours(json, radius_km, height_km) {
-    if (!json.overlay) return [];
-    const ov = json.overlay;
-    const ovData = ov.azimuthal_mean;
-    if (!ovData) return [];
-    try {
-        const intInput = document.getElementById('ep-contour-int');
-        let interval = intInput ? parseFloat(intInput.value) : NaN;
-        if (isNaN(interval) || interval <= 0) {
-            const flat = ovData.flat().filter(v => v !== null && !isNaN(v));
-            if (flat.length === 0) return [];
-            let mn = Infinity, mx = -Infinity;
-            for (let i = 0; i < flat.length; i++) { if (flat[i] < mn) mn = flat[i]; if (flat[i] > mx) mx = flat[i]; }
-            interval = parseFloat(((mx - mn) / 10).toPrecision(1));
-            if (!isFinite(interval) || interval <= 0) interval = (mx - mn) / 10 || 1;
-        }
-        const baseContour = { z: ovData, x: radius_km, y: height_km, type: 'contour', showscale: false, hoverongaps: false,
-            contours: { coloring: 'none', showlabels: true, labelfont: { size: 9, color: 'rgba(255,255,255,0.8)' } } };
-        const traces = [];
-        if (ov.vmax > interval) {
-            traces.push(Object.assign({}, baseContour, {
-                contours: Object.assign({}, baseContour.contours, { start: interval, end: ov.vmax, size: interval }),
-                line: { color: 'rgba(0,0,0,0.7)', width: 1.2, dash: 'solid' },
-                hovertemplate: `<b>${ov.display_name}</b>: %{z:.2f} ${ov.units}<extra>contour</extra>`,
-                name: `${ov.display_name} (+)`, showlegend: false,
-            }));
-        }
-        if (ov.vmin < -interval) {
-            traces.push(Object.assign({}, baseContour, {
-                contours: Object.assign({}, baseContour.contours, { start: ov.vmin, end: -interval, size: interval }),
-                line: { color: 'rgba(0,0,0,0.7)', width: 1.2, dash: 'dash' },
-                hovertemplate: `<b>${ov.display_name}</b>: %{z:.2f} ${ov.units}<extra>contour</extra>`,
-                name: `${ov.display_name} (−)`, showlegend: false,
-            }));
-        }
-        return traces;
-    } catch (e) { console.warn('Az overlay contour error:', e); return []; }
-}
-
-/* ═══ Intensity helpers ═══════════════════════════════════ */
-function getIntensityColor(vmax) {
-    if (!vmax) return '#9ca3af';
-    if (vmax < 34)  return '#3b82f6';
-    if (vmax < 64)  return '#10b981';
-    if (vmax < 83)  return '#fbbf24';
-    if (vmax < 96)  return '#f97316';
-    if (vmax < 113) return '#ef4444';
-    if (vmax < 137) return '#dc2626';
-    return '#7f1d1d';
-}
-function getIntensityCategory(vmax) {
-    if (!vmax) return 'Unknown';
-    if (vmax < 34) return 'TD'; if (vmax < 64) return 'TS';
-    if (vmax < 83) return 'Cat 1'; if (vmax < 96) return 'Cat 2';
-    if (vmax < 113) return 'Cat 3'; if (vmax < 137) return 'Cat 4';
-    return 'Cat 5';
-}
-
-/* ═══ Popup ═══════════════════════════════════════════════ */
-function createPopupContent(caseData) {
-    const intensity  = caseData.vmax_kt !== null ? `${caseData.vmax_kt} kt` : 'N/A';
-    const pressure   = caseData.min_pressure_hpa !== null ? `${caseData.min_pressure_hpa} hPa` : 'N/A';
-    const rmw        = caseData.rmw_km !== null ? `${caseData.rmw_km} km` : 'N/A';
-    const vmaxChange = caseData['24-h_vmax_change_kt'] !== null
-        ? `${caseData['24-h_vmax_change_kt'] > 0 ? '+' : ''}${caseData['24-h_vmax_change_kt']} kt` : 'N/A';
-    const tiltMag    = caseData.tilt_magnitude_km !== null ? `${caseData.tilt_magnitude_km.toFixed(1)} km` : 'N/A';
-    const category   = getIntensityCategory(caseData.vmax_kt);
-    const catColor   = getIntensityColor(caseData.vmax_kt);
-    const idx        = caseData.case_index;
-    return `
-        <div class="popup-header">
-            <div class="popup-storm-name">${caseData.storm_name}</div>
-            <div class="popup-mission">${caseData.mission_id}</div>
-        </div>
-        <div class="popup-row"><span class="popup-label">Date/Time:</span><span class="popup-value">${caseData.datetime}</span></div>
-        <div class="popup-row">
-            <span class="popup-label">Intensity:</span>
-            <span class="popup-value"><span class="intensity-badge" style="background:${catColor}">${category}</span> ${intensity}</span>
-        </div>
-        <div class="popup-row"><span class="popup-label">24-h Change:</span><span class="popup-value">${vmaxChange}</span></div>
-        <div class="popup-row"><span class="popup-label">Min Pressure:</span><span class="popup-value">${pressure}</span></div>
-        <div class="popup-row"><span class="popup-label">RMW:</span><span class="popup-value">${rmw}</span></div>
-        <div class="popup-row"><span class="popup-label">Tilt Magnitude:</span><span class="popup-value">${tiltMag}</span></div>
-        <div class="popup-row"><span class="popup-label">Location:</span><span class="popup-value">${Math.abs(caseData.latitude).toFixed(2)}°${caseData.latitude >= 0 ? 'N' : 'S'}, ${Math.abs(caseData.longitude).toFixed(2)}°${caseData.longitude < 0 ? 'W' : 'E'}</span></div>
-        <button class="popup-explore-btn" onclick="openSidePanelById(${idx})">🔬 View Radar & Explore Data →</button>
-    `;
-}
-
-function openSidePanelById(idx) {
-    if (!allData) return;
-    const caseData = allData.cases.find(c => c.case_index === idx);
-    if (caseData) openSidePanel(caseData);
-}
-
-/* ═══ Filters ═════════════════════════════════════════════ */
-function passesFilters(c) {
-    const vmax = c.vmax_kt || 0;
-    if (vmax < filters.minIntensity || vmax > filters.maxIntensity) return false;
-    if (filters.minVmaxChange !== -100 || filters.maxVmaxChange !== 85) {
-        if (c['24-h_vmax_change_kt'] === null) return false;
-        const vc = c['24-h_vmax_change_kt'];
-        if (vc < filters.minVmaxChange || vc > filters.maxVmaxChange) return false;
-    }
-    if (filters.minTilt !== 0 || filters.maxTilt !== 200) {
-        if (c.tilt_magnitude_km === null) return false;
-        if (c.tilt_magnitude_km < filters.minTilt || c.tilt_magnitude_km > filters.maxTilt) return false;
-    }
-    if (c.year < filters.minYear || c.year > filters.maxYear) return false;
-    if (filters.stormName !== 'all' && c.storm_name !== filters.stormName) return false;
-    return true;
-}
-
-function updateMarkers() {
-    if (!markers || !allData) return;
-    markers.clearLayers();
-    let n = 0;
-    allData.cases.forEach(c => {
-        if (passesFilters(c)) { const m = allMarkers.find(m => m.caseIndex === c.case_index); if (m) { markers.addLayer(m.marker); n++; } }
-    });
-    document.getElementById('filtered-count').textContent = n;
-}
-
-function updateIntensitySlider() {
-    let min = parseInt(document.getElementById('min-intensity').value);
-    let max = parseInt(document.getElementById('max-intensity').value);
-    if (min > max) { document.getElementById('min-intensity').value = max; min = max; }
-    filters.minIntensity = min; filters.maxIntensity = max;
-    document.getElementById('min-intensity-value').textContent = min;
-    document.getElementById('max-intensity-value').textContent = max;
-    const rf = document.getElementById('intensity-range-fill');
-    rf.style.left = (min/200*100)+'%'; rf.style.width = ((max-min)/200*100)+'%';
-    updateMarkers();
-}
-
-function updateVmaxChangeSlider() {
-    let min = parseInt(document.getElementById('min-vmax-change').value);
-    let max = parseInt(document.getElementById('max-vmax-change').value);
-    if (min > max) { document.getElementById('min-vmax-change').value = max; min = max; }
-    filters.minVmaxChange = min; filters.maxVmaxChange = max;
-    document.getElementById('min-vmax-change-value').textContent = min;
-    document.getElementById('max-vmax-change-value').textContent = max;
-    const rf = document.getElementById('vmax-change-range-fill');
-    rf.style.left = ((min+100)/185*100)+'%'; rf.style.width = ((max-min)/185*100)+'%';
-    updateMarkers();
-}
-
-function updateTiltSlider() {
-    let min = parseInt(document.getElementById('min-tilt').value);
-    let max = parseInt(document.getElementById('max-tilt').value);
-    if (min > max) { document.getElementById('min-tilt').value = max; min = max; }
-    filters.minTilt = min; filters.maxTilt = max;
-    document.getElementById('min-tilt-value').textContent = min;
-    document.getElementById('max-tilt-value').textContent = max;
-    const rf = document.getElementById('tilt-range-fill');
-    rf.style.left = (min/200*100)+'%'; rf.style.width = ((max-min)/200*100)+'%';
-    updateMarkers();
-}
-
-function updateYearFilter() {
-    let min = parseInt(document.getElementById('min-year').value);
-    let max = parseInt(document.getElementById('max-year').value);
-    if (min > max) { document.getElementById('min-year').value = max; min = max; }
-    filters.minYear = min; filters.maxYear = max;
-    updateMarkers();
-}
-
-function updateStormFilter() { filters.stormName = document.getElementById('storm-filter').value; updateMarkers(); }
-
-function resetFilters() {
-    filters.minIntensity=0; filters.maxIntensity=200;
-    document.getElementById('min-intensity').value=0; document.getElementById('max-intensity').value=200; updateIntensitySlider();
-    filters.minVmaxChange=-100; filters.maxVmaxChange=85;
-    document.getElementById('min-vmax-change').value=-100; document.getElementById('max-vmax-change').value=85; updateVmaxChangeSlider();
-    filters.minTilt=0; filters.maxTilt=200;
-    document.getElementById('min-tilt').value=0; document.getElementById('max-tilt').value=200; updateTiltSlider();
-    filters.minYear=1997; filters.maxYear=2024;
-    document.getElementById('min-year').value=1997; document.getElementById('max-year').value=2024;
-    filters.stormName='all'; document.getElementById('storm-filter').value='all';
-    updateMarkers();
-}
-
-function initializeFilters() {
-    document.getElementById('min-intensity').addEventListener('input', updateIntensitySlider);
-    document.getElementById('max-intensity').addEventListener('input', updateIntensitySlider);
-    document.getElementById('min-vmax-change').addEventListener('input', updateVmaxChangeSlider);
-    document.getElementById('max-vmax-change').addEventListener('input', updateVmaxChangeSlider);
-    document.getElementById('min-tilt').addEventListener('input', updateTiltSlider);
-    document.getElementById('max-tilt').addEventListener('input', updateTiltSlider);
-    document.getElementById('min-year').addEventListener('change', updateYearFilter);
-    document.getElementById('max-year').addEventListener('change', updateYearFilter);
-    document.getElementById('storm-filter').addEventListener('change', updateStormFilter);
-    updateIntensitySlider(); updateVmaxChangeSlider(); updateTiltSlider();
-}
-
-/* ═══ Pre-warm the API ════════════════════════════════════ */
-fetch(`${API_BASE}/health`).catch(() => {});
-
-/* ═══ Load data ═══════════════════════════════════════════ */
-fetch('tc_radar_metadata.json')
-    .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
-    .then(data => {
-        allData = data;
-        document.getElementById('loading').style.display = 'none';
-        document.getElementById('total-cases').textContent  = data.total_cases.toLocaleString();
-        document.getElementById('total-count').textContent  = data.total_cases.toLocaleString();
-        document.getElementById('filtered-count').textContent = data.total_cases.toLocaleString();
-
-        const storms = new Set(data.cases.map(c => c.storm_name));
-        document.getElementById('unique-storms').textContent = storms.size.toLocaleString();
-        const years = data.cases.map(c => c.year);
-        document.getElementById('year-range').textContent = `${Math.min(...years)}–${Math.max(...years)}`;
-        const validVmax = data.cases.filter(c => c.vmax_kt !== null).map(c => c.vmax_kt);
-        document.getElementById('intensity-range').textContent = validVmax.length
-            ? `${Math.min(...validVmax).toFixed(0)}–${Math.max(...validVmax).toFixed(0)} kt` : 'N/A';
-
-        const stormSelect = document.getElementById('storm-filter');
-        [...storms].sort().forEach(s => {
-            const o = document.createElement('option'); o.value = s; o.textContent = s; stormSelect.appendChild(o);
-        });
-
-        markers = L.markerClusterGroup({
-            maxClusterRadius:30, disableClusteringAtZoom:10,
-            spiderfyOnMaxZoom:true, showCoverageOnHover:false, zoomToBoundsOnClick:true,
-            iconCreateFunction: function(cluster) {
-                const n = cluster.getChildCount();
-                let color = n<10?'rgba(59,130,246,0.7)':n<50?'rgba(37,99,235,0.8)':n<100?'rgba(30,64,175,0.85)':'rgba(12,27,58,0.9)';
-                return L.divIcon({
-                    html:`<div style="background:${color};color:#fff;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;font-family:'DM Sans',sans-serif;border:2px solid rgba(255,255,255,0.3);box-shadow:0 2px 8px rgba(0,0,0,0.3);backdrop-filter:blur(4px);">${n}</div>`,
-                    className:'custom-cluster-icon', iconSize:L.point(38,38)
-                });
-            }
-        });
-
-        data.cases.forEach(caseData => {
-            const color = getIntensityColor(caseData.vmax_kt);
-            const icon  = L.divIcon({
-                className:'custom-div-icon',
-                html:`<div class="custom-marker" style="background-color:${color};width:12px;height:12px;"></div>`,
-                iconSize:[12,12], iconAnchor:[6,6]
-            });
-            const marker = L.marker([caseData.latitude, caseData.longitude], { icon });
-            marker.bindPopup(createPopupContent(caseData), {
-                maxWidth:320, minWidth:260, autoPan:true, autoPanPadding:[50,50],
-                keepInView:true, closeButton:true, closeOnEscapeKey:true
-            });
-            allMarkers.push({ caseIndex: caseData.case_index, marker });
-            markers.addLayer(marker);
-        });
-
-        map.addLayer(markers);
-
-        const legend = L.control({ position:'bottomright' });
-        legend.onAdd = function() {
-            const div = L.DomUtil.create('div','intensity-legend');
-            div.innerHTML = `<h4>Intensity (kt)</h4>
-                <div class="legend-item"><div class="legend-color" style="background:#3b82f6"></div><span>TD (&lt;34)</span></div>
-                <div class="legend-item"><div class="legend-color" style="background:#10b981"></div><span>TS (34–63)</span></div>
-                <div class="legend-item"><div class="legend-color" style="background:#fbbf24"></div><span>Cat 1 (64–82)</span></div>
-                <div class="legend-item"><div class="legend-color" style="background:#f97316"></div><span>Cat 2 (83–95)</span></div>
-                <div class="legend-item"><div class="legend-color" style="background:#ef4444"></div><span>Cat 3 (96–112)</span></div>
-                <div class="legend-item"><div class="legend-color" style="background:#dc2626"></div><span>Cat 4 (113–136)</span></div>
-                <div class="legend-item"><div class="legend-color" style="background:#7f1d1d"></div><span>Cat 5 (137+)</span></div>`;
-            return div;
-        };
-        legend.addTo(map);
-        initializeFilters();
-        populateQuickSelect();
-    })
-    .catch(err => {
-        document.getElementById('loading').innerHTML = `<div style="color:#ef4444;"><strong>Error loading data</strong><br><small>${err.message}</small></div>`;
-    });
-
-/* ═══ Smooth scroll ═══════════════════════════════════════ */
-document.querySelectorAll('a[href^="#"]').forEach(a => {
-    a.addEventListener('click', function(e) {
-        e.preventDefault();
-        const t = document.querySelector(this.getAttribute('href'));
-        if (t) t.scrollIntoView({ behavior:'smooth', block:'start' });
-    });
-});
-
-/* ═══ Fullscreen plot modal ═══════════════════════════════ */
-function openPlotModal(csJson) {
-    if (!window._lastPlotlyData) return;
-    const modal = document.getElementById('plotModal');
-    const box = document.getElementById('plotModalBox');
-    const csFull = document.getElementById('cs-fullscreen');
-    const csDivider = document.getElementById('cs-full-divider');
-    const azFull = document.getElementById('az-fullscreen');
-    const azDivider = document.getElementById('az-full-divider');
-    modal.classList.add('active'); document.body.style.overflow = 'hidden';
-    const hasCrossSection = !!csJson, hasAzMean = !!_lastAzJson;
-    const hasSub = hasCrossSection || hasAzMean;
-    if (hasSub) { box.classList.add('split'); } else { box.classList.remove('split'); }
-    csFull.style.display = hasCrossSection ? 'block' : 'none';
-    csDivider.style.display = hasCrossSection ? 'block' : 'none';
-    azFull.style.display = hasAzMean ? 'block' : 'none';
-    azDivider.style.display = hasAzMean ? 'block' : 'none';
-    const subCount = (hasCrossSection ? 1 : 0) + (hasAzMean ? 1 : 0);
-    document.getElementById('plotly-fullscreen').style.height = subCount === 0 ? '100%' : subCount === 1 ? '55%' : '40%';
-
-    const { heatmap, overlayTraces, baseLayout, title, config } = window._lastPlotlyData;
-    const fullLayout = Object.assign({}, baseLayout, {
-        title: { text: title, font: { color: '#e5e7eb', size: 15 }, y: 0.97, x: 0.5, xanchor: 'center' },
-        margin: { l: 65, r: 30, t: (overlayTraces && overlayTraces.length) ? 76 : 60, b: 55 },
-        xaxis: Object.assign({}, baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }),
-        yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }),
-    });
-    const fullHeatmap = Object.assign({}, heatmap, {
-        colorbar: Object.assign({}, heatmap.colorbar, {
-            title: { text: heatmap.colorbar.title.text, font: { color: '#ccc', size: 13 } },
-            tickfont: { color: '#ccc', size: 11 }, thickness: 16, len: 0.85,
-        }),
-    });
-    Plotly.newPlot('plotly-fullscreen', [fullHeatmap, ...(overlayTraces || [])], fullLayout, config);
-    if (hasCrossSection) renderCrossSectionInto('cs-fullscreen', csJson, true);
-    if (hasAzMean) renderAzimuthalMeanInto('az-fullscreen', _lastAzJson, true);
-}
-
-function closePlotModal() {
-    const modal = document.getElementById('plotModal'), box = document.getElementById('plotModalBox');
-    modal.classList.remove('active'); box.classList.remove('split'); document.body.style.overflow = '';
-    Plotly.purge('plotly-fullscreen');
-    const csFull = document.getElementById('cs-fullscreen');
-    if (csFull) { Plotly.purge('cs-fullscreen'); csFull.style.display = 'none'; }
-    document.getElementById('cs-full-divider').style.display = 'none';
-    const azFull = document.getElementById('az-fullscreen');
-    if (azFull) { Plotly.purge('az-fullscreen'); azFull.style.display = 'none'; }
-    document.getElementById('az-full-divider').style.display = 'none';
-}
-
-/* ═══ Image modal ═════════════════════════════════════════ */
-function openImageModal(url, caption) {
-    document.getElementById('imageModal').style.display = 'block';
-    document.getElementById('modalImage').src = url;
-    document.getElementById('modalCaption').textContent = caption;
-}
-function closeImageModal() { document.getElementById('imageModal').style.display = 'none'; }
-document.addEventListener('click', e => { if (e.target === document.getElementById('imageModal')) closeImageModal(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeImageModal(); closePlotModal(); } });
-
-/* ═══ Hide scroll hint on any scroll ══════════════════════ */
-let _scrollHintHidden = false;
-window.addEventListener('scroll', () => {
-    if (!_scrollHintHidden && window.scrollY > 100) {
-        _scrollHintHidden = true;
-        const hint = document.querySelector('.scroll-hint');
-        if (hint) hint.style.opacity = '0';
-    }
-}, { passive: true });
-</script>
-
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+    <script src="tc_radar_app.js"></script>
 </body>
 </html>
