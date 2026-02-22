@@ -626,6 +626,7 @@
             animStop();
             _csMode = false;
             _csPointA = null;
+            _removeRubberBand();
             setTimeout(() => map.invalidateSize(), 360);
         }
 
@@ -635,6 +636,8 @@
         const _dataCache = {};  // cache fetched JSON by level_km
         let _csMode = false;    // cross-section drawing mode
         let _csPointA = null;   // first click point {x, y}
+        let _csHoverHandler = null;  // rubber-band hover listener
+        let _csBaseShapes = null;    // shapes before rubber-band
 
         function generateCustomPlot(callback) {
             if (currentCaseIndex === null) return;
@@ -942,6 +945,7 @@
         function toggleCrossSection() {
             _csMode = !_csMode;
             _csPointA = null;
+            _removeRubberBand();
             const btn = document.getElementById('cs-btn');
             const status = document.getElementById('cs-status');
             if (_csMode) {
@@ -953,6 +957,15 @@
                 btn.textContent = '✂ Draw Cross Section';
                 if (status) status.textContent = '';
             }
+        }
+
+        function _removeRubberBand() {
+            if (_csHoverHandler) {
+                const plotDiv = document.getElementById('plotly-chart');
+                if (plotDiv) plotDiv.removeListener('plotly_hover', _csHoverHandler);
+                _csHoverHandler = null;
+            }
+            _csBaseShapes = null;
         }
 
         function handlePlotClick(eventData) {
@@ -969,37 +982,56 @@
                 if (btn) btn.textContent = '✂ Click point B on plot…';
                 if (status) status.textContent = `A: (${x.toFixed(0)}, ${y.toFixed(0)}) km — now click the end point`;
 
-                // Add marker for point A
+                // Add marker for point A and save base shapes for rubber-band
                 const currentShapes = (plotDiv.layout.shapes || []).slice();
-                currentShapes.push({
+                const pointAMarker = {
                     type: 'circle', xref: 'x', yref: 'y',
                     x0: x - 4, y0: y - 4, x1: x + 4, y1: y + 4,
                     fillcolor: '#ef4444', line: { color: 'white', width: 1.5 },
-                });
-                Plotly.relayout(plotDiv, { shapes: currentShapes });
+                };
+                _csBaseShapes = [...currentShapes, pointAMarker];
+                Plotly.relayout(plotDiv, { shapes: _csBaseShapes });
+
+                // Attach hover listener for rubber-band line
+                _csHoverHandler = function(hoverData) {
+                    if (!_csPointA || !hoverData.points || !hoverData.points.length) return;
+                    const hp = hoverData.points[0];
+                    const rubberBand = [
+                        ..._csBaseShapes,
+                        { type: 'line', xref: 'x', yref: 'y',
+                          x0: _csPointA.x, y0: _csPointA.y, x1: hp.x, y1: hp.y,
+                          line: { color: '#ef4444', width: 2, dash: 'dot' } },
+                        { type: 'circle', xref: 'x', yref: 'y',
+                          x0: hp.x - 3, y0: hp.y - 3, x1: hp.x + 3, y1: hp.y + 3,
+                          fillcolor: 'rgba(239,68,68,0.5)', line: { color: 'white', width: 1 } },
+                    ];
+                    Plotly.relayout(plotDiv, { shapes: rubberBand });
+                };
+                plotDiv.on('plotly_hover', _csHoverHandler);
             } else {
                 // Second click — set point B & fetch cross-section
                 const a = _csPointA;
                 const b = { x, y };
                 _csMode = false;
                 _csPointA = null;
+                _removeRubberBand();
 
                 const btn = document.getElementById('cs-btn');
                 if (btn) { btn.classList.remove('active'); btn.textContent = '✂ Draw Cross Section'; }
                 if (status) status.textContent = `A→B: (${a.x.toFixed(0)},${a.y.toFixed(0)}) → (${b.x.toFixed(0)},${b.y.toFixed(0)}) km`;
 
-                // Add line + endpoint marker B to the plan view
-                const currentShapes = (plotDiv.layout.shapes || []).slice();
+                // Add final line + endpoint markers to the plan view
+                const baseShapes = (_csBaseShapes || (plotDiv.layout.shapes || []).slice());
                 const csShapes = [
                     { type: 'line', xref: 'x', yref: 'y', x0: a.x, y0: a.y, x1: b.x, y1: b.y, line: { color: '#ef4444', width: 2.5 } },
                     { type: 'circle', xref: 'x', yref: 'y', x0: b.x-4, y0: b.y-4, x1: b.x+4, y1: b.y+4, fillcolor: '#ef4444', line: { color: 'white', width: 1.5 } },
                 ];
-                Plotly.relayout(plotDiv, { shapes: [...currentShapes, ...csShapes] });
+                Plotly.relayout(plotDiv, { shapes: [..._csBaseShapes, ...csShapes] });
 
                 // Store cross-section shapes so fullscreen modal includes them
                 if (window._lastPlotlyData) {
-                    const baseShapes = window._lastPlotlyData.baseLayout.shapes || [];
-                    window._lastPlotlyData.baseLayout.shapes = [...baseShapes, ...csShapes,
+                    const origShapes = window._lastPlotlyData.baseLayout.shapes || [];
+                    window._lastPlotlyData.baseLayout.shapes = [...origShapes, ...csShapes,
                         { type: 'circle', xref: 'x', yref: 'y', x0: a.x-4, y0: a.y-4, x1: a.x+4, y1: a.y+4, fillcolor: '#ef4444', line: { color: 'white', width: 1.5 } },
                     ];
                 }
