@@ -46,6 +46,7 @@ function enterFocusMode(caseData) {
     _focusMarker = L.marker([caseData.latitude, caseData.longitude], { icon: icon }).addTo(map);
     map.setView([caseData.latitude, caseData.longitude], 6, { animate: true });
     document.getElementById('map-wrapper').classList.add('focus-mode');
+    document.getElementById('side-panel').classList.add('focus-panel');
     setTimeout(function() { map.invalidateSize(); }, 380);
 }
 
@@ -55,7 +56,7 @@ function exitFocusMode() {
     if (_focusMarker) { map.removeLayer(_focusMarker); _focusMarker = null; }
     if (markers) map.addLayer(markers);
     document.getElementById('map-wrapper').classList.remove('focus-mode');
-    // Reset dropdowns
+    document.getElementById('side-panel').classList.remove('focus-panel');
     document.getElementById('storm-select').value = '';
     document.getElementById('case-select').innerHTML = '<option value="">\u2190 Select a storm first</option>';
     document.getElementById('case-select').disabled = true;
@@ -143,122 +144,129 @@ function openSidePanel(caseData, fromQuickSelect) {
         '<div class="panel-storm-name">' + caseData.storm_name + '</div>' +
         '<div class="panel-mission">' + caseData.mission_id + ' \u00b7 ' + caseData.datetime + '</div>' +
 
-        // ── Display area: thumbnail initially, replaced by plot ──
-        '<div id="display-area">' +
-            '<div id="thumbnail-wrap">' +
-                '<div class="panel-image-wrap" id="thumb-img-wrap">' +
-                    '<img id="thumb-img" src="' + imageUrl + '" alt="Quick-look: ' + caseData.storm_name + '">' +
+        '<div class="explorer-layout">' +
+            // ── LEFT: Display area + action buttons ──
+            '<div class="explorer-display">' +
+                '<div id="display-area">' +
+                    '<div id="thumbnail-wrap">' +
+                        '<div class="panel-image-wrap" id="thumb-img-wrap">' +
+                            '<img id="thumb-img" src="' + imageUrl + '" alt="Quick-look: ' + caseData.storm_name + '">' +
+                        '</div>' +
+                        '<div class="panel-image-label">Quick-look (2-km V<sub>t</sub>, WCM) \u00b7 click to enlarge</div>' +
+                    '</div>' +
+                    '<div class="explorer-result" id="ep-result"></div>' +
+                    '<div class="cs-result" id="cs-result"></div>' +
+                    '<div class="az-result" id="az-result"></div>' +
+                    '<div class="cs-status" id="cs-status"></div>' +
                 '</div>' +
-                '<div class="panel-image-label">Quick-look (2-km V<sub>t</sub>, WCM) \u00b7 click to enlarge</div>' +
+                '<div class="display-actions">' +
+                    '<button class="cs-btn" id="cs-btn" onclick="toggleCrossSection()" disabled>\u2702 Cross Section</button>' +
+                    '<button class="cs-btn" id="az-btn" onclick="fetchAzimuthalMean()" disabled>\u27F3 Azim. Mean</button>' +
+                '</div>' +
             '</div>' +
-            '<div class="explorer-result" id="ep-result"></div>' +
-            '<div class="cs-result" id="cs-result"></div>' +
-            '<div class="az-result" id="az-result"></div>' +
-            '<div class="cs-status" id="cs-status"></div>' +
-        '</div>' +
 
-        // ── Controls ──
-        '<hr class="explorer-divider">' +
-        '<div class="explorer-title">\uD83D\uDD2C Explore Data</div>' +
-        '<div class="explorer-row"><label>Variable</label>' +
-            '<select class="explorer-select" id="ep-var">' +
-                '<optgroup label="WCM Recentered (2 km)">' +
-                    '<option value="recentered_tangential_wind">Tangential Wind</option>' +
-                    '<option value="recentered_radial_wind">Radial Wind</option>' +
-                    '<option value="recentered_upward_air_velocity">Vertical Velocity</option>' +
-                    '<option value="recentered_reflectivity">Reflectivity</option>' +
-                    '<option value="recentered_wind_speed">Wind Speed</option>' +
-                    '<option value="recentered_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>' +
-                    '<option value="recentered_relative_vorticity">Relative Vorticity</option>' +
-                    '<option value="recentered_divergence">Divergence</option>' +
-                '</optgroup>' +
-                '<optgroup label="Tilt-Relative">' +
-                    '<option value="total_recentered_tangential_wind">Tangential Wind</option>' +
-                    '<option value="total_recentered_radial_wind">Radial Wind</option>' +
-                    '<option value="total_recentered_upward_air_velocity">Vertical Velocity</option>' +
-                    '<option value="total_recentered_reflectivity">Reflectivity</option>' +
-                    '<option value="total_recentered_wind_speed">Wind Speed</option>' +
-                    '<option value="total_recentered_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>' +
-                '</optgroup>' +
-                '<optgroup label="Original Swath">' +
-                    '<option value="swath_tangential_wind">Tangential Wind</option>' +
-                    '<option value="swath_radial_wind">Radial Wind</option>' +
-                    '<option value="swath_reflectivity">Reflectivity</option>' +
-                    '<option value="swath_wind_speed">Wind Speed</option>' +
-                    '<option value="swath_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>' +
-                '</optgroup>' +
-            '</select>' +
-        '</div>' +
-        '<div class="explorer-row"><label>Contour Overlay <span style="font-weight:400;color:var(--slate);">(optional)</span></label>' +
-            '<select class="explorer-select" id="ep-overlay" style="font-size:11px;">' +
-                '<option value="">None</option>' +
-                '<optgroup label="WCM Recentered (2 km)">' +
-                    '<option value="recentered_tangential_wind">Tangential Wind</option>' +
-                    '<option value="recentered_radial_wind">Radial Wind</option>' +
-                    '<option value="recentered_upward_air_velocity">Vertical Velocity</option>' +
-                    '<option value="recentered_reflectivity">Reflectivity</option>' +
-                    '<option value="recentered_wind_speed">Wind Speed</option>' +
-                    '<option value="recentered_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>' +
-                    '<option value="recentered_relative_vorticity">Relative Vorticity</option>' +
-                    '<option value="recentered_divergence">Divergence</option>' +
-                '</optgroup>' +
-                '<optgroup label="Tilt-Relative">' +
-                    '<option value="total_recentered_tangential_wind">Tangential Wind</option>' +
-                    '<option value="total_recentered_radial_wind">Radial Wind</option>' +
-                    '<option value="total_recentered_upward_air_velocity">Vertical Velocity</option>' +
-                    '<option value="total_recentered_reflectivity">Reflectivity</option>' +
-                    '<option value="total_recentered_wind_speed">Wind Speed</option>' +
-                    '<option value="total_recentered_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>' +
-                '</optgroup>' +
-                '<optgroup label="Original Swath">' +
-                    '<option value="swath_tangential_wind">Tangential Wind</option>' +
-                    '<option value="swath_radial_wind">Radial Wind</option>' +
-                    '<option value="swath_reflectivity">Reflectivity</option>' +
-                    '<option value="swath_wind_speed">Wind Speed</option>' +
-                    '<option value="swath_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>' +
-                '</optgroup>' +
-            '</select>' +
-            '<div style="display:flex;align-items:center;gap:6px;margin-top:3px;">' +
-                '<label style="font-size:10px;white-space:nowrap;margin:0;">Interval:</label>' +
-                '<input type="number" id="ep-contour-int" value="" placeholder="auto" style="width:60px;padding:3px 5px;font-size:11px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);color:var(--text);">' +
-                '<span style="font-size:10px;color:var(--slate);" id="ep-contour-units"></span>' +
-            '</div>' +
-        '</div>' +
-        '<div class="explorer-row"><label>Colormap</label>' +
-            '<select class="explorer-select" id="ep-cmap" style="font-size:11px;" onchange="applyCmap()">' +
-                '<option value="">Default (from variable)</option>' +
-                '<optgroup label="Sequential"><option value="Viridis">Viridis</option><option value="Inferno">Inferno</option><option value="Magma">Magma</option><option value="Plasma">Plasma</option><option value="Cividis">Cividis</option><option value="Hot">Hot</option><option value="YlOrRd">YlOrRd</option><option value="YlGnBu">YlGnBu</option><option value="Blues">Blues</option><option value="Reds">Reds</option><option value="Greys">Greys</option></optgroup>' +
-                '<optgroup label="Diverging"><option value="RdBu">RdBu (red-blue)</option><option value=\'[[0,"rgb(5,10,172)"],[0.5,"rgb(255,255,255)"],[1,"rgb(178,10,28)"]]\'>BuWtRd (blue-white-red)</option><option value="Picnic">Picnic</option><option value="Portland">Portland</option></optgroup>' +
-                '<optgroup label="Other"><option value="Jet">Jet</option><option value="Rainbow">Rainbow</option><option value="Electric">Electric</option><option value="Earth">Earth</option><option value="Blackbody">Blackbody</option></optgroup>' +
-            '</select>' +
-        '</div>' +
-        '<div class="explorer-row"><label>Color Range <span style="font-weight:400;color:var(--slate);">(override)</span></label>' +
-            '<div style="display:flex;align-items:center;gap:6px;">' +
-                '<input type="number" id="ep-vmin" placeholder="min" step="any" style="width:70px;padding:3px 5px;font-size:11px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);color:var(--text);" onchange="applyColorRange()">' +
-                '<span style="font-size:11px;color:var(--slate);">to</span>' +
-                '<input type="number" id="ep-vmax" placeholder="max" step="any" style="width:70px;padding:3px 5px;font-size:11px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);color:var(--text);" onchange="applyColorRange()">' +
-                '<button onclick="resetColorRange()" title="Reset to variable default" style="padding:2px 6px;font-size:10px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);cursor:pointer;color:var(--slate);">\u21BA</button>' +
-            '</div>' +
-        '</div>' +
-        '<div class="explorer-row"><label>Height Level</label>' +
-            '<div class="explorer-level-row">' +
-                '<input type="range" id="ep-level" min="0" max="18" step="0.5" value="2" oninput="document.getElementById(\'ep-level-val\').textContent = parseFloat(this.value).toFixed(1)+\' km\'">' +
-                '<span class="explorer-level-value" id="ep-level-val">2.0 km</span>' +
-            '</div>' +
-            '<div class="anim-controls">' +
-                '<button class="anim-btn" onclick="animStep(-1)" title="Previous level">\u25C0</button>' +
-                '<button class="anim-btn" id="anim-play-btn" onclick="animToggle()" title="Play/Pause">\u25B6</button>' +
-                '<button class="anim-btn" onclick="animStep(1)" title="Next level">\u25B6\u25B6</button>' +
-                '<span class="anim-speed" id="anim-speed-label">0.8s / level</span>' +
-            '</div>' +
-        '</div>' +
-        '<button class="generate-btn" id="ep-btn" onclick="generateCustomPlot()">Generate Plot</button>' +
-        '<button class="cs-btn" id="cs-btn" onclick="toggleCrossSection()" disabled>\u2702 Draw Cross Section</button>' +
-        '<button class="cs-btn" id="az-btn" onclick="fetchAzimuthalMean()" disabled style="margin-top:4px;">\u27F3 Azimuthal Mean</button>' +
-        '<div class="explorer-row" id="az-controls" style="margin-top:6px;"><label>Coverage Threshold</label>' +
-            '<div style="display:flex;align-items:center;gap:8px;">' +
-                '<input type="range" id="az-coverage" min="0" max="100" step="5" value="50" class="az-cov-slider" oninput="document.getElementById(\'az-cov-val\').textContent = this.value+\'%\'">' +
-                '<span style="font-size:12px;font-weight:600;color:var(--cyan);min-width:36px;font-family:\'JetBrains Mono\',monospace;" id="az-cov-val">50%</span>' +
+            // ── RIGHT: Controls panel ──
+            '<div class="explorer-controls">' +
+                '<div class="explorer-title">\uD83D\uDD2C Explore Data</div>' +
+                '<div class="explorer-row"><label>Variable</label>' +
+                    '<select class="explorer-select" id="ep-var">' +
+                        '<optgroup label="WCM Recentered (2 km)">' +
+                            '<option value="recentered_tangential_wind">Tangential Wind</option>' +
+                            '<option value="recentered_radial_wind">Radial Wind</option>' +
+                            '<option value="recentered_upward_air_velocity">Vertical Velocity</option>' +
+                            '<option value="recentered_reflectivity">Reflectivity</option>' +
+                            '<option value="recentered_wind_speed">Wind Speed</option>' +
+                            '<option value="recentered_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>' +
+                            '<option value="recentered_relative_vorticity">Relative Vorticity</option>' +
+                            '<option value="recentered_divergence">Divergence</option>' +
+                        '</optgroup>' +
+                        '<optgroup label="Tilt-Relative">' +
+                            '<option value="total_recentered_tangential_wind">Tangential Wind</option>' +
+                            '<option value="total_recentered_radial_wind">Radial Wind</option>' +
+                            '<option value="total_recentered_upward_air_velocity">Vertical Velocity</option>' +
+                            '<option value="total_recentered_reflectivity">Reflectivity</option>' +
+                            '<option value="total_recentered_wind_speed">Wind Speed</option>' +
+                            '<option value="total_recentered_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>' +
+                        '</optgroup>' +
+                        '<optgroup label="Original Swath">' +
+                            '<option value="swath_tangential_wind">Tangential Wind</option>' +
+                            '<option value="swath_radial_wind">Radial Wind</option>' +
+                            '<option value="swath_reflectivity">Reflectivity</option>' +
+                            '<option value="swath_wind_speed">Wind Speed</option>' +
+                            '<option value="swath_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>' +
+                        '</optgroup>' +
+                    '</select>' +
+                '</div>' +
+                '<div class="explorer-row"><label>Contour Overlay</label>' +
+                    '<select class="explorer-select" id="ep-overlay" style="font-size:11px;">' +
+                        '<option value="">None</option>' +
+                        '<optgroup label="WCM Recentered (2 km)">' +
+                            '<option value="recentered_tangential_wind">Tangential Wind</option>' +
+                            '<option value="recentered_radial_wind">Radial Wind</option>' +
+                            '<option value="recentered_upward_air_velocity">Vertical Velocity</option>' +
+                            '<option value="recentered_reflectivity">Reflectivity</option>' +
+                            '<option value="recentered_wind_speed">Wind Speed</option>' +
+                            '<option value="recentered_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>' +
+                            '<option value="recentered_relative_vorticity">Relative Vorticity</option>' +
+                            '<option value="recentered_divergence">Divergence</option>' +
+                        '</optgroup>' +
+                        '<optgroup label="Tilt-Relative">' +
+                            '<option value="total_recentered_tangential_wind">Tangential Wind</option>' +
+                            '<option value="total_recentered_radial_wind">Radial Wind</option>' +
+                            '<option value="total_recentered_upward_air_velocity">Vertical Velocity</option>' +
+                            '<option value="total_recentered_reflectivity">Reflectivity</option>' +
+                            '<option value="total_recentered_wind_speed">Wind Speed</option>' +
+                            '<option value="total_recentered_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>' +
+                        '</optgroup>' +
+                        '<optgroup label="Original Swath">' +
+                            '<option value="swath_tangential_wind">Tangential Wind</option>' +
+                            '<option value="swath_radial_wind">Radial Wind</option>' +
+                            '<option value="swath_reflectivity">Reflectivity</option>' +
+                            '<option value="swath_wind_speed">Wind Speed</option>' +
+                            '<option value="swath_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>' +
+                        '</optgroup>' +
+                    '</select>' +
+                    '<div style="display:flex;align-items:center;gap:5px;margin-top:2px;">' +
+                        '<label style="font-size:9px;white-space:nowrap;margin:0;">Int:</label>' +
+                        '<input type="number" id="ep-contour-int" value="" placeholder="auto" style="width:55px;padding:2px 4px;font-size:10px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);color:var(--text);">' +
+                        '<span style="font-size:9px;color:var(--slate);" id="ep-contour-units"></span>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="explorer-row"><label>Colormap</label>' +
+                    '<select class="explorer-select" id="ep-cmap" style="font-size:11px;" onchange="applyCmap()">' +
+                        '<option value="">Default (from variable)</option>' +
+                        '<optgroup label="Sequential"><option value="Viridis">Viridis</option><option value="Inferno">Inferno</option><option value="Magma">Magma</option><option value="Plasma">Plasma</option><option value="Cividis">Cividis</option><option value="Hot">Hot</option><option value="YlOrRd">YlOrRd</option><option value="YlGnBu">YlGnBu</option><option value="Blues">Blues</option><option value="Reds">Reds</option><option value="Greys">Greys</option></optgroup>' +
+                        '<optgroup label="Diverging"><option value="RdBu">RdBu (red-blue)</option><option value=\'[[0,"rgb(5,10,172)"],[0.5,"rgb(255,255,255)"],[1,"rgb(178,10,28)"]]\'>BuWtRd (blue-white-red)</option><option value="Picnic">Picnic</option><option value="Portland">Portland</option></optgroup>' +
+                        '<optgroup label="Other"><option value="Jet">Jet</option><option value="Rainbow">Rainbow</option><option value="Electric">Electric</option><option value="Earth">Earth</option><option value="Blackbody">Blackbody</option></optgroup>' +
+                    '</select>' +
+                '</div>' +
+                '<div class="explorer-row"><label>Color Range</label>' +
+                    '<div style="display:flex;align-items:center;gap:4px;">' +
+                        '<input type="number" id="ep-vmin" placeholder="min" step="any" style="width:60px;padding:2px 4px;font-size:10px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);color:var(--text);" onchange="applyColorRange()">' +
+                        '<span style="font-size:10px;color:var(--slate);">to</span>' +
+                        '<input type="number" id="ep-vmax" placeholder="max" step="any" style="width:60px;padding:2px 4px;font-size:10px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);color:var(--text);" onchange="applyColorRange()">' +
+                        '<button onclick="resetColorRange()" title="Reset" style="padding:2px 5px;font-size:9px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);cursor:pointer;color:var(--slate);">\u21BA</button>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="explorer-row"><label>Height Level</label>' +
+                    '<div class="explorer-level-row">' +
+                        '<input type="range" id="ep-level" min="0" max="18" step="0.5" value="2" oninput="document.getElementById(\'ep-level-val\').textContent = parseFloat(this.value).toFixed(1)+\' km\'">' +
+                        '<span class="explorer-level-value" id="ep-level-val">2.0 km</span>' +
+                    '</div>' +
+                    '<div class="anim-controls">' +
+                        '<button class="anim-btn" onclick="animStep(-1)" title="Previous level">\u25C0</button>' +
+                        '<button class="anim-btn" id="anim-play-btn" onclick="animToggle()" title="Play/Pause">\u25B6</button>' +
+                        '<button class="anim-btn" onclick="animStep(1)" title="Next level">\u25B6\u25B6</button>' +
+                        '<span class="anim-speed" id="anim-speed-label">0.8s / level</span>' +
+                    '</div>' +
+                '</div>' +
+                '<button class="generate-btn" id="ep-btn" onclick="generateCustomPlot()">Generate Plot</button>' +
+                '<div class="explorer-row" id="az-controls" style="margin-top:6px;"><label>Az. Mean Coverage</label>' +
+                    '<div style="display:flex;align-items:center;gap:6px;">' +
+                        '<input type="range" id="az-coverage" min="0" max="100" step="5" value="50" class="az-cov-slider" oninput="document.getElementById(\'az-cov-val\').textContent = this.value+\'%\'">' +
+                        '<span style="font-size:11px;font-weight:600;color:var(--cyan);min-width:32px;font-family:\'JetBrains Mono\',monospace;" id="az-cov-val">50%</span>' +
+                    '</div>' +
+                '</div>' +
             '</div>' +
         '</div>';
 
