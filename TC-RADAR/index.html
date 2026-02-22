@@ -1032,12 +1032,19 @@
                                       : { title: 10, axis: 9,  tick: 8,  cbar: 9,  cbarTick: 8,  hover: 11 };
             const cbarThick = fullsize ? 14 : 10;
 
+            // Apply user-selected colormap if set
+            let csColorscale = varInfo.colorscale;
+            const cmapSel = document.getElementById('ep-cmap');
+            if (cmapSel && cmapSel.value) {
+                try { csColorscale = JSON.parse(cmapSel.value); } catch { csColorscale = cmapSel.value; }
+            }
+
             const heatmap = {
                 z: csData,
                 x: distance_km,
                 y: height_km,
                 type: 'heatmap',
-                colorscale: varInfo.colorscale,
+                colorscale: csColorscale,
                 zmin: varInfo.vmin, zmax: varInfo.vmax,
                 colorbar: {
                     title: { text: varInfo.units, font: { color: '#ccc', size: fontSize.cbar } },
