@@ -99,6 +99,11 @@
         }
         .plot-modal-close:hover { background:rgba(255,255,255,0.25); color:#fff; }
         #plotly-fullscreen { width:100%; height:100%; }
+        /* Split mode: plan view + cross section stacked */
+        .plot-modal-box.split { overflow-y:auto; }
+        .plot-modal-box.split #plotly-fullscreen { height:55%; min-height:300px; }
+        .plot-modal-box.split #cs-fullscreen { height:40%; min-height:220px; width:100%; }
+        .cs-full-divider { height:1px; background:rgba(255,255,255,0.1); margin:4px 16px; }
 
         /* Animation controls */
         .anim-controls { display:flex; align-items:center; gap:4px; margin-top:6px; }
@@ -714,6 +719,7 @@
             const pt = eventData.points[0];
             const x = pt.x, y = pt.y;
             const status = document.getElementById('cs-status');
+            const plotDiv = document.getElementById('plotly-chart');
 
             if (!_csPointA) {
                 // First click — set point A
@@ -723,14 +729,13 @@
                 if (status) status.textContent = `A: (${x.toFixed(0)}, ${y.toFixed(0)}) km — now click the end point`;
 
                 // Add marker for point A
-                const plotDiv = document.getElementById('plotly-chart');
-                Plotly.relayout(plotDiv, {
-                    'shapes[-1]': {
-                        type: 'circle', xref: 'x', yref: 'y',
-                        x0: x - 4, y0: y - 4, x1: x + 4, y1: y + 4,
-                        fillcolor: '#ef4444', line: { color: 'white', width: 1.5 },
-                    }
+                const currentShapes = (plotDiv.layout.shapes || []).slice();
+                currentShapes.push({
+                    type: 'circle', xref: 'x', yref: 'y',
+                    x0: x - 4, y0: y - 4, x1: x + 4, y1: y + 4,
+                    fillcolor: '#ef4444', line: { color: 'white', width: 1.5 },
                 });
+                Plotly.relayout(plotDiv, { shapes: currentShapes });
             } else {
                 // Second click — set point B & fetch cross-section
                 const a = _csPointA;
@@ -742,26 +747,21 @@
                 if (btn) { btn.classList.remove('active'); btn.textContent = '✂ Draw Cross Section'; }
                 if (status) status.textContent = `A→B: (${a.x.toFixed(0)},${a.y.toFixed(0)}) → (${b.x.toFixed(0)},${b.y.toFixed(0)}) km`;
 
-                // Draw the line on the plan view
-                const plotDiv = document.getElementById('plotly-chart');
-                Plotly.relayout(plotDiv, {
-                    'shapes[-1]': {
-                        type: 'line', xref: 'x', yref: 'y',
-                        x0: a.x, y0: a.y, x1: b.x, y1: b.y,
-                        line: { color: '#ef4444', width: 2.5 },
-                    },
-                    // Marker for point B
-                    'shapes[-1]': undefined, // handled via annotations instead
-                });
-                // Add endpoint markers + line as annotations/shapes
-                const currentShapes = plotDiv.layout.shapes || [];
-                Plotly.relayout(plotDiv, {
-                    shapes: [
-                        ...currentShapes,
-                        { type: 'line', xref: 'x', yref: 'y', x0: a.x, y0: a.y, x1: b.x, y1: b.y, line: { color: '#ef4444', width: 2.5 } },
-                        { type: 'circle', xref: 'x', yref: 'y', x0: b.x-4, y0: b.y-4, x1: b.x+4, y1: b.y+4, fillcolor: '#ef4444', line: { color: 'white', width: 1.5 } },
-                    ]
-                });
+                // Add line + endpoint marker B to the plan view
+                const currentShapes = (plotDiv.layout.shapes || []).slice();
+                const csShapes = [
+                    { type: 'line', xref: 'x', yref: 'y', x0: a.x, y0: a.y, x1: b.x, y1: b.y, line: { color: '#ef4444', width: 2.5 } },
+                    { type: 'circle', xref: 'x', yref: 'y', x0: b.x-4, y0: b.y-4, x1: b.x+4, y1: b.y+4, fillcolor: '#ef4444', line: { color: 'white', width: 1.5 } },
+                ];
+                Plotly.relayout(plotDiv, { shapes: [...currentShapes, ...csShapes] });
+
+                // Store cross-section shapes so fullscreen modal includes them
+                if (window._lastPlotlyData) {
+                    const baseShapes = window._lastPlotlyData.baseLayout.shapes || [];
+                    window._lastPlotlyData.baseLayout.shapes = [...baseShapes, ...csShapes,
+                        { type: 'circle', xref: 'x', yref: 'y', x0: a.x-4, y0: a.y-4, x1: a.x+4, y1: a.y+4, fillcolor: '#ef4444', line: { color: 'white', width: 1.5 } },
+                    ];
+                }
 
                 fetchCrossSection(a, b);
             }
@@ -781,18 +781,24 @@
                     return r.json();
                 })
                 .then(json => {
-                    renderCrossSection(json, csResult);
+                    // Small inline version in side panel
+                    csResult.innerHTML = `<div class="explorer-status" style="color:#10b981;">✓ Cross-section ready — opening expanded view</div>`;
+                    // Auto-open fullscreen modal with plan view + cross-section
+                    openPlotModal(json);
                 })
                 .catch(err => {
                     csResult.innerHTML = `<div class="explorer-status error">⚠️ ${err.message}</div>`;
                 });
         }
 
-        function renderCrossSection(json, container) {
-            container.innerHTML = `<div id="cs-chart" style="width:100%;height:260px;border-radius:6px;overflow:hidden;"></div>
-                <div style="font-size:11px;color:#9ca3af;text-align:center;margin-top:4px;">Vertical cross-section · hover for values</div>`;
+        function renderCrossSectionInto(targetId, json, fullsize) {
+            const el = document.getElementById(targetId);
+            if (!el) return;
 
             const { cross_section: csData, distance_km, height_km, variable: varInfo, case_meta: meta, endpoints: ep } = json;
+            const fontSize = fullsize ? { title: 13, axis: 12, tick: 10, cbar: 12, cbarTick: 10, hover: 13 }
+                                      : { title: 10, axis: 9,  tick: 8,  cbar: 9,  cbarTick: 8,  hover: 11 };
+            const cbarThick = fullsize ? 14 : 10;
 
             const heatmap = {
                 z: csData,
@@ -802,9 +808,9 @@
                 colorscale: varInfo.colorscale,
                 zmin: varInfo.vmin, zmax: varInfo.vmax,
                 colorbar: {
-                    title: { text: varInfo.units, font: { color: '#ccc', size: 9 } },
-                    tickfont: { color: '#ccc', size: 8 },
-                    thickness: 10, len: 0.85,
+                    title: { text: varInfo.units, font: { color: '#ccc', size: fontSize.cbar } },
+                    tickfont: { color: '#ccc', size: fontSize.cbarTick },
+                    thickness: cbarThick, len: 0.85,
                 },
                 hovertemplate:
                     `<b>${varInfo.display_name}</b>: %{z:.2f} ${varInfo.units}<br>` +
@@ -815,24 +821,25 @@
             const title = `Cross Section: (${ep.x0.toFixed(0)},${ep.y0.toFixed(0)}) → (${ep.x1.toFixed(0)},${ep.y1.toFixed(0)}) km`;
 
             const layout = {
-                title: { text: title, font: { color: '#e5e7eb', size: 10 }, y: 0.97, x: 0.5, xanchor: 'center' },
+                title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' },
                 paper_bgcolor: '#0e1117', plot_bgcolor: '#0e1117',
                 xaxis: {
-                    title: { text: 'Distance along line (km)', font: { color: '#aaa', size: 9 } },
-                    tickfont: { color: '#aaa', size: 8 },
+                    title: { text: 'Distance along line (km)', font: { color: '#aaa', size: fontSize.axis } },
+                    tickfont: { color: '#aaa', size: fontSize.tick },
                     gridcolor: 'rgba(255,255,255,0.05)', zeroline: false,
                 },
                 yaxis: {
-                    title: { text: 'Height (km)', font: { color: '#aaa', size: 9 } },
-                    tickfont: { color: '#aaa', size: 8 },
+                    title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } },
+                    tickfont: { color: '#aaa', size: fontSize.tick },
                     gridcolor: 'rgba(255,255,255,0.05)', zeroline: false,
                 },
-                margin: { l: 45, r: 12, t: 36, b: 38 },
-                hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 11 } },
+                margin: fullsize ? { l: 55, r: 24, t: 40, b: 46 } : { l: 45, r: 12, t: 36, b: 38 },
+                hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: fontSize.hover } },
             };
 
-            Plotly.newPlot('cs-chart', [heatmap], layout, {
-                responsive: true, displayModeBar: false,
+            Plotly.newPlot(targetId, [heatmap], layout, {
+                responsive: true, displayModeBar: fullsize, displaylogo: false,
+                modeBarButtonsToRemove: ['lasso2d', 'select2d', 'toggleSpikelines'],
             });
         }
 
@@ -1093,11 +1100,25 @@
         });
 
         // ── Fullscreen plot modal ─────────────────────────────────────
-        function openPlotModal() {
+        function openPlotModal(csJson) {
             if (!window._lastPlotlyData) return;
             const modal = document.getElementById('plotModal');
+            const box   = document.getElementById('plotModalBox');
+            const csFull = document.getElementById('cs-fullscreen');
+            const csDivider = document.getElementById('cs-full-divider');
             modal.classList.add('active');
             document.body.style.overflow = 'hidden';
+
+            const hasCrossSection = !!csJson;
+            if (hasCrossSection) {
+                box.classList.add('split');
+                csFull.style.display = 'block';
+                csDivider.style.display = 'block';
+            } else {
+                box.classList.remove('split');
+                csFull.style.display = 'none';
+                csDivider.style.display = 'none';
+            }
 
             const { heatmap, baseLayout, title, config } = window._lastPlotlyData;
             const fullLayout = Object.assign({}, baseLayout, {
@@ -1106,7 +1127,6 @@
                 xaxis: Object.assign({}, baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }),
                 yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }),
             });
-            // Scale up colorbar for fullscreen
             const fullHeatmap = Object.assign({}, heatmap, {
                 colorbar: Object.assign({}, heatmap.colorbar, {
                     title: { text: heatmap.colorbar.title.text, font: { color: '#ccc', size: 13 } },
@@ -1115,12 +1135,22 @@
                 }),
             });
             Plotly.newPlot('plotly-fullscreen', [fullHeatmap], fullLayout, config);
+
+            // Render cross-section in fullscreen if provided
+            if (hasCrossSection) {
+                renderCrossSectionInto('cs-fullscreen', csJson, true);
+            }
         }
         function closePlotModal() {
             const modal = document.getElementById('plotModal');
+            const box   = document.getElementById('plotModalBox');
             modal.classList.remove('active');
+            box.classList.remove('split');
             document.body.style.overflow = '';
             Plotly.purge('plotly-fullscreen');
+            const csFull = document.getElementById('cs-fullscreen');
+            if (csFull) { Plotly.purge('cs-fullscreen'); csFull.style.display = 'none'; }
+            document.getElementById('cs-full-divider').style.display = 'none';
         }
 
         // ── Image modal ──────────────────────────────────────────────
@@ -1145,9 +1175,11 @@
     </div>
     <!-- Fullscreen plot modal -->
     <div id="plotModal" class="plot-modal-overlay" onclick="closePlotModal()">
-        <div class="plot-modal-box" onclick="event.stopPropagation()">
+        <div class="plot-modal-box" id="plotModalBox" onclick="event.stopPropagation()">
             <button class="plot-modal-close" onclick="closePlotModal()" title="Close (Esc)">&times;</button>
             <div id="plotly-fullscreen"></div>
+            <div class="cs-full-divider" id="cs-full-divider" style="display:none;"></div>
+            <div id="cs-fullscreen" style="display:none;"></div>
         </div>
     </div>
 </body>
