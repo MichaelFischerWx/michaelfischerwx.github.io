@@ -516,6 +516,39 @@
                 </div>
 
                 <div class="explorer-row">
+                    <label>Colormap</label>
+                    <select class="explorer-select" id="ep-cmap" style="font-size:11px;" onchange="applyCmap()">
+                        <option value="">Default (from variable)</option>
+                        <optgroup label="Sequential">
+                            <option value="Viridis">Viridis</option>
+                            <option value="Inferno">Inferno</option>
+                            <option value="Magma">Magma</option>
+                            <option value="Plasma">Plasma</option>
+                            <option value="Cividis">Cividis</option>
+                            <option value="Hot">Hot</option>
+                            <option value="YlOrRd">YlOrRd</option>
+                            <option value="YlGnBu">YlGnBu</option>
+                            <option value="Blues">Blues</option>
+                            <option value="Reds">Reds</option>
+                            <option value="Greys">Greys</option>
+                        </optgroup>
+                        <optgroup label="Diverging">
+                            <option value="RdBu">RdBu (red-blue)</option>
+                            <option value="[[0,&quot;rgb(5,10,172)&quot;],[0.5,&quot;rgb(255,255,255)&quot;],[1,&quot;rgb(178,10,28)&quot;]]">BuWtRd (blue-white-red)</option>
+                            <option value="Picnic">Picnic</option>
+                            <option value="Portland">Portland</option>
+                        </optgroup>
+                        <optgroup label="Other">
+                            <option value="Jet">Jet</option>
+                            <option value="Rainbow">Rainbow</option>
+                            <option value="Electric">Electric</option>
+                            <option value="Earth">Earth</option>
+                            <option value="Blackbody">Blackbody</option>
+                        </optgroup>
+                    </select>
+                </div>
+
+                <div class="explorer-row">
                     <label>Height Level</label>
                     <div class="explorer-level-row">
                         <input type="range" id="ep-level" min="0" max="18" step="0.5" value="2"
@@ -697,6 +730,35 @@
             });
         }
 
+        // ── Colormap switcher (instant, no API call) ─────────────────
+        let _defaultColorscale = null;  // stored from API response
+
+        function applyCmap() {
+            const sel = document.getElementById('ep-cmap');
+            if (!sel) return;
+            let cs = sel.value;
+
+            // Empty = revert to API default
+            if (!cs && _defaultColorscale) cs = _defaultColorscale;
+            if (!cs) return;
+
+            // Parse JSON array colorscales (e.g. BuWtRd)
+            let colorscale;
+            try { colorscale = JSON.parse(cs); } catch { colorscale = cs; }
+
+            // Restyle heatmap (trace 0) on all visible plots instantly
+            ['plotly-chart', 'plotly-fullscreen', 'cs-fullscreen'].forEach(id => {
+                const plotDiv = document.getElementById(id);
+                if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
+                Plotly.restyle(plotDiv, { colorscale: [colorscale] }, [0]);
+            });
+
+            // Update stored data so fullscreen re-render uses it
+            if (window._lastPlotlyData) {
+                window._lastPlotlyData.heatmap.colorscale = colorscale;
+            }
+        }
+
         function renderPlotFromJSON(json, resultDiv) {
             // Build the Plotly container with expand button
             resultDiv.innerHTML = `<div style="position:relative;">
@@ -712,6 +774,14 @@
 
             const { data: zData, x, y, variable: varInfo, case_meta: meta } = json;
 
+            // Store API-provided colorscale as default, apply user override if selected
+            _defaultColorscale = varInfo.colorscale;
+            const cmapSel = document.getElementById('ep-cmap');
+            let activeColorscale = varInfo.colorscale;
+            if (cmapSel && cmapSel.value) {
+                try { activeColorscale = JSON.parse(cmapSel.value); } catch { activeColorscale = cmapSel.value; }
+            }
+
             // Title
             const vmaxStr = meta.vmax_kt ? ` | Vmax = ${meta.vmax_kt} kt` : '';
             const title = `${meta.storm_name} | ${meta.datetime}${vmaxStr}<br>${varInfo.display_name} @ ${json.actual_level_km.toFixed(1)} km`;
@@ -720,7 +790,7 @@
             const heatmap = {
                 z: zData, x: x, y: y,
                 type: 'heatmap',
-                colorscale: varInfo.colorscale,
+                colorscale: activeColorscale,
                 zmin: varInfo.vmin, zmax: varInfo.vmax,
                 colorbar: {
                     title: { text: varInfo.units, font: { color: '#ccc', size: 10 } },
