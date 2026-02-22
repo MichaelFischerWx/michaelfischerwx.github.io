@@ -142,10 +142,22 @@ function openSidePanel(caseData, fromQuickSelect) {
         backBtnHtml +
         '<div class="panel-storm-name">' + caseData.storm_name + '</div>' +
         '<div class="panel-mission">' + caseData.mission_id + ' \u00b7 ' + caseData.datetime + '</div>' +
-        '<div class="panel-image-wrap" onclick="openImageModal(\'' + imageUrl + '\',\'' + caseData.storm_name + ' \u2013 ' + caseData.datetime + '\')">' +
-            '<img src="' + imageUrl + '" alt="Quick-look: ' + caseData.storm_name + '" onerror="this.parentElement.style.display=\'none\'">' +
+
+        // ── Display area: thumbnail initially, replaced by plot ──
+        '<div id="display-area">' +
+            '<div id="thumbnail-wrap">' +
+                '<div class="panel-image-wrap" id="thumb-img-wrap">' +
+                    '<img id="thumb-img" src="' + imageUrl + '" alt="Quick-look: ' + caseData.storm_name + '">' +
+                '</div>' +
+                '<div class="panel-image-label">Quick-look (2-km V<sub>t</sub>, WCM) \u00b7 click to enlarge</div>' +
+            '</div>' +
+            '<div class="explorer-result" id="ep-result"></div>' +
+            '<div class="cs-result" id="cs-result"></div>' +
+            '<div class="az-result" id="az-result"></div>' +
+            '<div class="cs-status" id="cs-status"></div>' +
         '</div>' +
-        '<div class="panel-image-label">Quick-look (2-km V<sub>t</sub>, WCM) \u00b7 click to enlarge</div>' +
+
+        // ── Controls ──
         '<hr class="explorer-divider">' +
         '<div class="explorer-title">\uD83D\uDD2C Explore Data</div>' +
         '<div class="explorer-row"><label>Variable</label>' +
@@ -248,11 +260,27 @@ function openSidePanel(caseData, fromQuickSelect) {
                 '<input type="range" id="az-coverage" min="0" max="100" step="5" value="50" class="az-cov-slider" oninput="document.getElementById(\'az-cov-val\').textContent = this.value+\'%\'">' +
                 '<span style="font-size:12px;font-weight:600;color:var(--cyan);min-width:36px;font-family:\'JetBrains Mono\',monospace;" id="az-cov-val">50%</span>' +
             '</div>' +
-        '</div>' +
-        '<div class="cs-status" id="cs-status"></div>' +
-        '<div class="explorer-result" id="ep-result"></div>' +
-        '<div class="cs-result" id="cs-result"></div>' +
-        '<div class="az-result" id="az-result"></div>';
+        '</div>';
+
+    // Set up thumbnail click-to-enlarge and error handling
+    var thumbImg = document.getElementById('thumb-img');
+    var thumbWrap = document.getElementById('thumb-img-wrap');
+    if (thumbImg) {
+        thumbImg.onerror = function() {
+            // Try raw GitHub URL as fallback
+            var fallback = 'https://raw.githubusercontent.com/MichaelFischerWx/michaelfischerwx.github.io/main/TC-RADAR/images/v3m/v3m_swath_cf_' + padded + '.png';
+            if (this.src.indexOf('raw.githubusercontent') === -1) {
+                this.src = fallback;
+            } else {
+                // Both failed, hide thumbnail
+                document.getElementById('thumbnail-wrap').style.display = 'none';
+            }
+        };
+        thumbWrap.onclick = function() {
+            var src = thumbImg.src;
+            openImageModal(src, caseData.storm_name + ' \u2013 ' + caseData.datetime);
+        };
+    }
 
     document.getElementById('side-panel').classList.add('open');
     setTimeout(function() { map.invalidateSize(); }, 360);
@@ -319,7 +347,13 @@ function generateCustomPlot(callback) {
     var resultDiv = document.getElementById('ep-result');
     var btn = document.getElementById('ep-btn');
     btn.disabled = true; btn.textContent = 'Generating\u2026';
-    if (!_animPlaying) resultDiv.innerHTML = '<div class="explorer-status loading">\u23F3 Fetching data from API\u2026 (may take ~30s if service is waking up)</div>';
+    if (!_animPlaying) {
+        var thumbWrap = document.getElementById('thumbnail-wrap');
+        if (thumbWrap) thumbWrap.style.display = 'none';
+        resultDiv.innerHTML = '<div class="explorer-status loading">\u23F3 Fetching data from API\u2026 (may take ~30s if service is waking up)</div>';
+        var panelInner = document.getElementById('side-panel-inner');
+        if (panelInner) panelInner.scrollTop = 0;
+    }
     var cacheKey = currentCaseIndex + '_' + variable + '_' + level_km + '_' + overlay;
     if (_dataCache[cacheKey]) {
         renderPlotFromJSON(_dataCache[cacheKey], resultDiv);
@@ -410,7 +444,15 @@ function resetColorRange() {
 }
 
 function renderPlotFromJSON(json, resultDiv) {
+    // Hide thumbnail, show plot in its place
+    var thumbWrap = document.getElementById('thumbnail-wrap');
+    if (thumbWrap) thumbWrap.style.display = 'none';
+
     resultDiv.innerHTML = '<div style="position:relative;"><div id="plotly-chart" style="width:100%;height:360px;border-radius:6px;overflow:hidden;"></div><button onclick="openPlotModal()" title="Expand to fullscreen" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">\u26F6</button></div><div style="font-size:11px;color:var(--slate);text-align:center;margin-top:4px;">Hover for values \u00b7 scroll to zoom \u00b7 drag to pan \u00b7 \u26F6 expand</div>';
+
+    // Scroll panel to top so plot is visible
+    var panelInner = document.getElementById('side-panel-inner');
+    if (panelInner) panelInner.scrollTop = 0;
 
     var zData = json.data, x = json.x, y = json.y, varInfo = json.variable, meta = json.case_meta;
     _defaultColorscale = varInfo.colorscale; _defaultVmin = varInfo.vmin; _defaultVmax = varInfo.vmax;
@@ -441,6 +483,14 @@ function renderPlotFromJSON(json, resultDiv) {
     var csBtn = document.getElementById('cs-btn'); if (csBtn) csBtn.disabled = false;
     var azBtn = document.getElementById('az-btn'); if (azBtn) azBtn.disabled = false;
     document.getElementById('plotly-chart').on('plotly_click', handlePlotClick);
+
+    // Auto-scroll the side panel to show the plot (skip during animation)
+    if (!_animPlaying) {
+        setTimeout(function() {
+            var chartEl = document.getElementById('plotly-chart');
+            if (chartEl) chartEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 150);
+    }
 }
 
 // ── Height animation ─────────────────────────────────────────
@@ -562,8 +612,12 @@ function renderAzimuthalMeanInto(targetId, json, fullsize) {
     var plotBg = '#0a1628';
     var layout = { title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' }, paper_bgcolor: plotBg, plot_bgcolor: plotBg, xaxis: { title: { text: 'Radius (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, margin: fullsize ? { l:55,r:24,t:json.overlay?66:50,b:46 } : { l:45,r:12,t:json.overlay?56:42,b:38 }, shapes: shapes, hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: fontSize.hover } }, showlegend: false };
     if (!fullsize) {
+        var thumbWrap = document.getElementById('thumbnail-wrap');
+        if (thumbWrap) thumbWrap.style.display = 'none';
         el.innerHTML = '<div style="position:relative;"><div id="az-chart" style="width:100%;height:340px;border-radius:6px;overflow:hidden;"></div><button onclick="openPlotModal()" title="Expand to fullscreen" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">\u26F6</button></div><div style="font-size:11px;color:var(--slate);text-align:center;margin-top:4px;">Hover \u00b7 zoom \u00b7 pan \u00b7 \u26F6 expand</div>';
         Plotly.newPlot('az-chart', [heatmap].concat(azOverlayTraces), layout, { responsive:true,displayModeBar:false,displaylogo:false });
+        var panelInner = document.getElementById('side-panel-inner');
+        if (panelInner) panelInner.scrollTop = 0;
     } else {
         Plotly.newPlot(targetId, [heatmap].concat(azOverlayTraces), layout, { responsive:true,displayModeBar:true,displaylogo:false,modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
     }
