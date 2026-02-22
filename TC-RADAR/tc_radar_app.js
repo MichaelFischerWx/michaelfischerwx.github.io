@@ -29,13 +29,12 @@ function toggleFilterDrawer() {
     btn.classList.toggle('active');
 }
 
-// ── Case quick-select handler ────────────────────────────────
+// ── Two-step Storm → Case selection ──────────────────────────
 var _focusMode = false;
 var _focusMarker = null;
 
 function enterFocusMode(caseData) {
     _focusMode = true;
-    // Remove cluster group, add single marker
     if (markers) map.removeLayer(markers);
     if (_focusMarker) { map.removeLayer(_focusMarker); _focusMarker = null; }
     var color = getIntensityColor(caseData.vmax_kt);
@@ -46,7 +45,6 @@ function enterFocusMode(caseData) {
     });
     _focusMarker = L.marker([caseData.latitude, caseData.longitude], { icon: icon }).addTo(map);
     map.setView([caseData.latitude, caseData.longitude], 6, { animate: true });
-    // Add focus class to map wrapper
     document.getElementById('map-wrapper').classList.add('focus-mode');
     setTimeout(function() { map.invalidateSize(); }, 380);
 }
@@ -54,23 +52,78 @@ function enterFocusMode(caseData) {
 function exitFocusMode() {
     if (!_focusMode) return;
     _focusMode = false;
-    // Remove solo marker, restore cluster group
     if (_focusMarker) { map.removeLayer(_focusMarker); _focusMarker = null; }
     if (markers) map.addLayer(markers);
     document.getElementById('map-wrapper').classList.remove('focus-mode');
-    // Reset quick-select dropdown
-    document.getElementById('case-quick-select').value = '';
+    // Reset dropdowns
+    document.getElementById('storm-select').value = '';
+    document.getElementById('case-select').innerHTML = '<option value="">\u2190 Select a storm first</option>';
+    document.getElementById('case-select').disabled = true;
+    document.getElementById('explore-btn').disabled = true;
+    // Restore map filter to all
+    filters.stormName = 'all';
+    updateMarkers();
     setTimeout(function() { map.invalidateSize(); map.setView([20, -60], 4, { animate: true }); }, 380);
 }
 
-document.getElementById('case-quick-select').addEventListener('change', function() {
-    const idx = parseInt(this.value);
+// Storm dropdown: filters the map AND populates the case dropdown
+document.getElementById('storm-select').addEventListener('change', function() {
+    var storm = this.value;
+    var caseSelect = document.getElementById('case-select');
+    var exploreBtn = document.getElementById('explore-btn');
+
+    // Update map filter
+    filters.stormName = storm || 'all';
+    updateMarkers();
+
+    // Populate case dropdown
+    caseSelect.innerHTML = '';
+    if (!storm) {
+        caseSelect.innerHTML = '<option value="">\u2190 Select a storm first</option>';
+        caseSelect.disabled = true;
+        exploreBtn.disabled = true;
+        return;
+    }
+
+    caseSelect.disabled = false;
+    caseSelect.innerHTML = '<option value="">Choose a case\u2026</option>';
+    var cases = allData.cases.filter(function(c) { return c.storm_name === storm; });
+    cases.sort(function(a, b) { return a.datetime.localeCompare(b.datetime); });
+    cases.forEach(function(c) {
+        var opt = document.createElement('option');
+        opt.value = c.case_index;
+        var cat = getIntensityCategory(c.vmax_kt);
+        var vStr = c.vmax_kt !== null ? ' [' + cat + ', ' + c.vmax_kt + ' kt]' : '';
+        opt.textContent = c.datetime + vStr;
+        caseSelect.appendChild(opt);
+    });
+
+    // Zoom map to storm's extent
+    var lats = cases.map(function(c) { return c.latitude; });
+    var lons = cases.map(function(c) { return c.longitude; });
+    if (lats.length > 0) {
+        var bounds = L.latLngBounds(
+            [Math.min.apply(null, lats) - 2, Math.min.apply(null, lons) - 2],
+            [Math.max.apply(null, lats) + 2, Math.max.apply(null, lons) + 2]
+        );
+        map.fitBounds(bounds, { padding: [40, 40], animate: true });
+    }
+});
+
+// Case dropdown: enable explore button
+document.getElementById('case-select').addEventListener('change', function() {
+    document.getElementById('explore-btn').disabled = !this.value;
+});
+
+// Explore button
+function exploreCaseGo() {
+    var idx = parseInt(document.getElementById('case-select').value);
     if (isNaN(idx) || !allData) return;
-    const caseData = allData.cases.find(c => c.case_index === idx);
+    var caseData = allData.cases.find(function(c) { return c.case_index === idx; });
     if (!caseData) return;
     enterFocusMode(caseData);
     openSidePanel(caseData, true);
-});
+}
 
 // ── Side panel ───────────────────────────────────────────────
 function openSidePanel(caseData, fromQuickSelect) {
@@ -602,14 +655,18 @@ function updateTiltSlider() {
     var rf = document.getElementById('tilt-range-fill'); rf.style.left = (min/200*100)+'%'; rf.style.width = ((max-min)/200*100)+'%'; updateMarkers();
 }
 function updateYearFilter() { var min = parseInt(document.getElementById('min-year').value), max = parseInt(document.getElementById('max-year').value); if (min > max) { document.getElementById('min-year').value = max; min = max; } filters.minYear = min; filters.maxYear = max; updateMarkers(); }
-function updateStormFilter() { filters.stormName = document.getElementById('storm-filter').value; updateMarkers(); }
+function updateStormFilter() { filters.stormName = document.getElementById('storm-select').value || 'all'; updateMarkers(); }
 
 function resetFilters() {
     filters.minIntensity=0; filters.maxIntensity=200; document.getElementById('min-intensity').value=0; document.getElementById('max-intensity').value=200; updateIntensitySlider();
     filters.minVmaxChange=-100; filters.maxVmaxChange=85; document.getElementById('min-vmax-change').value=-100; document.getElementById('max-vmax-change').value=85; updateVmaxChangeSlider();
     filters.minTilt=0; filters.maxTilt=200; document.getElementById('min-tilt').value=0; document.getElementById('max-tilt').value=200; updateTiltSlider();
     filters.minYear=1997; filters.maxYear=2024; document.getElementById('min-year').value=1997; document.getElementById('max-year').value=2024;
-    filters.stormName='all'; document.getElementById('storm-filter').value='all'; updateMarkers();
+    filters.stormName='all'; document.getElementById('storm-select').value=''; updateMarkers();
+    // Also reset case dropdown
+    document.getElementById('case-select').innerHTML = '<option value="">\u2190 Select a storm first</option>';
+    document.getElementById('case-select').disabled = true;
+    document.getElementById('explore-btn').disabled = true;
 }
 
 function initializeFilters() {
@@ -621,7 +678,7 @@ function initializeFilters() {
     document.getElementById('max-tilt').addEventListener('input', updateTiltSlider);
     document.getElementById('min-year').addEventListener('change', updateYearFilter);
     document.getElementById('max-year').addEventListener('change', updateYearFilter);
-    document.getElementById('storm-filter').addEventListener('change', updateStormFilter);
+    // Storm filtering handled by two-step handler at top of file
     updateIntensitySlider(); updateVmaxChangeSlider(); updateTiltSlider();
 }
 
@@ -643,26 +700,8 @@ fetch('tc_radar_metadata.json')
         var years = data.cases.map(function(c) { return c.year; });
         document.getElementById('year-range').textContent = Math.min.apply(null, years) + '\u2013' + Math.max.apply(null, years);
 
-        var stormSelect = document.getElementById('storm-filter');
+        var stormSelect = document.getElementById('storm-select');
         Array.from(storms).sort().forEach(function(s) { var o = document.createElement('option'); o.value = s; o.textContent = s; stormSelect.appendChild(o); });
-
-        // Populate case quick-select dropdown
-        var caseSelect = document.getElementById('case-quick-select');
-        var byStorm = {};
-        data.cases.forEach(function(c) { if (!byStorm[c.storm_name]) byStorm[c.storm_name] = []; byStorm[c.storm_name].push(c); });
-        Object.keys(byStorm).sort().forEach(function(stormName) {
-            var optgroup = document.createElement('optgroup');
-            optgroup.label = stormName;
-            byStorm[stormName].sort(function(a,b) { return a.datetime.localeCompare(b.datetime); }).forEach(function(c) {
-                var opt = document.createElement('option');
-                opt.value = c.case_index;
-                var cat = getIntensityCategory(c.vmax_kt);
-                var vStr = c.vmax_kt !== null ? ' [' + cat + ', ' + c.vmax_kt + ' kt]' : '';
-                opt.textContent = c.datetime + vStr;
-                optgroup.appendChild(opt);
-            });
-            caseSelect.appendChild(optgroup);
-        });
 
         markers = L.markerClusterGroup({
             maxClusterRadius: 30, disableClusteringAtZoom: 10, spiderfyOnMaxZoom: true, showCoverageOnHover: false, zoomToBoundsOnClick: true,

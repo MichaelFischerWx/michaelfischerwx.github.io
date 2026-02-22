@@ -61,10 +61,9 @@
         .toolbar-select option { background: var(--navy); color: var(--text); }
         .toolbar-sep { width: 1px; height: 24px; background: var(--border-light); margin: 0 4px; }
 
-        .case-select-wrap { position: relative; flex: 0 1 340px; min-width: 200px; }
-        .case-select-wrap::before { content: '\01F52C'; position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 14px; pointer-events: none; z-index: 2; }
-        #case-quick-select { width: 100%; background: var(--navy-mid); color: var(--text); border: 1px solid var(--blue); border-radius: 6px; padding: 7px 10px 7px 32px; font-size: 0.82rem; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all 0.2s; box-shadow: 0 0 0 2px var(--blue-glow); }
-        #case-quick-select:focus { outline: none; border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(0,212,255,0.2); }
+        .toolbar-explore-btn { background: var(--blue); color: white; border: none; border-radius: 6px; padding: 6px 14px; font-size: 0.8rem; font-weight: 600; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+        .toolbar-explore-btn:hover { background: #1d4ed8; }
+        .toolbar-explore-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
         .toolbar-count { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--blue-light); white-space: nowrap; }
         .toolbar-reset { background: transparent; border: 1px solid var(--border-light); color: var(--slate); border-radius: 6px; padding: 5px 12px; font-size: 0.75rem; cursor: pointer; font-family: 'DM Sans', sans-serif; font-weight: 500; transition: all 0.2s; }
@@ -270,7 +269,8 @@
             .topbar-version { display: none; }
             #map-section { height: calc(100vh - 46px); min-height: 500px; }
             .map-toolbar { padding: 8px 12px; gap: 8px; }
-            .case-select-wrap { flex: 1 1 100%; min-width: 0; }
+            .toolbar-group { flex: 1 1 auto; min-width: 0; }
+            .toolbar-group .toolbar-select { width: 100%; min-width: 0 !important; }
             .toolbar-sep { display: none; }
             .filter-drawer.open { max-height: 400px; }
             .filter-grid { grid-template-columns: 1fr; }
@@ -322,14 +322,15 @@
 
     <section id="map-section">
         <div class="map-toolbar">
-            <div class="case-select-wrap">
-                <select id="case-quick-select" class="toolbar-select"><option value="">Select a case to explore&hellip;</option></select>
-            </div>
-            <div class="toolbar-sep"></div>
             <div class="toolbar-group">
                 <span class="toolbar-label">Storm</span>
-                <select id="storm-filter" class="toolbar-select" style="max-width:160px;"><option value="all">All Storms</option></select>
+                <select id="storm-select" class="toolbar-select" style="min-width:160px;"><option value="">All Storms</option></select>
             </div>
+            <div class="toolbar-group">
+                <span class="toolbar-label">Case</span>
+                <select id="case-select" class="toolbar-select" style="min-width:260px;" disabled><option value="">← Select a storm first</option></select>
+            </div>
+            <button class="toolbar-explore-btn" id="explore-btn" onclick="exploreCaseGo()" disabled>Explore →</button>
             <div class="toolbar-sep"></div>
             <button class="filter-toggle-btn" id="filter-toggle" onclick="toggleFilterDrawer()"><span style="font-size:13px;">&#9881;</span> Filters</button>
             <button class="toolbar-reset" onclick="resetFilters()">Reset</button>
