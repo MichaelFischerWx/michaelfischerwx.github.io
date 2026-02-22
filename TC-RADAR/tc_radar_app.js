@@ -482,6 +482,10 @@ function findDataMin(zData, xCoords, yCoords) {
     return { value: minVal, x: xCoords[minJ], y: yCoords[minI] };
 }
 
+function isWindVariable(varName) {
+    return varName && varName.toLowerCase().indexOf('wind') !== -1;
+}
+
 function buildMaxMarkerTrace(maxInfo, units) {
     if (!maxInfo) return null;
     return {
@@ -550,16 +554,21 @@ function renderPlotFromJSON(json, resultDiv) {
 
     // Max value marker + annotation
     var maxInfo = findDataMax(zData, x, y);
+    var maxTraces = [];
     if (maxInfo) {
         var maxAnnot = buildMaxAnnotation(maxInfo, varInfo.units, 'X', 'Y', 9);
         if (maxAnnot) {
             smallLayout.annotations = (smallLayout.annotations || []).concat([maxAnnot]);
             baseLayout.annotations = (baseLayout.annotations || []).concat([maxAnnot]);
         }
+        if (isWindVariable((document.getElementById('ep-var') || {}).value || '')) {
+            var maxMarker = buildMaxMarkerTrace(maxInfo, varInfo.units);
+            if (maxMarker) maxTraces.push(maxMarker);
+        }
     }
 
-    Plotly.newPlot('plotly-chart', [heatmap].concat(overlayTraces), smallLayout, config);
-    window._lastPlotlyData = { heatmap: heatmap, overlayTraces: overlayTraces, baseLayout: baseLayout, title: title, config: config };
+    Plotly.newPlot('plotly-chart', [heatmap].concat(overlayTraces).concat(maxTraces), smallLayout, config);
+    window._lastPlotlyData = { heatmap: heatmap, overlayTraces: overlayTraces, maxTraces: maxTraces, baseLayout: baseLayout, title: title, config: config };
     var csBtn = document.getElementById('cs-btn'); if (csBtn) csBtn.disabled = false;
     var azBtn = document.getElementById('az-btn'); if (azBtn) azBtn.disabled = false;
     document.getElementById('plotly-chart').on('plotly_click', handlePlotClick);
@@ -650,12 +659,17 @@ function renderCrossSectionInto(targetId, json, fullsize) {
 
     // Max value marker + annotation for cross-section
     var csMaxInfo = findDataMax(csData, distance_km, height_km);
+    var csMaxTraces = [];
     if (csMaxInfo) {
         var csMaxAnnot = buildMaxAnnotation(csMaxInfo, varInfo.units, 'Dist', 'Z', fullsize ? 10 : 8);
         if (csMaxAnnot) layout.annotations = (layout.annotations || []).concat([csMaxAnnot]);
+        if (isWindVariable((document.getElementById('ep-var') || {}).value || '')) {
+            var csMaxMarker = buildMaxMarkerTrace(csMaxInfo, varInfo.units);
+            if (csMaxMarker) csMaxTraces.push(csMaxMarker);
+        }
     }
 
-    Plotly.newPlot(targetId, [heatmap].concat(csOverlayTraces), layout, { responsive: true, displayModeBar: fullsize, displaylogo: false, modeBarButtonsToRemove: ['lasso2d','select2d','toggleSpikelines'] });
+    Plotly.newPlot(targetId, [heatmap].concat(csOverlayTraces).concat(csMaxTraces), layout, { responsive: true, displayModeBar: fullsize, displaylogo: false, modeBarButtonsToRemove: ['lasso2d','select2d','toggleSpikelines'] });
 }
 
 // ── Azimuthal Mean ─────────────────────────────────────────────
@@ -702,20 +716,25 @@ function renderAzimuthalMeanInto(targetId, json, fullsize) {
 
     // Max value marker + annotation for azimuthal mean
     var azMaxInfo = findDataMax(azData, radius_km, height_km);
+    var azMaxTraces = [];
     if (azMaxInfo) {
         var azMaxAnnot = buildMaxAnnotation(azMaxInfo, varInfo.units, 'R', 'Z', fullsize ? 10 : 8);
         if (azMaxAnnot) layout.annotations = (layout.annotations || []).concat([azMaxAnnot]);
+        if (isWindVariable((document.getElementById('ep-var') || {}).value || '')) {
+            var azMaxMarker = buildMaxMarkerTrace(azMaxInfo, varInfo.units);
+            if (azMaxMarker) azMaxTraces.push(azMaxMarker);
+        }
     }
 
     if (!fullsize) {
         var thumbWrap = document.getElementById('thumbnail-wrap');
         if (thumbWrap) thumbWrap.style.display = 'none';
         el.innerHTML = '<div style="position:relative;"><div id="az-chart" style="width:100%;height:340px;border-radius:6px;overflow:hidden;"></div><button onclick="openPlotModal()" title="Expand to fullscreen" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">\u26F6</button></div><div style="font-size:11px;color:var(--slate);text-align:center;margin-top:4px;">Hover \u00b7 zoom \u00b7 pan \u00b7 \u26F6 expand</div>';
-        Plotly.newPlot('az-chart', [heatmap].concat(azOverlayTraces), layout, { responsive:true,displayModeBar:false,displaylogo:false });
+        Plotly.newPlot('az-chart', [heatmap].concat(azOverlayTraces).concat(azMaxTraces), layout, { responsive:true,displayModeBar:false,displaylogo:false });
         var panelInner = document.getElementById('side-panel-inner');
         if (panelInner) panelInner.scrollTop = 0;
     } else {
-        Plotly.newPlot(targetId, [heatmap].concat(azOverlayTraces), layout, { responsive:true,displayModeBar:true,displaylogo:false,modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
+        Plotly.newPlot(targetId, [heatmap].concat(azOverlayTraces).concat(azMaxTraces), layout, { responsive:true,displayModeBar:true,displaylogo:false,modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
     }
 }
 
@@ -912,7 +931,7 @@ function openPlotModal(csJson) {
         });
     }
     var fullHeatmap = Object.assign({}, d.heatmap, { colorbar: Object.assign({}, d.heatmap.colorbar, { title: { text: d.heatmap.colorbar.title.text, font: { color: '#ccc', size: 13 } }, tickfont: { color: '#ccc', size: 11 }, thickness: 16, len: 0.85 }) });
-    Plotly.newPlot('plotly-fullscreen', [fullHeatmap].concat(d.overlayTraces||[]), fullLayout, d.config);
+    Plotly.newPlot('plotly-fullscreen', [fullHeatmap].concat(d.overlayTraces||[]).concat(d.maxTraces||[]), fullLayout, d.config);
     if (hasCrossSection) renderCrossSectionInto('cs-fullscreen', csJson, true);
     if (hasAzMean) renderAzimuthalMeanInto('az-fullscreen', _lastAzJson, true);
 }
