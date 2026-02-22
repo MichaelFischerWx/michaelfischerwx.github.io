@@ -1133,6 +1133,7 @@
                 .then(json => {
                     _lastAzJson = json;
                     renderAzimuthalMeanInto('az-result', json, false);
+                    openPlotModal();  // auto-expand to fullscreen
                 })
                 .catch(err => {
                     const msg = err.name === 'AbortError'
