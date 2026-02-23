@@ -361,6 +361,11 @@ function generateCustomPlot(callback) {
     var resultDiv = document.getElementById('ep-result');
     var btn = document.getElementById('ep-btn');
     btn.disabled = true; btn.textContent = 'Generating\u2026';
+    // Clear previous az/sq/cs results so stale data from a different variable doesn't persist
+    var azResult = document.getElementById('az-result'); if (azResult) azResult.innerHTML = '';
+    var sqResult = document.getElementById('sq-result'); if (sqResult) sqResult.innerHTML = '';
+    var csResult = document.getElementById('cs-result'); if (csResult) csResult.innerHTML = '';
+    var csStatus = document.getElementById('cs-status'); if (csStatus) csStatus.textContent = '';
     if (!_animPlaying) {
         var thumbWrap = document.getElementById('thumbnail-wrap');
         if (thumbWrap) thumbWrap.style.display = 'none';
