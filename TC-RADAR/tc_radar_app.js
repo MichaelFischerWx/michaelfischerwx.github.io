@@ -383,7 +383,7 @@ function generateCustomPlot(callback) {
         var panelInner = document.getElementById('side-panel-inner');
         if (panelInner) panelInner.scrollTop = 0;
     }
-    var cacheKey = currentCaseIndex + '_' + variable + '_' + level_km + '_' + overlay;
+    var cacheKey = _activeDataType + '_' + currentCaseIndex + '_' + variable + '_' + level_km + '_' + overlay;
     if (_dataCache[cacheKey]) {
         renderPlotFromJSON(_dataCache[cacheKey], resultDiv);
         btn.disabled = false; btn.textContent = 'Generate Plot';
