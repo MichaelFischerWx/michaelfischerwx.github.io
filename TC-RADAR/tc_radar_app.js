@@ -462,6 +462,62 @@ function resetColorRange() {
     }
 }
 
+// ── Composite colormap / color range helpers ─────────────────
+var _compDefaultColorscale = null;
+var _compDefaultVmin = null;
+var _compDefaultVmax = null;
+
+function _getCompColorscale(fallback) {
+    var sel = document.getElementById('comp-cmap');
+    if (sel && sel.value) { try { return JSON.parse(sel.value); } catch(e) { return sel.value; } }
+    return fallback;
+}
+function _getCompVmin(fallback) { var inp = document.getElementById('comp-vmin'); if (inp && inp.value !== '') return parseFloat(inp.value); return fallback; }
+function _getCompVmax(fallback) { var inp = document.getElementById('comp-vmax'); if (inp && inp.value !== '') return parseFloat(inp.value); return fallback; }
+
+function applyCompCmap() {
+    var sel = document.getElementById('comp-cmap'); if (!sel) return;
+    var cs = sel.value;
+    if (!cs && _compDefaultColorscale) cs = _compDefaultColorscale; if (!cs) return;
+    var colorscale; try { colorscale = JSON.parse(cs); } catch(e) { colorscale = cs; }
+    ['comp-az-chart','comp-sq-chart'].forEach(function(id) {
+        var plotDiv = document.getElementById(id);
+        if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
+        // Restyle all heatmap traces (quadrant view has 4)
+        var indices = plotDiv.data.map(function(_,i){return i;});
+        var csArr = indices.map(function(){return colorscale;});
+        Plotly.restyle(plotDiv, { colorscale: csArr }, indices);
+    });
+}
+
+function applyCompColorRange() {
+    var zmin = _getCompVmin(_compDefaultVmin), zmax = _getCompVmax(_compDefaultVmax);
+    if (zmin === null || zmax === null) return;
+    ['comp-az-chart','comp-sq-chart'].forEach(function(id) {
+        var plotDiv = document.getElementById(id);
+        if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
+        var indices = plotDiv.data.map(function(_,i){return i;});
+        var zminArr = indices.map(function(){return zmin;});
+        var zmaxArr = indices.map(function(){return zmax;});
+        Plotly.restyle(plotDiv, { zmin: zminArr, zmax: zmaxArr }, indices);
+    });
+}
+
+function resetCompColorRange() {
+    var vminInput = document.getElementById('comp-vmin'), vmaxInput = document.getElementById('comp-vmax');
+    if (vminInput) vminInput.value = ''; if (vmaxInput) vmaxInput.value = '';
+    if (_compDefaultVmin !== null && _compDefaultVmax !== null) {
+        ['comp-az-chart','comp-sq-chart'].forEach(function(id) {
+            var plotDiv = document.getElementById(id);
+            if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
+            var indices = plotDiv.data.map(function(_,i){return i;});
+            var zminArr = indices.map(function(){return _compDefaultVmin;});
+            var zmaxArr = indices.map(function(){return _compDefaultVmax;});
+            Plotly.restyle(plotDiv, { zmin: zminArr, zmax: zmaxArr }, indices);
+        });
+    }
+}
+
 // ── Max value helper ─────────────────────────────────────────
 function findDataMax(zData, xCoords, yCoords) {
     var maxVal = -Infinity, maxI = 0, maxJ = 0;
@@ -1402,6 +1458,23 @@ function initCompositePanel() {
                             '<span id="comp-cov-val" style="font-size:11px;font-weight:600;color:var(--cyan);min-width:32px;font-family:\'JetBrains Mono\',monospace;">50%</span>' +
                         '</div>' +
                     '</div>' +
+                    '<div class="comp-section-title" style="margin-top:14px;">\uD83C\uDFA8 Display</div>' +
+                    '<div class="comp-filter-row"><label>Colormap</label>' +
+                        '<select class="explorer-select" id="comp-cmap" style="font-size:11px;" onchange="applyCompCmap()">' +
+                            '<option value="">Default (from variable)</option>' +
+                            '<optgroup label="Sequential"><option value="Viridis">Viridis</option><option value="Inferno">Inferno</option><option value="Magma">Magma</option><option value="Plasma">Plasma</option><option value="Cividis">Cividis</option><option value="Hot">Hot</option><option value="YlOrRd">YlOrRd</option><option value="YlGnBu">YlGnBu</option><option value="Blues">Blues</option><option value="Reds">Reds</option><option value="Greys">Greys</option></optgroup>' +
+                            '<optgroup label="Diverging"><option value="RdBu">RdBu (red-blue)</option><option value=\'[[0,"rgb(5,10,172)"],[0.5,"rgb(255,255,255)"],[1,"rgb(178,10,28)"]]\'>BuWtRd (blue-white-red)</option><option value="Picnic">Picnic</option><option value="Portland">Portland</option></optgroup>' +
+                            '<optgroup label="Other"><option value="Jet">Jet</option><option value="Rainbow">Rainbow</option><option value="Electric">Electric</option><option value="Earth">Earth</option><option value="Blackbody">Blackbody</option></optgroup>' +
+                        '</select>' +
+                    '</div>' +
+                    '<div class="comp-filter-row"><label>Color Range</label>' +
+                        '<div style="display:flex;align-items:center;gap:4px;">' +
+                            '<input type="number" id="comp-vmin" placeholder="min" step="any" style="width:60px;padding:2px 4px;font-size:10px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);color:var(--text);" onchange="applyCompColorRange()">' +
+                            '<span style="font-size:10px;color:var(--slate);">to</span>' +
+                            '<input type="number" id="comp-vmax" placeholder="max" step="any" style="width:60px;padding:2px 4px;font-size:10px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);color:var(--text);" onchange="applyCompColorRange()">' +
+                            '<button onclick="resetCompColorRange()" title="Reset to default" style="padding:2px 5px;font-size:9px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);cursor:pointer;color:var(--slate);">\u21BA</button>' +
+                        '</div>' +
+                    '</div>' +
                     '<div class="comp-section-title" style="margin-top:14px;">\uD83D\uDD0D Filter Criteria</div>' +
                     _buildRangeRow('Intensity', 'comp-int', 0, 200, 5, 0, 200, 'kt') +
                     _buildRangeRow('24-h \u0394V<sub>max</sub>', 'comp-dv', -100, 85, 5, -100, 85, 'kt') +
@@ -1567,9 +1640,17 @@ function renderCompositeAzMeanInto(targetId, json, filters) {
     var isNorm = json.normalized;
     var rLabel = isNorm ? 'R / RMW' : 'Radius (km)';
     var fontSize = { title:14, axis:12, tick:10, cbar:12, cbarTick:10, hover:13 };
+    // Store defaults and update placeholders
+    _compDefaultColorscale = varInfo.colorscale; _compDefaultVmin = varInfo.vmin; _compDefaultVmax = varInfo.vmax;
+    var vminInp = document.getElementById('comp-vmin'), vmaxInp = document.getElementById('comp-vmax');
+    if (vminInp) vminInp.placeholder = varInfo.vmin; if (vmaxInp) vmaxInp.placeholder = varInfo.vmax;
+    // Apply user overrides
+    var activeColorscale = _getCompColorscale(varInfo.colorscale);
+    var activeVmin = _getCompVmin(varInfo.vmin);
+    var activeVmax = _getCompVmax(varInfo.vmax);
     var heatmap = {
         z: azData, x: radius, y: height_km, type: 'heatmap',
-        colorscale: varInfo.colorscale, zmin: varInfo.vmin, zmax: varInfo.vmax,
+        colorscale: activeColorscale, zmin: activeVmin, zmax: activeVmax,
         colorbar: { title: { text: varInfo.units, font: { color:'#ccc', size:fontSize.cbar } }, tickfont: { color:'#ccc', size:fontSize.cbarTick }, thickness:14, len:0.85 },
         hovertemplate: '<b>' + varInfo.display_name + '</b>: %{z:.2f} ' + varInfo.units + '<br>' + rLabel + ': %{x:.2f}<br>Height: %{y:.1f} km<extra></extra>',
         hoverongaps: false
@@ -1608,7 +1689,13 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
     var isNorm = json.normalized;
     var rLabel = isNorm ? 'R / RMW' : 'Radius (km)';
     var fontSize = { title:14, axis:11, tick:10, cbar:11, cbarTick:10, hover:12, panel:12 };
-    var zmin = varInfo.vmin, zmax = varInfo.vmax;
+    // Store defaults and update placeholders
+    _compDefaultColorscale = varInfo.colorscale; _compDefaultVmin = varInfo.vmin; _compDefaultVmax = varInfo.vmax;
+    var vminInp = document.getElementById('comp-vmin'), vmaxInp = document.getElementById('comp-vmax');
+    if (vminInp) vminInp.placeholder = varInfo.vmin; if (vmaxInp) vmaxInp.placeholder = varInfo.vmax;
+    // Apply user overrides
+    var activeColorscale = _getCompColorscale(varInfo.colorscale);
+    var zmin = _getCompVmin(varInfo.vmin), zmax = _getCompVmax(varInfo.vmax);
 
     var panelOrder = [
         { key:'USL', label:'Upshear Left', row:0, col:0 },
@@ -1633,7 +1720,7 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
         var showCbar = (i === 1);
         traces.push({
             z:qData.data, x:radius, y:height_km, type:'heatmap',
-            colorscale:varInfo.colorscale, zmin:zmin, zmax:zmax,
+            colorscale:activeColorscale, zmin:zmin, zmax:zmax,
             xaxis:'x'+axSuffix, yaxis:'y'+axSuffix,
             showscale:showCbar,
             colorbar: showCbar ? { title:{text:varInfo.units,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:14, len:0.85, x:1.02, y:0.5 } : undefined,
