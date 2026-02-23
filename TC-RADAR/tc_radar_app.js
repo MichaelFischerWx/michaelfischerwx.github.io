@@ -377,22 +377,12 @@ function _renderHurricaneFrame(phase, W, H) {
             var dx = (col - cx) / asp;
             var dy = -(row - cy);
             var dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < 0.3 || dist > 8.5) continue;
+            if (dist < 0.5 || dist > 8.5) continue;
 
             var angle = Math.atan2(dy, dx);
             if (angle < 0) angle += 2 * Math.PI;
 
-            // Eyewall: nearly complete ring
-            if (dist >= 0.6 && dist <= 2.2) {
-                var flowAngle = angle + Math.PI / 2;
-                if (flowAngle < 0) flowAngle += 2 * Math.PI;
-                var dirIdx = Math.round(flowAngle / (Math.PI / 4)) % 8;
-                grid[row][col] = chars[dirIdx];
-                bright[row][col] = 3;
-                continue;
-            }
-
-            // Outer rainbands: spiral arms with moats between them
+            // Unified spiral: eyewall and rainbands share the same arms
             var a = 0.65;
             var nArms = 3;
             var minDist = Infinity;
@@ -406,18 +396,26 @@ function _renderHurricaneFrame(phase, W, H) {
                 if (arcDist < minDist) minDist = arcDist;
             }
 
+            // Band width: very wide at eyewall (nearly closed ring), tapering to thin outer bands
             var bandWidth;
-            if (dist < 4.0) bandWidth = 0.65;
+            if (dist < 2.3) bandWidth = dist * 0.95;
+            else if (dist < 4.0) bandWidth = 0.65;
             else if (dist < 6.0) bandWidth = 0.50;
             else bandWidth = 0.38;
 
             if (minDist < bandWidth) {
-                var flowAngle2 = angle + Math.atan2(1, a / dist) + Math.PI;
-                if (flowAngle2 < 0) flowAngle2 += 2 * Math.PI;
-                var dirIdx2 = Math.round(flowAngle2 / (Math.PI / 4)) % 8;
-                var b2 = dist < 4.0 ? 2 : 1;
-                grid[row][col] = chars[dirIdx2];
-                bright[row][col] = b2;
+                // Flow characters: tangential at eyewall, spiral tangent for outer bands
+                var flowAngle;
+                if (dist < 2.3) {
+                    flowAngle = angle + Math.PI / 2;
+                } else {
+                    flowAngle = angle + Math.atan2(1, a / dist) + Math.PI;
+                }
+                if (flowAngle < 0) flowAngle += 2 * Math.PI;
+                var dirIdx = Math.round(flowAngle / (Math.PI / 4)) % 8;
+                var bv = dist < 2.3 ? 3 : dist < 4.0 ? 2 : 1;
+                grid[row][col] = chars[dirIdx];
+                bright[row][col] = bv;
             }
         }
     }
@@ -442,11 +440,11 @@ function _renderHurricaneFrame(phase, W, H) {
         var line = '';
         var curBright = 0;
         for (c = 0; c < W; c++) {
-            var bv = bright[r][c];
-            if (bv !== curBright) {
+            var b2 = bright[r][c];
+            if (b2 !== curBright) {
                 if (curBright > 0) line += '</span>';
-                if (bv > 0) line += '<span style="color:' + colors[bv] + '">';
-                curBright = bv;
+                if (b2 > 0) line += '<span style="color:' + colors[b2] + '">';
+                curBright = b2;
             }
             line += grid[r][c];
         }
