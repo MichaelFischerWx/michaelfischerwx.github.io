@@ -264,7 +264,7 @@ function openSidePanel(caseData, fromQuickSelect) {
                     '</div>' +
                 '</div>' +
                 '<button class="generate-btn" id="ep-btn" onclick="generateCustomPlot()">Generate Plot</button>' +
-                '<div class="explorer-row" id="az-controls" style="margin-top:6px;"><label>Az. Mean Coverage</label>' +
+                '<div class="explorer-row" id="az-controls" style="margin-top:6px;"><label>Min. Coverage Threshold</label>' +
                     '<div style="display:flex;align-items:center;gap:6px;">' +
                         '<input type="range" id="az-coverage" min="0" max="100" step="5" value="50" class="az-cov-slider" oninput="document.getElementById(\'az-cov-val\').textContent = this.value+\'%\'">' +
                         '<span style="font-size:11px;font-weight:600;color:var(--cyan);min-width:32px;font-family:\'JetBrains Mono\',monospace;" id="az-cov-val">50%</span>' +
@@ -574,15 +574,13 @@ function renderPlotFromJSON(json, resultDiv) {
         }
     }
 
-    // Shear vector inset
+    // Shear vector inset (small panel only; fullscreen builds its own in openPlotModal)
     var shearInset = buildShearInset(_currentSddc, false);
     if (shearInset.shapes.length) {
         smallLayout.shapes = (smallLayout.shapes || []).concat(shearInset.shapes);
-        baseLayout.shapes = (baseLayout.shapes || []).concat(shearInset.shapes);
     }
     if (shearInset.annotations.length) {
         smallLayout.annotations = (smallLayout.annotations || []).concat(shearInset.annotations);
-        baseLayout.annotations = (baseLayout.annotations || []).concat(shearInset.annotations);
     }
 
     Plotly.newPlot('plotly-chart', [heatmap].concat(overlayTraces).concat(maxTraces), smallLayout, config);
@@ -864,7 +862,7 @@ function fetchShearQuadrants() {
         .then(function(json) {
             _lastSqJson = json;
             if (json.case_meta && json.case_meta.sddc !== undefined) _currentSddc = (json.case_meta.sddc !== 9999) ? json.case_meta.sddc : null;
-            renderQuadrantMeansInto('sq-result', json, false);
+            resultDiv.innerHTML = '<div class="explorer-status" style="color:#10b981;">\u2713 Shear quadrants ready \u2014 opening expanded view</div>';
             openPlotModal();
         })
         .catch(function(err) { resultDiv.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + (err.name === 'AbortError' ? 'Request timed out (90s).' : err.message) + '</div>'; })
@@ -1286,13 +1284,10 @@ function openPlotModal(csJson) {
             return Object.assign({}, a, { font: Object.assign({}, a.font, { size: 11 }) });
         });
     }
-    // Scale up shear inset shapes for fullscreen
+    // Add fullscreen-scaled shear inset (baseLayout has no shear shapes)
     var fsShearInset = buildShearInset(_currentSddc, true);
-    if (fsShearInset.shapes.length) fullLayout.shapes = (fullLayout.shapes || []).filter(function(s){return !s._shearInset;}).concat(fsShearInset.shapes);
-    if (fsShearInset.annotations.length) {
-        var nonShear = (fullLayout.annotations || []).filter(function(a){return a.text && a.text.indexOf('SHR') === -1 && a.text.indexOf('\u00b0') === -1 || !a.text;});
-        fullLayout.annotations = nonShear.concat(fsShearInset.annotations);
-    }
+    if (fsShearInset.shapes.length) fullLayout.shapes = (fullLayout.shapes || []).concat(fsShearInset.shapes);
+    if (fsShearInset.annotations.length) fullLayout.annotations = (fullLayout.annotations || []).concat(fsShearInset.annotations);
     var fullHeatmap = Object.assign({}, d.heatmap, { colorbar: Object.assign({}, d.heatmap.colorbar, { title: { text: d.heatmap.colorbar.title.text, font: { color: '#ccc', size: 13 } }, tickfont: { color: '#ccc', size: 11 }, thickness: 16, len: 0.85 }) });
     Plotly.newPlot('plotly-fullscreen', [fullHeatmap].concat(d.overlayTraces||[]).concat(d.maxTraces||[]), fullLayout, d.config);
     if (hasCrossSection) renderCrossSectionInto('cs-fullscreen', csJson, true);
