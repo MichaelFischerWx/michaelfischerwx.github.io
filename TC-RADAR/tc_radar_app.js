@@ -1463,6 +1463,23 @@ function _updateOriginalVarGroup(idPrefix, dataType) {
     }
 }
 
+function _updateCompOverlayOriginalGroup(dataType) {
+    var og = document.getElementById('comp-overlay-original');
+    if (!og) return;
+    var defs = _originalVarDefs[dataType] || _originalVarDefs.swath;
+    og.label = dataType === 'merge' ? 'Original Merged' : 'Original Swath';
+    og.innerHTML = '';
+    defs.forEach(function(d) {
+        var opt = document.createElement('option');
+        opt.value = d.value; opt.textContent = d.label;
+        og.appendChild(opt);
+    });
+    var sel = document.getElementById('comp-overlay');
+    if (sel && sel.selectedOptions.length && sel.selectedOptions[0].parentElement === og) {
+        sel.value = '';  // reset to None
+    }
+}
+
 function _buildRangeRow(label, idBase, min, max, step, defaultMin, defaultMax, units) {
     return '<div class="comp-filter-row"><label>' + label + '</label>' +
         '<div class="comp-range-inputs">' +
@@ -1500,6 +1517,37 @@ function initCompositePanel() {
                         '<div style="display:flex;align-items:center;gap:6px;">' +
                             '<input type="range" id="comp-coverage" min="0" max="100" step="5" value="50" class="az-cov-slider" oninput="document.getElementById(\'comp-cov-val\').textContent=this.value+\'%\'">' +
                             '<span id="comp-cov-val" style="font-size:11px;font-weight:600;color:var(--cyan);min-width:32px;font-family:\'JetBrains Mono\',monospace;">50%</span>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="comp-filter-row"><label>Contour Overlay</label>' +
+                        '<select class="explorer-select" id="comp-overlay" style="font-size:11px;">' +
+                            '<option value="">None</option>' +
+                            '<optgroup label="WCM Recentered (2 km)">' +
+                                '<option value="recentered_tangential_wind">Tangential Wind</option>' +
+                                '<option value="recentered_radial_wind">Radial Wind</option>' +
+                                '<option value="recentered_upward_air_velocity">Vertical Velocity</option>' +
+                                '<option value="recentered_reflectivity">Reflectivity</option>' +
+                                '<option value="recentered_wind_speed">Wind Speed</option>' +
+                                '<option value="recentered_relative_vorticity">Relative Vorticity</option>' +
+                                '<option value="recentered_divergence">Divergence</option>' +
+                            '</optgroup>' +
+                            '<optgroup label="Tilt-Relative">' +
+                                '<option value="total_recentered_tangential_wind">Tangential Wind</option>' +
+                                '<option value="total_recentered_radial_wind">Radial Wind</option>' +
+                                '<option value="total_recentered_upward_air_velocity">Vertical Velocity</option>' +
+                                '<option value="total_recentered_reflectivity">Reflectivity</option>' +
+                                '<option value="total_recentered_wind_speed">Wind Speed</option>' +
+                            '</optgroup>' +
+                            '<optgroup label="Original Swath" id="comp-overlay-original">' +
+                                '<option value="swath_tangential_wind">Tangential Wind</option>' +
+                                '<option value="swath_radial_wind">Radial Wind</option>' +
+                                '<option value="swath_reflectivity">Reflectivity</option>' +
+                                '<option value="swath_wind_speed">Wind Speed</option>' +
+                            '</optgroup>' +
+                        '</select>' +
+                        '<div style="display:flex;align-items:center;gap:5px;margin-top:2px;">' +
+                            '<label style="font-size:9px;white-space:nowrap;margin:0;">Int:</label>' +
+                            '<input type="number" id="comp-contour-int" value="" placeholder="auto" style="width:55px;padding:2px 4px;font-size:10px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);color:var(--text);">' +
                         '</div>' +
                     '</div>' +
                     '<div class="comp-section-title" style="margin-top:14px;">\uD83C\uDFA8 Display</div>' +
@@ -1563,6 +1611,7 @@ function initCompositePanel() {
         dtypeSelect.addEventListener('change', function() {
             var varType = this.value === 'merge' ? 'merge' : 'swath';
             _updateOriginalVarGroup('comp', varType);
+            _updateCompOverlayOriginalGroup(varType);
             _debouncedCompositeCount();
         });
     }
@@ -1723,6 +1772,54 @@ function _showCompStatus(cls, msg) {
     el.style.display = 'block';
 }
 
+// ── Composite overlay contour helpers ─────────────────────────
+function _compContourInterval(ovData) {
+    var intInput = document.getElementById('comp-contour-int');
+    var interval = intInput ? parseFloat(intInput.value) : NaN;
+    if (isNaN(interval) || interval <= 0) {
+        var flat = ovData.flat().filter(function(v) { return v !== null && !isNaN(v); });
+        if (flat.length === 0) return 1;
+        var mn = Infinity, mx = -Infinity;
+        for (var i = 0; i < flat.length; i++) { if (flat[i] < mn) mn = flat[i]; if (flat[i] > mx) mx = flat[i]; }
+        interval = parseFloat(((mx - mn) / 10).toPrecision(1));
+        if (!isFinite(interval) || interval <= 0) interval = (mx - mn) / 10 || 1;
+    }
+    return interval;
+}
+
+function buildCompAzOverlayContours(json, radius, height_km) {
+    if (!json.overlay) return [];
+    var ov = json.overlay; var ovData = ov.azimuthal_mean; if (!ovData) return [];
+    try {
+        var interval = _compContourInterval(ovData);
+        var baseContour = { z: ovData, x: radius, y: height_km, type: 'contour', showscale: false, hoverongaps: false, contours: { coloring: 'none', showlabels: true, labelfont: { size: 9, color: 'rgba(255,255,255,0.8)' } } };
+        var traces = [];
+        if (ov.vmax > interval) traces.push(Object.assign({}, baseContour, { contours: Object.assign({}, baseContour.contours, { start: interval, end: ov.vmax, size: interval }), line: { color: 'rgba(0,0,0,0.7)', width: 1.2, dash: 'solid' }, hovertemplate: '<b>' + ov.display_name + '</b>: %{z:.2f} ' + ov.units + '<extra>contour</extra>', name: ov.display_name + ' (+)', showlegend: false }));
+        if (ov.vmin < -interval) traces.push(Object.assign({}, baseContour, { contours: Object.assign({}, baseContour.contours, { start: ov.vmin, end: -interval, size: interval }), line: { color: 'rgba(0,0,0,0.7)', width: 1.2, dash: 'dash' }, hovertemplate: '<b>' + ov.display_name + '</b>: %{z:.2f} ' + ov.units + '<extra>contour</extra>', name: ov.display_name + ' (\u2212)', showlegend: false }));
+        return traces;
+    } catch (e) { console.warn('Composite az overlay error:', e); return []; }
+}
+
+function buildCompQuadOverlayContours(json, radius, height_km, panelOrder) {
+    if (!json.overlay || !json.overlay.quadrant_means) return [];
+    var ov = json.overlay; var traces = [];
+    try {
+        // Use first available quadrant data for interval calc
+        var firstQ = null;
+        for (var k in ov.quadrant_means) { if (ov.quadrant_means[k] && ov.quadrant_means[k].data) { firstQ = ov.quadrant_means[k].data; break; } }
+        if (!firstQ) return [];
+        var interval = _compContourInterval(firstQ);
+        panelOrder.forEach(function(p, i) {
+            var ovQ = ov.quadrant_means[p.key]; if (!ovQ || !ovQ.data) return;
+            var axSuffix = i === 0 ? '' : String(i + 1);
+            var baseContour = { z: ovQ.data, x: radius, y: height_km, type: 'contour', xaxis: 'x' + axSuffix, yaxis: 'y' + axSuffix, showscale: false, hoverongaps: false, contours: { coloring: 'none', showlabels: true, labelfont: { size: 8, color: 'rgba(255,255,255,0.7)' } } };
+            if (ov.vmax > interval) traces.push(Object.assign({}, baseContour, { contours: Object.assign({}, baseContour.contours, { start: interval, end: ov.vmax, size: interval }), line: { color: 'rgba(0,0,0,0.6)', width: 1, dash: 'solid' }, showlegend: false }));
+            if (ov.vmin < -interval) traces.push(Object.assign({}, baseContour, { contours: Object.assign({}, baseContour.contours, { start: ov.vmin, end: -interval, size: interval }), line: { color: 'rgba(0,0,0,0.6)', width: 1, dash: 'dash' }, showlegend: false }));
+        });
+        return traces;
+    } catch (e) { console.warn('Composite quad overlay error:', e); return []; }
+}
+
 function renderCompositeAzMeanInto(targetId, json, filters) {
     var el = document.getElementById(targetId); if (!el) return;
     var azData = json.azimuthal_mean, radius = json.radius_rrmw, height_km = json.height_km, varInfo = json.variable;
@@ -1749,8 +1846,9 @@ function renderCompositeAzMeanInto(targetId, json, filters) {
     var dtypeLabel = (document.getElementById('comp-dtype') && document.getElementById('comp-dtype').value === 'merge') ? ' (Merge)' : '';
     var meanVmax = _computeCompositeMeanVmax(filters);
     var vmaxNote = meanVmax !== null ? ' | Mean V<sub>max</sub>=' + meanVmax + ' kt' : '';
+    var overlayLabel = json.overlay ? '<br><span style="font-size:0.85em;color:#9ca3af;">Contours: ' + json.overlay.display_name + ' (' + json.overlay.units + ')</span>' : '';
     var title = _compositeFilterSummary(filters, json.n_cases) + vmaxNote + rmwNote +
-               '<br>Azimuthal Mean: ' + varInfo.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
+               '<br>Azimuthal Mean: ' + varInfo.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)' + overlayLabel;
     var plotBg = '#0a1628';
     var shapes = [];
     // RMW reference line at R/RMW = 1
@@ -1760,7 +1858,7 @@ function renderCompositeAzMeanInto(targetId, json, filters) {
         paper_bgcolor: plotBg, plot_bgcolor: plotBg,
         xaxis: { title: { text:rLabel, font:{color:'#aaa',size:fontSize.axis} }, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
         yaxis: { title: { text:'Height (km)', font:{color:'#aaa',size:fontSize.axis} }, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
-        margin: { l:55, r:24, t:80, b:46 }, shapes: shapes,
+        margin: { l:55, r:24, t: json.overlay ? 96 : 80, b:46 }, shapes: shapes,
         hoverlabel: { bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
         showlegend: false
     };
@@ -1769,9 +1867,10 @@ function renderCompositeAzMeanInto(targetId, json, filters) {
         var maxAnnot = buildMaxAnnotation(maxInfo, varInfo.units, isNorm ? 'R/RMW' : 'R', 'Z', 10);
         if (maxAnnot) layout.annotations = (layout.annotations || []).concat([maxAnnot]);
     }
+    var compAzOverlay = buildCompAzOverlayContours(json, radius, height_km);
     el.style.display = 'block';
     el.innerHTML = '<div id="comp-az-chart" style="width:100%;height:500px;border-radius:8px;overflow:hidden;"></div>';
-    Plotly.newPlot('comp-az-chart', [heatmap], layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
+    Plotly.newPlot('comp-az-chart', [heatmap].concat(compAzOverlay), layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
 }
 
 function renderCompositeQuadMeanInto(targetId, json, filters) {
@@ -1844,6 +1943,8 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
     var vmaxNote = meanVmax !== null ? ' | Mean V<sub>max</sub>=' + meanVmax + ' kt' : '';
     var title = _compositeFilterSummary(filters, json.n_cases) + vmaxNote + rmwNote +
                '<br>Shear-Relative Quadrant Mean: ' + varInfo.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
+    var overlayLabel = json.overlay ? '<br><span style="font-size:0.85em;color:#9ca3af;">Contours: ' + json.overlay.display_name + ' (' + json.overlay.units + ')</span>' : '';
+    title += overlayLabel;
 
     var plotBg = '#0a1628';
     var layoutAxes = {};
@@ -1858,10 +1959,12 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
         layoutAxes['yaxis' + axSuffix] = { domain:[yBottom,yTop], title:showYLabel?{text:'Height (km)',font:{color:'#aaa',size:fontSize.axis}}:undefined, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false, anchor:'x'+axSuffix };
     });
 
+    var compQuadOverlay = buildCompQuadOverlayContours(json, radius, height_km, panelOrder);
+
     var layout = Object.assign({
         title:{ text:title, font:{color:'#e5e7eb',size:fontSize.title}, y:0.99, x:0.5, xanchor:'center' },
         paper_bgcolor:plotBg, plot_bgcolor:plotBg,
-        margin:{ l:50, r:60, t:86, b:50 },
+        margin:{ l:50, r:60, t: json.overlay ? 100 : 86, b:50 },
         annotations:annotations, shapes:shapes.concat(shearInset.shapes || []),
         hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
         showlegend:false
@@ -1869,7 +1972,7 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
 
     el.style.display = 'block';
     el.innerHTML = '<div id="comp-sq-chart" style="width:100%;height:650px;border-radius:8px;overflow:hidden;"></div>';
-    Plotly.newPlot('comp-sq-chart', traces, layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
+    Plotly.newPlot('comp-sq-chart', traces.concat(compQuadOverlay), layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
 }
 
 function generateCompositeAzMean() {
@@ -1884,7 +1987,9 @@ function generateCompositeAzMean() {
     document.getElementById('comp-result-sq').style.display = 'none';
     _showCompStatus('loading', 'Computing composite azimuthal mean \u2014 this may take 30\u201390 seconds for many cases\u2026');
 
+    var overlay = (document.getElementById('comp-overlay') || {}).value || '';
     var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage;
+    if (overlay) qs += '&overlay=' + encodeURIComponent(overlay);
     fetch(API_BASE + '/composite/azimuthal_mean?' + qs)
         .then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error(e.detail||'API error');}); return r.json(); })
         .then(function(json) {
@@ -1910,7 +2015,9 @@ function generateCompositeQuadMean() {
     document.getElementById('comp-result-az').style.display = 'none';
     _showCompStatus('loading', 'Computing composite shear quadrants \u2014 this may take 30\u201390 seconds for many cases\u2026');
 
+    var overlay = (document.getElementById('comp-overlay') || {}).value || '';
     var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage;
+    if (overlay) qs += '&overlay=' + encodeURIComponent(overlay);
     fetch(API_BASE + '/composite/quadrant_mean?' + qs)
         .then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error(e.detail||'API error');}); return r.json(); })
         .then(function(json) {
