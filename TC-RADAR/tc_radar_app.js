@@ -326,6 +326,124 @@ var _csMouseHandler = null;
 var _currentSddc = null;
 var _lastSqJson = null;
 
+// ── ASCII Hurricane Loading Animation ────────────────────────
+var _hurricaneAnimId = null;
+var _hurricanePhase = 0;
+
+function _hurricaneLoadingHTML(message, compact) {
+    var id = 'hurricane-anim-' + Date.now();
+    var fontSize = compact ? '10px' : '11px';
+    var html = '<div class="hurricane-loader" id="' + id + '">' +
+        '<pre class="hurricane-pre" style="font-size:' + fontSize + ';"></pre>' +
+        '<div class="hurricane-msg">' + (message || 'Loading\u2026') + '</div>' +
+    '</div>';
+    // Start animation on next tick
+    setTimeout(function() { _startHurricaneAnim(id, compact); }, 30);
+    return html;
+}
+
+function _startHurricaneAnim(containerId, compact) {
+    _stopHurricaneAnim();
+    _hurricanePhase = 0;
+    var W = compact ? 33 : 39;
+    var H = compact ? 13 : 17;
+    _hurricaneAnimId = setInterval(function() {
+        var container = document.getElementById(containerId);
+        if (!container) { _stopHurricaneAnim(); return; }
+        var pre = container.querySelector('.hurricane-pre');
+        if (!pre) { _stopHurricaneAnim(); return; }
+        pre.innerHTML = _renderHurricaneFrame(_hurricanePhase, W, H);
+        _hurricanePhase -= 0.18;  // counterclockwise
+    }, 120);
+}
+
+function _stopHurricaneAnim() {
+    if (_hurricaneAnimId) { clearInterval(_hurricaneAnimId); _hurricaneAnimId = null; }
+}
+
+function _renderHurricaneFrame(phase, W, H) {
+    var cx = (W - 1) / 2, cy = (H - 1) / 2;
+    var grid = [], bright = [];
+    var r, c;
+    for (r = 0; r < H; r++) {
+        grid[r] = []; bright[r] = [];
+        for (c = 0; c < W; c++) { grid[r][c] = ' '; bright[r][c] = 0; }
+    }
+
+    var nArms = 3;
+    var a = 0.14;    // spiral tightness
+    var asp = 2.1;   // char aspect ratio correction
+    var chars = ['\u2500', '\\', '\u2502', '/', '\u2500', '\\', '\u2502', '/'];
+
+    for (var arm = 0; arm < nArms; arm++) {
+        var armOff = arm * 2 * Math.PI / nArms;
+        // Each arm has a width that varies — thicker near eyewall
+        for (var t = 1.5; t < 38; t += 0.08) {
+            var sr = a * t;
+            var theta = t + armOff + phase;
+            // Slight width: jitter perpendicular to spiral
+            var widthJitter = [0];
+            if (sr > 0.8 && sr < 2.0) widthJitter = [-0.3, 0, 0.3]; // thick eyewall
+            else if (sr < 3.2) widthJitter = [0, 0.18];
+            for (var w = 0; w < widthJitter.length; w++) {
+                var perpTheta = theta + Math.PI / 2;
+                var px = cx + (sr + widthJitter[w] * 0.5) * Math.cos(theta) * asp + widthJitter[w] * Math.cos(perpTheta) * asp * 0.3;
+                var py = cy - (sr + widthJitter[w] * 0.5) * Math.sin(theta) - widthJitter[w] * Math.sin(perpTheta) * 0.3;
+                var ix = Math.round(px), iy = Math.round(py);
+                if (ix < 0 || ix >= W || iy < 0 || iy >= H) continue;
+
+                // Tangent direction for character selection
+                var dx = (a * Math.cos(theta) - a * t * Math.sin(theta)) * asp;
+                var dy = -(a * Math.sin(theta) + a * t * Math.cos(theta));
+                var angle = Math.atan2(dy, dx);
+                if (angle < 0) angle += 2 * Math.PI;
+                var dirIdx = Math.round(angle / (Math.PI / 4)) % 8;
+
+                // Brightness: 3=eyewall, 2=inner, 1=outer
+                var b = sr < 2.0 ? 3 : sr < 3.2 ? 2 : 1;
+                if (b > bright[iy][ix]) {
+                    grid[iy][ix] = chars[dirIdx];
+                    bright[iy][ix] = b;
+                }
+            }
+        }
+    }
+
+    // Clear the eye
+    var eyeR = 0.45;
+    for (var ey = -2; ey <= 2; ey++) {
+        for (var ex = -4; ex <= 4; ex++) {
+            if (Math.sqrt((ex / asp) * (ex / asp) + ey * ey) < eyeR) {
+                var eiy = Math.round(cy + ey), eix = Math.round(cx + ex);
+                if (eiy >= 0 && eiy < H && eix >= 0 && eix < W) { grid[eiy][eix] = ' '; bright[eiy][eix] = 0; }
+            }
+        }
+    }
+    // Eye symbol
+    grid[Math.round(cy)][Math.round(cx)] = '\u25C9';
+    bright[Math.round(cy)][Math.round(cx)] = 4;
+
+    // Build colored HTML
+    var colors = ['', 'rgba(34,211,238,0.22)', 'rgba(34,211,238,0.48)', 'rgba(34,211,238,0.82)', '#22d3ee'];
+    var lines = [];
+    for (r = 0; r < H; r++) {
+        var line = '';
+        var curBright = 0;
+        for (c = 0; c < W; c++) {
+            var b2 = bright[r][c];
+            if (b2 !== curBright) {
+                if (curBright > 0) line += '</span>';
+                if (b2 > 0) line += '<span style="color:' + colors[b2] + '">';
+                curBright = b2;
+            }
+            line += grid[r][c];
+        }
+        if (curBright > 0) line += '</span>';
+        lines.push(line);
+    }
+    return lines.join('\n');
+}
+
 // Supplement API case_meta with local frontend metadata when fields are missing.
 // This handles cases where the API's merge metadata may not be deployed.
 function _enrichCaseMeta(meta) {
@@ -400,7 +518,7 @@ function generateCustomPlot(callback) {
     if (!_animPlaying) {
         var thumbWrap = document.getElementById('thumbnail-wrap');
         if (thumbWrap) thumbWrap.style.display = 'none';
-        resultDiv.innerHTML = '<div class="explorer-status loading">\u23F3 Fetching data from API\u2026 (may take ~30s if service is waking up)</div>';
+        resultDiv.innerHTML = _hurricaneLoadingHTML('Fetching data from API\u2026 (may take ~30s if service is waking up)', true);
         var panelInner = document.getElementById('side-panel-inner');
         if (panelInner) panelInner.scrollTop = 0;
     }
@@ -742,7 +860,7 @@ function fetchCrossSection(a, b) {
     var variable = document.getElementById('ep-var').value;
     var overlay = (document.getElementById('ep-overlay') || {}).value || '';
     var csResult = document.getElementById('cs-result'); if (!csResult) return;
-    csResult.innerHTML = '<div class="explorer-status loading">\u23F3 Computing cross-section\u2026</div>';
+    csResult.innerHTML = _hurricaneLoadingHTML('Computing cross-section\u2026', true);
     var url = API_BASE + '/cross_section?case_index=' + currentCaseIndex + '&variable=' + variable + '&data_type=' + _activeDataType + '&x0=' + a.x + '&y0=' + a.y + '&x1=' + b.x + '&y1=' + b.y + '&n_points=150';
     if (overlay) url += '&overlay=' + overlay;
     fetch(url)
@@ -796,7 +914,7 @@ function fetchAzimuthalMean() {
     var covSlider = document.getElementById('az-coverage');
     var coverage = covSlider ? (parseInt(covSlider.value) / 100) : 0.5;
     var resultDiv = document.getElementById('az-result'), btn = document.getElementById('az-btn');
-    resultDiv.innerHTML = '<div class="explorer-status">Computing azimuthal mean\u2026</div>';
+    resultDiv.innerHTML = _hurricaneLoadingHTML('Computing azimuthal mean\u2026', true);
     btn.disabled = true; btn.textContent = '\u27F3 Computing\u2026';
     var url = API_BASE + '/azimuthal_mean?case_index=' + currentCaseIndex + '&variable=' + variable + '&data_type=' + _activeDataType + '&coverage_min=' + coverage;
     if (overlay && overlay !== 'none') url += '&overlay=' + overlay;
@@ -943,7 +1061,7 @@ function fetchShearQuadrants() {
     var covSlider = document.getElementById('az-coverage');
     var coverage = covSlider ? (parseInt(covSlider.value) / 100) : 0.5;
     var resultDiv = document.getElementById('sq-result'), btn = document.getElementById('sq-btn');
-    resultDiv.innerHTML = '<div class="explorer-status loading">\u23F3 Computing shear-relative quadrant means\u2026</div>';
+    resultDiv.innerHTML = _hurricaneLoadingHTML('Computing shear-relative quadrant means\u2026', true);
     btn.disabled = true; btn.textContent = '\u25D1 Computing\u2026';
     var url = API_BASE + '/quadrant_mean?case_index=' + currentCaseIndex + '&variable=' + variable + '&data_type=' + _activeDataType + '&coverage_min=' + coverage;
     if (overlay && overlay !== 'none') url += '&overlay=' + overlay;
@@ -1804,6 +1922,10 @@ function _injectCompositeStyles() {
         '.comp-cl-copy { font-size:10px !important; padding:3px 8px !important; }' +
         '.comp-link-btn { border-color:rgba(34,211,238,0.25); color:var(--cyan, #22d3ee); }' +
         '.comp-link-btn:hover { background:rgba(34,211,238,0.1); border-color:rgba(34,211,238,0.4); }' +
+        '.hurricane-loader { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:16px 0 8px; }' +
+        '.hurricane-pre { font-family:"JetBrains Mono","Fira Code",Consolas,monospace; line-height:1.15; letter-spacing:0.5px; margin:0; text-align:center; color:rgba(34,211,238,0.5); user-select:none; }' +
+        '.hurricane-msg { margin-top:10px; font-size:12px; font-weight:600; color:#9ca3af; font-family:"JetBrains Mono",monospace; text-align:center; animation:hurricanePulse 2s ease-in-out infinite; }' +
+        '@keyframes hurricanePulse { 0%,100% { opacity:0.5; } 50% { opacity:1; } }' +
         '@media (max-width:900px) { .composite-body { flex-direction:column; } .composite-controls { width:100%; min-width:auto; border-right:none; border-bottom:1px solid rgba(255,255,255,0.06); max-height:none; } .composite-results { min-height:500px; } }';
     document.head.appendChild(style);
 }
@@ -1911,8 +2033,13 @@ function _computeCompositeMeanVmax(filters) {
 function _showCompStatus(cls, msg) {
     var el = document.getElementById('comp-status');
     el.className = 'comp-status ' + cls;
-    el.textContent = msg;
     el.style.display = 'block';
+    if (cls === 'loading') {
+        el.innerHTML = _hurricaneLoadingHTML(msg, false);
+    } else {
+        _stopHurricaneAnim();
+        el.textContent = msg;
+    }
 }
 
 // ── Composite overlay contour helpers ─────────────────────────
