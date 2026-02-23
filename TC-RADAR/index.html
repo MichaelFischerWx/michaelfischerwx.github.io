@@ -327,8 +327,6 @@
                 <span class="topbar-version">v3m</span>
             </div>
             <ul class="topbar-nav">
-                <li><a href="javascript:void(0)" onclick="toggleCompositePanel()">Composites</a></li>
-                <li><a href="#about">About</a></li>
                 <li><a href="#about">About</a></li>
                 <li><a href="#features">Features</a></li>
                 <li><a href="#download">Download</a></li>
@@ -435,7 +433,7 @@
             </div>
             <div class="usage-policy">
                 <h3>&#128203; Usage Policy</h3>
-                <p>Users are free to download TC-RADAR. However, we request that you notify <strong>Dr. Michael Fischer</strong> (<a href="/cdn-cgi/l/email-protection#107d797b753e76796373787562507d79717d793e757465"><span class="__cf_email__" data-cfemail="0d60646668236b647e6e65687f4d60646c606423686978">[email&#160;protected]</span></a>) and NOAA's Hurricane Research Division radar team lead, <strong>Dr. Paul Reasor</strong> (<a href="/cdn-cgi/l/email-protection#ed9d8c9881c39f888c9e829fad83828c8cc38a829b"><span class="__cf_email__" data-cfemail="3e4e5f4b52104c5b5f4d514c7e50515f5f10595148">[email&#160;protected]</span></a>), of the nature of your research project to ensure proper usage. Users should carefully examine data and apply additional QC consistent with their objectives.</p>
+                <p>Users are free to download TC-RADAR. However, we request that you notify <strong>Dr. Michael Fischer</strong> (<a href="mailto:mike.fischer@miami.edu">mike.fischer@miami.edu</a>) and NOAA's Hurricane Research Division radar team lead, <strong>Dr. Paul Reasor</strong> (<a href="mailto:paul.reasor@noaa.gov">paul.reasor@noaa.gov</a>), of the nature of your research project to ensure proper usage. Users should carefully examine data and apply additional QC consistent with their objectives.</p>
             </div>
             <div class="citation-box">
                 <h3>How to Cite</h3>
@@ -451,7 +449,7 @@
         <div class="contact-info">
             <p style="font-size:1.15rem;margin-bottom:0.75rem;"><strong>Dr. Michael Fischer</strong></p>
             <p style="opacity:0.85;">TC-RADAR Developer</p>
-            <p style="margin-top:1rem;"><a href="/cdn-cgi/l/email-protection#5b3632303e753d322838333e291b36323a3632753e3f2e" style="font-size:1rem;"><span class="__cf_email__" data-cfemail="f29f9b9997dc949b81919a9780b29f9b939f9bdc979687">[email&#160;protected]</span></a></p>
+            <p style="margin-top:1rem;"><a href="mailto:mike.fischer@miami.edu" style="font-size:1rem;">mike.fischer@miami.edu</a></p>
             <p style="margin-top:1.5rem;font-size:0.85rem;opacity:0.75;">Please include details about your research project and intended use of TC-RADAR data.</p>
         </div>
     </section>
@@ -474,4 +472,14 @@
             <div id="plotly-fullscreen"></div>
             <div class="cs-full-divider" id="cs-full-divider" style="display:none;"></div>
             <div id="cs-fullscreen" style="display:none;"></div>
-            <div class="cs-full-divider" id="az-full-divider" style="disp
+            <div class="cs-full-divider" id="az-full-divider" style="display:none;"></div>
+            <div id="az-fullscreen" style="display:none;"></div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+    <script src="tc_radar_app.js"></script>
+</body>
+</html>
