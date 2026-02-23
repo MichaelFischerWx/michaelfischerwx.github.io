@@ -1682,6 +1682,40 @@ function _compositeFilterSummary(filters, nCases) {
     return 'Composite (N=' + nCases + ') | ' + summary;
 }
 
+function _computeCompositeMeanVmax(filters) {
+    var dataType = document.getElementById('comp-dtype') ? document.getElementById('comp-dtype').value : 'swath';
+    var source = (dataType === 'merge' && mergeData) ? mergeData : allData;
+    if (!source || !source.cases) return null;
+    var sum = 0, count = 0;
+    source.cases.forEach(function(c) {
+        if (c.vmax_kt === null || c.vmax_kt === undefined) return;
+        var v = c.vmax_kt;
+        if (v < filters.min_intensity || v > filters.max_intensity) return;
+        if (filters.min_vmax_change > -100 || filters.max_vmax_change < 85) {
+            if (c['24-h_vmax_change_kt'] === null || c['24-h_vmax_change_kt'] === undefined) return;
+            var dv = c['24-h_vmax_change_kt'];
+            if (dv < filters.min_vmax_change || dv > filters.max_vmax_change) return;
+        }
+        if (filters.min_tilt > 0 || filters.max_tilt < 200) {
+            if (c.tilt_magnitude_km === null || c.tilt_magnitude_km === undefined) return;
+            if (c.tilt_magnitude_km < filters.min_tilt || c.tilt_magnitude_km > filters.max_tilt) return;
+        }
+        if (c.year < filters.min_year || c.year > filters.max_year) return;
+        if (filters.min_shear_mag > 0 || filters.max_shear_mag < 100) {
+            var sm = c.shear_magnitude_kt !== undefined ? c.shear_magnitude_kt : null;
+            if (sm === null) return;
+            if (sm < filters.min_shear_mag || sm > filters.max_shear_mag) return;
+        }
+        if (filters.min_shear_dir > 0 || filters.max_shear_dir < 360) {
+            var sd = c.sddc !== undefined ? c.sddc : null;
+            if (sd === null) return;
+            if (sd < filters.min_shear_dir || sd > filters.max_shear_dir) return;
+        }
+        sum += v; count++;
+    });
+    return count > 0 ? Math.round(sum / count) : null;
+}
+
 function _showCompStatus(cls, msg) {
     var el = document.getElementById('comp-status');
     el.className = 'comp-status ' + cls;
@@ -1713,7 +1747,9 @@ function renderCompositeAzMeanInto(targetId, json, filters) {
     var covPct = Math.round((json.coverage_min || 0.5) * 100);
     var rmwNote = isNorm ? ' | N(RMW)=' + (json.n_with_rmw || json.n_cases) : '';
     var dtypeLabel = (document.getElementById('comp-dtype') && document.getElementById('comp-dtype').value === 'merge') ? ' (Merge)' : '';
-    var title = _compositeFilterSummary(filters, json.n_cases) + rmwNote +
+    var meanVmax = _computeCompositeMeanVmax(filters);
+    var vmaxNote = meanVmax !== null ? ' | Mean V<sub>max</sub>=' + meanVmax + ' kt' : '';
+    var title = _compositeFilterSummary(filters, json.n_cases) + vmaxNote + rmwNote +
                '<br>Azimuthal Mean: ' + varInfo.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
     var plotBg = '#0a1628';
     var shapes = [];
@@ -1724,7 +1760,7 @@ function renderCompositeAzMeanInto(targetId, json, filters) {
         paper_bgcolor: plotBg, plot_bgcolor: plotBg,
         xaxis: { title: { text:rLabel, font:{color:'#aaa',size:fontSize.axis} }, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
         yaxis: { title: { text:'Height (km)', font:{color:'#aaa',size:fontSize.axis} }, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
-        margin: { l:55, r:24, t:64, b:46 }, shapes: shapes,
+        margin: { l:55, r:24, t:80, b:46 }, shapes: shapes,
         hoverlabel: { bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
         showlegend: false
     };
@@ -1761,7 +1797,7 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
     ];
 
     var traces = [], annotations = [], shapes = [];
-    var gap=0.08, cbarW=0.04, leftM=0.06, rightM=0.02+cbarW+0.02, topM=0.10, botM=0.06;
+    var gap=0.08, cbarW=0.04, leftM=0.06, rightM=0.02+cbarW+0.02, topM=0.13, botM=0.06;
     var pw = (1-leftM-rightM-gap)/2, ph = (1-topM-botM-gap)/2;
     var quadColors = { DSL:'#f59e0b', DSR:'#f59e0b', USL:'#60a5fa', USR:'#60a5fa' };
 
@@ -1804,7 +1840,9 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
     var covPct = Math.round((json.coverage_min || 0.5) * 100);
     var rmwNote = isNorm ? ' | N(RMW+Shr)=' + (json.n_with_shear_and_rmw || json.n_cases) : '';
     var dtypeLabel = (document.getElementById('comp-dtype') && document.getElementById('comp-dtype').value === 'merge') ? ' (Merge)' : '';
-    var title = _compositeFilterSummary(filters, json.n_cases) + rmwNote +
+    var meanVmax = _computeCompositeMeanVmax(filters);
+    var vmaxNote = meanVmax !== null ? ' | Mean V<sub>max</sub>=' + meanVmax + ' kt' : '';
+    var title = _compositeFilterSummary(filters, json.n_cases) + vmaxNote + rmwNote +
                '<br>Shear-Relative Quadrant Mean: ' + varInfo.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
 
     var plotBg = '#0a1628';
@@ -1823,14 +1861,14 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
     var layout = Object.assign({
         title:{ text:title, font:{color:'#e5e7eb',size:fontSize.title}, y:0.99, x:0.5, xanchor:'center' },
         paper_bgcolor:plotBg, plot_bgcolor:plotBg,
-        margin:{ l:50, r:60, t:70, b:50 },
+        margin:{ l:50, r:60, t:86, b:50 },
         annotations:annotations, shapes:shapes.concat(shearInset.shapes || []),
         hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
         showlegend:false
     }, layoutAxes);
 
     el.style.display = 'block';
-    el.innerHTML = '<div id="comp-sq-chart" style="width:100%;height:600px;border-radius:8px;overflow:hidden;"></div>';
+    el.innerHTML = '<div id="comp-sq-chart" style="width:100%;height:650px;border-radius:8px;overflow:hidden;"></div>';
     Plotly.newPlot('comp-sq-chart', traces, layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
 }
 
