@@ -332,7 +332,7 @@ var _hurricanePhase = 0;
 
 function _hurricaneLoadingHTML(message, compact) {
     var id = 'hurricane-anim-' + Date.now();
-    var fontSize = compact ? '10px' : '11px';
+    var fontSize = compact ? '8.5px' : '9px';
     var html = '<div class="hurricane-loader" id="' + id + '">' +
         '<pre class="hurricane-pre" style="font-size:' + fontSize + ';"></pre>' +
         '<div class="hurricane-msg">' + (message || 'Loading\u2026') + '</div>' +
@@ -345,8 +345,8 @@ function _hurricaneLoadingHTML(message, compact) {
 function _startHurricaneAnim(containerId, compact) {
     _stopHurricaneAnim();
     _hurricanePhase = 0;
-    var W = compact ? 33 : 39;
-    var H = compact ? 13 : 17;
+    var W = compact ? 45 : 55;
+    var H = compact ? 17 : 23;
     _hurricaneAnimId = setInterval(function() {
         var container = document.getElementById(containerId);
         if (!container) { _stopHurricaneAnim(); return; }
@@ -363,13 +363,14 @@ function _stopHurricaneAnim() {
 
 function _renderHurricaneFrame(phase, W, H) {
     var cx = (W - 1) / 2, cy = (H - 1) / 2;
+    var asp = 2.1;
+    var maxR = cy - 0.5;
     var grid = [], bright = [];
     var r, c;
     for (r = 0; r < H; r++) {
         grid[r] = []; bright[r] = [];
         for (c = 0; c < W; c++) { grid[r][c] = ' '; bright[r][c] = 0; }
     }
-    var asp = 2.1;
     var chars = ['\u2500', '\\', '\u2502', '/', '\u2500', '\\', '\u2502', '/'];
 
     for (var row = 0; row < H; row++) {
@@ -377,43 +378,43 @@ function _renderHurricaneFrame(phase, W, H) {
             var dx = (col - cx) / asp;
             var dy = -(row - cy);
             var dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < 0.5 || dist > 8.5) continue;
+            var nr = dist / maxR;
+            if (nr < 0.05 || nr > 1.0) continue;
 
             var angle = Math.atan2(dy, dx);
             if (angle < 0) angle += 2 * Math.PI;
 
             // Unified spiral: eyewall and rainbands share the same arms
-            var a = 0.65;
+            var a = 0.08;
             var nArms = 3;
             var minDist = Infinity;
             for (var arm = 0; arm < nArms; arm++) {
                 var armOff = arm * 2 * Math.PI / nArms;
-                var spiralTheta = dist / a + armOff + phase;
+                var spiralTheta = nr / a + armOff + phase;
                 var diff = angle - (spiralTheta % (2 * Math.PI));
                 while (diff > Math.PI) diff -= 2 * Math.PI;
                 while (diff < -Math.PI) diff += 2 * Math.PI;
-                var arcDist = Math.abs(diff) * dist;
+                var arcDist = Math.abs(diff) * nr;
                 if (arcDist < minDist) minDist = arcDist;
             }
 
-            // Band width: very wide at eyewall (nearly closed ring), tapering to thin outer bands
+            // Band width: nearly closed eyewall, tapering to thin outer bands
             var bandWidth;
-            if (dist < 2.3) bandWidth = dist * 0.95;
-            else if (dist < 4.0) bandWidth = 0.65;
-            else if (dist < 6.0) bandWidth = 0.50;
-            else bandWidth = 0.38;
+            if (nr < 0.27) bandWidth = nr * 0.92;
+            else if (nr < 0.48) bandWidth = 0.078;
+            else if (nr < 0.72) bandWidth = 0.060;
+            else bandWidth = 0.045;
 
             if (minDist < bandWidth) {
-                // Flow characters: tangential at eyewall, spiral tangent for outer bands
                 var flowAngle;
-                if (dist < 2.3) {
+                if (nr < 0.27) {
                     flowAngle = angle + Math.PI / 2;
                 } else {
-                    flowAngle = angle + Math.atan2(1, a / dist) + Math.PI;
+                    flowAngle = angle + Math.atan2(1, a / nr) + Math.PI;
                 }
                 if (flowAngle < 0) flowAngle += 2 * Math.PI;
                 var dirIdx = Math.round(flowAngle / (Math.PI / 4)) % 8;
-                var bv = dist < 2.3 ? 3 : dist < 4.0 ? 2 : 1;
+                var bv = nr < 0.27 ? 3 : nr < 0.48 ? 2 : 1;
                 grid[row][col] = chars[dirIdx];
                 bright[row][col] = bv;
             }
@@ -421,10 +422,10 @@ function _renderHurricaneFrame(phase, W, H) {
     }
 
     // Clear the eye
-    var eyeR = 0.55;
-    for (var ey = -2; ey <= 2; ey++) {
-        for (var ex = -5; ex <= 5; ex++) {
-            if (Math.sqrt((ex / asp) * (ex / asp) + ey * ey) < eyeR) {
+    for (var ey = -Math.ceil(cy * 0.12); ey <= Math.ceil(cy * 0.12); ey++) {
+        for (var ex = -Math.ceil(cx * 0.12); ex <= Math.ceil(cx * 0.12); ex++) {
+            var ed = Math.sqrt((ex / asp) * (ex / asp) + ey * ey) / maxR;
+            if (ed < 0.065) {
                 var eiy = Math.round(cy + ey), eix = Math.round(cx + ex);
                 if (eiy >= 0 && eiy < H && eix >= 0 && eix < W) { grid[eiy][eix] = ' '; bright[eiy][eix] = 0; }
             }
