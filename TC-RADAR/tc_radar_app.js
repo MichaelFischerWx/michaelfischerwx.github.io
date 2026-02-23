@@ -332,7 +332,7 @@ var _hurricanePhase = 0;
 
 function _hurricaneLoadingHTML(message, compact) {
     var id = 'hurricane-anim-' + Date.now();
-    var fontSize = compact ? '8.5px' : '9px';
+    var fontSize = compact ? '7.5px' : '8px';
     var html = '<div class="hurricane-loader" id="' + id + '">' +
         '<pre class="hurricane-pre" style="font-size:' + fontSize + ';"></pre>' +
         '<div class="hurricane-msg">' + (message || 'Loading\u2026') + '</div>' +
@@ -345,8 +345,8 @@ function _hurricaneLoadingHTML(message, compact) {
 function _startHurricaneAnim(containerId, compact) {
     _stopHurricaneAnim();
     _hurricanePhase = 0;
-    var W = compact ? 45 : 55;
-    var H = compact ? 17 : 23;
+    var W = compact ? 55 : 75;
+    var H = compact ? 21 : 31;
     _hurricaneAnimId = setInterval(function() {
         var container = document.getElementById(containerId);
         if (!container) { _stopHurricaneAnim(); return; }
@@ -384,7 +384,7 @@ function _renderHurricaneFrame(phase, W, H) {
             var angle = Math.atan2(dy, dx);
             if (angle < 0) angle += 2 * Math.PI;
 
-            // Unified spiral: eyewall and rainbands share the same arms
+            // Unified spiral system
             var a = 0.08;
             var nArms = 3;
             var minDist = Infinity;
@@ -398,32 +398,40 @@ function _renderHurricaneFrame(phase, W, H) {
                 if (arcDist < minDist) minDist = arcDist;
             }
 
-            // Band width: nearly closed eyewall, tapering to thin outer bands
+            // Wider bands for denser grids
             var bandWidth;
-            if (nr < 0.27) bandWidth = nr * 0.92;
-            else if (nr < 0.48) bandWidth = 0.078;
-            else if (nr < 0.72) bandWidth = 0.060;
-            else bandWidth = 0.045;
+            if (nr < 0.27) bandWidth = nr * 0.93;
+            else if (nr < 0.48) bandWidth = 0.088;
+            else if (nr < 0.72) bandWidth = 0.072;
+            else bandWidth = 0.055;
 
             if (minDist < bandWidth) {
-                var flowAngle;
+                var edgeFrac = minDist / bandWidth;
+
                 if (nr < 0.27) {
-                    flowAngle = angle + Math.PI / 2;
+                    // Eyewall: directional flow characters
+                    var flowAngle = angle + Math.PI / 2;
+                    if (flowAngle < 0) flowAngle += 2 * Math.PI;
+                    var dirIdx = Math.round(flowAngle / (Math.PI / 4)) % 8;
+                    grid[row][col] = chars[dirIdx];
+                    bright[row][col] = edgeFrac < 0.5 ? 4 : 3;
                 } else {
-                    flowAngle = angle + Math.atan2(1, a / nr) + Math.PI;
+                    // Rainbands: block-shade characters with intensity gradient
+                    var radialFade = nr < 0.48 ? 1.0 : nr < 0.72 ? 0.8 : 0.6;
+                    var intensity = (1 - edgeFrac * 0.8) * radialFade;
+                    if (intensity > 0.75)      { grid[row][col] = '\u2593'; bright[row][col] = 3; }
+                    else if (intensity > 0.50)  { grid[row][col] = '\u2592'; bright[row][col] = 2; }
+                    else if (intensity > 0.25)  { grid[row][col] = '\u2591'; bright[row][col] = 1; }
+                    else                        { grid[row][col] = '\u00b7'; bright[row][col] = 1; }
                 }
-                if (flowAngle < 0) flowAngle += 2 * Math.PI;
-                var dirIdx = Math.round(flowAngle / (Math.PI / 4)) % 8;
-                var bv = nr < 0.27 ? 3 : nr < 0.48 ? 2 : 1;
-                grid[row][col] = chars[dirIdx];
-                bright[row][col] = bv;
             }
         }
     }
 
     // Clear the eye
-    for (var ey = -Math.ceil(cy * 0.12); ey <= Math.ceil(cy * 0.12); ey++) {
-        for (var ex = -Math.ceil(cx * 0.12); ex <= Math.ceil(cx * 0.12); ex++) {
+    var eyeLim = Math.ceil(maxR * 0.08);
+    for (var ey = -eyeLim; ey <= eyeLim; ey++) {
+        for (var ex = -Math.ceil(eyeLim * asp); ex <= Math.ceil(eyeLim * asp); ex++) {
             var ed = Math.sqrt((ex / asp) * (ex / asp) + ey * ey) / maxR;
             if (ed < 0.065) {
                 var eiy = Math.round(cy + ey), eix = Math.round(cx + ex);
@@ -432,10 +440,10 @@ function _renderHurricaneFrame(phase, W, H) {
         }
     }
     grid[Math.round(cy)][Math.round(cx)] = '\u25C9';
-    bright[Math.round(cy)][Math.round(cx)] = 4;
+    bright[Math.round(cy)][Math.round(cx)] = 5;
 
-    // Build colored HTML
-    var colors = ['', 'rgba(34,211,238,0.22)', 'rgba(34,211,238,0.48)', 'rgba(34,211,238,0.82)', '#22d3ee'];
+    // Build colored HTML — 5 tiers now
+    var colors = ['', 'rgba(34,211,238,0.18)', 'rgba(34,211,238,0.38)', 'rgba(34,211,238,0.65)', 'rgba(34,211,238,0.88)', '#22d3ee'];
     var lines = [];
     for (r = 0; r < H; r++) {
         var line = '';
@@ -1934,7 +1942,7 @@ function _injectCompositeStyles() {
         '.comp-link-btn { border-color:rgba(34,211,238,0.25); color:var(--cyan, #22d3ee); }' +
         '.comp-link-btn:hover { background:rgba(34,211,238,0.1); border-color:rgba(34,211,238,0.4); }' +
         '.hurricane-loader { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:16px 0 8px; }' +
-        '.hurricane-pre { font-family:"JetBrains Mono","Fira Code",Consolas,monospace; line-height:1.15; letter-spacing:0.5px; margin:0; text-align:center; color:rgba(34,211,238,0.5); user-select:none; }' +
+        '.hurricane-pre { font-family:"JetBrains Mono","Fira Code",Consolas,monospace; line-height:1.1; letter-spacing:0.3px; margin:0; text-align:center; color:rgba(34,211,238,0.5); user-select:none; }' +
         '.hurricane-msg { margin-top:10px; font-size:12px; font-weight:600; color:#9ca3af; font-family:"JetBrains Mono",monospace; text-align:center; animation:hurricanePulse 2s ease-in-out infinite; }' +
         '@keyframes hurricanePulse { 0%,100% { opacity:0.5; } 50% { opacity:1; } }' +
         '@media (max-width:900px) { .composite-body { flex-direction:column; } .composite-controls { width:100%; min-width:auto; border-right:none; border-bottom:1px solid rgba(255,255,255,0.06); max-height:none; } .composite-results { min-height:500px; } }';
