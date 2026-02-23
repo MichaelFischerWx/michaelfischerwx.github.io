@@ -1241,6 +1241,12 @@ function initializeFilters() {
 fetch(API_BASE + '/health').catch(function(){});
 
 // ── Load data ────────────────────────────────────────────────
+var mergeData = null;
+fetch('tc_radar_metadata_merge.json')
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(data) { mergeData = data; console.log('Merge metadata loaded: ' + data.total_cases + ' cases'); })
+    .catch(function(err) { console.warn('Merge metadata not available: ' + err.message); });
+
 fetch('tc_radar_metadata.json')
     .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function(data) {
@@ -1409,7 +1415,7 @@ function _varOptionsHTML(idPrefix) {
             '<option value="total_recentered_wind_speed">Wind Speed</option>' +
             '<option value="total_recentered_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>' +
         '</optgroup>' +
-        '<optgroup label="Original Swath">' +
+        '<optgroup label="Original Swath" id="' + idPrefix + '-var-original">' +
             '<option value="swath_tangential_wind">Tangential Wind</option>' +
             '<option value="swath_radial_wind">Radial Wind</option>' +
             '<option value="swath_reflectivity">Reflectivity</option>' +
@@ -1417,6 +1423,44 @@ function _varOptionsHTML(idPrefix) {
             '<option value="swath_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>' +
         '</optgroup>' +
     '</select>';
+}
+
+// ── Original-domain variable definitions per data type ───────
+var _originalVarDefs = {
+    swath: [
+        { value: 'swath_tangential_wind', label: 'Tangential Wind' },
+        { value: 'swath_radial_wind', label: 'Radial Wind' },
+        { value: 'swath_reflectivity', label: 'Reflectivity' },
+        { value: 'swath_wind_speed', label: 'Wind Speed' },
+        { value: 'swath_earth_relative_wind_speed', label: 'Earth-Rel. Wind Speed' }
+    ],
+    merge: [
+        { value: 'merged_tangential_wind', label: 'Tangential Wind' },
+        { value: 'merged_radial_wind', label: 'Radial Wind' },
+        { value: 'merged_reflectivity', label: 'Reflectivity' },
+        { value: 'merged_wind_speed', label: 'Wind Speed' },
+        { value: 'merged_upward_air_velocity', label: 'Vertical Velocity' },
+        { value: 'merged_relative_vorticity', label: 'Relative Vorticity' },
+        { value: 'merged_divergence', label: 'Divergence' }
+    ]
+};
+
+function _updateOriginalVarGroup(idPrefix, dataType) {
+    var og = document.getElementById(idPrefix + '-var-original');
+    if (!og) return;
+    var defs = _originalVarDefs[dataType] || _originalVarDefs.swath;
+    og.label = dataType === 'merge' ? 'Original Merged' : 'Original Swath';
+    og.innerHTML = '';
+    defs.forEach(function(d) {
+        var opt = document.createElement('option');
+        opt.value = d.value; opt.textContent = d.label;
+        og.appendChild(opt);
+    });
+    // If currently selected value was in the old original group, reset to first recentered
+    var sel = document.getElementById(idPrefix + '-var');
+    if (sel && sel.selectedOptions.length && sel.selectedOptions[0].parentElement === og) {
+        sel.value = 'recentered_tangential_wind';
+    }
 }
 
 function _buildRangeRow(label, idBase, min, max, step, defaultMin, defaultMax, units) {
@@ -1513,6 +1557,16 @@ function initCompositePanel() {
         inp.addEventListener('input', _debouncedCompositeCount);
     });
 
+    // Wire up data type change to swap original-domain variable options
+    var dtypeSelect = document.getElementById('comp-dtype');
+    if (dtypeSelect) {
+        dtypeSelect.addEventListener('change', function() {
+            var varType = this.value === 'merge' ? 'merge' : 'swath';
+            _updateOriginalVarGroup('comp', varType);
+            _debouncedCompositeCount();
+        });
+    }
+
     _injectCompositeStyles();
 }
 
@@ -1601,9 +1655,10 @@ function _debouncedCompositeCount() {
 
 function updateCompositeCount() {
     var filters = _getCompositeFilters();
+    var dataType = document.getElementById('comp-dtype').value || 'swath';
     var el = document.getElementById('comp-count-num');
     el.textContent = '\u2026';
-    fetch(API_BASE + '/composite/count?' + _compositeQueryString(filters))
+    fetch(API_BASE + '/composite/count?' + _compositeQueryString(filters) + '&data_type=' + dataType)
         .then(function(r) { return r.json(); })
         .then(function(json) { el.textContent = json.count; })
         .catch(function() { el.textContent = '?'; });
@@ -1657,8 +1712,9 @@ function renderCompositeAzMeanInto(targetId, json, filters) {
     };
     var covPct = Math.round((json.coverage_min || 0.5) * 100);
     var rmwNote = isNorm ? ' | N(RMW)=' + (json.n_with_rmw || json.n_cases) : '';
+    var dtypeLabel = (document.getElementById('comp-dtype') && document.getElementById('comp-dtype').value === 'merge') ? ' (Merge)' : '';
     var title = _compositeFilterSummary(filters, json.n_cases) + rmwNote +
-               '<br>Azimuthal Mean: ' + varInfo.display_name + ' (\u2265' + covPct + '% cov.)';
+               '<br>Azimuthal Mean: ' + varInfo.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
     var plotBg = '#0a1628';
     var shapes = [];
     // RMW reference line at R/RMW = 1
@@ -1747,8 +1803,9 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
 
     var covPct = Math.round((json.coverage_min || 0.5) * 100);
     var rmwNote = isNorm ? ' | N(RMW+Shr)=' + (json.n_with_shear_and_rmw || json.n_cases) : '';
+    var dtypeLabel = (document.getElementById('comp-dtype') && document.getElementById('comp-dtype').value === 'merge') ? ' (Merge)' : '';
     var title = _compositeFilterSummary(filters, json.n_cases) + rmwNote +
-               '<br>Shear-Relative Quadrant Mean: ' + varInfo.display_name + ' (\u2265' + covPct + '% cov.)';
+               '<br>Shear-Relative Quadrant Mean: ' + varInfo.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
 
     var plotBg = '#0a1628';
     var layoutAxes = {};
