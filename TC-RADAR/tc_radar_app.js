@@ -1763,6 +1763,20 @@ function _injectCompositeStyles() {
         '.comp-status.loading { background:rgba(34,211,238,0.08); color:var(--cyan, #22d3ee); border:1px solid rgba(34,211,238,0.2); }' +
         '.comp-status.success { background:rgba(16,185,129,0.08); color:#10b981; border:1px solid rgba(16,185,129,0.2); }' +
         '.comp-status.error { background:rgba(239,68,68,0.08); color:#ef4444; border:1px solid rgba(239,68,68,0.2); }' +
+        '.comp-toolbar { display:flex; gap:8px; margin-top:10px; padding:10px 0 4px; border-top:1px solid rgba(255,255,255,0.06); }' +
+        '.comp-tool-btn { padding:6px 12px; font-size:11px; font-weight:600; border:1px solid rgba(255,255,255,0.12); border-radius:6px; background:rgba(255,255,255,0.04); color:#9ca3af; cursor:pointer; font-family:"JetBrains Mono",monospace; transition:all 0.15s; }' +
+        '.comp-tool-btn:hover { background:rgba(255,255,255,0.08); color:#e5e7eb; border-color:rgba(255,255,255,0.2); }' +
+        '.comp-case-list-wrap { margin-top:10px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:8px; overflow:hidden; }' +
+        '.comp-cl-header { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border-bottom:1px solid rgba(255,255,255,0.06); background:rgba(255,255,255,0.02); }' +
+        '.comp-cl-title { font-size:12px; font-weight:600; color:#e5e7eb; font-family:"JetBrains Mono",monospace; }' +
+        '.comp-cl-scroll { max-height:280px; overflow-y:auto; }' +
+        '.comp-cl-table { width:100%; border-collapse:collapse; font-size:11px; font-family:"JetBrains Mono",monospace; }' +
+        '.comp-cl-table thead { position:sticky; top:0; background:#0a1628; }' +
+        '.comp-cl-table th { padding:6px 10px; text-align:left; color:#9ca3af; font-weight:600; border-bottom:1px solid rgba(255,255,255,0.08); font-size:10px; text-transform:uppercase; letter-spacing:0.5px; }' +
+        '.comp-cl-table td { padding:5px 10px; color:#d1d5db; border-bottom:1px solid rgba(255,255,255,0.03); }' +
+        '.comp-cl-table tr:hover td { background:rgba(34,211,238,0.04); }' +
+        '.comp-cl-empty { padding:16px; text-align:center; color:#6b7280; font-size:12px; }' +
+        '.comp-cl-copy { font-size:10px !important; padding:3px 8px !important; }' +
         '@media (max-width:900px) { .composite-body { flex-direction:column; } .composite-controls { width:100%; min-width:auto; border-right:none; border-bottom:1px solid rgba(255,255,255,0.06); max-height:none; } .composite-results { min-height:500px; } }';
     document.head.appendChild(style);
 }
@@ -1922,6 +1936,139 @@ function buildCompQuadOverlayContours(json, radius, height_km, panelOrder) {
     } catch (e) { console.warn('Composite quad overlay error:', e); return []; }
 }
 
+// ── Composite export & case-list utilities ──────────────────
+var _lastCompJson = null;
+var _lastCompType = null;  // 'az' or 'sq'
+
+function _buildCompToolbar() {
+    return '<div class="comp-toolbar">' +
+        '<button class="comp-tool-btn" onclick="_downloadCompCSV()" title="Download data as CSV">\u2B07 CSV</button>' +
+        '<button class="comp-tool-btn" onclick="_downloadCompJSON()" title="Download full API response as JSON">\u2B07 JSON</button>' +
+        '<button class="comp-tool-btn" onclick="_toggleCompCaseList()" title="Show/hide cases used in this composite">\uD83D\uDCCB Cases</button>' +
+    '</div>' +
+    '<div class="comp-case-list-wrap" id="comp-case-list" style="display:none;"></div>';
+}
+
+function _triggerDownload(content, filename, mimeType) {
+    var blob = new Blob([content], { type: mimeType });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function _downloadCompJSON() {
+    if (!_lastCompJson) return;
+    var ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    var filename = 'tc_radar_composite_' + _lastCompType + '_' + ts + '.json';
+    _triggerDownload(JSON.stringify(_lastCompJson, null, 2), filename, 'application/json');
+}
+
+function _downloadCompCSV() {
+    if (!_lastCompJson) return;
+    var json = _lastCompJson;
+    var radius = json.radius_rrmw;
+    var height_km = json.height_km;
+    var varInfo = json.variable;
+    var rLabel = json.normalized ? 'R/RMW' : 'Radius_km';
+    var lines = [];
+
+    if (_lastCompType === 'az') {
+        // Azimuthal mean: straightforward height × radius table
+        lines.push('# TC-RADAR Composite Azimuthal Mean');
+        lines.push('# Variable: ' + varInfo.display_name + ' (' + varInfo.units + ')');
+        lines.push('# N cases: ' + json.n_cases);
+        lines.push('# Coverage threshold: ' + Math.round((json.coverage_min || 0.5) * 100) + '%');
+        lines.push('# Filters: ' + JSON.stringify(json.filters));
+        lines.push('#');
+        // Header row: Height_km, then each radius bin
+        lines.push('Height_km,' + radius.map(function(r) { return rLabel + '=' + r; }).join(','));
+        var azData = json.azimuthal_mean;
+        for (var h = 0; h < height_km.length; h++) {
+            var row = [height_km[h]];
+            for (var r = 0; r < radius.length; r++) {
+                var v = azData[h] && azData[h][r];
+                row.push(v !== null && v !== undefined ? v : '');
+            }
+            lines.push(row.join(','));
+        }
+    } else if (_lastCompType === 'sq') {
+        // Quadrant means: one block per quadrant
+        lines.push('# TC-RADAR Composite Shear-Relative Quadrant Means');
+        lines.push('# Variable: ' + varInfo.display_name + ' (' + varInfo.units + ')');
+        lines.push('# N cases: ' + json.n_cases);
+        lines.push('# Coverage threshold: ' + Math.round((json.coverage_min || 0.5) * 100) + '%');
+        lines.push('# Filters: ' + JSON.stringify(json.filters));
+        lines.push('#');
+        var qOrder = ['DSL', 'DSR', 'USL', 'USR'];
+        var qLabels = { DSL: 'Downshear Left', DSR: 'Downshear Right', USL: 'Upshear Left', USR: 'Upshear Right' };
+        // Header row: Quadrant, Height_km, then each radius bin
+        lines.push('Quadrant,Height_km,' + radius.map(function(r) { return rLabel + '=' + r; }).join(','));
+        qOrder.forEach(function(q) {
+            var qData = json.quadrant_means[q];
+            if (!qData || !qData.data) return;
+            for (var h = 0; h < height_km.length; h++) {
+                var row = [qLabels[q], height_km[h]];
+                for (var r = 0; r < radius.length; r++) {
+                    var v = qData.data[h] && qData.data[h][r];
+                    row.push(v !== null && v !== undefined ? v : '');
+                }
+                lines.push(row.join(','));
+            }
+        });
+    }
+
+    // Append case list
+    if (json.case_list && json.case_list.length > 0) {
+        lines.push('');
+        lines.push('# Cases used in composite');
+        lines.push('case_index,storm_name,datetime,vmax_kt');
+        json.case_list.forEach(function(c) {
+            lines.push([c.case_index, c.storm_name, c.datetime, c.vmax_kt !== null ? c.vmax_kt : ''].join(','));
+        });
+    }
+
+    var ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    var filename = 'tc_radar_composite_' + _lastCompType + '_' + ts + '.csv';
+    _triggerDownload(lines.join('\n'), filename, 'text/csv');
+}
+
+function _toggleCompCaseList() {
+    var el = document.getElementById('comp-case-list');
+    if (!el || !_lastCompJson) return;
+    if (el.style.display !== 'none') { el.style.display = 'none'; return; }
+    var caseList = _lastCompJson.case_list || [];
+    if (caseList.length === 0) { el.innerHTML = '<div class="comp-cl-empty">No case list available.</div>'; el.style.display = 'block'; return; }
+    // Build table
+    var html = '<div class="comp-cl-header">' +
+        '<span class="comp-cl-title">\uD83D\uDCCB ' + caseList.length + ' cases used in composite</span>' +
+        '<button class="comp-tool-btn comp-cl-copy" onclick="_copyCompCaseIndices()" title="Copy case indices to clipboard">\uD83D\uDCCB Copy Indices</button>' +
+    '</div>' +
+    '<div class="comp-cl-scroll"><table class="comp-cl-table"><thead><tr>' +
+        '<th>Index</th><th>Storm</th><th>Date/Time</th><th>V<sub>max</sub> (kt)</th>' +
+    '</tr></thead><tbody>';
+    caseList.forEach(function(c) {
+        var cat = getIntensityCategory(c.vmax_kt);
+        var color = getIntensityColor(c.vmax_kt);
+        html += '<tr><td>' + c.case_index + '</td><td>' + c.storm_name + '</td><td>' + c.datetime + '</td>' +
+            '<td><span class="intensity-badge" style="background:' + color + ';font-size:9px;padding:1px 4px;">' + cat + '</span> ' + (c.vmax_kt !== null ? c.vmax_kt : 'N/A') + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    el.innerHTML = html;
+    el.style.display = 'block';
+}
+
+function _copyCompCaseIndices() {
+    if (!_lastCompJson || !_lastCompJson.case_list) return;
+    var indices = _lastCompJson.case_list.map(function(c) { return c.case_index; });
+    navigator.clipboard.writeText(indices.join(', ')).then(function() {
+        var btn = document.querySelector('.comp-cl-copy');
+        if (btn) { var orig = btn.textContent; btn.textContent = '\u2713 Copied!'; setTimeout(function() { btn.textContent = orig; }, 1500); }
+    });
+}
+
 function renderCompositeAzMeanInto(targetId, json, filters) {
     var el = document.getElementById(targetId); if (!el) return;
     var azData = json.azimuthal_mean, radius = json.radius_rrmw, height_km = json.height_km, varInfo = json.variable;
@@ -1971,7 +2118,8 @@ function renderCompositeAzMeanInto(targetId, json, filters) {
     }
     var compAzOverlay = buildCompAzOverlayContours(json, radius, height_km);
     el.style.display = 'block';
-    el.innerHTML = '<div id="comp-az-chart" style="width:100%;height:540px;border-radius:8px;overflow:hidden;"></div>';
+    _lastCompJson = json; _lastCompType = 'az';
+    el.innerHTML = '<div id="comp-az-chart" style="width:100%;height:540px;border-radius:8px;overflow:hidden;"></div>' + _buildCompToolbar();
     Plotly.newPlot('comp-az-chart', [heatmap].concat(compAzOverlay), layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
 }
 
@@ -2073,7 +2221,8 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
     }, layoutAxes);
 
     el.style.display = 'block';
-    el.innerHTML = '<div id="comp-sq-chart" style="width:100%;height:700px;border-radius:8px;overflow:hidden;"></div>';
+    _lastCompJson = json; _lastCompType = 'sq';
+    el.innerHTML = '<div id="comp-sq-chart" style="width:100%;height:700px;border-radius:8px;overflow:hidden;"></div>' + _buildCompToolbar();
     Plotly.newPlot('comp-sq-chart', traces.concat(compQuadOverlay), layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
 }
 
