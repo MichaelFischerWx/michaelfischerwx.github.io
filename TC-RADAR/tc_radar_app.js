@@ -1858,7 +1858,7 @@ function renderCompositeAzMeanInto(targetId, json, filters) {
         paper_bgcolor: plotBg, plot_bgcolor: plotBg,
         xaxis: { title: { text:rLabel, font:{color:'#aaa',size:fontSize.axis} }, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
         yaxis: { title: { text:'Height (km)', font:{color:'#aaa',size:fontSize.axis} }, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
-        margin: { l:55, r:24, t: json.overlay ? 96 : 80, b:46 }, shapes: shapes,
+        margin: { l:55, r:24, t: json.overlay ? 110 : 96, b:46 }, shapes: shapes,
         hoverlabel: { bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
         showlegend: false
     };
@@ -1869,7 +1869,7 @@ function renderCompositeAzMeanInto(targetId, json, filters) {
     }
     var compAzOverlay = buildCompAzOverlayContours(json, radius, height_km);
     el.style.display = 'block';
-    el.innerHTML = '<div id="comp-az-chart" style="width:100%;height:500px;border-radius:8px;overflow:hidden;"></div>';
+    el.innerHTML = '<div id="comp-az-chart" style="width:100%;height:540px;border-radius:8px;overflow:hidden;"></div>';
     Plotly.newPlot('comp-az-chart', [heatmap].concat(compAzOverlay), layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
 }
 
@@ -1896,7 +1896,7 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
     ];
 
     var traces = [], annotations = [], shapes = [];
-    var gap=0.08, cbarW=0.04, leftM=0.06, rightM=0.02+cbarW+0.02, topM=0.13, botM=0.06;
+    var gap=0.08, cbarW=0.04, leftM=0.06, rightM=0.02+cbarW+0.02, topM=0.16, botM=0.06;
     var pw = (1-leftM-rightM-gap)/2, ph = (1-topM-botM-gap)/2;
     var quadColors = { DSL:'#f59e0b', DSR:'#f59e0b', USL:'#60a5fa', USR:'#60a5fa' };
 
@@ -1964,14 +1964,14 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
     var layout = Object.assign({
         title:{ text:title, font:{color:'#e5e7eb',size:fontSize.title}, y:0.99, x:0.5, xanchor:'center' },
         paper_bgcolor:plotBg, plot_bgcolor:plotBg,
-        margin:{ l:50, r:60, t: json.overlay ? 100 : 86, b:50 },
+        margin:{ l:50, r:60, t: json.overlay ? 110 : 96, b:50 },
         annotations:annotations, shapes:shapes.concat(shearInset.shapes || []),
         hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
         showlegend:false
     }, layoutAxes);
 
     el.style.display = 'block';
-    el.innerHTML = '<div id="comp-sq-chart" style="width:100%;height:650px;border-radius:8px;overflow:hidden;"></div>';
+    el.innerHTML = '<div id="comp-sq-chart" style="width:100%;height:700px;border-radius:8px;overflow:hidden;"></div>';
     Plotly.newPlot('comp-sq-chart', traces.concat(compQuadOverlay), layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
 }
 
