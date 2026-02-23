@@ -1324,3 +1324,431 @@ var _scrollPromptHidden = false;
 window.addEventListener('scroll', function() {
     if (!_scrollPromptHidden && window.scrollY > 50) { _scrollPromptHidden = true; var el = document.querySelector('.scroll-prompt'); if (el) el.style.opacity = '0'; }
 });
+
+
+// ═══════════════════════════════════════════════════════════════
+// ── COMPOSITE ANALYSIS PANEL ──────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+
+var _compositePanel = null;
+var _compositeCountTimeout = null;
+
+function _varOptionsHTML(idPrefix) {
+    return '<select class="explorer-select" id="' + idPrefix + '-var">' +
+        '<optgroup label="WCM Recentered (2 km)">' +
+            '<option value="recentered_tangential_wind">Tangential Wind</option>' +
+            '<option value="recentered_radial_wind">Radial Wind</option>' +
+            '<option value="recentered_upward_air_velocity">Vertical Velocity</option>' +
+            '<option value="recentered_reflectivity">Reflectivity</option>' +
+            '<option value="recentered_wind_speed">Wind Speed</option>' +
+            '<option value="recentered_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>' +
+            '<option value="recentered_relative_vorticity">Relative Vorticity</option>' +
+            '<option value="recentered_divergence">Divergence</option>' +
+        '</optgroup>' +
+        '<optgroup label="Tilt-Relative">' +
+            '<option value="total_recentered_tangential_wind">Tangential Wind</option>' +
+            '<option value="total_recentered_radial_wind">Radial Wind</option>' +
+            '<option value="total_recentered_upward_air_velocity">Vertical Velocity</option>' +
+            '<option value="total_recentered_reflectivity">Reflectivity</option>' +
+            '<option value="total_recentered_wind_speed">Wind Speed</option>' +
+            '<option value="total_recentered_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>' +
+        '</optgroup>' +
+        '<optgroup label="Original Swath">' +
+            '<option value="swath_tangential_wind">Tangential Wind</option>' +
+            '<option value="swath_radial_wind">Radial Wind</option>' +
+            '<option value="swath_reflectivity">Reflectivity</option>' +
+            '<option value="swath_wind_speed">Wind Speed</option>' +
+            '<option value="swath_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>' +
+        '</optgroup>' +
+    '</select>';
+}
+
+function _buildRangeRow(label, idBase, min, max, step, defaultMin, defaultMax, units) {
+    return '<div class="comp-filter-row"><label>' + label + '</label>' +
+        '<div class="comp-range-inputs">' +
+            '<input type="number" id="' + idBase + '-min" value="' + defaultMin + '" min="' + min + '" max="' + max + '" step="' + step + '">' +
+            '<span class="comp-range-sep">to</span>' +
+            '<input type="number" id="' + idBase + '-max" value="' + defaultMax + '" min="' + min + '" max="' + max + '" step="' + step + '">' +
+            '<span class="comp-range-unit">' + units + '</span>' +
+        '</div></div>';
+}
+
+function initCompositePanel() {
+    if (_compositePanel) return;
+    var overlay = document.createElement('div');
+    overlay.id = 'composite-panel';
+    overlay.className = 'composite-overlay';
+    overlay.innerHTML =
+        '<div class="composite-box">' +
+            '<div class="composite-header">' +
+                '<div class="composite-header-left">' +
+                    '<span class="composite-logo">\uD83D\uDCCA</span> ' +
+                    '<span class="composite-title">Composite Analysis</span>' +
+                    '<span class="composite-subtitle">Multi-case averaged fields</span>' +
+                '</div>' +
+                '<button class="composite-close" onclick="toggleCompositePanel()">\u2715</button>' +
+            '</div>' +
+            '<div class="composite-body">' +
+                // ── Left: Controls ──
+                '<div class="composite-controls">' +
+                    '<div class="comp-section-title">\uD83C\uDFAF Variable & Grid</div>' +
+                    '<div class="comp-filter-row"><label>Variable</label>' + _varOptionsHTML('comp') + '</div>' +
+                    '<div class="comp-filter-row"><label>Data Type</label>' +
+                        '<select class="explorer-select" id="comp-dtype"><option value="swath">Swath</option><option value="merge">Merge</option></select>' +
+                    '</div>' +
+                    '<div class="comp-filter-row"><label>Coverage</label>' +
+                        '<div style="display:flex;align-items:center;gap:6px;">' +
+                            '<input type="range" id="comp-coverage" min="0" max="100" step="5" value="50" class="az-cov-slider" oninput="document.getElementById(\'comp-cov-val\').textContent=this.value+\'%\'">' +
+                            '<span id="comp-cov-val" style="font-size:11px;font-weight:600;color:var(--cyan);min-width:32px;font-family:\'JetBrains Mono\',monospace;">50%</span>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="comp-section-title" style="margin-top:14px;">\uD83D\uDD0D Filter Criteria</div>' +
+                    _buildRangeRow('Intensity', 'comp-int', 0, 200, 5, 0, 200, 'kt') +
+                    _buildRangeRow('24-h \u0394V<sub>max</sub>', 'comp-dv', -100, 85, 5, -100, 85, 'kt') +
+                    _buildRangeRow('Tilt', 'comp-tilt', 0, 200, 5, 0, 200, 'km') +
+                    _buildRangeRow('Year', 'comp-year', 1997, 2024, 1, 1997, 2024, '') +
+                    _buildRangeRow('Shear Mag', 'comp-shrmag', 0, 100, 2, 0, 100, 'kt') +
+                    _buildRangeRow('Shear Dir', 'comp-shrdir', 0, 360, 5, 0, 360, '\u00b0') +
+                    '<div class="comp-case-count" id="comp-count-display">' +
+                        '<span class="comp-count-label">Matching cases:</span> ' +
+                        '<span class="comp-count-num" id="comp-count-num">\u2014</span>' +
+                    '</div>' +
+                    '<div class="comp-actions">' +
+                        '<button class="comp-btn comp-btn-primary" id="comp-btn-az" onclick="generateCompositeAzMean()">\u27F3 Azimuthal Mean</button>' +
+                        '<button class="comp-btn comp-btn-accent" id="comp-btn-sq" onclick="generateCompositeQuadMean()">\u25D1 Shear Quadrants</button>' +
+                    '</div>' +
+                '</div>' +
+                // ── Right: Results ──
+                '<div class="composite-results">' +
+                    '<div class="comp-result-placeholder" id="comp-result-placeholder">' +
+                        '<div class="comp-result-icon">\uD83C\uDF00</div>' +
+                        '<div class="comp-result-msg">Set filter criteria and click a generate button to compute a composite.</div>' +
+                    '</div>' +
+                    '<div id="comp-status" style="display:none;"></div>' +
+                    '<div id="comp-result-az" style="display:none;"></div>' +
+                    '<div id="comp-result-sq" style="display:none;"></div>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+    document.body.appendChild(overlay);
+    _compositePanel = overlay;
+
+    // Wire up live case count on filter changes
+    var filterInputs = overlay.querySelectorAll('input[type="number"], select, input[type="range"]');
+    filterInputs.forEach(function(inp) {
+        inp.addEventListener('change', _debouncedCompositeCount);
+        inp.addEventListener('input', _debouncedCompositeCount);
+    });
+
+    _injectCompositeStyles();
+}
+
+function _injectCompositeStyles() {
+    if (document.getElementById('composite-styles')) return;
+    var style = document.createElement('style');
+    style.id = 'composite-styles';
+    style.textContent =
+        '.composite-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; z-index:3000; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px); overflow-y:auto; }' +
+        '.composite-overlay.active { display:flex; align-items:flex-start; justify-content:center; padding:20px; }' +
+        '.composite-box { width:100%; max-width:1400px; background:var(--navy, #0a1628); border:1px solid rgba(255,255,255,0.08); border-radius:12px; overflow:hidden; box-shadow:0 25px 50px rgba(0,0,0,0.5); }' +
+        '.composite-header { display:flex; justify-content:space-between; align-items:center; padding:16px 24px; border-bottom:1px solid rgba(255,255,255,0.06); background:rgba(255,255,255,0.02); }' +
+        '.composite-header-left { display:flex; align-items:center; gap:10px; }' +
+        '.composite-logo { font-size:20px; }' +
+        '.composite-title { font-size:18px; font-weight:700; color:#e5e7eb; font-family:"JetBrains Mono",monospace; }' +
+        '.composite-subtitle { font-size:12px; color:#6b7280; margin-left:4px; }' +
+        '.composite-close { background:none; border:1px solid rgba(255,255,255,0.1); color:#9ca3af; font-size:18px; width:36px; height:36px; border-radius:8px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.15s; }' +
+        '.composite-close:hover { background:rgba(255,255,255,0.05); color:#e5e7eb; }' +
+        '.composite-body { display:flex; min-height:600px; }' +
+        '.composite-controls { width:320px; min-width:320px; padding:20px; border-right:1px solid rgba(255,255,255,0.06); overflow-y:auto; max-height:calc(100vh - 120px); }' +
+        '.composite-results { flex:1; padding:20px; overflow-y:auto; max-height:calc(100vh - 120px); display:flex; flex-direction:column; }' +
+        '.comp-section-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; color:var(--cyan, #22d3ee); margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid rgba(34,211,238,0.15); }' +
+        '.comp-filter-row { margin-bottom:10px; }' +
+        '.comp-filter-row label { display:block; font-size:11px; font-weight:600; color:#9ca3af; margin-bottom:3px; font-family:"JetBrains Mono",monospace; }' +
+        '.comp-range-inputs { display:flex; align-items:center; gap:5px; }' +
+        '.comp-range-inputs input[type="number"] { width:65px; padding:4px 6px; font-size:11px; border:1px solid rgba(255,255,255,0.1); border-radius:4px; background:rgba(255,255,255,0.03); color:#e5e7eb; font-family:"JetBrains Mono",monospace; }' +
+        '.comp-range-sep { font-size:10px; color:#6b7280; }' +
+        '.comp-range-unit { font-size:10px; color:#6b7280; min-width:18px; }' +
+        '.comp-case-count { margin:16px 0; padding:12px; background:rgba(34,211,238,0.05); border:1px solid rgba(34,211,238,0.15); border-radius:8px; text-align:center; }' +
+        '.comp-count-label { font-size:11px; color:#9ca3af; }' +
+        '.comp-count-num { font-size:22px; font-weight:700; color:var(--cyan, #22d3ee); font-family:"JetBrains Mono",monospace; }' +
+        '.comp-actions { display:flex; flex-direction:column; gap:8px; margin-top:8px; }' +
+        '.comp-btn { padding:10px 16px; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family:"JetBrains Mono",monospace; transition:all 0.15s; }' +
+        '.comp-btn:disabled { opacity:0.4; cursor:not-allowed; }' +
+        '.comp-btn-primary { background:var(--cyan, #22d3ee); color:#0a1628; }' +
+        '.comp-btn-primary:hover:not(:disabled) { background:#67e8f9; }' +
+        '.comp-btn-accent { background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3); }' +
+        '.comp-btn-accent:hover:not(:disabled) { background:rgba(245,158,11,0.25); }' +
+        '.comp-result-placeholder { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#4b5563; }' +
+        '.comp-result-icon { font-size:48px; margin-bottom:12px; opacity:0.4; }' +
+        '.comp-result-msg { font-size:13px; text-align:center; max-width:320px; line-height:1.6; }' +
+        '.comp-status { padding:12px 16px; border-radius:8px; font-size:12px; font-family:"JetBrains Mono",monospace; margin-bottom:12px; }' +
+        '.comp-status.loading { background:rgba(34,211,238,0.08); color:var(--cyan, #22d3ee); border:1px solid rgba(34,211,238,0.2); }' +
+        '.comp-status.success { background:rgba(16,185,129,0.08); color:#10b981; border:1px solid rgba(16,185,129,0.2); }' +
+        '.comp-status.error { background:rgba(239,68,68,0.08); color:#ef4444; border:1px solid rgba(239,68,68,0.2); }' +
+        '@media (max-width:900px) { .composite-body { flex-direction:column; } .composite-controls { width:100%; min-width:auto; border-right:none; border-bottom:1px solid rgba(255,255,255,0.06); max-height:none; } .composite-results { min-height:500px; } }';
+    document.head.appendChild(style);
+}
+
+function toggleCompositePanel() {
+    initCompositePanel();
+    var panel = document.getElementById('composite-panel');
+    panel.classList.toggle('active');
+    if (panel.classList.contains('active')) {
+        updateCompositeCount();
+    }
+}
+
+function _getCompositeFilters() {
+    return {
+        min_intensity:   parseFloat(document.getElementById('comp-int-min').value) || 0,
+        max_intensity:   parseFloat(document.getElementById('comp-int-max').value) || 200,
+        min_vmax_change: parseFloat(document.getElementById('comp-dv-min').value) || -100,
+        max_vmax_change: parseFloat(document.getElementById('comp-dv-max').value) || 85,
+        min_tilt:        parseFloat(document.getElementById('comp-tilt-min').value) || 0,
+        max_tilt:        parseFloat(document.getElementById('comp-tilt-max').value) || 200,
+        min_year:        parseInt(document.getElementById('comp-year-min').value) || 1997,
+        max_year:        parseInt(document.getElementById('comp-year-max').value) || 2024,
+        min_shear_mag:   parseFloat(document.getElementById('comp-shrmag-min').value) || 0,
+        max_shear_mag:   parseFloat(document.getElementById('comp-shrmag-max').value) || 100,
+        min_shear_dir:   parseFloat(document.getElementById('comp-shrdir-min').value) || 0,
+        max_shear_dir:   parseFloat(document.getElementById('comp-shrdir-max').value) || 360,
+    };
+}
+
+function _compositeQueryString(filters) {
+    var parts = [];
+    for (var k in filters) { parts.push(k + '=' + encodeURIComponent(filters[k])); }
+    return parts.join('&');
+}
+
+function _debouncedCompositeCount() {
+    clearTimeout(_compositeCountTimeout);
+    _compositeCountTimeout = setTimeout(updateCompositeCount, 400);
+}
+
+function updateCompositeCount() {
+    var filters = _getCompositeFilters();
+    var el = document.getElementById('comp-count-num');
+    el.textContent = '\u2026';
+    fetch(API_BASE + '/composite/count?' + _compositeQueryString(filters))
+        .then(function(r) { return r.json(); })
+        .then(function(json) { el.textContent = json.count; })
+        .catch(function() { el.textContent = '?'; });
+}
+
+function _compositeFilterSummary(filters, nCases) {
+    var parts = [];
+    if (filters.min_intensity > 0 || filters.max_intensity < 200)
+        parts.push(filters.min_intensity + '\u2013' + filters.max_intensity + ' kt');
+    if (filters.min_vmax_change > -100 || filters.max_vmax_change < 85)
+        parts.push('\u0394V ' + filters.min_vmax_change + ' to ' + filters.max_vmax_change + ' kt');
+    if (filters.min_tilt > 0 || filters.max_tilt < 200)
+        parts.push('Tilt ' + filters.min_tilt + '\u2013' + filters.max_tilt + ' km');
+    if (filters.min_year > 1997 || filters.max_year < 2024)
+        parts.push(filters.min_year + '\u2013' + filters.max_year);
+    if (filters.min_shear_mag > 0 || filters.max_shear_mag < 100)
+        parts.push('Shr ' + filters.min_shear_mag + '\u2013' + filters.max_shear_mag + ' kt');
+    if (filters.min_shear_dir > 0 || filters.max_shear_dir < 360)
+        parts.push('Dir ' + filters.min_shear_dir + '\u2013' + filters.max_shear_dir + '\u00b0');
+    var summary = parts.length > 0 ? parts.join(' | ') : 'All cases';
+    return 'Composite (N=' + nCases + ') | ' + summary;
+}
+
+function _showCompStatus(cls, msg) {
+    var el = document.getElementById('comp-status');
+    el.className = 'comp-status ' + cls;
+    el.textContent = msg;
+    el.style.display = 'block';
+}
+
+function renderCompositeAzMeanInto(targetId, json, filters) {
+    var el = document.getElementById(targetId); if (!el) return;
+    var azData = json.azimuthal_mean, radius = json.radius_rrmw, height_km = json.height_km, varInfo = json.variable;
+    var isNorm = json.normalized;
+    var rLabel = isNorm ? 'R / RMW' : 'Radius (km)';
+    var fontSize = { title:14, axis:12, tick:10, cbar:12, cbarTick:10, hover:13 };
+    var heatmap = {
+        z: azData, x: radius, y: height_km, type: 'heatmap',
+        colorscale: varInfo.colorscale, zmin: varInfo.vmin, zmax: varInfo.vmax,
+        colorbar: { title: { text: varInfo.units, font: { color:'#ccc', size:fontSize.cbar } }, tickfont: { color:'#ccc', size:fontSize.cbarTick }, thickness:14, len:0.85 },
+        hovertemplate: '<b>' + varInfo.display_name + '</b>: %{z:.2f} ' + varInfo.units + '<br>' + rLabel + ': %{x:.2f}<br>Height: %{y:.1f} km<extra></extra>',
+        hoverongaps: false
+    };
+    var covPct = Math.round((json.coverage_min || 0.5) * 100);
+    var rmwNote = isNorm ? ' | N(RMW)=' + (json.n_with_rmw || json.n_cases) : '';
+    var title = _compositeFilterSummary(filters, json.n_cases) + rmwNote +
+               '<br>Azimuthal Mean: ' + varInfo.display_name + ' (\u2265' + covPct + '% cov.)';
+    var plotBg = '#0a1628';
+    var shapes = [];
+    // RMW reference line at R/RMW = 1
+    if (isNorm) shapes.push({ type:'line', xref:'x', yref:'paper', x0:1, x1:1, y0:0, y1:1, line:{ color:'white', width:1.5, dash:'dash' } });
+    var layout = {
+        title: { text: title, font: { color:'#e5e7eb', size:fontSize.title }, y:0.97, x:0.5, xanchor:'center' },
+        paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+        xaxis: { title: { text:rLabel, font:{color:'#aaa',size:fontSize.axis} }, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
+        yaxis: { title: { text:'Height (km)', font:{color:'#aaa',size:fontSize.axis} }, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
+        margin: { l:55, r:24, t:64, b:46 }, shapes: shapes,
+        hoverlabel: { bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
+        showlegend: false
+    };
+    var maxInfo = findDataMax(azData, radius, height_km);
+    if (maxInfo) {
+        var maxAnnot = buildMaxAnnotation(maxInfo, varInfo.units, isNorm ? 'R/RMW' : 'R', 'Z', 10);
+        if (maxAnnot) layout.annotations = (layout.annotations || []).concat([maxAnnot]);
+    }
+    el.style.display = 'block';
+    el.innerHTML = '<div id="comp-az-chart" style="width:100%;height:500px;border-radius:8px;overflow:hidden;"></div>';
+    Plotly.newPlot('comp-az-chart', [heatmap], layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
+}
+
+function renderCompositeQuadMeanInto(targetId, json, filters) {
+    var el = document.getElementById(targetId); if (!el) return;
+    var quads = json.quadrant_means;
+    var radius = json.radius_rrmw, height_km = json.height_km, varInfo = json.variable;
+    var isNorm = json.normalized;
+    var rLabel = isNorm ? 'R / RMW' : 'Radius (km)';
+    var fontSize = { title:14, axis:11, tick:10, cbar:11, cbarTick:10, hover:12, panel:12 };
+    var zmin = varInfo.vmin, zmax = varInfo.vmax;
+
+    var panelOrder = [
+        { key:'USL', label:'Upshear Left', row:0, col:0 },
+        { key:'DSL', label:'Downshear Left', row:0, col:1 },
+        { key:'USR', label:'Upshear Right', row:1, col:0 },
+        { key:'DSR', label:'Downshear Right', row:1, col:1 }
+    ];
+
+    var traces = [], annotations = [], shapes = [];
+    var gap=0.08, cbarW=0.04, leftM=0.06, rightM=0.02+cbarW+0.02, topM=0.10, botM=0.06;
+    var pw = (1-leftM-rightM-gap)/2, ph = (1-topM-botM-gap)/2;
+    var quadColors = { DSL:'#f59e0b', DSR:'#f59e0b', USL:'#60a5fa', USR:'#60a5fa' };
+
+    panelOrder.forEach(function(p, i) {
+        var qData = quads[p.key];
+        if (!qData || !qData.data) return;
+        var x0 = leftM + p.col * (pw + gap);
+        var x1 = x0 + pw;
+        var yTop = 1 - topM - p.row * ph - p.row * gap;
+        var yBottom = 1 - topM - (p.row+1) * ph - p.row * gap;
+        var axSuffix = i === 0 ? '' : String(i+1);
+        var showCbar = (i === 1);
+        traces.push({
+            z:qData.data, x:radius, y:height_km, type:'heatmap',
+            colorscale:varInfo.colorscale, zmin:zmin, zmax:zmax,
+            xaxis:'x'+axSuffix, yaxis:'y'+axSuffix,
+            showscale:showCbar,
+            colorbar: showCbar ? { title:{text:varInfo.units,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:14, len:0.85, x:1.02, y:0.5 } : undefined,
+            hovertemplate:'<b>'+p.label+'</b><br>'+varInfo.display_name+': %{z:.2f} '+varInfo.units+'<br>'+rLabel+': %{x:.2f}<br>Height: %{y:.1f} km<extra></extra>',
+            hoverongaps:false
+        });
+        annotations.push({
+            text:'<b>'+p.label+'</b>', xref:'paper', yref:'paper',
+            x:(x0+x1)/2, y:yTop+0.005, xanchor:'center', yanchor:'bottom', showarrow:false,
+            font:{ color:quadColors[p.key]||'#ccc', size:fontSize.panel, family:'JetBrains Mono, monospace' },
+            bgcolor:'rgba(10,22,40,0.7)', borderpad:2
+        });
+        // RMW reference line at R/RMW = 1
+        if (isNorm) {
+            shapes.push({ type:'line', xref:'x'+axSuffix, yref:'y'+axSuffix,
+                x0:1, x1:1, y0:height_km[0], y1:height_km[height_km.length-1],
+                line:{ color:'white', width:1, dash:'dash' } });
+        }
+    });
+
+    // Shear arrow inset at center
+    var shearInset = buildShearInset(90, true);
+    annotations = annotations.concat(shearInset.annotations || []);
+
+    var covPct = Math.round((json.coverage_min || 0.5) * 100);
+    var rmwNote = isNorm ? ' | N(RMW+Shr)=' + (json.n_with_shear_and_rmw || json.n_cases) : '';
+    var title = _compositeFilterSummary(filters, json.n_cases) + rmwNote +
+               '<br>Shear-Relative Quadrant Mean: ' + varInfo.display_name + ' (\u2265' + covPct + '% cov.)';
+
+    var plotBg = '#0a1628';
+    var layoutAxes = {};
+    panelOrder.forEach(function(p, i) {
+        var x0 = leftM + p.col * (pw + gap);
+        var x1 = x0 + pw;
+        var yBottom = 1 - topM - (p.row+1) * ph - p.row * gap;
+        var yTop = 1 - topM - p.row * ph - p.row * gap;
+        var axSuffix = i === 0 ? '' : String(i+1);
+        var showYLabel = (p.col === 0), showXLabel = (p.row === 1);
+        layoutAxes['xaxis' + axSuffix] = { domain:[x0,x1], title:showXLabel?{text:rLabel,font:{color:'#aaa',size:fontSize.axis}}:undefined, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false, anchor:'y'+axSuffix };
+        layoutAxes['yaxis' + axSuffix] = { domain:[yBottom,yTop], title:showYLabel?{text:'Height (km)',font:{color:'#aaa',size:fontSize.axis}}:undefined, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false, anchor:'x'+axSuffix };
+    });
+
+    var layout = Object.assign({
+        title:{ text:title, font:{color:'#e5e7eb',size:fontSize.title}, y:0.99, x:0.5, xanchor:'center' },
+        paper_bgcolor:plotBg, plot_bgcolor:plotBg,
+        margin:{ l:50, r:60, t:70, b:50 },
+        annotations:annotations, shapes:shapes.concat(shearInset.shapes || []),
+        hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
+        showlegend:false
+    }, layoutAxes);
+
+    el.style.display = 'block';
+    el.innerHTML = '<div id="comp-sq-chart" style="width:100%;height:600px;border-radius:8px;overflow:hidden;"></div>';
+    Plotly.newPlot('comp-sq-chart', traces, layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
+}
+
+function generateCompositeAzMean() {
+    var filters = _getCompositeFilters();
+    var variable = document.getElementById('comp-var').value;
+    var dataType = document.getElementById('comp-dtype').value;
+    var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
+    var btnAz = document.getElementById('comp-btn-az'), btnSq = document.getElementById('comp-btn-sq');
+    btnAz.disabled = true; btnSq.disabled = true;
+    btnAz.textContent = '\u23F3 Computing\u2026';
+    document.getElementById('comp-result-placeholder').style.display = 'none';
+    document.getElementById('comp-result-sq').style.display = 'none';
+    _showCompStatus('loading', 'Computing composite azimuthal mean \u2014 this may take 30\u201390 seconds for many cases\u2026');
+
+    var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage;
+    fetch(API_BASE + '/composite/azimuthal_mean?' + qs)
+        .then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error(e.detail||'API error');}); return r.json(); })
+        .then(function(json) {
+            _showCompStatus('success', '\u2713 Composite computed: ' + json.n_cases + ' cases processed');
+            renderCompositeAzMeanInto('comp-result-az', json, filters);
+        })
+        .catch(function(err) { _showCompStatus('error', '\u2717 ' + err.message); })
+        .finally(function() {
+            btnAz.disabled = false; btnSq.disabled = false;
+            btnAz.textContent = '\u27F3 Azimuthal Mean';
+        });
+}
+
+function generateCompositeQuadMean() {
+    var filters = _getCompositeFilters();
+    var variable = document.getElementById('comp-var').value;
+    var dataType = document.getElementById('comp-dtype').value;
+    var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
+    var btnAz = document.getElementById('comp-btn-az'), btnSq = document.getElementById('comp-btn-sq');
+    btnAz.disabled = true; btnSq.disabled = true;
+    btnSq.textContent = '\u23F3 Computing\u2026';
+    document.getElementById('comp-result-placeholder').style.display = 'none';
+    document.getElementById('comp-result-az').style.display = 'none';
+    _showCompStatus('loading', 'Computing composite shear quadrants \u2014 this may take 30\u201390 seconds for many cases\u2026');
+
+    var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage;
+    fetch(API_BASE + '/composite/quadrant_mean?' + qs)
+        .then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error(e.detail||'API error');}); return r.json(); })
+        .then(function(json) {
+            _showCompStatus('success', '\u2713 Composite computed: ' + json.n_cases + ' cases processed (' + json.n_with_shear + ' with shear data)');
+            renderCompositeQuadMeanInto('comp-result-sq', json, filters);
+        })
+        .catch(function(err) { _showCompStatus('error', '\u2717 ' + err.message); })
+        .finally(function() {
+            btnAz.disabled = false; btnSq.disabled = false;
+            btnSq.textContent = '\u25D1 Shear Quadrants';
+        });
+}
+
+// Close composite panel on Escape
+(function() {
+    var orig = document.onkeydown;
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            var cp = document.getElementById('composite-panel');
+            if (cp && cp.classList.contains('active')) { toggleCompositePanel(); e.stopPropagation(); }
+        }
+    });
+})();
