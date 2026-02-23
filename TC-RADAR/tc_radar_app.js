@@ -369,57 +369,69 @@ function _renderHurricaneFrame(phase, W, H) {
         grid[r] = []; bright[r] = [];
         for (c = 0; c < W; c++) { grid[r][c] = ' '; bright[r][c] = 0; }
     }
-
-    var nArms = 3;
-    var a = 0.14;    // spiral tightness
-    var asp = 2.1;   // char aspect ratio correction
+    var asp = 2.1;
     var chars = ['\u2500', '\\', '\u2502', '/', '\u2500', '\\', '\u2502', '/'];
 
-    for (var arm = 0; arm < nArms; arm++) {
-        var armOff = arm * 2 * Math.PI / nArms;
-        // Each arm has a width that varies — thicker near eyewall
-        for (var t = 1.5; t < 38; t += 0.08) {
-            var sr = a * t;
-            var theta = t + armOff + phase;
-            // Slight width: jitter perpendicular to spiral
-            var widthJitter = [0];
-            if (sr > 0.8 && sr < 2.0) widthJitter = [-0.3, 0, 0.3]; // thick eyewall
-            else if (sr < 3.2) widthJitter = [0, 0.18];
-            for (var w = 0; w < widthJitter.length; w++) {
-                var perpTheta = theta + Math.PI / 2;
-                var px = cx + (sr + widthJitter[w] * 0.5) * Math.cos(theta) * asp + widthJitter[w] * Math.cos(perpTheta) * asp * 0.3;
-                var py = cy - (sr + widthJitter[w] * 0.5) * Math.sin(theta) - widthJitter[w] * Math.sin(perpTheta) * 0.3;
-                var ix = Math.round(px), iy = Math.round(py);
-                if (ix < 0 || ix >= W || iy < 0 || iy >= H) continue;
+    for (var row = 0; row < H; row++) {
+        for (var col = 0; col < W; col++) {
+            var dx = (col - cx) / asp;
+            var dy = -(row - cy);
+            var dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 0.3 || dist > 8.5) continue;
 
-                // Tangent direction for character selection
-                var dx = (a * Math.cos(theta) - a * t * Math.sin(theta)) * asp;
-                var dy = -(a * Math.sin(theta) + a * t * Math.cos(theta));
-                var angle = Math.atan2(dy, dx);
-                if (angle < 0) angle += 2 * Math.PI;
-                var dirIdx = Math.round(angle / (Math.PI / 4)) % 8;
+            var angle = Math.atan2(dy, dx);
+            if (angle < 0) angle += 2 * Math.PI;
 
-                // Brightness: 3=eyewall, 2=inner, 1=outer
-                var b = sr < 2.0 ? 3 : sr < 3.2 ? 2 : 1;
-                if (b > bright[iy][ix]) {
-                    grid[iy][ix] = chars[dirIdx];
-                    bright[iy][ix] = b;
-                }
+            // Eyewall: nearly complete ring
+            if (dist >= 0.6 && dist <= 2.2) {
+                var flowAngle = angle + Math.PI / 2;
+                if (flowAngle < 0) flowAngle += 2 * Math.PI;
+                var dirIdx = Math.round(flowAngle / (Math.PI / 4)) % 8;
+                grid[row][col] = chars[dirIdx];
+                bright[row][col] = 3;
+                continue;
+            }
+
+            // Outer rainbands: spiral arms with moats between them
+            var a = 0.65;
+            var nArms = 3;
+            var minDist = Infinity;
+            for (var arm = 0; arm < nArms; arm++) {
+                var armOff = arm * 2 * Math.PI / nArms;
+                var spiralTheta = dist / a + armOff + phase;
+                var diff = angle - (spiralTheta % (2 * Math.PI));
+                while (diff > Math.PI) diff -= 2 * Math.PI;
+                while (diff < -Math.PI) diff += 2 * Math.PI;
+                var arcDist = Math.abs(diff) * dist;
+                if (arcDist < minDist) minDist = arcDist;
+            }
+
+            var bandWidth;
+            if (dist < 4.0) bandWidth = 0.65;
+            else if (dist < 6.0) bandWidth = 0.50;
+            else bandWidth = 0.38;
+
+            if (minDist < bandWidth) {
+                var flowAngle2 = angle + Math.atan2(1, a / dist) + Math.PI;
+                if (flowAngle2 < 0) flowAngle2 += 2 * Math.PI;
+                var dirIdx2 = Math.round(flowAngle2 / (Math.PI / 4)) % 8;
+                var b2 = dist < 4.0 ? 2 : 1;
+                grid[row][col] = chars[dirIdx2];
+                bright[row][col] = b2;
             }
         }
     }
 
     // Clear the eye
-    var eyeR = 0.45;
+    var eyeR = 0.55;
     for (var ey = -2; ey <= 2; ey++) {
-        for (var ex = -4; ex <= 4; ex++) {
+        for (var ex = -5; ex <= 5; ex++) {
             if (Math.sqrt((ex / asp) * (ex / asp) + ey * ey) < eyeR) {
                 var eiy = Math.round(cy + ey), eix = Math.round(cx + ex);
                 if (eiy >= 0 && eiy < H && eix >= 0 && eix < W) { grid[eiy][eix] = ' '; bright[eiy][eix] = 0; }
             }
         }
     }
-    // Eye symbol
     grid[Math.round(cy)][Math.round(cx)] = '\u25C9';
     bright[Math.round(cy)][Math.round(cx)] = 4;
 
@@ -430,11 +442,11 @@ function _renderHurricaneFrame(phase, W, H) {
         var line = '';
         var curBright = 0;
         for (c = 0; c < W; c++) {
-            var b2 = bright[r][c];
-            if (b2 !== curBright) {
+            var bv = bright[r][c];
+            if (bv !== curBright) {
                 if (curBright > 0) line += '</span>';
-                if (b2 > 0) line += '<span style="color:' + colors[b2] + '">';
-                curBright = b2;
+                if (bv > 0) line += '<span style="color:' + colors[bv] + '">';
+                curBright = bv;
             }
             line += grid[r][c];
         }
