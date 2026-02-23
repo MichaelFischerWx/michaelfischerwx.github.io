@@ -326,6 +326,27 @@ var _csMouseHandler = null;
 var _currentSddc = null;
 var _lastSqJson = null;
 
+// Supplement API case_meta with local frontend metadata when fields are missing.
+// This handles cases where the API's merge metadata may not be deployed.
+function _enrichCaseMeta(meta) {
+    if (!meta) meta = {};
+    if ((!meta.storm_name || meta.storm_name === '') && currentCaseIndex !== null) {
+        var d = _getActiveData();
+        if (d) {
+            var local = d.cases.find(function(c) { return c.case_index === currentCaseIndex; });
+            if (local) {
+                if (!meta.storm_name) meta.storm_name = local.storm_name || '';
+                if (!meta.datetime) meta.datetime = local.datetime || '';
+                if (meta.vmax_kt === undefined || meta.vmax_kt === null) meta.vmax_kt = local.vmax_kt;
+                if (meta.rmw_km === undefined || meta.rmw_km === null) meta.rmw_km = local.rmw_km;
+                if (!meta.mission_id) meta.mission_id = local.mission_id || '';
+                if ((meta.sddc === undefined || meta.sddc === null || meta.sddc === 9999) && local.sddc !== undefined && local.sddc !== null && local.sddc !== 9999) meta.sddc = local.sddc;
+            }
+        }
+    }
+    return meta;
+}
+
 function _startRubberBand(plotDiv, pxA, pyA) {
     var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.id = 'cs-rubber-band';
@@ -604,7 +625,7 @@ function renderPlotFromJSON(json, resultDiv) {
     var panelInner = document.getElementById('side-panel-inner');
     if (panelInner) panelInner.scrollTop = 0;
 
-    var zData = json.data, x = json.x, y = json.y, varInfo = json.variable, meta = json.case_meta;
+    var zData = json.data, x = json.x, y = json.y, varInfo = json.variable, meta = _enrichCaseMeta(json.case_meta);
     _currentSddc = (meta.sddc !== undefined && meta.sddc !== null && meta.sddc !== 9999) ? meta.sddc : null;
     _defaultColorscale = varInfo.colorscale; _defaultVmin = varInfo.vmin; _defaultVmax = varInfo.vmax;
     var vminInput = document.getElementById('ep-vmin'), vmaxInput = document.getElementById('ep-vmax');
@@ -732,7 +753,7 @@ function fetchCrossSection(a, b) {
 
 function renderCrossSectionInto(targetId, json, fullsize) {
     var el = document.getElementById(targetId); if (!el) return;
-    var csData = json.cross_section, distance_km = json.distance_km, height_km = json.height_km, varInfo = json.variable, meta = json.case_meta, ep = json.endpoints;
+    var csData = json.cross_section, distance_km = json.distance_km, height_km = json.height_km, varInfo = json.variable, meta = _enrichCaseMeta(json.case_meta), ep = json.endpoints;
     var fontSize = fullsize ? { title:13,axis:12,tick:10,cbar:12,cbarTick:10,hover:13 } : { title:10,axis:9,tick:8,cbar:9,cbarTick:8,hover:11 };
     var csColorscale = varInfo.colorscale;
     var cmapSel = document.getElementById('ep-cmap');
@@ -790,7 +811,7 @@ function fetchAzimuthalMean() {
 
 function renderAzimuthalMeanInto(targetId, json, fullsize) {
     var el = document.getElementById(targetId); if (!el) return;
-    var azData = json.azimuthal_mean, radius_km = json.radius_km, height_km = json.height_km, varInfo = json.variable, meta = json.case_meta;
+    var azData = json.azimuthal_mean, radius_km = json.radius_km, height_km = json.height_km, varInfo = json.variable, meta = _enrichCaseMeta(json.case_meta);
     if (meta.sddc !== undefined && meta.sddc !== null && meta.sddc !== 9999) _currentSddc = meta.sddc;
     var fontSize = fullsize ? { title:13,axis:12,tick:10,cbar:12,cbarTick:10,hover:13 } : { title:10,axis:9,tick:8,cbar:9,cbarTick:8,hover:11 };
     var csColorscale = varInfo.colorscale;
@@ -932,6 +953,7 @@ function fetchShearQuadrants() {
         .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
         .then(function(json) {
             _lastSqJson = json;
+            json.case_meta = _enrichCaseMeta(json.case_meta);
             if (json.case_meta && json.case_meta.sddc !== undefined) _currentSddc = (json.case_meta.sddc !== 9999) ? json.case_meta.sddc : null;
             resultDiv.innerHTML = '<div class="explorer-status" style="color:#10b981;">\u2713 Shear quadrants ready \u2014 opening expanded view</div>';
             openPlotModal();
@@ -943,7 +965,7 @@ function fetchShearQuadrants() {
 function renderQuadrantMeansInto(targetId, json, fullsize) {
     var el = document.getElementById(targetId); if (!el) return;
     var quads = json.quadrant_means; // { DSL: {data:...}, DSR: ..., USL: ..., USR: ... }
-    var radius_km = json.radius_km, height_km = json.height_km, varInfo = json.variable, meta = json.case_meta;
+    var radius_km = json.radius_km, height_km = json.height_km, varInfo = json.variable, meta = _enrichCaseMeta(json.case_meta);
     var sddc = (meta.sddc !== undefined && meta.sddc !== 9999) ? meta.sddc : null;
     var fontSize = fullsize ? { title:14,axis:11,tick:10,cbar:11,cbarTick:10,hover:12,panel:12 } : { title:11,axis:9,tick:8,cbar:9,cbarTick:8,hover:10,panel:10 };
 
