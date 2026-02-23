@@ -1328,6 +1328,9 @@ fetch('tc_radar_metadata.json')
         };
         legend.addTo(map);
         initializeFilters();
+
+        // Check for composite permalink in URL hash
+        _checkCompPermalink();
     })
     .catch(function(err) { document.getElementById('loading').innerHTML = '<div style="color:#f87171;"><strong>Error loading data</strong><br><small>' + err.message + '</small></div>'; });
 
@@ -1799,6 +1802,8 @@ function _injectCompositeStyles() {
         '.comp-cl-table tr:hover td { background:rgba(34,211,238,0.04); }' +
         '.comp-cl-empty { padding:16px; text-align:center; color:#6b7280; font-size:12px; }' +
         '.comp-cl-copy { font-size:10px !important; padding:3px 8px !important; }' +
+        '.comp-link-btn { border-color:rgba(34,211,238,0.25); color:var(--cyan, #22d3ee); }' +
+        '.comp-link-btn:hover { background:rgba(34,211,238,0.1); border-color:rgba(34,211,238,0.4); }' +
         '@media (max-width:900px) { .composite-body { flex-direction:column; } .composite-controls { width:100%; min-width:auto; border-right:none; border-bottom:1px solid rgba(255,255,255,0.06); max-height:none; } .composite-results { min-height:500px; } }';
     document.head.appendChild(style);
 }
@@ -1967,8 +1972,138 @@ function _buildCompToolbar() {
         '<button class="comp-tool-btn" onclick="_downloadCompCSV()" title="Download data as CSV">\u2B07 CSV</button>' +
         '<button class="comp-tool-btn" onclick="_downloadCompJSON()" title="Download full API response as JSON">\u2B07 JSON</button>' +
         '<button class="comp-tool-btn" onclick="_toggleCompCaseList()" title="Show/hide cases used in this composite">\uD83D\uDCCB Cases</button>' +
+        '<button class="comp-tool-btn comp-link-btn" onclick="_copyCompPermalink()" title="Copy shareable link with current settings">\uD83D\uDD17 Copy Link</button>' +
     '</div>' +
     '<div class="comp-case-list-wrap" id="comp-case-list" style="display:none;"></div>';
+}
+
+// ── Permalink: encode/decode composite state in URL hash ────
+function _buildCompPermalinkHash() {
+    var filters = _getCompositeFilters();
+    var params = {};
+    // Only include non-default filter values to keep the URL clean
+    if (filters.min_intensity > 0)     params.min_intensity = filters.min_intensity;
+    if (filters.max_intensity < 200)   params.max_intensity = filters.max_intensity;
+    if (filters.min_vmax_change > -100) params.min_vmax_change = filters.min_vmax_change;
+    if (filters.max_vmax_change < 85)  params.max_vmax_change = filters.max_vmax_change;
+    if (filters.min_tilt > 0)          params.min_tilt = filters.min_tilt;
+    if (filters.max_tilt < 200)        params.max_tilt = filters.max_tilt;
+    if (filters.min_year > 1997)       params.min_year = filters.min_year;
+    if (filters.max_year < 2024)       params.max_year = filters.max_year;
+    if (filters.min_shear_mag > 0)     params.min_shear_mag = filters.min_shear_mag;
+    if (filters.max_shear_mag < 100)   params.max_shear_mag = filters.max_shear_mag;
+    if (filters.min_shear_dir > 0)     params.min_shear_dir = filters.min_shear_dir;
+    if (filters.max_shear_dir < 360)   params.max_shear_dir = filters.max_shear_dir;
+    // Variable, data type, coverage, overlay
+    var variable = document.getElementById('comp-var');
+    if (variable && variable.value !== 'recentered_tangential_wind') params.variable = variable.value;
+    var dtype = document.getElementById('comp-dtype');
+    if (dtype && dtype.value !== 'swath') params.dtype = dtype.value;
+    var coverage = document.getElementById('comp-coverage');
+    if (coverage && coverage.value !== '50') params.coverage = coverage.value;
+    var overlay = document.getElementById('comp-overlay');
+    if (overlay && overlay.value) params.overlay = overlay.value;
+    // Which view was generated
+    if (_lastCompType) params.view = _lastCompType;
+    var qs = Object.keys(params).map(function(k) { return k + '=' + encodeURIComponent(params[k]); }).join('&');
+    return 'composite' + (qs ? '?' + qs : '');
+}
+
+function _copyCompPermalink() {
+    initCompositePanel();  // ensure panel is created so filters exist
+    var hash = _buildCompPermalinkHash();
+    var url = window.location.origin + window.location.pathname + '#' + hash;
+    navigator.clipboard.writeText(url).then(function() {
+        var btn = document.querySelector('.comp-link-btn');
+        if (btn) { var orig = btn.innerHTML; btn.innerHTML = '\u2713 Copied!'; setTimeout(function() { btn.innerHTML = orig; }, 1500); }
+    });
+    // Also update browser URL bar (without reloading)
+    history.replaceState(null, '', '#' + hash);
+}
+
+function _parseCompHashParams() {
+    var hash = window.location.hash;
+    if (!hash || hash.indexOf('#composite') !== 0) return null;
+    var qsIdx = hash.indexOf('?');
+    if (qsIdx === -1) return {};  // just #composite with no params
+    var qs = hash.substring(qsIdx + 1);
+    var params = {};
+    qs.split('&').forEach(function(pair) {
+        var parts = pair.split('=');
+        if (parts.length === 2) params[decodeURIComponent(parts[0])] = decodeURIComponent(parts[1]);
+    });
+    return params;
+}
+
+function _applyCompHashParams(params) {
+    if (!params) return false;
+    initCompositePanel();
+
+    // Set filter values
+    var fieldMap = {
+        min_intensity: 'comp-int-min', max_intensity: 'comp-int-max',
+        min_vmax_change: 'comp-dv-min', max_vmax_change: 'comp-dv-max',
+        min_tilt: 'comp-tilt-min', max_tilt: 'comp-tilt-max',
+        min_year: 'comp-year-min', max_year: 'comp-year-max',
+        min_shear_mag: 'comp-shrmag-min', max_shear_mag: 'comp-shrmag-max',
+        min_shear_dir: 'comp-shrdir-min', max_shear_dir: 'comp-shrdir-max'
+    };
+    for (var key in fieldMap) {
+        if (params[key] !== undefined) {
+            var el = document.getElementById(fieldMap[key]);
+            if (el) el.value = params[key];
+        }
+    }
+    // Variable
+    if (params.variable) {
+        var varSel = document.getElementById('comp-var');
+        if (varSel) varSel.value = params.variable;
+    }
+    // Data type
+    if (params.dtype) {
+        var dtSel = document.getElementById('comp-dtype');
+        if (dtSel) {
+            dtSel.value = params.dtype;
+            _updateOriginalVarGroup('comp', params.dtype);
+            _updateCompOverlayOriginalGroup(params.dtype);
+        }
+    }
+    // Coverage
+    if (params.coverage) {
+        var covSlider = document.getElementById('comp-coverage');
+        if (covSlider) {
+            covSlider.value = params.coverage;
+            var covLabel = document.getElementById('comp-cov-val');
+            if (covLabel) covLabel.textContent = params.coverage + '%';
+        }
+    }
+    // Overlay
+    if (params.overlay) {
+        var ovSel = document.getElementById('comp-overlay');
+        if (ovSel) ovSel.value = params.overlay;
+    }
+
+    // Open the panel
+    var panel = document.getElementById('composite-panel');
+    if (!panel.classList.contains('active')) panel.classList.add('active');
+
+    // Update the count then auto-generate if a view was specified
+    updateCompositeCount();
+    if (params.view === 'az') {
+        setTimeout(generateCompositeAzMean, 600);
+    } else if (params.view === 'sq') {
+        setTimeout(generateCompositeQuadMean, 600);
+    }
+    return true;
+}
+
+// Check for composite permalink on page load (called after data loads)
+function _checkCompPermalink() {
+    var params = _parseCompHashParams();
+    if (params) {
+        // Small delay to ensure composite panel DOM is ready
+        setTimeout(function() { _applyCompHashParams(params); }, 300);
+    }
 }
 
 function _triggerDownload(content, filename, mimeType) {
@@ -2129,7 +2264,7 @@ function renderCompositeAzMeanInto(targetId, json, filters) {
         paper_bgcolor: plotBg, plot_bgcolor: plotBg,
         xaxis: { title: { text:rLabel, font:{color:'#aaa',size:fontSize.axis} }, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
         yaxis: { title: { text:'Height (km)', font:{color:'#aaa',size:fontSize.axis} }, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
-        margin: { l:55, r:24, t: json.overlay ? 110 : 96, b:46 }, shapes: shapes,
+        margin: { l:55, r:24, t: json.overlay ? 130 : 116, b:46 }, shapes: shapes,
         hoverlabel: { bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
         showlegend: false
     };
@@ -2141,7 +2276,7 @@ function renderCompositeAzMeanInto(targetId, json, filters) {
     var compAzOverlay = buildCompAzOverlayContours(json, radius, height_km);
     el.style.display = 'block';
     _lastCompJson = json; _lastCompType = 'az';
-    el.innerHTML = '<div id="comp-az-chart" style="width:100%;height:540px;border-radius:8px;overflow:hidden;"></div>' + _buildCompToolbar();
+    el.innerHTML = '<div id="comp-az-chart" style="width:100%;height:560px;border-radius:8px;overflow:hidden;"></div>' + _buildCompToolbar();
     Plotly.newPlot('comp-az-chart', [heatmap].concat(compAzOverlay), layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
 }
 
@@ -2168,7 +2303,7 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
     ];
 
     var traces = [], annotations = [], shapes = [];
-    var gap=0.08, cbarW=0.04, leftM=0.06, rightM=0.02+cbarW+0.02, topM=0.16, botM=0.06;
+    var gap=0.08, cbarW=0.04, leftM=0.06, rightM=0.02+cbarW+0.02, topM=0.20, botM=0.06;
     var pw = (1-leftM-rightM-gap)/2, ph = (1-topM-botM-gap)/2;
     var quadColors = { DSL:'#f59e0b', DSR:'#f59e0b', USL:'#60a5fa', USR:'#60a5fa' };
 
@@ -2236,7 +2371,7 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
     var layout = Object.assign({
         title:{ text:title, font:{color:'#e5e7eb',size:fontSize.title}, y:0.99, x:0.5, xanchor:'center' },
         paper_bgcolor:plotBg, plot_bgcolor:plotBg,
-        margin:{ l:50, r:60, t: json.overlay ? 110 : 96, b:50 },
+        margin:{ l:50, r:60, t: json.overlay ? 130 : 116, b:50 },
         annotations:annotations, shapes:shapes.concat(shearInset.shapes || []),
         hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
         showlegend:false
@@ -2244,7 +2379,7 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
 
     el.style.display = 'block';
     _lastCompJson = json; _lastCompType = 'sq';
-    el.innerHTML = '<div id="comp-sq-chart" style="width:100%;height:700px;border-radius:8px;overflow:hidden;"></div>' + _buildCompToolbar();
+    el.innerHTML = '<div id="comp-sq-chart" style="width:100%;height:740px;border-radius:8px;overflow:hidden;"></div>' + _buildCompToolbar();
     Plotly.newPlot('comp-sq-chart', traces.concat(compQuadOverlay), layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
 }
 
@@ -2268,6 +2403,7 @@ function generateCompositeAzMean() {
         .then(function(json) {
             _showCompStatus('success', '\u2713 Composite computed: ' + json.n_cases + ' cases processed');
             renderCompositeAzMeanInto('comp-result-az', json, filters);
+            history.replaceState(null, '', '#' + _buildCompPermalinkHash());
         })
         .catch(function(err) { _showCompStatus('error', '\u2717 ' + err.message); })
         .finally(function() {
@@ -2296,6 +2432,7 @@ function generateCompositeQuadMean() {
         .then(function(json) {
             _showCompStatus('success', '\u2713 Composite computed: ' + json.n_cases + ' cases processed (' + json.n_with_shear + ' with shear data)');
             renderCompositeQuadMeanInto('comp-result-sq', json, filters);
+            history.replaceState(null, '', '#' + _buildCompPermalinkHash());
         })
         .catch(function(err) { _showCompStatus('error', '\u2717 ' + err.message); })
         .finally(function() {
