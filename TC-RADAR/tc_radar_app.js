@@ -1,6 +1,8 @@
 const API_BASE = 'https://tc-radar-api.onrender.com';
 
 let allData = null;
+var _activeDataType = 'swath';  // 'swath' or 'merge'
+function _getActiveData() { return _activeDataType === 'merge' ? mergeData : allData; }
 let markers = null;
 let allMarkers = [];
 let currentCaseIndex = null;
@@ -88,7 +90,7 @@ document.getElementById('storm-select').addEventListener('change', function() {
 
     caseSelect.disabled = false;
     caseSelect.innerHTML = '<option value="">Choose a case\u2026</option>';
-    var cases = allData.cases.filter(function(c) { return c.storm_name === storm; });
+    var cases = _getActiveData().cases.filter(function(c) { return c.storm_name === storm; });
     cases.sort(function(a, b) { return a.datetime.localeCompare(b.datetime); });
     cases.forEach(function(c) {
         var opt = document.createElement('option');
@@ -119,8 +121,8 @@ document.getElementById('case-select').addEventListener('change', function() {
 // Explore button
 function exploreCaseGo() {
     var idx = parseInt(document.getElementById('case-select').value);
-    if (isNaN(idx) || !allData) return;
-    var caseData = allData.cases.find(function(c) { return c.case_index === idx; });
+    if (isNaN(idx) || !_getActiveData()) return;
+    var caseData = _getActiveData().cases.find(function(c) { return c.case_index === idx; });
     if (!caseData) return;
     enterFocusMode(caseData);
     openSidePanel(caseData, true);
@@ -132,7 +134,8 @@ function openSidePanel(caseData, fromQuickSelect) {
     _currentSddc = (caseData.sddc !== null && caseData.sddc !== undefined && caseData.sddc !== 9999) ? caseData.sddc : null;
     const idx = caseData.case_index;
     const padded = String(idx).padStart(4, '0');
-    const imageUrl = 'images/v3m/v3m_swath_cf_' + padded + '.png';
+    const imgPrefix = _activeDataType === 'merge' ? 'v3m_merge_cf_' : 'v3m_swath_cf_';
+    const imageUrl = 'images/v3m/' + imgPrefix + padded + '.png';
 
     var backBtnHtml = _focusMode ?
         '<button class="focus-back-btn" onclick="exitFocusMode();closeSidePanel();">' +
@@ -142,8 +145,12 @@ function openSidePanel(caseData, fromQuickSelect) {
     document.getElementById('side-panel-inner').innerHTML =
         '<button id="side-panel-close" onclick="closeSidePanel()">\u2715</button>' +
         backBtnHtml +
-        '<div class="panel-storm-name">' + caseData.storm_name + '</div>' +
-        '<div class="panel-mission">' + caseData.mission_id + ' \u00b7 ' + caseData.datetime + '</div>' +
+        '<div class="panel-storm-name">' + caseData.storm_name +
+            (_activeDataType === 'merge' ? ' <span style="font-size:10px;background:#4f46e5;color:#fff;padding:1px 6px;border-radius:3px;vertical-align:middle;">MERGE</span>' : '') +
+        '</div>' +
+        '<div class="panel-mission">' + caseData.mission_id + ' \u00b7 ' + caseData.datetime +
+            (caseData.number_of_swaths ? ' \u00b7 ' + caseData.number_of_swaths + ' swaths' : '') +
+        '</div>' +
 
         '<div class="explorer-layout">' +
             // ── LEFT: Display area + action buttons ──
@@ -153,7 +160,7 @@ function openSidePanel(caseData, fromQuickSelect) {
                         '<div class="panel-image-wrap" id="thumb-img-wrap">' +
                             '<img id="thumb-img" src="' + imageUrl + '" alt="Quick-look: ' + caseData.storm_name + '">' +
                         '</div>' +
-                        '<div class="panel-image-label">Quick-look (2-km V<sub>t</sub>, WCM) \u00b7 click to enlarge</div>' +
+                        '<div class="panel-image-label">Quick-look (2-km V<sub>t</sub>, WCM) \u00b7 ' + (_activeDataType === 'merge' ? 'Merged' : 'Swath') + ' \u00b7 click to enlarge</div>' +
                     '</div>' +
                     '<div class="explorer-result" id="ep-result"></div>' +
                     '<div class="cs-result" id="cs-result"></div>' +
@@ -191,7 +198,7 @@ function openSidePanel(caseData, fromQuickSelect) {
                             '<option value="total_recentered_wind_speed">Wind Speed</option>' +
                             '<option value="total_recentered_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>' +
                         '</optgroup>' +
-                        '<optgroup label="Original Swath">' +
+                        '<optgroup label="Original Swath" id="ep-var-original">' +
                             '<option value="swath_tangential_wind">Tangential Wind</option>' +
                             '<option value="swath_radial_wind">Radial Wind</option>' +
                             '<option value="swath_reflectivity">Reflectivity</option>' +
@@ -221,7 +228,7 @@ function openSidePanel(caseData, fromQuickSelect) {
                             '<option value="total_recentered_wind_speed">Wind Speed</option>' +
                             '<option value="total_recentered_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>' +
                         '</optgroup>' +
-                        '<optgroup label="Original Swath">' +
+                        '<optgroup label="Original Swath" id="ep-overlay-original">' +
                             '<option value="swath_tangential_wind">Tangential Wind</option>' +
                             '<option value="swath_radial_wind">Radial Wind</option>' +
                             '<option value="swath_reflectivity">Reflectivity</option>' +
@@ -279,7 +286,7 @@ function openSidePanel(caseData, fromQuickSelect) {
     if (thumbImg) {
         thumbImg.onerror = function() {
             // Try raw GitHub URL as fallback
-            var fallback = 'https://raw.githubusercontent.com/MichaelFischerWx/michaelfischerwx.github.io/main/TC-RADAR/images/v3m/v3m_swath_cf_' + padded + '.png';
+            var fallback = 'https://raw.githubusercontent.com/MichaelFischerWx/michaelfischerwx.github.io/main/TC-RADAR/images/v3m/' + imgPrefix + padded + '.png';
             if (this.src.indexOf('raw.githubusercontent') === -1) {
                 this.src = fallback;
             } else {
@@ -292,6 +299,9 @@ function openSidePanel(caseData, fromQuickSelect) {
             openImageModal(src, caseData.storm_name + ' \u2013 ' + caseData.datetime);
         };
     }
+
+    // Update variable optgroups for current data type
+    _updateExplorerOriginalGroups();
 
     document.getElementById('side-panel').classList.add('open');
     setTimeout(function() { map.invalidateSize(); }, 360);
@@ -381,7 +391,7 @@ function generateCustomPlot(callback) {
     }
     var controller = new AbortController();
     var timeout = setTimeout(function() { controller.abort(); }, 90000);
-    var url = API_BASE + '/data?case_index=' + currentCaseIndex + '&variable=' + variable + '&level_km=' + level_km + '&data_type=swath';
+    var url = API_BASE + '/data?case_index=' + currentCaseIndex + '&variable=' + variable + '&level_km=' + level_km + '&data_type=' + _activeDataType + '';
     if (overlay) url += '&overlay=' + overlay;
     fetch(url, { signal: controller.signal })
         .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
@@ -712,7 +722,7 @@ function fetchCrossSection(a, b) {
     var overlay = (document.getElementById('ep-overlay') || {}).value || '';
     var csResult = document.getElementById('cs-result'); if (!csResult) return;
     csResult.innerHTML = '<div class="explorer-status loading">\u23F3 Computing cross-section\u2026</div>';
-    var url = API_BASE + '/cross_section?case_index=' + currentCaseIndex + '&variable=' + variable + '&data_type=swath&x0=' + a.x + '&y0=' + a.y + '&x1=' + b.x + '&y1=' + b.y + '&n_points=150';
+    var url = API_BASE + '/cross_section?case_index=' + currentCaseIndex + '&variable=' + variable + '&data_type=' + _activeDataType + '&x0=' + a.x + '&y0=' + a.y + '&x1=' + b.x + '&y1=' + b.y + '&n_points=150';
     if (overlay) url += '&overlay=' + overlay;
     fetch(url)
         .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
@@ -767,7 +777,7 @@ function fetchAzimuthalMean() {
     var resultDiv = document.getElementById('az-result'), btn = document.getElementById('az-btn');
     resultDiv.innerHTML = '<div class="explorer-status">Computing azimuthal mean\u2026</div>';
     btn.disabled = true; btn.textContent = '\u27F3 Computing\u2026';
-    var url = API_BASE + '/azimuthal_mean?case_index=' + currentCaseIndex + '&variable=' + variable + '&data_type=swath&coverage_min=' + coverage;
+    var url = API_BASE + '/azimuthal_mean?case_index=' + currentCaseIndex + '&variable=' + variable + '&data_type=' + _activeDataType + '&coverage_min=' + coverage;
     if (overlay && overlay !== 'none') url += '&overlay=' + overlay;
     var controller = new AbortController();
     var timeout = setTimeout(function() { controller.abort(); }, 90000);
@@ -914,7 +924,7 @@ function fetchShearQuadrants() {
     var resultDiv = document.getElementById('sq-result'), btn = document.getElementById('sq-btn');
     resultDiv.innerHTML = '<div class="explorer-status loading">\u23F3 Computing shear-relative quadrant means\u2026</div>';
     btn.disabled = true; btn.textContent = '\u25D1 Computing\u2026';
-    var url = API_BASE + '/quadrant_mean?case_index=' + currentCaseIndex + '&variable=' + variable + '&data_type=swath&coverage_min=' + coverage;
+    var url = API_BASE + '/quadrant_mean?case_index=' + currentCaseIndex + '&variable=' + variable + '&data_type=' + _activeDataType + '&coverage_min=' + coverage;
     if (overlay && overlay !== 'none') url += '&overlay=' + overlay;
     var controller = new AbortController();
     var timeout = setTimeout(function() { controller.abort(); }, 90000);
@@ -1157,7 +1167,10 @@ function createPopupContent(caseData) {
     var category = getIntensityCategory(caseData.vmax_kt);
     var catColor = getIntensityColor(caseData.vmax_kt);
     var idx = caseData.case_index;
-    return '<div class="popup-header"><div class="popup-storm-name">' + caseData.storm_name + '</div><div class="popup-mission">' + caseData.mission_id + '</div></div>' +
+    var nSwathsRow = (caseData.number_of_swaths !== null && caseData.number_of_swaths !== undefined) ?
+        '<div class="popup-row"><span class="popup-label">Swaths:</span><span class="popup-value">' + caseData.number_of_swaths + '</span></div>' : '';
+    var dtBadge = _activeDataType === 'merge' ? '<span style="font-size:9px;background:#4f46e5;color:#fff;padding:1px 5px;border-radius:3px;margin-left:6px;">MERGE</span>' : '';
+    return '<div class="popup-header"><div class="popup-storm-name">' + caseData.storm_name + dtBadge + '</div><div class="popup-mission">' + caseData.mission_id + '</div></div>' +
         '<div class="popup-row"><span class="popup-label">Date/Time:</span><span class="popup-value">' + caseData.datetime + '</span></div>' +
         '<div class="popup-row"><span class="popup-label">Intensity:</span><span class="popup-value"><span class="intensity-badge" style="background:' + catColor + '">' + category + '</span> ' + intensity + '</span></div>' +
         '<div class="popup-row"><span class="popup-label">24-h Change:</span><span class="popup-value">' + vmaxChange + '</span></div>' +
@@ -1165,11 +1178,12 @@ function createPopupContent(caseData) {
         '<div class="popup-row"><span class="popup-label">RMW:</span><span class="popup-value">' + rmw + '</span></div>' +
         '<div class="popup-row"><span class="popup-label">Tilt Magnitude:</span><span class="popup-value">' + tiltMag + '</span></div>' +
         '<div class="popup-row"><span class="popup-label">Shear Dir:</span><span class="popup-value">' + shearDir + '</span></div>' +
+        nSwathsRow +
         '<div class="popup-row"><span class="popup-label">Location:</span><span class="popup-value">' + Math.abs(caseData.latitude).toFixed(2) + '\u00b0' + (caseData.latitude>=0?'N':'S') + ', ' + Math.abs(caseData.longitude).toFixed(2) + '\u00b0' + (caseData.longitude<0?'W':'E') + '</span></div>' +
         '<button class="popup-explore-btn" onclick="openSidePanelById(' + idx + ')">\uD83D\uDD2C View Radar & Explore Data \u2192</button>';
 }
 
-function openSidePanelById(idx) { if (!allData) return; var caseData = allData.cases.find(function(c) { return c.case_index === idx; }); if (caseData) openSidePanel(caseData); }
+function openSidePanelById(idx) { var d = _getActiveData(); if (!d) return; var caseData = d.cases.find(function(c) { return c.case_index === idx; }); if (caseData) openSidePanel(caseData); }
 
 // ── Filters ──────────────────────────────────────────────────
 function passesFilters(c) {
@@ -1183,8 +1197,8 @@ function passesFilters(c) {
 }
 
 function updateMarkers() {
-    if (!markers || !allData) return; markers.clearLayers(); var n = 0;
-    allData.cases.forEach(function(c) { if (passesFilters(c)) { var m = allMarkers.find(function(m) { return m.caseIndex === c.case_index; }); if (m) { markers.addLayer(m.marker); n++; } } });
+    if (!markers || !_getActiveData()) return; markers.clearLayers(); var n = 0;
+    _getActiveData().cases.forEach(function(c) { if (passesFilters(c)) { var m = allMarkers.find(function(m) { return m.caseIndex === c.case_index; }); if (m) { markers.addLayer(m.marker); n++; } } });
     document.getElementById('filtered-count').textContent = n;
 }
 
@@ -1294,6 +1308,94 @@ fetch('tc_radar_metadata.json')
         initializeFilters();
     })
     .catch(function(err) { document.getElementById('loading').innerHTML = '<div style="color:#f87171;"><strong>Error loading data</strong><br><small>' + err.message + '</small></div>'; });
+
+// ── Data-type toggle (Swath / Merge) ──────────────────────────
+function _injectDataTypeToggle() {
+    var toolbar = document.querySelector('.map-toolbar');
+    if (!toolbar) return;
+    var grp = document.createElement('div');
+    grp.className = 'toolbar-group';
+    grp.innerHTML =
+        '<span class="toolbar-label">Data</span>' +
+        '<select id="map-data-type" class="toolbar-select" style="min-width:100px;" onchange="switchDataType(this.value)">' +
+            '<option value="swath">Swath</option>' +
+            '<option value="merge">Merge</option>' +
+        '</select>';
+    toolbar.insertBefore(grp, toolbar.firstChild);
+    // add a separator after
+    var sep = document.createElement('div');
+    sep.className = 'toolbar-sep';
+    grp.parentNode.insertBefore(sep, grp.nextSibling);
+}
+_injectDataTypeToggle();
+
+function switchDataType(dt) {
+    if (dt === _activeDataType) return;
+    var src = dt === 'merge' ? mergeData : allData;
+    if (!src) {
+        alert(dt === 'merge' ? 'Merge metadata not loaded yet.' : 'Swath metadata not loaded yet.');
+        document.getElementById('map-data-type').value = _activeDataType;
+        return;
+    }
+    _activeDataType = dt;
+    closeSidePanel();
+
+    // Update hero stats
+    document.getElementById('total-cases').textContent = src.total_cases.toLocaleString();
+    document.getElementById('total-count').textContent = src.total_cases.toLocaleString();
+    var storms = new Set(src.cases.map(function(c) { return c.storm_name; }));
+    document.getElementById('unique-storms').textContent = storms.size.toLocaleString();
+    var years = src.cases.map(function(c) { return c.year; });
+    document.getElementById('year-range').textContent = Math.min.apply(null, years) + '\u2013' + Math.max.apply(null, years);
+
+    // Rebuild storm dropdown
+    var stormSelect = document.getElementById('storm-select');
+    stormSelect.innerHTML = '<option value="">All Storms</option>';
+    Array.from(storms).sort().forEach(function(s) { var o = document.createElement('option'); o.value = s; o.textContent = s; stormSelect.appendChild(o); });
+
+    // Reset case dropdown
+    document.getElementById('case-select').innerHTML = '<option value="">\u2190 Select a storm first</option>';
+    document.getElementById('case-select').disabled = true;
+    document.getElementById('explore-btn').disabled = true;
+    filters.stormName = 'all';
+
+    // Rebuild markers
+    markers.clearLayers();
+    allMarkers = [];
+    src.cases.forEach(function(caseData) {
+        var color = getIntensityColor(caseData.vmax_kt);
+        var icon = L.divIcon({ className:'custom-div-icon', html:'<div class="custom-marker" style="background-color:'+color+';width:12px;height:12px;box-shadow:0 0 6px '+color+'40;"></div>', iconSize:[12,12], iconAnchor:[6,6] });
+        var marker = L.marker([caseData.latitude, caseData.longitude], { icon: icon });
+        marker.bindPopup(createPopupContent(caseData), { maxWidth:320,minWidth:260,autoPan:true,autoPanPadding:[50,50],keepInView:true,closeButton:true,closeOnEscapeKey:true });
+        allMarkers.push({ caseIndex: caseData.case_index, marker: marker });
+        markers.addLayer(marker);
+    });
+    updateMarkers();
+}
+
+// Update explorer panel Original optgroups when data type changes
+function _updateExplorerOriginalGroups() {
+    var isMerge = _activeDataType === 'merge';
+    var label = isMerge ? 'Original Merged' : 'Original Swath';
+    var options = isMerge ?
+        '<option value="merged_tangential_wind">Tangential Wind</option>' +
+        '<option value="merged_radial_wind">Radial Wind</option>' +
+        '<option value="merged_reflectivity">Reflectivity</option>' +
+        '<option value="merged_wind_speed">Wind Speed</option>' +
+        '<option value="merged_upward_air_velocity">Vertical Velocity</option>' +
+        '<option value="merged_relative_vorticity">Relative Vorticity</option>' +
+        '<option value="merged_divergence">Divergence</option>'
+        :
+        '<option value="swath_tangential_wind">Tangential Wind</option>' +
+        '<option value="swath_radial_wind">Radial Wind</option>' +
+        '<option value="swath_reflectivity">Reflectivity</option>' +
+        '<option value="swath_wind_speed">Wind Speed</option>' +
+        '<option value="swath_earth_relative_wind_speed">Earth-Rel. Wind Speed</option>';
+    ['ep-var-original','ep-overlay-original'].forEach(function(id) {
+        var og = document.getElementById(id);
+        if (og) { og.label = label; og.innerHTML = options; }
+    });
+}
 
 // ── Smooth scroll ────────────────────────────────────────────
 document.querySelectorAll('a[href^="#"]').forEach(function(a) {
