@@ -2806,7 +2806,7 @@ function generateCompDiffAzMean() {
         }
 
         _showCompStatus('success', '\u2713 Difference computed: Group A (' + jsonA.n_cases + ' cases) \u2212 Group B (' + jsonB.n_cases + ' cases)');
-        _renderDiffAzMean('comp-result-az', diffJson, filtersA, filtersB);
+        _renderDiffAzMean('comp-result-az', diffJson, jsonA, jsonB, filtersA, filtersB);
     }).catch(function(err) {
         _showCompStatus('error', '\u2717 ' + err.message);
     }).finally(function() {
@@ -2900,7 +2900,7 @@ function generateCompDiffQuadMean() {
         }
 
         _showCompStatus('success', '\u2713 Difference computed: Group A (' + jsonA.n_cases + ' cases) \u2212 Group B (' + jsonB.n_cases + ' cases)');
-        _renderDiffQuadMean('comp-result-sq', diffJson, filtersA, filtersB);
+        _renderDiffQuadMean('comp-result-sq', diffJson, jsonA, jsonB, filtersA, filtersB);
     }).catch(function(err) {
         _showCompStatus('error', '\u2717 ' + err.message);
     }).finally(function() {
@@ -2909,52 +2909,94 @@ function generateCompDiffQuadMean() {
     });
 }
 
-function _renderDiffAzMean(targetId, json, filtersA, filtersB) {
-    // Override the title and force diff colormap, then use the standard renderer
+function _renderDiffAzMean(targetId, diffJson, jsonA, jsonB, filtersA, filtersB) {
     var el = document.getElementById(targetId); if (!el) return;
-    var azData = json.azimuthal_mean, radius = json.radius_rrmw, height_km = json.height_km, varInfo = json.variable;
-    var isNorm = json.normalized;
-    var rLabel = isNorm ? 'R / RMW' : 'Radius (km)';
-    var fontSize = { title:13, axis:12, tick:10, cbar:12, cbarTick:10, hover:13 };
-    // Force diff display settings (don't use user overrides)
-    _compDefaultColorscale = varInfo.colorscale; _compDefaultVmin = varInfo.vmin; _compDefaultVmax = varInfo.vmax;
-    var heatmap = {
-        z: azData, x: radius, y: height_km, type: 'heatmap',
-        colorscale: _DIFF_COLORSCALE, zmin: varInfo.vmin, zmax: varInfo.vmax,
-        colorbar: { title: { text: varInfo.units, font: { color:'#ccc', size:fontSize.cbar } }, tickfont: { color:'#ccc', size:fontSize.cbarTick }, thickness:14, len:0.85 },
-        hovertemplate: '<b>' + varInfo.display_name + '</b>: %{z:.2f} ' + varInfo.units + '<br>' + rLabel + ': %{x:.2f}<br>Height: %{y:.1f} km<extra></extra>',
-        hoverongaps: false
-    };
-    var covPct = Math.round((json.coverage_min || 0.5) * 100);
-    var dtypeLabel = (document.getElementById('comp-dtype') && document.getElementById('comp-dtype').value === 'merge') ? ' (Merge)' : '';
-    var title = _diffFilterSummary(filtersA, filtersB, json._nA, json._nB) +
-               '<br>\u0394 Azimuthal Mean: ' + json.variable.display_name.replace('\u0394 ','') + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
-    var plotBg = '#0a1628';
-    var shapes = [];
-    if (isNorm) shapes.push({ type:'line', xref:'x', yref:'paper', x0:1, x1:1, y0:0, y1:1, line:{ color:'white', width:1.5, dash:'dash' } });
-    var layout = {
-        title: { text: title, font: { color:'#e5e7eb', size:fontSize.title }, y:0.97, x:0.5, xanchor:'center' },
-        paper_bgcolor: plotBg, plot_bgcolor: plotBg,
-        xaxis: { title: { text:rLabel, font:{color:'#aaa',size:fontSize.axis} }, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
-        yaxis: { title: { text:'Height (km)', font:{color:'#aaa',size:fontSize.axis} }, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
-        margin: { l:55, r:24, t:130, b:46 }, shapes: shapes,
-        hoverlabel: { bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
-        showlegend: false
-    };
     el.style.display = 'block';
-    _lastCompJson = json; _lastCompType = 'az';
-    el.innerHTML = '<div id="comp-az-chart" style="width:100%;height:560px;border-radius:8px;overflow:hidden;"></div>' + _buildCompToolbar();
-    Plotly.newPlot('comp-az-chart', [heatmap], layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
+    _lastCompJson = diffJson; _lastCompType = 'az';
+
+    // Create 3 stacked chart containers + toolbar
+    el.innerHTML =
+        '<div style="margin-bottom:4px;padding:6px 10px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#60a5fa;">\uD83D\uDD35 Group A</div>' +
+        '<div id="comp-diff-az-a" style="width:100%;height:460px;border-radius:8px;overflow:hidden;"></div>' +
+        '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#f59e0b;">\uD83D\uDFE0 Group B</div>' +
+        '<div id="comp-diff-az-b" style="width:100%;height:460px;border-radius:8px;overflow:hidden;"></div>' +
+        '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#ef4444;">\u0394 Difference (A \u2212 B)</div>' +
+        '<div id="comp-diff-az-d" style="width:100%;height:460px;border-radius:8px;overflow:hidden;"></div>' +
+        _buildCompToolbar();
+
+    var plotOpts = { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] };
+    var plotBg = '#0a1628';
+    var isNorm = jsonA.normalized;
+    var rLabel = isNorm ? 'R / RMW' : 'Radius (km)';
+    var radius = jsonA.radius_rrmw, height_km = jsonA.height_km;
+    var varInfoA = jsonA.variable;
+    var covPct = Math.round((jsonA.coverage_min || 0.5) * 100);
+    var dtypeLabel = (document.getElementById('comp-dtype') && document.getElementById('comp-dtype').value === 'merge') ? ' (Merge)' : '';
+    var fontSize = { title:13, axis:11, tick:10, cbar:11, cbarTick:10, hover:12 };
+    var rmwShape = isNorm ? [{ type:'line', xref:'x', yref:'paper', x0:1, x1:1, y0:0, y1:1, line:{ color:'white', width:1.5, dash:'dash' } }] : [];
+
+    // Helper to build a single az mean plot
+    function buildAzPlot(chartId, data, titleText, colorscale, zmin, zmax, units) {
+        var hm = {
+            z: data, x: radius, y: height_km, type: 'heatmap',
+            colorscale: colorscale, zmin: zmin, zmax: zmax,
+            colorbar: { title:{text:units,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:14, len:0.85 },
+            hovertemplate: '%{z:.2f} ' + units + '<br>' + rLabel + ': %{x:.2f}<br>Height: %{y:.1f} km<extra></extra>',
+            hoverongaps: false
+        };
+        var layout = {
+            title: { text:titleText, font:{color:'#e5e7eb',size:fontSize.title}, y:0.97, x:0.5, xanchor:'center' },
+            paper_bgcolor:plotBg, plot_bgcolor:plotBg,
+            xaxis: { title:{text:rLabel,font:{color:'#aaa',size:fontSize.axis}}, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
+            yaxis: { title:{text:'Height (km)',font:{color:'#aaa',size:fontSize.axis}}, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
+            margin:{ l:55, r:24, t:96, b:42 }, shapes:rmwShape,
+            hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
+            showlegend:false
+        };
+        Plotly.newPlot(chartId, [hm], layout, plotOpts);
+    }
+
+    var meanVmaxA = _computeCompositeMeanVmax(filtersA);
+    var vmaxNoteA = meanVmaxA !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxA + ' kt' : '';
+    var titleA = _compositeFilterSummary(filtersA, jsonA.n_cases) + vmaxNoteA +
+                 '<br>Azimuthal Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
+    buildAzPlot('comp-diff-az-a', jsonA.azimuthal_mean, titleA, varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax, varInfoA.units);
+
+    var meanVmaxB = _computeCompositeMeanVmax(filtersB);
+    var vmaxNoteB = meanVmaxB !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxB + ' kt' : '';
+    var titleB = _compositeFilterSummary(filtersB, jsonB.n_cases) + vmaxNoteB +
+                 '<br>Azimuthal Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
+    buildAzPlot('comp-diff-az-b', jsonB.azimuthal_mean, titleB, varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax, varInfoA.units);
+
+    var diffVarInfo = diffJson.variable;
+    var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) +
+                 '<br>\u0394 Azimuthal Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
+    buildAzPlot('comp-diff-az-d', diffJson.azimuthal_mean, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, diffVarInfo.units);
 }
 
-function _renderDiffQuadMean(targetId, json, filtersA, filtersB) {
+function _renderDiffQuadMean(targetId, diffJson, jsonA, jsonB, filtersA, filtersB) {
     var el = document.getElementById(targetId); if (!el) return;
-    var quads = json.quadrant_means;
-    var radius = json.radius_rrmw, height_km = json.height_km, varInfo = json.variable;
-    var isNorm = json.normalized;
+    el.style.display = 'block';
+    _lastCompJson = diffJson; _lastCompType = 'sq';
+
+    el.innerHTML =
+        '<div style="margin-bottom:4px;padding:6px 10px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#60a5fa;">\uD83D\uDD35 Group A</div>' +
+        '<div id="comp-diff-sq-a" style="width:100%;height:640px;border-radius:8px;overflow:hidden;"></div>' +
+        '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#f59e0b;">\uD83D\uDFE0 Group B</div>' +
+        '<div id="comp-diff-sq-b" style="width:100%;height:640px;border-radius:8px;overflow:hidden;"></div>' +
+        '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#ef4444;">\u0394 Difference (A \u2212 B)</div>' +
+        '<div id="comp-diff-sq-d" style="width:100%;height:640px;border-radius:8px;overflow:hidden;"></div>' +
+        _buildCompToolbar();
+
+    var plotOpts = { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] };
+    var plotBg = '#0a1628';
+    var isNorm = jsonA.normalized;
     var rLabel = isNorm ? 'R / RMW' : 'Radius (km)';
-    var fontSize = { title:13, axis:11, tick:10, cbar:11, cbarTick:10, hover:12, panel:12 };
-    _compDefaultColorscale = varInfo.colorscale; _compDefaultVmin = varInfo.vmin; _compDefaultVmax = varInfo.vmax;
+    var radius = jsonA.radius_rrmw, height_km = jsonA.height_km;
+    var varInfoA = jsonA.variable;
+    var covPct = Math.round((jsonA.coverage_min || 0.5) * 100);
+    var dtypeLabel = (document.getElementById('comp-dtype') && document.getElementById('comp-dtype').value === 'merge') ? ' (Merge)' : '';
+    var fontSize = { title:12, axis:10, tick:9, cbar:10, cbarTick:9, hover:11, panel:11 };
 
     var panelOrder = [
         { key:'USL', label:'Upshear Left', row:0, col:0 },
@@ -2962,74 +3004,85 @@ function _renderDiffQuadMean(targetId, json, filtersA, filtersB) {
         { key:'USR', label:'Upshear Right', row:1, col:0 },
         { key:'DSR', label:'Downshear Right', row:1, col:1 }
     ];
-
-    var traces = [], annotations = [], shapes = [];
-    var gap=0.08, cbarW=0.04, leftM=0.06, rightM=0.02+cbarW+0.02, topM=0.20, botM=0.06;
-    var pw = (1-leftM-rightM-gap)/2, ph = (1-topM-botM-gap)/2;
     var quadColors = { DSL:'#f59e0b', DSR:'#f59e0b', USL:'#60a5fa', USR:'#60a5fa' };
 
-    panelOrder.forEach(function(p, i) {
-        var qData = quads[p.key];
-        if (!qData || !qData.data) return;
-        var x0 = leftM + p.col * (pw + gap), x1 = x0 + pw;
-        var yTop = 1 - topM - p.row * ph - p.row * gap;
-        var yBottom = 1 - topM - (p.row+1) * ph - p.row * gap;
-        var axSuffix = i === 0 ? '' : String(i+1);
-        var showCbar = (i === 1);
-        traces.push({
-            z:qData.data, x:radius, y:height_km, type:'heatmap',
-            colorscale:_DIFF_COLORSCALE, zmin:varInfo.vmin, zmax:varInfo.vmax,
-            xaxis:'x'+axSuffix, yaxis:'y'+axSuffix,
-            showscale:showCbar,
-            colorbar: showCbar ? { title:{text:varInfo.units,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:14, len:0.85, x:1.02, y:0.5 } : undefined,
-            hovertemplate:'<b>'+p.label+'</b><br>'+varInfo.display_name+': %{z:.2f} '+varInfo.units+'<br>'+rLabel+': %{x:.2f}<br>Height: %{y:.1f} km<extra></extra>',
-            hoverongaps:false
+    function buildQuadPlot(chartId, quads, titleText, colorscale, zmin, zmax, units) {
+        var traces = [], annotations = [], shapes = [];
+        var gap=0.08, cbarW=0.04, leftM=0.06, rightM=0.02+cbarW+0.02, topM=0.18, botM=0.06;
+        var pw = (1-leftM-rightM-gap)/2, ph = (1-topM-botM-gap)/2;
+
+        panelOrder.forEach(function(p, i) {
+            var qData = quads[p.key];
+            if (!qData) return;
+            var data = qData.data || qData;  // handle both {data:...} and raw array
+            var x0 = leftM + p.col * (pw + gap), x1 = x0 + pw;
+            var yTop = 1 - topM - p.row * ph - p.row * gap;
+            var yBottom = 1 - topM - (p.row+1) * ph - p.row * gap;
+            var axSuffix = i === 0 ? '' : String(i+1);
+            var showCbar = (i === 1);
+            traces.push({
+                z:data, x:radius, y:height_km, type:'heatmap',
+                colorscale:colorscale, zmin:zmin, zmax:zmax,
+                xaxis:'x'+axSuffix, yaxis:'y'+axSuffix,
+                showscale:showCbar,
+                colorbar: showCbar ? { title:{text:units,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:14, len:0.85, x:1.02, y:0.5 } : undefined,
+                hovertemplate:'<b>'+p.label+'</b><br>%{z:.2f} '+units+'<br>'+rLabel+': %{x:.2f}<br>Height: %{y:.1f} km<extra></extra>',
+                hoverongaps:false
+            });
+            annotations.push({
+                text:'<b>'+p.label+'</b>', xref:'paper', yref:'paper',
+                x:(x0+x1)/2, y:yTop+0.005, xanchor:'center', yanchor:'bottom', showarrow:false,
+                font:{ color:quadColors[p.key]||'#ccc', size:fontSize.panel, family:'JetBrains Mono, monospace' },
+                bgcolor:'rgba(10,22,40,0.7)', borderpad:2
+            });
+            if (isNorm) {
+                shapes.push({ type:'line', xref:'x'+axSuffix, yref:'y'+axSuffix,
+                    x0:1, x1:1, y0:height_km[0], y1:height_km[height_km.length-1],
+                    line:{ color:'white', width:1, dash:'dash' } });
+            }
         });
-        annotations.push({
-            text:'<b>'+p.label+'</b>', xref:'paper', yref:'paper',
-            x:(x0+x1)/2, y:yTop+0.005, xanchor:'center', yanchor:'bottom', showarrow:false,
-            font:{ color:quadColors[p.key]||'#ccc', size:fontSize.panel, family:'JetBrains Mono, monospace' },
-            bgcolor:'rgba(10,22,40,0.7)', borderpad:2
+
+        var shearInset = buildShearInset(90, true);
+        annotations = annotations.concat(shearInset.annotations || []);
+
+        var layoutAxes = {};
+        panelOrder.forEach(function(p, i) {
+            var x0 = leftM + p.col * (pw + gap), x1 = x0 + pw;
+            var yBottom = 1 - topM - (p.row+1) * ph - p.row * gap;
+            var yTop = 1 - topM - p.row * ph - p.row * gap;
+            var axSuffix = i === 0 ? '' : String(i+1);
+            var showYLabel = (p.col === 0), showXLabel = (p.row === 1);
+            layoutAxes['xaxis' + axSuffix] = { domain:[x0,x1], title:showXLabel?{text:rLabel,font:{color:'#aaa',size:fontSize.axis}}:undefined, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false, anchor:'y'+axSuffix };
+            layoutAxes['yaxis' + axSuffix] = { domain:[yBottom,yTop], title:showYLabel?{text:'Height (km)',font:{color:'#aaa',size:fontSize.axis}}:undefined, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false, anchor:'x'+axSuffix };
         });
-        if (isNorm) {
-            shapes.push({ type:'line', xref:'x'+axSuffix, yref:'y'+axSuffix,
-                x0:1, x1:1, y0:height_km[0], y1:height_km[height_km.length-1],
-                line:{ color:'white', width:1, dash:'dash' } });
-        }
-    });
 
-    var shearInset = buildShearInset(90, true);
-    annotations = annotations.concat(shearInset.annotations || []);
+        var layout = Object.assign({
+            title:{ text:titleText, font:{color:'#e5e7eb',size:fontSize.title}, y:0.99, x:0.5, xanchor:'center' },
+            paper_bgcolor:plotBg, plot_bgcolor:plotBg,
+            margin:{ l:50, r:60, t:100, b:44 },
+            annotations:annotations, shapes:shapes.concat(shearInset.shapes || []),
+            hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
+            showlegend:false
+        }, layoutAxes);
 
-    var covPct = Math.round((json.coverage_min || 0.5) * 100);
-    var dtypeLabel = (document.getElementById('comp-dtype') && document.getElementById('comp-dtype').value === 'merge') ? ' (Merge)' : '';
-    var title = _diffFilterSummary(filtersA, filtersB, json._nA, json._nB) +
-               '<br>\u0394 Shear-Relative Quadrant Mean: ' + json.variable.display_name.replace('\u0394 ','') + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
-    var plotBg = '#0a1628';
-    var layoutAxes = {};
-    panelOrder.forEach(function(p, i) {
-        var x0 = leftM + p.col * (pw + gap), x1 = x0 + pw;
-        var yBottom = 1 - topM - (p.row+1) * ph - p.row * gap;
-        var yTop = 1 - topM - p.row * ph - p.row * gap;
-        var axSuffix = i === 0 ? '' : String(i+1);
-        var showYLabel = (p.col === 0), showXLabel = (p.row === 1);
-        layoutAxes['xaxis' + axSuffix] = { domain:[x0,x1], title:showXLabel?{text:rLabel,font:{color:'#aaa',size:fontSize.axis}}:undefined, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false, anchor:'y'+axSuffix };
-        layoutAxes['yaxis' + axSuffix] = { domain:[yBottom,yTop], title:showYLabel?{text:'Height (km)',font:{color:'#aaa',size:fontSize.axis}}:undefined, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false, anchor:'x'+axSuffix };
-    });
+        Plotly.newPlot(chartId, traces, layout, plotOpts);
+    }
 
-    var layout = Object.assign({
-        title:{ text:title, font:{color:'#e5e7eb',size:fontSize.title}, y:0.99, x:0.5, xanchor:'center' },
-        paper_bgcolor:plotBg, plot_bgcolor:plotBg,
-        margin:{ l:50, r:60, t:130, b:50 },
-        annotations:annotations, shapes:shapes.concat(shearInset.shapes || []),
-        hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
-        showlegend:false
-    }, layoutAxes);
+    // Group A
+    var titleA = _compositeFilterSummary(filtersA, jsonA.n_cases) +
+                 '<br>Shear-Relative Quadrant Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
+    buildQuadPlot('comp-diff-sq-a', jsonA.quadrant_means, titleA, varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax, varInfoA.units);
 
-    el.style.display = 'block';
-    _lastCompJson = json; _lastCompType = 'sq';
-    el.innerHTML = '<div id="comp-sq-chart" style="width:100%;height:740px;border-radius:8px;overflow:hidden;"></div>' + _buildCompToolbar();
-    Plotly.newPlot('comp-sq-chart', traces, layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
+    // Group B
+    var titleB = _compositeFilterSummary(filtersB, jsonB.n_cases) +
+                 '<br>Shear-Relative Quadrant Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
+    buildQuadPlot('comp-diff-sq-b', jsonB.quadrant_means, titleB, varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax, varInfoA.units);
+
+    // Difference
+    var diffVarInfo = diffJson.variable;
+    var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) +
+                 '<br>\u0394 Shear-Relative Quadrant Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
+    buildQuadPlot('comp-diff-sq-d', diffJson.quadrant_means, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, diffVarInfo.units);
 }
 
 // Close composite panel on Escape
