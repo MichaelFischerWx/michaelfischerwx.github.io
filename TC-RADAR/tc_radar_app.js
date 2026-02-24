@@ -373,11 +373,6 @@ function _renderHurricaneFrame(phase, W, H) {
     }
     var chars = ['\u2500', '\\', '\u2502', '/', '\u2500', '\\', '\u2502', '/'];
 
-    // Two phase components:
-    // structurePhase: band positions rotate very slowly
-    // flowPhase (= phase): dashes within bands flow at full speed
-    var structurePhase = phase * 0.15;
-
     for (var row = 0; row < H; row++) {
         for (var col = 0; col < W; col++) {
             var dx = (col - cx) / asp;
@@ -389,20 +384,22 @@ function _renderHurricaneFrame(phase, W, H) {
             var angle = Math.atan2(dy, dx);
             if (angle < 0) angle += 2 * Math.PI;
 
-            // Band position: eyewall rotates fully, outer bands nearly stationary
-            var bandPhase = nr < 0.27 ? phase : structurePhase;
+            // Differential rotation: eyewall spins fast, outer bands slower
+            var rotScale = 1.0 / (1.0 + 2.0 * nr);
+            var effectivePhase = phase * rotScale;
 
             var a = 0.08;
             var nArms = 3;
             var minDist = Infinity;
+            var bestArmTheta = 0;
             for (var arm = 0; arm < nArms; arm++) {
                 var armOff = arm * 2 * Math.PI / nArms;
-                var spiralTheta = nr / a + armOff + bandPhase;
+                var spiralTheta = nr / a + armOff + effectivePhase;
                 var diff = angle - (spiralTheta % (2 * Math.PI));
                 while (diff > Math.PI) diff -= 2 * Math.PI;
                 while (diff < -Math.PI) diff += 2 * Math.PI;
                 var arcDist = Math.abs(diff) * nr;
-                if (arcDist < minDist) minDist = arcDist;
+                if (arcDist < minDist) { minDist = arcDist; bestArmTheta = spiralTheta; }
             }
 
             var bandWidth;
@@ -423,27 +420,22 @@ function _renderHurricaneFrame(phase, W, H) {
                 if (flowAngle < 0) flowAngle += 2 * Math.PI;
                 var dirIdx = Math.round(flowAngle / (Math.PI / 4)) % 8;
 
-                // Marching dashes: flow phase drives CCW motion within bands
-                var dashOn = true;
-                if (nr >= 0.27) {
-                    var flowSpeed = 1.0 / (1.0 + 2.0 * nr);
-                    var arcPos = angle + phase * flowSpeed;
-                    var dashPeriod = 0.65;
-                    var dashDuty = 0.55;
-                    var dashPhase = ((arcPos % dashPeriod) + dashPeriod) % dashPeriod;
-                    dashOn = dashPhase < dashPeriod * dashDuty;
-                }
+                // Trackable markers: evenly spaced dots along the spiral arc
+                var markerSpacing = 1.8;
+                var markerPos = bestArmTheta % markerSpacing;
+                if (markerPos < 0) markerPos += markerSpacing;
+                var isMarker = nr >= 0.27 && edgeFrac < 0.35 && markerPos < markerSpacing * 0.3;
 
-                if (dashOn) {
-                    grid[row][col] = chars[dirIdx];
-                    var radialFade = nr < 0.27 ? 1.0 : nr < 0.48 ? 0.85 : nr < 0.72 ? 0.65 : 0.45;
-                    var intensity = (1 - edgeFrac * 0.7) * radialFade;
-                    if (intensity > 0.7)      bright[row][col] = 5;
-                    else if (intensity > 0.5) bright[row][col] = 4;
-                    else if (intensity > 0.35) bright[row][col] = 3;
-                    else if (intensity > 0.2) bright[row][col] = 2;
-                    else                      bright[row][col] = 1;
-                }
+                grid[row][col] = isMarker ? '\u2022' : chars[dirIdx];
+
+                var radialFade = nr < 0.27 ? 1.0 : nr < 0.48 ? 0.85 : nr < 0.72 ? 0.65 : 0.45;
+                var intensity = (1 - edgeFrac * 0.7) * radialFade;
+                if (isMarker) intensity = Math.min(1.0, intensity + 0.25);
+                if (intensity > 0.8)      bright[row][col] = 5;
+                else if (intensity > 0.6) bright[row][col] = 4;
+                else if (intensity > 0.4) bright[row][col] = 3;
+                else if (intensity > 0.2) bright[row][col] = 2;
+                else                      bright[row][col] = 1;
             }
         }
     }
