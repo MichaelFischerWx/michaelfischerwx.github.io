@@ -172,6 +172,7 @@ function openSidePanel(caseData, fromQuickSelect) {
                     '<button class="cs-btn" id="cs-btn" onclick="toggleCrossSection()" disabled>\u2702 Cross Section</button>' +
                     '<button class="cs-btn" id="az-btn" onclick="fetchAzimuthalMean()" disabled>\u27F3 Azim. Mean</button>' +
                     '<button class="cs-btn" id="sq-btn" onclick="fetchShearQuadrants()" disabled>\u25D1 Shear Quads</button>' +
+                    '<button class="cs-btn" id="vol-btn" onclick="fetch3DVolume()" disabled>\uD83D\uDDA5 3D Volume</button>' +
                 '</div>' +
             '</div>' +
 
@@ -829,6 +830,7 @@ function renderPlotFromJSON(json, resultDiv) {
     var csBtn = document.getElementById('cs-btn'); if (csBtn) csBtn.disabled = false;
     var azBtn = document.getElementById('az-btn'); if (azBtn) azBtn.disabled = false;
     var sqBtn = document.getElementById('sq-btn'); if (sqBtn) sqBtn.disabled = false;
+    var volBtn = document.getElementById('vol-btn'); if (volBtn) volBtn.disabled = false;
     document.getElementById('plotly-chart').on('plotly_click', handlePlotClick);
 
     // Auto-scroll the side panel to show the plot (skip during animation)
@@ -1655,7 +1657,218 @@ function closePlotModal() {
 function openImageModal(url, caption) { document.getElementById('imageModal').style.display = 'block'; document.getElementById('modalImage').src = url; document.getElementById('modalCaption').textContent = caption; }
 function closeImageModal() { document.getElementById('imageModal').style.display = 'none'; }
 document.addEventListener('click', function(e) { if (e.target===document.getElementById('imageModal')) closeImageModal(); });
-document.addEventListener('keydown', function(e) { if (e.key==='Escape') { closeImageModal(); closePlotModal(); } });
+document.addEventListener('keydown', function(e) { if (e.key==='Escape') { closeImageModal(); closePlotModal(); close3DModal(); } });
+
+// ── 3D Isosurface Volume Viewer ───────────────────────────────
+var _last3DJson = null;
+
+function fetch3DVolume() {
+    if (currentCaseIndex === null) return;
+    var variable = document.getElementById('ep-var').value;
+    var btn = document.getElementById('vol-btn');
+    btn.disabled = true; btn.textContent = '\uD83D\uDDA5 Loading\u2026';
+
+    // Check cache
+    var cacheKey = '3d_' + _activeDataType + '_' + currentCaseIndex + '_' + variable;
+    if (_dataCache[cacheKey]) {
+        _last3DJson = _dataCache[cacheKey];
+        open3DModal();
+        btn.disabled = false; btn.textContent = '\uD83D\uDDA5 3D Volume';
+        return;
+    }
+
+    var controller = new AbortController();
+    var timeout = setTimeout(function() { controller.abort(); }, 120000);
+    var url = API_BASE + '/volume?case_index=' + currentCaseIndex + '&variable=' + variable + '&data_type=' + _activeDataType + '&stride=2&max_height_km=15';
+    fetch(url, { signal: controller.signal })
+        .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
+        .then(function(json) {
+            _dataCache[cacheKey] = json;
+            _last3DJson = json;
+            open3DModal();
+        })
+        .catch(function(err) {
+            var msg = err.name === 'AbortError' ? 'Request timed out (120s).' : err.message;
+            alert('\u26A0\uFE0F 3D Volume: ' + msg);
+        })
+        .finally(function() { clearTimeout(timeout); btn.disabled = false; btn.textContent = '\uD83D\uDDA5 3D Volume'; });
+}
+
+function open3DModal() {
+    if (!_last3DJson) return;
+    var modal = document.getElementById('vol3DModal');
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+
+    var json = _last3DJson;
+    var vi = json.variable;
+
+    // Build title
+    var meta = json.case_meta || {};
+    var title = (meta.storm_name || '') + '  |  ' + (meta.datetime || '') +
+        (meta.vmax_kt !== null && meta.vmax_kt !== undefined ? ' [' + meta.vmax_kt + ' kt]' : '') +
+        '\n' + vi.display_name + '  \u2014  3D Isosurface';
+
+    // Set up control defaults from data range
+    var isoMin = document.getElementById('vol-iso-min');
+    var isoMax = document.getElementById('vol-iso-max');
+    var surfs = document.getElementById('vol-surfaces');
+    var opac = document.getElementById('vol-opacity');
+    var capBtn = document.getElementById('vol-caps');
+
+    // Reasonable defaults based on variable
+    var dMin = vi.data_min, dMax = vi.data_max;
+    var rangeMin = Math.max(vi.vmin, dMin);
+    var rangeMax = Math.min(vi.vmax, dMax);
+    // For diverging variables (vmin < 0), only show positive isosurfaces by default
+    if (vi.vmin < 0) {
+        rangeMin = Math.max(0, dMin);
+    }
+    // For reflectivity, start at 15 dBZ
+    if (vi.key.indexOf('reflectivity') !== -1) {
+        rangeMin = Math.max(15, rangeMin);
+    }
+
+    isoMin.value = rangeMin.toFixed(1);
+    isoMax.value = rangeMax.toFixed(1);
+    document.getElementById('vol-iso-min-val').textContent = rangeMin.toFixed(1);
+    document.getElementById('vol-iso-max-val').textContent = rangeMax.toFixed(1);
+    document.getElementById('vol-units').textContent = vi.units;
+
+    render3DIsosurface();
+}
+
+function close3DModal() {
+    var modal = document.getElementById('vol3DModal');
+    if (!modal) return;
+    modal.classList.remove('active');
+    document.body.style.overflow = '';
+    Plotly.purge('vol-3d-chart');
+}
+
+function render3DIsosurface() {
+    var json = _last3DJson;
+    if (!json) return;
+
+    var vi = json.variable;
+    var sentinel = json.sentinel;
+
+    var isoMin = parseFloat(document.getElementById('vol-iso-min').value) || vi.vmin;
+    var isoMax = parseFloat(document.getElementById('vol-iso-max').value) || vi.vmax;
+    var nSurfaces = parseInt(document.getElementById('vol-surfaces').value) || 4;
+    var opacity = parseFloat(document.getElementById('vol-opacity').value) || 0.3;
+    var showCaps = document.getElementById('vol-caps').classList.contains('active');
+
+    // Clamp iso range above sentinel
+    if (isoMin <= sentinel + 1) isoMin = sentinel + 1;
+
+    var meta = json.case_meta || {};
+    var title = (meta.storm_name || '') + '  |  ' + (meta.datetime || '') +
+        (meta.vmax_kt !== null && meta.vmax_kt !== undefined ? ' [' + meta.vmax_kt + ' kt]' : '') +
+        '<br><span style="font-size:12px;">' + vi.display_name + ' (' + vi.units + ')  \u2014  3D Isosurface</span>';
+
+    var plotBg = '#0d1117';
+
+    var trace = {
+        type: 'isosurface',
+        x: json.x,
+        y: json.y,
+        z: json.z,
+        value: json.value,
+        isomin: isoMin,
+        isomax: isoMax,
+        surface: { count: nSurfaces, fill: 1.0 },
+        caps: {
+            x: { show: showCaps },
+            y: { show: showCaps },
+            z: { show: showCaps }
+        },
+        opacity: opacity,
+        colorscale: vi.colorscale,
+        cmin: isoMin,
+        cmax: isoMax,
+        colorbar: {
+            title: { text: vi.units, font: { color: '#ccc', size: 12 } },
+            tickfont: { color: '#ccc', size: 10 },
+            thickness: 14,
+            len: 0.7,
+            x: 1.02
+        },
+        showscale: true,
+        hovertemplate: '<b>' + vi.display_name + '</b>: %{value:.1f} ' + vi.units +
+            '<br>X: %{x:.0f} km  Y: %{y:.0f} km<br>Height: %{z:.1f} km<extra></extra>',
+        lighting: {
+            ambient: 0.6,
+            diffuse: 0.7,
+            specular: 0.3,
+            roughness: 0.6,
+            fresnel: 0.3
+        },
+        lightposition: { x: 1000, y: 1000, z: 2000 }
+    };
+
+    // Determine axis ranges from grid shape
+    var gs = json.grid_shape; // [nz, ny, nx]
+    var xRange = [json.x[0], json.x[json.x.length - 1]];
+    var yRange = [json.y[0], json.y[json.y.length - 1]];
+    var zRange = [json.z[0], json.z[json.z.length - 1]];
+
+    // Horizontal span (km) vs vertical span
+    var hSpan = Math.max(xRange[1] - xRange[0], yRange[1] - yRange[0]);
+    var vSpan = zRange[1] - zRange[0];
+    var vertExag = Math.min(hSpan / vSpan * 0.25, 8); // Exaggerate vertical but cap it
+
+    var layout = {
+        title: { text: title, font: { color: '#e5e7eb', size: 15 }, y: 0.97, x: 0.5, xanchor: 'center' },
+        paper_bgcolor: plotBg,
+        scene: {
+            bgcolor: plotBg,
+            xaxis: {
+                title: { text: 'East (km)', font: { color: '#aaa', size: 11 } },
+                tickfont: { color: '#888', size: 9 },
+                gridcolor: 'rgba(255,255,255,0.06)',
+                showbackground: true,
+                backgroundcolor: '#0f1419'
+            },
+            yaxis: {
+                title: { text: 'North (km)', font: { color: '#aaa', size: 11 } },
+                tickfont: { color: '#888', size: 9 },
+                gridcolor: 'rgba(255,255,255,0.06)',
+                showbackground: true,
+                backgroundcolor: '#0f1419'
+            },
+            zaxis: {
+                title: { text: 'Height (km)', font: { color: '#aaa', size: 11 } },
+                tickfont: { color: '#888', size: 9 },
+                gridcolor: 'rgba(255,255,255,0.06)',
+                showbackground: true,
+                backgroundcolor: '#111822'
+            },
+            aspectmode: 'manual',
+            aspectratio: { x: 1, y: 1, z: 1 / vertExag },
+            camera: {
+                eye: { x: 1.6, y: 1.6, z: 0.9 },
+                center: { x: 0, y: 0, z: -0.1 }
+            }
+        },
+        margin: { l: 0, r: 0, t: 50, b: 0 },
+        hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 12 } }
+    };
+
+    Plotly.newPlot('vol-3d-chart', [trace], layout, {
+        responsive: true,
+        displayModeBar: true,
+        displaylogo: false,
+        modeBarButtonsToRemove: ['toImage', 'resetCameraLastSave3d']
+    });
+}
+
+function toggle3DCaps() {
+    var btn = document.getElementById('vol-caps');
+    btn.classList.toggle('active');
+    render3DIsosurface();
+}
+
 
 // ── Hide scroll prompt on scroll ─────────────────────────────
 var _scrollPromptHidden = false;
