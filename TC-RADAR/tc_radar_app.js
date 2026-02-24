@@ -353,7 +353,7 @@ function _startHurricaneAnim(containerId, compact) {
         var pre = container.querySelector('.hurricane-pre');
         if (!pre) { _stopHurricaneAnim(); return; }
         pre.innerHTML = _renderHurricaneFrame(_hurricanePhase, W, H);
-        _hurricanePhase -= 0.18;  // counterclockwise
+        _hurricanePhase += 0.18;  // counterclockwise: increasing phase = increasing arm angle = CCW
     }, 120);
 }
 
@@ -373,6 +373,11 @@ function _renderHurricaneFrame(phase, W, H) {
     }
     var chars = ['\u2500', '\\', '\u2502', '/', '\u2500', '\\', '\u2502', '/'];
 
+    // Two phase components:
+    // structurePhase: band positions rotate very slowly
+    // flowPhase (= phase): dashes within bands flow at full speed
+    var structurePhase = phase * 0.15;
+
     for (var row = 0; row < H; row++) {
         for (var col = 0; col < W; col++) {
             var dx = (col - cx) / asp;
@@ -384,13 +389,15 @@ function _renderHurricaneFrame(phase, W, H) {
             var angle = Math.atan2(dy, dx);
             if (angle < 0) angle += 2 * Math.PI;
 
-            // Unified spiral system
+            // Band position: eyewall rotates fully, outer bands nearly stationary
+            var bandPhase = nr < 0.27 ? phase : structurePhase;
+
             var a = 0.08;
             var nArms = 3;
             var minDist = Infinity;
             for (var arm = 0; arm < nArms; arm++) {
                 var armOff = arm * 2 * Math.PI / nArms;
-                var spiralTheta = nr / a + armOff + phase;
+                var spiralTheta = nr / a + armOff + bandPhase;
                 var diff = angle - (spiralTheta % (2 * Math.PI));
                 while (diff > Math.PI) diff -= 2 * Math.PI;
                 while (diff < -Math.PI) diff += 2 * Math.PI;
@@ -398,7 +405,6 @@ function _renderHurricaneFrame(phase, W, H) {
                 if (arcDist < minDist) minDist = arcDist;
             }
 
-            // Wider bands for denser grids
             var bandWidth;
             if (nr < 0.27) bandWidth = nr * 0.93;
             else if (nr < 0.48) bandWidth = 0.088;
@@ -408,21 +414,35 @@ function _renderHurricaneFrame(phase, W, H) {
             if (minDist < bandWidth) {
                 var edgeFrac = minDist / bandWidth;
 
+                var flowAngle;
                 if (nr < 0.27) {
-                    // Eyewall: directional flow characters
-                    var flowAngle = angle + Math.PI / 2;
-                    if (flowAngle < 0) flowAngle += 2 * Math.PI;
-                    var dirIdx = Math.round(flowAngle / (Math.PI / 4)) % 8;
-                    grid[row][col] = chars[dirIdx];
-                    bright[row][col] = edgeFrac < 0.5 ? 4 : 3;
+                    flowAngle = angle + Math.PI / 2;
                 } else {
-                    // Rainbands: block-shade characters with intensity gradient
-                    var radialFade = nr < 0.48 ? 1.0 : nr < 0.72 ? 0.8 : 0.6;
-                    var intensity = (1 - edgeFrac * 0.8) * radialFade;
-                    if (intensity > 0.75)      { grid[row][col] = '\u2593'; bright[row][col] = 3; }
-                    else if (intensity > 0.50)  { grid[row][col] = '\u2592'; bright[row][col] = 2; }
-                    else if (intensity > 0.25)  { grid[row][col] = '\u2591'; bright[row][col] = 1; }
-                    else                        { grid[row][col] = '\u00b7'; bright[row][col] = 1; }
+                    flowAngle = angle + Math.atan2(1, a / nr) + Math.PI;
+                }
+                if (flowAngle < 0) flowAngle += 2 * Math.PI;
+                var dirIdx = Math.round(flowAngle / (Math.PI / 4)) % 8;
+
+                // Marching dashes: flow phase drives CCW motion within bands
+                var dashOn = true;
+                if (nr >= 0.27) {
+                    var flowSpeed = 1.0 / (1.0 + 2.0 * nr);
+                    var arcPos = angle + phase * flowSpeed;
+                    var dashPeriod = 0.65;
+                    var dashDuty = 0.55;
+                    var dashPhase = ((arcPos % dashPeriod) + dashPeriod) % dashPeriod;
+                    dashOn = dashPhase < dashPeriod * dashDuty;
+                }
+
+                if (dashOn) {
+                    grid[row][col] = chars[dirIdx];
+                    var radialFade = nr < 0.27 ? 1.0 : nr < 0.48 ? 0.85 : nr < 0.72 ? 0.65 : 0.45;
+                    var intensity = (1 - edgeFrac * 0.7) * radialFade;
+                    if (intensity > 0.7)      bright[row][col] = 5;
+                    else if (intensity > 0.5) bright[row][col] = 4;
+                    else if (intensity > 0.35) bright[row][col] = 3;
+                    else if (intensity > 0.2) bright[row][col] = 2;
+                    else                      bright[row][col] = 1;
                 }
             }
         }
@@ -440,10 +460,10 @@ function _renderHurricaneFrame(phase, W, H) {
         }
     }
     grid[Math.round(cy)][Math.round(cx)] = '\u25C9';
-    bright[Math.round(cy)][Math.round(cx)] = 5;
+    bright[Math.round(cy)][Math.round(cx)] = 6;
 
-    // Build colored HTML — 5 tiers now
-    var colors = ['', 'rgba(34,211,238,0.18)', 'rgba(34,211,238,0.38)', 'rgba(34,211,238,0.65)', 'rgba(34,211,238,0.88)', '#22d3ee'];
+    // Build colored HTML — 6 tiers for smooth gradient
+    var colors = ['', 'rgba(34,211,238,0.12)', 'rgba(34,211,238,0.24)', 'rgba(34,211,238,0.40)', 'rgba(34,211,238,0.62)', 'rgba(34,211,238,0.85)', '#22d3ee'];
     var lines = [];
     for (r = 0; r < H; r++) {
         var line = '';
@@ -1831,7 +1851,7 @@ function initCompositePanel() {
                             '<button onclick="resetCompColorRange()" title="Reset to default" style="padding:2px 5px;font-size:9px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);cursor:pointer;color:var(--slate);">\u21BA</button>' +
                         '</div>' +
                     '</div>' +
-                    '<div class="comp-section-title" style="margin-top:14px;">\uD83D\uDD0D Filter Criteria</div>' +
+                    '<div class="comp-section-title" style="margin-top:14px;">\uD83D\uDD0D Filter Criteria <span id="comp-group-a-label" style="display:none;color:#60a5fa;font-size:10px;">(Group A)</span></div>' +
                     _buildRangeRow('Intensity', 'comp-int', 0, 200, 5, 0, 200, 'kt') +
                     _buildRangeRow('24-h \u0394V<sub>max</sub>', 'comp-dv', -100, 85, 5, -100, 85, 'kt') +
                     _buildRangeRow('Tilt', 'comp-tilt', 0, 200, 5, 0, 200, 'km') +
@@ -1845,6 +1865,27 @@ function initCompositePanel() {
                     '<div class="comp-actions">' +
                         '<button class="comp-btn comp-btn-primary" id="comp-btn-az" onclick="generateCompositeAzMean()">\u27F3 Azimuthal Mean</button>' +
                         '<button class="comp-btn comp-btn-accent" id="comp-btn-sq" onclick="generateCompositeQuadMean()">\u25D1 Shear Quadrants</button>' +
+                    '</div>' +
+                    // ── Difference Mode ──
+                    '<div class="comp-diff-toggle">' +
+                        '<label class="comp-diff-label"><input type="checkbox" id="comp-diff-check" onchange="_toggleDiffMode()"> <span>\u0394 Difference Mode</span></label>' +
+                    '</div>' +
+                    '<div id="comp-group-b-wrap" style="display:none;">' +
+                        '<div class="comp-section-title comp-group-b-title">\uD83D\uDD0D Group B Filters</div>' +
+                        _buildRangeRow('Intensity', 'compb-int', 0, 200, 5, 0, 200, 'kt') +
+                        _buildRangeRow('24-h \u0394V<sub>max</sub>', 'compb-dv', -100, 85, 5, -100, 85, 'kt') +
+                        _buildRangeRow('Tilt', 'compb-tilt', 0, 200, 5, 0, 200, 'km') +
+                        _buildRangeRow('Year', 'compb-year', 1997, 2024, 1, 1997, 2024, '') +
+                        _buildRangeRow('Shear Mag', 'compb-shrmag', 0, 100, 2, 0, 100, 'kt') +
+                        _buildRangeRow('Shear Dir', 'compb-shrdir', 0, 360, 5, 0, 360, '\u00b0') +
+                        '<div class="comp-case-count" id="compb-count-display">' +
+                            '<span class="comp-count-label">Group B cases:</span> ' +
+                            '<span class="comp-count-num" id="compb-count-num">\u2014</span>' +
+                        '</div>' +
+                        '<div class="comp-actions">' +
+                            '<button class="comp-btn comp-btn-diff" id="comp-btn-diff-az" onclick="generateCompDiffAzMean()">\u0394 Az Mean (A\u2212B)</button>' +
+                            '<button class="comp-btn comp-btn-diff" id="comp-btn-diff-sq" onclick="generateCompDiffQuadMean()">\u0394 Quad Mean (A\u2212B)</button>' +
+                        '</div>' +
                     '</div>' +
                 '</div>' +
                 // ── Right: Results ──
@@ -1863,10 +1904,17 @@ function initCompositePanel() {
     _compositePanel = overlay;
 
     // Wire up live case count on filter changes
-    var filterInputs = overlay.querySelectorAll('input[type="number"], select, input[type="range"]');
+    var filterInputs = overlay.querySelectorAll('.composite-controls > .comp-filter-row input[type="number"], .composite-controls > .comp-filter-row select, .composite-controls > div > select, .composite-controls > div input[type="range"]');
     filterInputs.forEach(function(inp) {
         inp.addEventListener('change', _debouncedCompositeCount);
         inp.addEventListener('input', _debouncedCompositeCount);
+    });
+
+    // Wire up Group B filter inputs
+    var groupBInputs = document.querySelectorAll('#comp-group-b-wrap input[type="number"]');
+    groupBInputs.forEach(function(inp) {
+        inp.addEventListener('change', _debouncedGroupBCount);
+        inp.addEventListener('input', _debouncedGroupBCount);
     });
 
     // Wire up data type change to swap original-domain variable options
@@ -1877,6 +1925,7 @@ function initCompositePanel() {
             _updateOriginalVarGroup('comp', varType);
             _updateCompOverlayOriginalGroup(varType);
             _debouncedCompositeCount();
+            if (document.getElementById('comp-diff-check').checked) _debouncedGroupBCount();
         });
     }
 
@@ -1941,6 +1990,15 @@ function _injectCompositeStyles() {
         '.comp-cl-copy { font-size:10px !important; padding:3px 8px !important; }' +
         '.comp-link-btn { border-color:rgba(34,211,238,0.25); color:var(--cyan, #22d3ee); }' +
         '.comp-link-btn:hover { background:rgba(34,211,238,0.1); border-color:rgba(34,211,238,0.4); }' +
+        // Difference mode styles
+        '.comp-diff-toggle { margin-top:14px; padding:8px 0; border-top:1px solid rgba(255,255,255,0.06); }' +
+        '.comp-diff-label { display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; font-weight:600; color:#f59e0b; font-family:"JetBrains Mono",monospace; }' +
+        '.comp-diff-label input { accent-color:#f59e0b; cursor:pointer; }' +
+        '.comp-group-b-title { color:#f59e0b !important; border-top:1px dashed rgba(245,158,11,0.25); padding-top:10px; margin-top:10px; }' +
+        '#comp-group-b-wrap .comp-filter-row label { color:#d97706; }' +
+        '#comp-group-b-wrap .comp-range-inputs input { border-color:rgba(245,158,11,0.2); }' +
+        '.comp-btn-diff { background:rgba(245,158,11,0.12); color:#f59e0b; border:1px solid rgba(245,158,11,0.25); font-weight:600; }' +
+        '.comp-btn-diff:hover:not(:disabled) { background:rgba(245,158,11,0.22); }' +
         '.hurricane-loader { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:16px 0 8px; }' +
         '.hurricane-pre { font-family:"JetBrains Mono","Fira Code",Consolas,monospace; line-height:1.1; letter-spacing:0.3px; margin:0; text-align:center; color:rgba(34,211,238,0.5); user-select:none; }' +
         '.hurricane-msg { margin-top:10px; font-size:12px; font-weight:600; color:#9ca3af; font-family:"JetBrains Mono",monospace; text-align:center; animation:hurricanePulse 2s ease-in-out infinite; }' +
@@ -2585,6 +2643,393 @@ function generateCompositeQuadMean() {
             btnAz.disabled = false; btnSq.disabled = false;
             btnSq.textContent = '\u25D1 Shear Quadrants';
         });
+}
+
+// ── Composite Difference Mode ───────────────────────
+var _groupBCountTimeout;
+
+function _toggleDiffMode() {
+    var on = document.getElementById('comp-diff-check').checked;
+    document.getElementById('comp-group-b-wrap').style.display = on ? 'block' : 'none';
+    var groupALabel = document.getElementById('comp-group-a-label');
+    if (groupALabel) groupALabel.style.display = on ? 'inline' : 'none';
+    if (on) _updateGroupBCount();
+}
+
+function _getCompGroupBFilters() {
+    return {
+        min_intensity:   parseFloat(document.getElementById('compb-int-min').value) || 0,
+        max_intensity:   parseFloat(document.getElementById('compb-int-max').value) || 200,
+        min_vmax_change: parseFloat(document.getElementById('compb-dv-min').value) || -100,
+        max_vmax_change: parseFloat(document.getElementById('compb-dv-max').value) || 85,
+        min_tilt:        parseFloat(document.getElementById('compb-tilt-min').value) || 0,
+        max_tilt:        parseFloat(document.getElementById('compb-tilt-max').value) || 200,
+        min_year:        parseInt(document.getElementById('compb-year-min').value) || 1997,
+        max_year:        parseInt(document.getElementById('compb-year-max').value) || 2024,
+        min_shear_mag:   parseFloat(document.getElementById('compb-shrmag-min').value) || 0,
+        max_shear_mag:   parseFloat(document.getElementById('compb-shrmag-max').value) || 100,
+        min_shear_dir:   parseFloat(document.getElementById('compb-shrdir-min').value) || 0,
+        max_shear_dir:   parseFloat(document.getElementById('compb-shrdir-max').value) || 360,
+    };
+}
+
+function _debouncedGroupBCount() {
+    clearTimeout(_groupBCountTimeout);
+    _groupBCountTimeout = setTimeout(_updateGroupBCount, 400);
+}
+
+function _updateGroupBCount() {
+    var filters = _getCompGroupBFilters();
+    var dataType = document.getElementById('comp-dtype').value || 'swath';
+    var el = document.getElementById('compb-count-num');
+    if (!el) return;
+    el.textContent = '\u2026';
+    fetch(API_BASE + '/composite/count?' + _compositeQueryString(filters) + '&data_type=' + dataType)
+        .then(function(r) { return r.json(); })
+        .then(function(json) { el.textContent = json.count; })
+        .catch(function() { el.textContent = '?'; });
+}
+
+function _subtractArrays2D(a, b) {
+    // Element-wise a - b, preserving NaN where either is null/NaN
+    var result = [];
+    for (var r = 0; r < a.length; r++) {
+        var row = [];
+        for (var c = 0; c < a[r].length; c++) {
+            var va = a[r][c], vb = b[r][c];
+            if (va === null || va === undefined || vb === null || vb === undefined ||
+                (typeof va === 'number' && isNaN(va)) || (typeof vb === 'number' && isNaN(vb))) {
+                row.push(null);
+            } else {
+                row.push(va - vb);
+            }
+        }
+        result.push(row);
+    }
+    return result;
+}
+
+function _symmetricRange(data2d) {
+    var maxAbs = 0;
+    for (var r = 0; r < data2d.length; r++) {
+        for (var c = 0; c < data2d[r].length; c++) {
+            var v = data2d[r][c];
+            if (v !== null && v !== undefined && !isNaN(v)) {
+                var av = Math.abs(v);
+                if (av > maxAbs) maxAbs = av;
+            }
+        }
+    }
+    // Round up to a clean number
+    if (maxAbs === 0) return 1;
+    var mag = Math.pow(10, Math.floor(Math.log10(maxAbs)));
+    return Math.ceil(maxAbs / mag) * mag;
+}
+
+var _DIFF_COLORSCALE = [[0,'rgb(5,48,97)'],[0.1,'rgb(33,102,172)'],[0.2,'rgb(67,147,195)'],[0.3,'rgb(146,197,222)'],[0.4,'rgb(209,229,240)'],[0.5,'rgb(247,247,247)'],[0.6,'rgb(253,219,199)'],[0.7,'rgb(239,163,128)'],[0.8,'rgb(214,96,77)'],[0.9,'rgb(178,24,43)'],[1,'rgb(103,0,31)']];
+
+function _diffFilterSummary(filtersA, filtersB, nA, nB) {
+    var summA = _compositeFilterSummary(filtersA, nA);
+    var summB = _compositeFilterSummary(filtersB, nB);
+    // Extract just the filter part (after "Composite (N=...) | ")
+    var partA = summA.replace(/^Composite \(N=\d+\) \| ?/, '') || 'All';
+    var partB = summB.replace(/^Composite \(N=\d+\) \| ?/, '') || 'All';
+    return '<span style="color:#60a5fa;">A</span> (N=' + nA + '): ' + partA +
+           ' \u2212 <span style="color:#f59e0b;">B</span> (N=' + nB + '): ' + partB;
+}
+
+function generateCompDiffAzMean() {
+    var filtersA = _getCompositeFilters();
+    var filtersB = _getCompGroupBFilters();
+    var variable = document.getElementById('comp-var').value;
+    var dataType = document.getElementById('comp-dtype').value;
+    var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
+    var overlay = (document.getElementById('comp-overlay') || {}).value || '';
+
+    // Disable buttons
+    var btns = ['comp-btn-az','comp-btn-sq','comp-btn-diff-az','comp-btn-diff-sq'];
+    btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = true; });
+    var btnDiffAz = document.getElementById('comp-btn-diff-az');
+    btnDiffAz.textContent = '\u23F3 Computing\u2026';
+    document.getElementById('comp-result-placeholder').style.display = 'none';
+    document.getElementById('comp-result-sq').style.display = 'none';
+    _showCompStatus('loading', 'Computing difference composite (A\u2212B) azimuthal mean\u2026');
+
+    var baseQS = '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage;
+    if (overlay) baseQS += '&overlay=' + encodeURIComponent(overlay);
+    var urlA = API_BASE + '/composite/azimuthal_mean?' + _compositeQueryString(filtersA) + baseQS;
+    var urlB = API_BASE + '/composite/azimuthal_mean?' + _compositeQueryString(filtersB) + baseQS;
+
+    Promise.all([
+        fetch(urlA).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group A: '+(e.detail||'error'));}); return r.json(); }),
+        fetch(urlB).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group B: '+(e.detail||'error'));}); return r.json(); })
+    ]).then(function(results) {
+        var jsonA = results[0], jsonB = results[1];
+        var diffData = _subtractArrays2D(jsonA.azimuthal_mean, jsonB.azimuthal_mean);
+        var symRange = _symmetricRange(diffData);
+
+        // Build a synthetic json for the renderer
+        var diffJson = {
+            azimuthal_mean: diffData,
+            radius_rrmw: jsonA.radius_rrmw,
+            height_km: jsonA.height_km,
+            normalized: jsonA.normalized,
+            coverage_min: jsonA.coverage_min,
+            n_cases: jsonA.n_cases,
+            n_with_rmw: jsonA.n_with_rmw,
+            case_list: jsonA.case_list,
+            _isDiff: true,
+            _nA: jsonA.n_cases,
+            _nB: jsonB.n_cases,
+            _filtersA: filtersA,
+            _filtersB: filtersB,
+            variable: {
+                key: jsonA.variable.key,
+                display_name: '\u0394 ' + jsonA.variable.display_name,
+                units: jsonA.variable.units,
+                vmin: -symRange,
+                vmax: symRange,
+                colorscale: _DIFF_COLORSCALE,
+            }
+        };
+        // Overlay difference
+        if (jsonA.overlay && jsonB.overlay) {
+            var ovDiff = _subtractArrays2D(jsonA.overlay.azimuthal_mean, jsonB.overlay.azimuthal_mean);
+            diffJson.overlay = {
+                display_name: '\u0394 ' + jsonA.overlay.display_name,
+                key: jsonA.overlay.key,
+                units: jsonA.overlay.units,
+                azimuthal_mean: ovDiff,
+                vmin: jsonA.overlay.vmin,
+                vmax: jsonA.overlay.vmax,
+            };
+        }
+
+        _showCompStatus('success', '\u2713 Difference computed: Group A (' + jsonA.n_cases + ' cases) \u2212 Group B (' + jsonB.n_cases + ' cases)');
+        _renderDiffAzMean('comp-result-az', diffJson, filtersA, filtersB);
+    }).catch(function(err) {
+        _showCompStatus('error', '\u2717 ' + err.message);
+    }).finally(function() {
+        btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = false; });
+        btnDiffAz.textContent = '\u0394 Az Mean (A\u2212B)';
+    });
+}
+
+function generateCompDiffQuadMean() {
+    var filtersA = _getCompositeFilters();
+    var filtersB = _getCompGroupBFilters();
+    var variable = document.getElementById('comp-var').value;
+    var dataType = document.getElementById('comp-dtype').value;
+    var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
+    var overlay = (document.getElementById('comp-overlay') || {}).value || '';
+
+    var btns = ['comp-btn-az','comp-btn-sq','comp-btn-diff-az','comp-btn-diff-sq'];
+    btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = true; });
+    var btnDiffSq = document.getElementById('comp-btn-diff-sq');
+    btnDiffSq.textContent = '\u23F3 Computing\u2026';
+    document.getElementById('comp-result-placeholder').style.display = 'none';
+    document.getElementById('comp-result-az').style.display = 'none';
+    _showCompStatus('loading', 'Computing difference composite (A\u2212B) shear quadrants\u2026');
+
+    var baseQS = '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage;
+    if (overlay) baseQS += '&overlay=' + encodeURIComponent(overlay);
+    var urlA = API_BASE + '/composite/quadrant_mean?' + _compositeQueryString(filtersA) + baseQS;
+    var urlB = API_BASE + '/composite/quadrant_mean?' + _compositeQueryString(filtersB) + baseQS;
+
+    Promise.all([
+        fetch(urlA).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group A: '+(e.detail||'error'));}); return r.json(); }),
+        fetch(urlB).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group B: '+(e.detail||'error'));}); return r.json(); })
+    ]).then(function(results) {
+        var jsonA = results[0], jsonB = results[1];
+        var diffQuads = {};
+        var allDiffVals = [];
+        var quadKeys = ['DSL','DSR','USL','USR'];
+        quadKeys.forEach(function(k) {
+            if (jsonA.quadrant_means[k] && jsonB.quadrant_means[k]) {
+                var d = _subtractArrays2D(jsonA.quadrant_means[k].data, jsonB.quadrant_means[k].data);
+                diffQuads[k] = { data: d, n_cases: jsonA.quadrant_means[k].n_cases };
+                // Collect values for symmetric range
+                for (var r = 0; r < d.length; r++) for (var c = 0; c < d[r].length; c++) {
+                    var v = d[r][c];
+                    if (v !== null && v !== undefined && !isNaN(v)) allDiffVals.push(Math.abs(v));
+                }
+            }
+        });
+        var symRange = allDiffVals.length > 0 ? _symmetricRange([allDiffVals]) : 1;
+
+        var diffJson = {
+            quadrant_means: diffQuads,
+            radius_rrmw: jsonA.radius_rrmw,
+            height_km: jsonA.height_km,
+            normalized: jsonA.normalized,
+            coverage_min: jsonA.coverage_min,
+            n_cases: jsonA.n_cases,
+            n_with_shear: jsonA.n_with_shear,
+            n_with_shear_and_rmw: jsonA.n_with_shear_and_rmw,
+            case_list: jsonA.case_list,
+            _isDiff: true,
+            _nA: jsonA.n_cases,
+            _nB: jsonB.n_cases,
+            _filtersA: filtersA,
+            _filtersB: filtersB,
+            variable: {
+                key: jsonA.variable.key,
+                display_name: '\u0394 ' + jsonA.variable.display_name,
+                units: jsonA.variable.units,
+                vmin: -symRange,
+                vmax: symRange,
+                colorscale: _DIFF_COLORSCALE,
+            }
+        };
+        if (jsonA.overlay && jsonB.overlay) {
+            var ovDiffQuads = {};
+            quadKeys.forEach(function(k) {
+                if (jsonA.overlay.quadrant_means && jsonA.overlay.quadrant_means[k] &&
+                    jsonB.overlay.quadrant_means && jsonB.overlay.quadrant_means[k]) {
+                    ovDiffQuads[k] = _subtractArrays2D(jsonA.overlay.quadrant_means[k], jsonB.overlay.quadrant_means[k]);
+                }
+            });
+            diffJson.overlay = {
+                display_name: '\u0394 ' + jsonA.overlay.display_name,
+                key: jsonA.overlay.key,
+                units: jsonA.overlay.units,
+                quadrant_means: ovDiffQuads,
+                vmin: jsonA.overlay.vmin,
+                vmax: jsonA.overlay.vmax,
+            };
+        }
+
+        _showCompStatus('success', '\u2713 Difference computed: Group A (' + jsonA.n_cases + ' cases) \u2212 Group B (' + jsonB.n_cases + ' cases)');
+        _renderDiffQuadMean('comp-result-sq', diffJson, filtersA, filtersB);
+    }).catch(function(err) {
+        _showCompStatus('error', '\u2717 ' + err.message);
+    }).finally(function() {
+        btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = false; });
+        btnDiffSq.textContent = '\u0394 Quad Mean (A\u2212B)';
+    });
+}
+
+function _renderDiffAzMean(targetId, json, filtersA, filtersB) {
+    // Override the title and force diff colormap, then use the standard renderer
+    var el = document.getElementById(targetId); if (!el) return;
+    var azData = json.azimuthal_mean, radius = json.radius_rrmw, height_km = json.height_km, varInfo = json.variable;
+    var isNorm = json.normalized;
+    var rLabel = isNorm ? 'R / RMW' : 'Radius (km)';
+    var fontSize = { title:13, axis:12, tick:10, cbar:12, cbarTick:10, hover:13 };
+    // Force diff display settings (don't use user overrides)
+    _compDefaultColorscale = varInfo.colorscale; _compDefaultVmin = varInfo.vmin; _compDefaultVmax = varInfo.vmax;
+    var heatmap = {
+        z: azData, x: radius, y: height_km, type: 'heatmap',
+        colorscale: _DIFF_COLORSCALE, zmin: varInfo.vmin, zmax: varInfo.vmax,
+        colorbar: { title: { text: varInfo.units, font: { color:'#ccc', size:fontSize.cbar } }, tickfont: { color:'#ccc', size:fontSize.cbarTick }, thickness:14, len:0.85 },
+        hovertemplate: '<b>' + varInfo.display_name + '</b>: %{z:.2f} ' + varInfo.units + '<br>' + rLabel + ': %{x:.2f}<br>Height: %{y:.1f} km<extra></extra>',
+        hoverongaps: false
+    };
+    var covPct = Math.round((json.coverage_min || 0.5) * 100);
+    var dtypeLabel = (document.getElementById('comp-dtype') && document.getElementById('comp-dtype').value === 'merge') ? ' (Merge)' : '';
+    var title = _diffFilterSummary(filtersA, filtersB, json._nA, json._nB) +
+               '<br>\u0394 Azimuthal Mean: ' + json.variable.display_name.replace('\u0394 ','') + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
+    var plotBg = '#0a1628';
+    var shapes = [];
+    if (isNorm) shapes.push({ type:'line', xref:'x', yref:'paper', x0:1, x1:1, y0:0, y1:1, line:{ color:'white', width:1.5, dash:'dash' } });
+    var layout = {
+        title: { text: title, font: { color:'#e5e7eb', size:fontSize.title }, y:0.97, x:0.5, xanchor:'center' },
+        paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+        xaxis: { title: { text:rLabel, font:{color:'#aaa',size:fontSize.axis} }, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
+        yaxis: { title: { text:'Height (km)', font:{color:'#aaa',size:fontSize.axis} }, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
+        margin: { l:55, r:24, t:130, b:46 }, shapes: shapes,
+        hoverlabel: { bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
+        showlegend: false
+    };
+    el.style.display = 'block';
+    _lastCompJson = json; _lastCompType = 'az';
+    el.innerHTML = '<div id="comp-az-chart" style="width:100%;height:560px;border-radius:8px;overflow:hidden;"></div>' + _buildCompToolbar();
+    Plotly.newPlot('comp-az-chart', [heatmap], layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
+}
+
+function _renderDiffQuadMean(targetId, json, filtersA, filtersB) {
+    var el = document.getElementById(targetId); if (!el) return;
+    var quads = json.quadrant_means;
+    var radius = json.radius_rrmw, height_km = json.height_km, varInfo = json.variable;
+    var isNorm = json.normalized;
+    var rLabel = isNorm ? 'R / RMW' : 'Radius (km)';
+    var fontSize = { title:13, axis:11, tick:10, cbar:11, cbarTick:10, hover:12, panel:12 };
+    _compDefaultColorscale = varInfo.colorscale; _compDefaultVmin = varInfo.vmin; _compDefaultVmax = varInfo.vmax;
+
+    var panelOrder = [
+        { key:'USL', label:'Upshear Left', row:0, col:0 },
+        { key:'DSL', label:'Downshear Left', row:0, col:1 },
+        { key:'USR', label:'Upshear Right', row:1, col:0 },
+        { key:'DSR', label:'Downshear Right', row:1, col:1 }
+    ];
+
+    var traces = [], annotations = [], shapes = [];
+    var gap=0.08, cbarW=0.04, leftM=0.06, rightM=0.02+cbarW+0.02, topM=0.20, botM=0.06;
+    var pw = (1-leftM-rightM-gap)/2, ph = (1-topM-botM-gap)/2;
+    var quadColors = { DSL:'#f59e0b', DSR:'#f59e0b', USL:'#60a5fa', USR:'#60a5fa' };
+
+    panelOrder.forEach(function(p, i) {
+        var qData = quads[p.key];
+        if (!qData || !qData.data) return;
+        var x0 = leftM + p.col * (pw + gap), x1 = x0 + pw;
+        var yTop = 1 - topM - p.row * ph - p.row * gap;
+        var yBottom = 1 - topM - (p.row+1) * ph - p.row * gap;
+        var axSuffix = i === 0 ? '' : String(i+1);
+        var showCbar = (i === 1);
+        traces.push({
+            z:qData.data, x:radius, y:height_km, type:'heatmap',
+            colorscale:_DIFF_COLORSCALE, zmin:varInfo.vmin, zmax:varInfo.vmax,
+            xaxis:'x'+axSuffix, yaxis:'y'+axSuffix,
+            showscale:showCbar,
+            colorbar: showCbar ? { title:{text:varInfo.units,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:14, len:0.85, x:1.02, y:0.5 } : undefined,
+            hovertemplate:'<b>'+p.label+'</b><br>'+varInfo.display_name+': %{z:.2f} '+varInfo.units+'<br>'+rLabel+': %{x:.2f}<br>Height: %{y:.1f} km<extra></extra>',
+            hoverongaps:false
+        });
+        annotations.push({
+            text:'<b>'+p.label+'</b>', xref:'paper', yref:'paper',
+            x:(x0+x1)/2, y:yTop+0.005, xanchor:'center', yanchor:'bottom', showarrow:false,
+            font:{ color:quadColors[p.key]||'#ccc', size:fontSize.panel, family:'JetBrains Mono, monospace' },
+            bgcolor:'rgba(10,22,40,0.7)', borderpad:2
+        });
+        if (isNorm) {
+            shapes.push({ type:'line', xref:'x'+axSuffix, yref:'y'+axSuffix,
+                x0:1, x1:1, y0:height_km[0], y1:height_km[height_km.length-1],
+                line:{ color:'white', width:1, dash:'dash' } });
+        }
+    });
+
+    var shearInset = buildShearInset(90, true);
+    annotations = annotations.concat(shearInset.annotations || []);
+
+    var covPct = Math.round((json.coverage_min || 0.5) * 100);
+    var dtypeLabel = (document.getElementById('comp-dtype') && document.getElementById('comp-dtype').value === 'merge') ? ' (Merge)' : '';
+    var title = _diffFilterSummary(filtersA, filtersB, json._nA, json._nB) +
+               '<br>\u0394 Shear-Relative Quadrant Mean: ' + json.variable.display_name.replace('\u0394 ','') + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
+    var plotBg = '#0a1628';
+    var layoutAxes = {};
+    panelOrder.forEach(function(p, i) {
+        var x0 = leftM + p.col * (pw + gap), x1 = x0 + pw;
+        var yBottom = 1 - topM - (p.row+1) * ph - p.row * gap;
+        var yTop = 1 - topM - p.row * ph - p.row * gap;
+        var axSuffix = i === 0 ? '' : String(i+1);
+        var showYLabel = (p.col === 0), showXLabel = (p.row === 1);
+        layoutAxes['xaxis' + axSuffix] = { domain:[x0,x1], title:showXLabel?{text:rLabel,font:{color:'#aaa',size:fontSize.axis}}:undefined, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false, anchor:'y'+axSuffix };
+        layoutAxes['yaxis' + axSuffix] = { domain:[yBottom,yTop], title:showYLabel?{text:'Height (km)',font:{color:'#aaa',size:fontSize.axis}}:undefined, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false, anchor:'x'+axSuffix };
+    });
+
+    var layout = Object.assign({
+        title:{ text:title, font:{color:'#e5e7eb',size:fontSize.title}, y:0.99, x:0.5, xanchor:'center' },
+        paper_bgcolor:plotBg, plot_bgcolor:plotBg,
+        margin:{ l:50, r:60, t:130, b:50 },
+        annotations:annotations, shapes:shapes.concat(shearInset.shapes || []),
+        hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
+        showlegend:false
+    }, layoutAxes);
+
+    el.style.display = 'block';
+    _lastCompJson = json; _lastCompType = 'sq';
+    el.innerHTML = '<div id="comp-sq-chart" style="width:100%;height:740px;border-radius:8px;overflow:hidden;"></div>' + _buildCompToolbar();
+    Plotly.newPlot('comp-sq-chart', traces, layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
 }
 
 // Close composite panel on Escape
