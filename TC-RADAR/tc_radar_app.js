@@ -2961,7 +2961,14 @@ function _renderDiffAzMean(targetId, diffJson, jsonA, jsonB, filtersA, filtersB)
     buildAzPlot('comp-diff-az-b', jsonB.azimuthal_mean, titleB, varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax, varInfoA.units);
 
     var diffVarInfo = diffJson.variable;
-    var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) +
+    var diffVmaxNote = '';
+    if (meanVmaxA !== null || meanVmaxB !== null) {
+        diffVmaxNote = ' | V\u0305<sub>max</sub>: ';
+        if (meanVmaxA !== null) diffVmaxNote += '<span style="color:#60a5fa;">A=' + meanVmaxA + '</span>';
+        if (meanVmaxA !== null && meanVmaxB !== null) diffVmaxNote += ', ';
+        if (meanVmaxB !== null) diffVmaxNote += '<span style="color:#f59e0b;">B=' + meanVmaxB + '</span> kt';
+    }
+    var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) + diffVmaxNote +
                  '<br>\u0394 Azimuthal Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
     buildAzPlot('comp-diff-az-d', diffJson.azimuthal_mean, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, diffVarInfo.units);
 }
@@ -3061,18 +3068,29 @@ function _renderDiffQuadMean(targetId, diffJson, jsonA, jsonB, filtersA, filters
     }
 
     // Group A
-    var titleA = _compositeFilterSummary(filtersA, jsonA.n_cases) +
+    var meanVmaxA = _computeCompositeMeanVmax(filtersA);
+    var vmaxNoteA = meanVmaxA !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxA + ' kt' : '';
+    var titleA = _compositeFilterSummary(filtersA, jsonA.n_cases) + vmaxNoteA +
                  '<br>Shear-Relative Quadrant Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
     buildQuadPlot('comp-diff-sq-a', jsonA.quadrant_means, titleA, varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax, varInfoA.units);
 
     // Group B
-    var titleB = _compositeFilterSummary(filtersB, jsonB.n_cases) +
+    var meanVmaxB = _computeCompositeMeanVmax(filtersB);
+    var vmaxNoteB = meanVmaxB !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxB + ' kt' : '';
+    var titleB = _compositeFilterSummary(filtersB, jsonB.n_cases) + vmaxNoteB +
                  '<br>Shear-Relative Quadrant Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
     buildQuadPlot('comp-diff-sq-b', jsonB.quadrant_means, titleB, varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax, varInfoA.units);
 
     // Difference
     var diffVarInfo = diffJson.variable;
-    var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) +
+    var diffVmaxNote = '';
+    if (meanVmaxA !== null || meanVmaxB !== null) {
+        diffVmaxNote = ' | V\u0305<sub>max</sub>: ';
+        if (meanVmaxA !== null) diffVmaxNote += '<span style="color:#60a5fa;">A=' + meanVmaxA + '</span>';
+        if (meanVmaxA !== null && meanVmaxB !== null) diffVmaxNote += ', ';
+        if (meanVmaxB !== null) diffVmaxNote += '<span style="color:#f59e0b;">B=' + meanVmaxB + '</span> kt';
+    }
+    var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) + diffVmaxNote +
                  '<br>\u0394 Shear-Relative Quadrant Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
     buildQuadPlot('comp-diff-sq-d', diffJson.quadrant_means, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, diffVarInfo.units);
 }
