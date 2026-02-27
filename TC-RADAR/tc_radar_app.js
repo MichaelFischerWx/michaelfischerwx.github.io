@@ -1082,7 +1082,7 @@ function irAnimToggle() {
     if (_irAnimPlaying) { irAnimStop(); }
     else {
         _irAnimPlaying = true;
-        _irAnimFrame = 0;
+        _irAnimFrame = _irCanvases.length - 1;
         showIRMapOverlay(_irAnimFrame);
         _updateIRSlider();
         _updateIRPlayBtn();
@@ -1092,10 +1092,10 @@ function irAnimToggle() {
 
 function irAnimTick() {
     if (!_irAnimPlaying) return;
-    irAnimStep(1);
-    if (_irAnimFrame === _irCanvases.length - 1) {
+    irAnimStep(-1);
+    if (_irAnimFrame === 0) {
         _irAnimTimer = setTimeout(function() {
-            _irAnimFrame = 0;
+            _irAnimFrame = _irCanvases.length - 1;
             showIRMapOverlay(_irAnimFrame);
             _updateIRSlider();
             _irAnimTimer = setTimeout(irAnimTick, 600);
@@ -1118,7 +1118,7 @@ function _updateIRPlayBtn() {
 
 function _updateIRSlider() {
     var slider = document.getElementById('ir-frame-slider');
-    if (slider) slider.value = _irAnimFrame;
+    if (slider) slider.value = (_irCanvases.length - 1) - _irAnimFrame;
 }
 
 function toggleIRMapVisibility() {
@@ -1139,11 +1139,11 @@ function _injectIRMapControls() {
     ctrl.innerHTML =
         '<div class="ir-ctrl-row">' +
             '<button class="ir-ctrl-btn" id="ir-toggle-btn" onclick="toggleIRMapVisibility()">\uD83C\uDF0D IR On</button>' +
-            '<button class="ir-ctrl-btn" onclick="irAnimStep(-1)" title="Previous (earlier)">\u25C0</button>' +
+            '<button class="ir-ctrl-btn" onclick="irAnimStep(1)" title="Previous (earlier)">\u25C0</button>' +
             '<button class="ir-ctrl-btn" id="ir-play-btn" onclick="irAnimToggle()" title="Play/Pause">\u25B6</button>' +
-            '<button class="ir-ctrl-btn" onclick="irAnimStep(1)" title="Next (later)">\u25B6</button>' +
-            '<input type="range" id="ir-frame-slider" min="0" max="' + (n - 1) + '" value="' + (n - 1) + '" ' +
-                'oninput="showIRMapOverlay(parseInt(this.value))" class="ir-slider">' +
+            '<button class="ir-ctrl-btn" onclick="irAnimStep(-1)" title="Next (later)">\u25B6</button>' +
+            '<input type="range" id="ir-frame-slider" min="0" max="' + (n - 1) + '" value="0" ' +
+                'oninput="showIRMapOverlay(' + (n - 1) + ' - parseInt(this.value))" class="ir-slider">' +
             '<span class="ir-label" id="ir-map-label">IR t\u22124.0h</span>' +
         '</div>';
     mapWrapper.appendChild(ctrl);
