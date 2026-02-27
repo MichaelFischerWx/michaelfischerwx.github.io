@@ -49,7 +49,14 @@ function enterFocusMode(caseData) {
     map.setView([caseData.latitude, caseData.longitude], 6, { animate: true });
     document.getElementById('map-wrapper').classList.add('focus-mode');
     document.getElementById('side-panel').classList.add('focus-panel');
-    setTimeout(function() { map.invalidateSize(); }, 380);
+    setTimeout(function() {
+        map.invalidateSize();
+        // If IR data was already fetched before focus mode, show it now
+        if (_irData && _irCanvases.length) {
+            showIRMapOverlay(_irCanvases.length - 1);
+            _injectIRMapControls();
+        }
+    }, 380);
 }
 
 function exitFocusMode() {
@@ -142,7 +149,13 @@ function openSidePanel(caseData, fromQuickSelect) {
     var backBtnHtml = _focusMode ?
         '<button class="focus-back-btn" onclick="exitFocusMode();closeSidePanel();">' +
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>' +
-        'Back to all cases</button>' : '';
+        'Back to all cases</button>' :
+        '<button class="focus-back-btn" style="background:var(--blue);color:white;border-color:var(--blue);" ' +
+        'onclick="enterFocusMode(_lastCaseData);openSidePanel(_lastCaseData,false);">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 6 15 12 9 18"/></svg>' +
+        'Focus &amp; IR Satellite</button>';
+
+    window._lastCaseData = caseData;
 
     document.getElementById('side-panel-inner').innerHTML =
         '<button id="side-panel-close" onclick="closeSidePanel()">\u2715</button>' +
