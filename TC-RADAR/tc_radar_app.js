@@ -53,8 +53,8 @@ function enterFocusMode(caseData) {
         map.invalidateSize();
         // If IR data was already fetched before focus mode, show it now
         if (_irData && _irFrameURLs.length) {
-            showIRMapOverlay(_irFrameURLs.length - 1);
             _injectIRMapControls();
+            showIRMapOverlay(0);
         }
     }, 380);
 }
@@ -325,7 +325,7 @@ function openSidePanel(caseData, fromQuickSelect) {
     document.getElementById('side-panel').classList.add('open');
 
     // Fetch IR satellite data for this case
-    _irData = null; _irFrameURLs = []; _irPlotlyVisible = false;
+    _irData = null; _irFrameURLs = []; _irPlotlyVisible = false; _irAllFramesLoaded = false;
     _showIRLoadingIndicator();
     fetchIRData(caseData.case_index, function(data) {
         _removeIRLoadingIndicator();
@@ -333,8 +333,8 @@ function openSidePanel(caseData, fromQuickSelect) {
             var irBtn = document.getElementById('ir-underlay-btn');
             if (irBtn) irBtn.disabled = false;
             if (_focusMode) {
-                showIRMapOverlay(data.frames.length - 1);
                 _injectIRMapControls();
+                showIRMapOverlay(0);
             }
         }
     });
@@ -960,9 +960,14 @@ function _removeIRLoadingIndicator() {
     if (el) el.remove();
 }
 
+var _irAllFramesLoaded = false;
+
 function fetchIRData(caseIndex, callback) {
     if (_irFetching) return;
     _irFetching = true;
+    _irAllFramesLoaded = false;
+
+    // Phase 1: Fetch metadata + t=0 frame for instant display
     var url = API_BASE + '/ir?case_index=' + caseIndex;
     fetch(url)
         .then(function(r) {
@@ -973,15 +978,46 @@ function fetchIRData(caseIndex, callback) {
             _irFetching = false;
             if (!data) return;
             _irData = data;
-            // Server returns pre-rendered PNG data-URLs in data.frames
-            // Keep nulls in place to preserve index alignment with lag_hours/ir_datetimes
-            _irFrameURLs = data.frames || [];
+            // Initialize frame array with just frame0 in position 0
+            _irFrameURLs = new Array(data.n_frames || 9);
+            for (var i = 0; i < _irFrameURLs.length; i++) _irFrameURLs[i] = null;
+            if (data.frame0) _irFrameURLs[0] = data.frame0;
+
             if (callback) callback(data);
+
+            // Phase 2: Background-fetch all animation frames
+            _fetchIRAnimFrames(caseIndex);
         })
         .catch(function(err) {
             console.warn('IR fetch failed:', err);
             _irFetching = false; _irData = null;
             if (callback) callback(null);
+        });
+}
+
+function _fetchIRAnimFrames(caseIndex) {
+    var url = API_BASE + '/ir_frames?case_index=' + caseIndex;
+    fetch(url)
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+            if (!data || !data.frames) return;
+            // Only apply if we're still looking at the same case
+            if (_irData && _irData.case_index === data.case_index) {
+                _irFrameURLs = data.frames;
+                _irAllFramesLoaded = true;
+                // Enable animation controls if they exist
+                var playBtn = document.getElementById('ir-play-btn');
+                if (playBtn) playBtn.classList.remove('ir-ctrl-disabled');
+                var stepBack = document.getElementById('ir-step-back');
+                if (stepBack) stepBack.classList.remove('ir-ctrl-disabled');
+                var stepFwd = document.getElementById('ir-step-fwd');
+                if (stepFwd) stepFwd.classList.remove('ir-ctrl-disabled');
+                var slider = document.getElementById('ir-frame-slider');
+                if (slider) slider.disabled = false;
+            }
+        })
+        .catch(function(err) {
+            console.warn('IR animation frames fetch failed:', err);
         });
 }
 
@@ -1021,13 +1057,13 @@ function removeIRMapOverlay() {
     irAnimStop();
     _removeIRLoadingIndicator();
     if (_irMapOverlay) { map.removeLayer(_irMapOverlay); _irMapOverlay = null; }
-    _irData = null; _irFrameURLs = []; _irAnimFrame = 0; _irMapVisible = true;
+    _irData = null; _irFrameURLs = []; _irAnimFrame = 0; _irMapVisible = true; _irAllFramesLoaded = false;
     var ctrl = document.getElementById('ir-map-controls');
     if (ctrl) ctrl.remove();
 }
 
 function irAnimStep(dir) {
-    if (!_irData) return;
+    if (!_irData || !_irAllFramesLoaded) return;
     var n = _irFrameURLs.length;
     _irAnimFrame = (_irAnimFrame + dir + n) % n;
     showIRMapOverlay(_irAnimFrame);
@@ -1035,6 +1071,7 @@ function irAnimStep(dir) {
 }
 
 function irAnimToggle() {
+    if (!_irAllFramesLoaded) return;
     if (_irAnimPlaying) { irAnimStop(); }
     else {
         _irAnimPlaying = true;
@@ -1089,18 +1126,21 @@ function _injectIRMapControls() {
     var mapWrapper = document.getElementById('map-wrapper');
     if (!mapWrapper) return;
     var n = _irFrameURLs.length;
+    var disabledCls = _irAllFramesLoaded ? '' : ' ir-ctrl-disabled';
+    var disabledAttr = _irAllFramesLoaded ? '' : ' disabled';
     var ctrl = document.createElement('div');
     ctrl.id = 'ir-map-controls';
     ctrl.className = 'ir-map-controls';
     ctrl.innerHTML =
         '<div class="ir-ctrl-row">' +
             '<button class="ir-ctrl-btn" id="ir-toggle-btn" onclick="toggleIRMapVisibility()">\uD83C\uDF0D IR On</button>' +
-            '<button class="ir-ctrl-btn" onclick="irAnimStep(1)" title="Previous (earlier)">\u25C0</button>' +
-            '<button class="ir-ctrl-btn" id="ir-play-btn" onclick="irAnimToggle()" title="Play/Pause">\u25B6</button>' +
-            '<button class="ir-ctrl-btn" onclick="irAnimStep(-1)" title="Next (later)">\u25B6</button>' +
-            '<input type="range" id="ir-frame-slider" min="0" max="' + (n - 1) + '" value="0" ' +
-                'oninput="showIRMapOverlay(' + (n - 1) + ' - parseInt(this.value))" class="ir-slider">' +
-            '<span class="ir-label" id="ir-map-label">IR t\u22124.0h</span>' +
+            '<button class="ir-ctrl-btn' + disabledCls + '" id="ir-step-back" onclick="irAnimStep(1)" title="Previous (earlier)">\u25C0</button>' +
+            '<button class="ir-ctrl-btn' + disabledCls + '" id="ir-play-btn" onclick="irAnimToggle()" title="Play/Pause">\u25B6</button>' +
+            '<button class="ir-ctrl-btn' + disabledCls + '" id="ir-step-fwd" onclick="irAnimStep(-1)" title="Next (later)">\u25B6</button>' +
+            '<input type="range" id="ir-frame-slider" min="0" max="' + (n - 1) + '" value="' + (n - 1) + '" ' +
+                disabledAttr +
+                ' oninput="showIRMapOverlay(' + (n - 1) + ' - parseInt(this.value))" class="ir-slider">' +
+            '<span class="ir-label" id="ir-map-label">IR t=0</span>' +
         '</div>';
     mapWrapper.appendChild(ctrl);
 }
