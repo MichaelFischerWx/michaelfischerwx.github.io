@@ -936,6 +936,8 @@ var _irAnimPlaying = false;
 var _irMapVisible = true;
 var _irPlotlyVisible = false;
 var _irFetching = false;
+var _irBoundsSet = false;
+var _irDecodedImages = [];
 
 // ── IR data fetch ────────────────────────────────────────────
 // ── IR loading indicator on map ───────────────────────────────
@@ -1007,6 +1009,7 @@ function _fetchRemainingFramesParallel(caseIndex, startIdx) {
     if (startIdx >= _irFrameURLs.length) {
         _irAllFramesLoaded = true;
         _updateIRLoadingLabel();
+        _preDecodeIRFrames();
         return;
     }
 
@@ -1046,8 +1049,28 @@ function _fetchRemainingFramesParallel(caseIndex, startIdx) {
             if (_irLoadedCount >= 2) {
                 _enableIRAnimControls();
             }
+            _preDecodeIRFrames();
         }
     });
+}
+
+// ── Pre-decoded IR frame images for smooth animation ─────────
+
+function _preDecodeIRFrames() {
+    _irDecodedImages = new Array(_irFrameURLs.length);
+    for (var i = 0; i < _irFrameURLs.length; i++) {
+        if (_irFrameURLs[i]) {
+            var img = new Image();
+            img.src = _irFrameURLs[i];
+            // Use decode() where available to pre-decode off main thread
+            if (img.decode) {
+                img.decode().catch(function() {});
+            }
+            _irDecodedImages[i] = img;
+        } else {
+            _irDecodedImages[i] = null;
+        }
+    }
 }
 
 function _countLoadedFrames() {
@@ -1104,11 +1127,24 @@ function showIRMapOverlay(frameIdx) {
     if (!url) return;  // skip null frames
     var bounds = _irGetBounds(_irData);
     if (_irMapOverlay) {
-        _irMapOverlay.setUrl(url);
-        _irMapOverlay.setBounds(bounds);
+        // Fast path: bypass Leaflet's setUrl() to avoid its async load cycle.
+        // Directly set the <img> src — if a pre-decoded Image exists for this
+        // frame, the browser can resolve the data URL from its cache near-instantly.
+        var imgEl = _irMapOverlay.getElement ? _irMapOverlay.getElement() : _irMapOverlay._image;
+        if (imgEl) {
+            imgEl.src = url;
+        } else {
+            _irMapOverlay.setUrl(url);
+        }
+        // Bounds are identical for all frames in a case, so only set once
+        if (!_irBoundsSet) {
+            _irMapOverlay.setBounds(bounds);
+            _irBoundsSet = true;
+        }
     } else {
         _irMapOverlay = L.imageOverlay(url, bounds, { opacity: 0.75, interactive: false, zIndex: 200 });
         _irMapOverlay.addTo(map);
+        _irBoundsSet = true;
     }
     _updateIRLoadingLabel();
 }
@@ -1117,7 +1153,7 @@ function removeIRMapOverlay() {
     irAnimStop();
     _removeIRLoadingIndicator();
     if (_irMapOverlay) { map.removeLayer(_irMapOverlay); _irMapOverlay = null; }
-    _irData = null; _irFrameURLs = []; _irAnimFrame = 0; _irMapVisible = true; _irAllFramesLoaded = false; _irLoadedCount = 0;
+    _irData = null; _irFrameURLs = []; _irAnimFrame = 0; _irMapVisible = true; _irAllFramesLoaded = false; _irLoadedCount = 0; _irBoundsSet = false; _irDecodedImages = [];
     var ctrl = document.getElementById('ir-map-controls');
     if (ctrl) ctrl.remove();
 }
