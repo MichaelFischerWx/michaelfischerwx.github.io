@@ -56,6 +56,8 @@ function exitFocusMode() {
     if (!_focusMode) return;
     _focusMode = false;
     if (_focusMarker) { map.removeLayer(_focusMarker); _focusMarker = null; }
+    removeIRMapOverlay();
+    cleanupERA5();
     if (markers) map.addLayer(markers);
     document.getElementById('map-wrapper').classList.remove('focus-mode');
     document.getElementById('side-panel').classList.remove('focus-panel');
@@ -173,6 +175,9 @@ function openSidePanel(caseData, fromQuickSelect) {
                     '<button class="cs-btn" id="az-btn" onclick="fetchAzimuthalMean()" disabled>\u27F3 Azim. Mean</button>' +
                     '<button class="cs-btn" id="sq-btn" onclick="fetchShearQuadrants()" disabled>\u25D1 Shear Quads</button>' +
                     '<button class="cs-btn" id="vol-btn" onclick="fetch3DVolume()" disabled>\uD83D\uDDA5 3D Volume</button>' +
+                    '<button class="cs-btn" id="ir-underlay-btn" onclick="toggleIRPlotlyUnderlay()" disabled>\uD83D\uDEF0 IR Off</button>' +
+                    '<button class="cs-btn" id="era5-underlay-btn" onclick="showERA5FieldMenu()" disabled>\uD83C\uDF0D Env Off</button>' +
+                    '<button class="cs-btn" id="env-panel-btn" onclick="toggleEnvPanel()" disabled>\uD83C\uDF21 Env Panel</button>' +
                 '</div>' +
             '</div>' +
 
@@ -305,6 +310,31 @@ function openSidePanel(caseData, fromQuickSelect) {
     _updateExplorerOriginalGroups();
 
     document.getElementById('side-panel').classList.add('open');
+
+    // Fetch IR satellite data for this case
+    _irData = null; _irCanvases = []; _irPlotlyVisible = false;
+    fetchIRData(caseData.case_index, function(data) {
+        if (data && currentCaseIndex === caseData.case_index) {
+            var irBtn = document.getElementById('ir-underlay-btn');
+            if (irBtn) irBtn.disabled = false;
+            if (_focusMode) {
+                showIRMapOverlay(data.Tb.length - 1);
+                _injectIRMapControls();
+            }
+        }
+    });
+
+    // Fetch ERA5 environmental data for this case
+    _era5Data = null; _era5PlotlyVisible = false; _era5EnvPanelVisible = false;
+    fetchERA5Data(caseData.case_index, 'shear_mag', function(data) {
+        if (data && currentCaseIndex === caseData.case_index) {
+            var era5Btn = document.getElementById('era5-underlay-btn');
+            if (era5Btn) era5Btn.disabled = false;
+            var envBtn = document.getElementById('env-panel-btn');
+            if (envBtn) envBtn.disabled = false;
+        }
+    });
+
     setTimeout(function() { map.invalidateSize(); }, 360);
 }
 
@@ -312,6 +342,9 @@ function closeSidePanel() {
     document.getElementById('side-panel').classList.remove('open');
     currentCaseIndex = null;
     animStop();
+    removeIRMapOverlay();
+    _irPlotlyVisible = false;
+    cleanupERA5();
     _csMode = false; _csPointA = null; _removeRubberBand();
     exitFocusMode();
     setTimeout(function() { map.invalidateSize(); }, 360);
@@ -330,6 +363,808 @@ var _lastSqJson = null;
 // ── ASCII Hurricane Loading Animation ────────────────────────
 var _hurricaneAnimId = null;
 var _hurricanePhase = 0;
+
+
+// ══════════════════════════════════════════════════════════════
+// ERA5 Environmental Diagnostics Module
+// ══════════════════════════════════════════════════════════════
+
+// ── ERA5 state ───────────────────────────────────────────────
+var _era5Data = null;
+var _era5MapOverlay = null;
+var _era5MapField = 'shear_mag';
+var _era5MapVisible = false;
+var _era5Fetching = false;
+var _era5PlotlyVisible = false;
+var _era5EnvPanelVisible = false;
+
+// ── ERA5 colormaps ───────────────────────────────────────────
+var _era5Colormaps = {
+    shear_mag: {
+        stops: [
+            { pos: 0.00, r: 255, g: 255, b: 204 },
+            { pos: 0.15, r: 255, g: 237, b: 160 },
+            { pos: 0.30, r: 254, g: 217, b: 118 },
+            { pos: 0.45, r: 254, g: 178, b: 76  },
+            { pos: 0.60, r: 253, g: 141, b: 60  },
+            { pos: 0.75, r: 240, g: 59,  b: 32  },
+            { pos: 0.90, r: 189, g: 0,   b: 38  },
+            { pos: 1.00, r: 128, g: 0,   b: 38  },
+        ],
+    },
+    rh_mid: {
+        stops: [
+            { pos: 0.00, r: 140, g: 81,  b: 10  },
+            { pos: 0.15, r: 191, g: 129, b: 45  },
+            { pos: 0.30, r: 223, g: 194, b: 125 },
+            { pos: 0.50, r: 245, g: 245, b: 220 },
+            { pos: 0.70, r: 128, g: 205, b: 193 },
+            { pos: 0.85, r: 53,  g: 151, b: 143 },
+            { pos: 1.00, r: 1,   g: 102, b: 94  },
+        ],
+    },
+    div200: {
+        stops: [
+            { pos: 0.00, r: 178, g: 24,  b: 43  },
+            { pos: 0.25, r: 239, g: 138, b: 98  },
+            { pos: 0.45, r: 253, g: 219, b: 199 },
+            { pos: 0.55, r: 209, g: 229, b: 240 },
+            { pos: 0.75, r: 103, g: 169, b: 207 },
+            { pos: 1.00, r: 33,  g: 102, b: 172 },
+        ],
+    },
+};
+
+function _era5ValToColor(val, field) {
+    var cfg = _era5Data ? _era5Data.field_config : null;
+    if (!cfg) return [0, 0, 0, 0];
+    var vmin = cfg.vmin, vmax = cfg.vmax;
+    if (val === null || val === undefined || isNaN(val)) return [0, 0, 0, 0];
+    var frac = (val - vmin) / (vmax - vmin);
+    frac = Math.max(0, Math.min(1, frac));
+    var stops = _era5Colormaps[field] ? _era5Colormaps[field].stops : _era5Colormaps.shear_mag.stops;
+    var lo = stops[0], hi = stops[stops.length - 1];
+    for (var i = 0; i < stops.length - 1; i++) {
+        if (frac >= stops[i].pos && frac <= stops[i + 1].pos) {
+            lo = stops[i]; hi = stops[i + 1]; break;
+        }
+    }
+    var t = (hi.pos === lo.pos) ? 0 : (frac - lo.pos) / (hi.pos - lo.pos);
+    return [
+        Math.round(lo.r + t * (hi.r - lo.r)),
+        Math.round(lo.g + t * (hi.g - lo.g)),
+        Math.round(lo.b + t * (hi.b - lo.b)),
+        200
+    ];
+}
+
+function _era5RenderCanvas(data2d, field) {
+    var nLat = data2d.length, nLon = data2d[0].length;
+    var canvas = document.createElement('canvas');
+    canvas.width = nLon; canvas.height = nLat;
+    var ctx = canvas.getContext('2d');
+    var imgData = ctx.createImageData(nLon, nLat);
+    var d = imgData.data;
+    for (var yi = 0; yi < nLat; yi++) {
+        var srcRow = nLat - 1 - yi;
+        for (var xi = 0; xi < nLon; xi++) {
+            var idx = (yi * nLon + xi) * 4;
+            var rgba = _era5ValToColor(data2d[srcRow][xi], field);
+            d[idx] = rgba[0]; d[idx + 1] = rgba[1]; d[idx + 2] = rgba[2]; d[idx + 3] = rgba[3];
+        }
+    }
+    ctx.putImageData(imgData, 0, 0);
+    return canvas;
+}
+
+// ── ERA5 data fetch ──────────────────────────────────────────
+function fetchERA5Data(caseIndex, field, callback) {
+    if (_era5Fetching) return;
+    _era5Fetching = true;
+    var url = API_BASE + '/era5?case_index=' + caseIndex + '&field=' + (field || 'shear_mag');
+    fetch(url)
+        .then(function(r) {
+            if (!r.ok) { _era5Fetching = false; if (callback) callback(null); return null; }
+            return r.json();
+        })
+        .then(function(data) {
+            _era5Fetching = false;
+            if (!data) return;
+            _era5Data = data;
+            if (callback) callback(data);
+        })
+        .catch(function(err) {
+            console.warn('ERA5 fetch failed:', err);
+            _era5Fetching = false; _era5Data = null;
+            if (callback) callback(null);
+        });
+}
+
+// ── Leaflet map overlay ──────────────────────────────────────
+function _era5GetBounds(data) {
+    var latOff = data.lat_offsets, lonOff = data.lon_offsets;
+    return L.latLngBounds(
+        [data.center_lat + latOff[0], data.center_lon + lonOff[0]],
+        [data.center_lat + latOff[latOff.length - 1], data.center_lon + lonOff[lonOff.length - 1]]
+    );
+}
+
+function showERA5MapOverlay() {
+    if (!_era5Data || !_era5Data.data) return;
+    var canvas = _era5RenderCanvas(_era5Data.data, _era5Data.field);
+    var bounds = _era5GetBounds(_era5Data);
+    var url = canvas.toDataURL();
+    if (_era5MapOverlay) {
+        _era5MapOverlay.setUrl(url);
+        _era5MapOverlay.setBounds(bounds);
+    } else {
+        _era5MapOverlay = L.imageOverlay(url, bounds, { opacity: 0.6, interactive: false, zIndex: 190 });
+        _era5MapOverlay.addTo(map);
+    }
+    _era5MapVisible = true;
+}
+
+function removeERA5MapOverlay() {
+    if (_era5MapOverlay) { map.removeLayer(_era5MapOverlay); _era5MapOverlay = null; }
+    _era5MapVisible = false;
+}
+
+function toggleERA5MapOverlay() {
+    if (_era5MapVisible) {
+        removeERA5MapOverlay();
+    } else if (_era5Data) {
+        showERA5MapOverlay();
+    }
+    var btn = document.getElementById('era5-map-btn');
+    if (btn) btn.textContent = _era5MapVisible ? '\uD83C\uDF0D Env On' : '\uD83C\uDF10 Env Off';
+}
+
+// ── Plotly explorer underlay ─────────────────────────────────
+function buildERA5PlotlyTrace(data) {
+    if (!data || !data.data) return null;
+    var frame = data.data;
+    var latOff = data.lat_offsets, lonOff = data.lon_offsets;
+    var centerLat = data.center_lat;
+    var cosLat = Math.cos(centerLat * Math.PI / 180);
+    var yKm = latOff.map(function(d) { return d * 111.0; });
+    var xKm = lonOff.map(function(d) { return d * 111.0 * cosLat; });
+    return {
+        z: frame, x: xKm, y: yKm, type: 'heatmap',
+        colorscale: data.field_config.colorscale,
+        zmin: data.field_config.vmin, zmax: data.field_config.vmax,
+        showscale: false, hoverongaps: false, opacity: 0.25,
+        hovertemplate: '<b>' + data.field_config.display_name + '</b>: %{z:.2f} ' + data.field_config.units + '<extra>ERA5</extra>',
+    };
+}
+
+function buildERA5QuiverTraces(data) {
+    if (!data || !data.vectors) return [];
+    var vecs = data.vectors;
+    var latOff = data.lat_offsets, lonOff = data.lon_offsets;
+    var centerLat = data.center_lat;
+    var cosLat = Math.cos(centerLat * Math.PI / 180);
+    var stride = vecs.stride;
+    var traces = [];
+    var arrowScale = 40;
+    for (var yi = 0; yi < vecs.u.length; yi++) {
+        for (var xi = 0; xi < vecs.u[yi].length; xi++) {
+            var u = vecs.u[yi][xi], v = vecs.v[yi][xi];
+            if (u === null || v === null) continue;
+            var x0 = lonOff[xi * stride] * 111.0 * cosLat;
+            var y0 = latOff[yi * stride] * 111.0;
+            var mag = Math.sqrt(u * u + v * v);
+            if (mag < 0.5) continue;
+            var scale = arrowScale * mag / 20;
+            traces.push({
+                x: [x0, x0 + u / mag * scale], y: [y0, y0 + v / mag * scale],
+                type: 'scatter', mode: 'lines',
+                line: { color: 'rgba(255,255,255,0.4)', width: 1 },
+                showlegend: false, hoverinfo: 'skip',
+            });
+        }
+    }
+    return traces;
+}
+
+function toggleERA5PlotlyUnderlay() {
+    _era5PlotlyVisible = !_era5PlotlyVisible;
+    var plotDiv = document.getElementById('plotly-chart');
+    if (!plotDiv || !plotDiv.data) { _era5PlotlyVisible = false; return; }
+
+    if (_era5PlotlyVisible && _era5Data) {
+        var trace = buildERA5PlotlyTrace(_era5Data);
+        if (trace) {
+            // Insert at index 0 (or 1 if IR underlay present)
+            var insertIdx = 0;
+            if (plotDiv.data.length > 0 && plotDiv.data[0].hovertemplate &&
+                plotDiv.data[0].hovertemplate.indexOf('satellite') !== -1) {
+                insertIdx = 1;
+            }
+            Plotly.addTraces('plotly-chart', trace, insertIdx);
+            // Add quiver traces
+            var quivers = buildERA5QuiverTraces(_era5Data);
+            if (quivers.length) {
+                for (var qi = 0; qi < quivers.length; qi++) {
+                    Plotly.addTraces('plotly-chart', quivers[qi]);
+                }
+            }
+        }
+    } else {
+        _era5PlotlyVisible = false;
+        // Remove ERA5 traces (tagged with 'ERA5' in hovertemplate)
+        var toRemove = [];
+        for (var i = plotDiv.data.length - 1; i >= 0; i--) {
+            if ((plotDiv.data[i].hovertemplate && plotDiv.data[i].hovertemplate.indexOf('ERA5') !== -1) ||
+                (plotDiv.data[i].hoverinfo === 'skip' && plotDiv.data[i].line && plotDiv.data[i].line.color === 'rgba(255,255,255,0.4)')) {
+                toRemove.push(i);
+            }
+        }
+        if (toRemove.length) Plotly.deleteTraces('plotly-chart', toRemove);
+    }
+    _updateERA5Buttons();
+}
+
+function _updateERA5Buttons() {
+    var btn = document.getElementById('era5-underlay-btn');
+    if (btn) {
+        btn.classList.toggle('active', _era5PlotlyVisible);
+        btn.textContent = _era5PlotlyVisible ? '\uD83C\uDF0D ' + (_era5Data ? _era5Data.field_config.display_name.split('(')[0].trim() : 'Env') : '\uD83C\uDF0D Env Off';
+    }
+}
+
+// ── ERA5 field selector ──────────────────────────────────────
+function showERA5FieldMenu() {
+    var existing = document.getElementById('era5-field-menu');
+    if (existing) { existing.remove(); return; }
+    var btn = document.getElementById('era5-underlay-btn');
+    if (!btn) return;
+    var menu = document.createElement('div');
+    menu.id = 'era5-field-menu';
+    menu.className = 'env-field-dropdown';
+    var fields = [
+        { key: 'shear_mag', label: '\uD83C\uDF2C Shear (200\u2013850 hPa)' },
+        { key: 'rh_mid',    label: '\uD83D\uDCA7 Mid-Level RH (500\u2013700)' },
+        { key: 'div200',    label: '\u2B06 200 hPa Divergence' },
+    ];
+    fields.forEach(function(f) {
+        var opt = document.createElement('div');
+        opt.className = 'env-field-option' + (_era5MapField === f.key ? ' active' : '');
+        opt.textContent = f.label;
+        opt.onclick = function() {
+            menu.remove();
+            _era5MapField = f.key;
+            if (currentCaseIndex !== null) {
+                fetchERA5Data(currentCaseIndex, f.key, function(data) {
+                    if (data) {
+                        if (_era5PlotlyVisible) {
+                            _era5PlotlyVisible = false;
+                            toggleERA5PlotlyUnderlay();
+                        }
+                        if (_era5MapVisible) showERA5MapOverlay();
+                        renderEnvPanel();
+                    }
+                });
+            }
+        };
+        menu.appendChild(opt);
+    });
+    btn.parentElement.style.position = 'relative';
+    btn.parentElement.appendChild(menu);
+    setTimeout(function() {
+        document.addEventListener('click', function closeMenu(e) {
+            if (!menu.contains(e.target) && e.target !== btn) {
+                menu.remove(); document.removeEventListener('click', closeMenu);
+            }
+        });
+    }, 10);
+}
+
+// ── Environment Panel (hodograph + profiles + scalars) ───────
+function toggleEnvPanel() {
+    _era5EnvPanelVisible = !_era5EnvPanelVisible;
+    var panel = document.getElementById('env-panel');
+    if (_era5EnvPanelVisible && _era5Data) {
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'env-panel';
+            panel.className = 'env-panel';
+            var displayArea = document.getElementById('display-area');
+            if (displayArea) displayArea.parentElement.appendChild(panel);
+        }
+        panel.style.display = 'block';
+        renderEnvPanel();
+    } else {
+        _era5EnvPanelVisible = false;
+        if (panel) panel.style.display = 'none';
+    }
+    var btn = document.getElementById('env-panel-btn');
+    if (btn) {
+        btn.classList.toggle('active', _era5EnvPanelVisible);
+        btn.textContent = _era5EnvPanelVisible ? '\uD83C\uDF21 Env Panel' : '\uD83C\uDF21 Env Panel';
+    }
+}
+
+function renderEnvPanel() {
+    var panel = document.getElementById('env-panel');
+    if (!panel || !_era5Data) return;
+
+    var scalars = _era5Data.scalars || {};
+    var profiles = _era5Data.profiles;
+
+    // Build panel HTML
+    var html = '<div class="env-panel-header" onclick="toggleEnvPanel()">' +
+        '<span class="env-panel-title">\uD83C\uDF21 Environmental Context (ERA5)</span>' +
+        '<span style="color:var(--slate);font-size:11px;">\u2715</span></div>' +
+        '<div class="env-panel-body">' +
+        '<div class="env-panel-grid">' +
+        '<div id="env-hodograph" style="min-height:220px;"></div>' +
+        '<div class="env-scalars-col">';
+
+    // Scalar diagnostics with SHIPS comparison
+    var shearMs = scalars.shear_mag_env;
+    var shearKt = shearMs !== null && shearMs !== undefined ? (shearMs * 1.944).toFixed(0) : '\u2014';
+    var shearDir = scalars.shear_dir_env;
+    var rhMid = scalars.rh_mid_env;
+    var div200 = scalars.div200_env;
+
+    html += '<div class="env-scalar-section">' +
+        '<div class="env-scalar-row"><span class="env-scalar-label">Deep-Layer Shear</span>' +
+        '<span class="env-scalar-value">' + (shearMs != null ? shearMs.toFixed(1) + ' m/s (' + shearKt + ' kt)' : '\u2014') + '</span></div>' +
+        '<div class="env-scalar-row"><span class="env-scalar-label">Shear Direction</span>' +
+        '<span class="env-scalar-value">' + (shearDir != null ? shearDir.toFixed(0) + '\u00b0' : '\u2014') + '</span></div>';
+
+    // SHIPS comparison if available
+    if (_currentSddc !== null) {
+        html += '<div class="env-scalar-row"><span class="env-scalar-ships">SHIPS: SDDC=' + _currentSddc.toFixed(0) + '\u00b0</span>' +
+            '<span class="env-scalar-ships">\u0394=' + (shearDir != null ? Math.abs(shearDir - _currentSddc).toFixed(0) : '?') + '\u00b0</span></div>';
+    }
+
+    html += '<div class="env-scalar-row"><span class="env-scalar-label">Mid-Level RH</span>' +
+        '<span class="env-scalar-value">' + (rhMid != null ? rhMid.toFixed(0) + '%' : '\u2014') + '</span></div>' +
+        '<div class="env-scalar-row"><span class="env-scalar-label">200 hPa Divergence</span>' +
+        '<span class="env-scalar-value">' + (div200 != null ? (div200 * 1e5).toFixed(1) + ' \u00d710\u207b\u2075 s\u207b\u00b9' : '\u2014') + '</span></div>' +
+        '</div></div>';
+
+    // Profile plots row
+    if (profiles && profiles.plev) {
+        html += '<div class="env-profiles-row" style="display:flex;gap:8px;margin-top:8px;">' +
+            '<div id="env-rh-profile" style="flex:1;min-height:180px;"></div>' +
+            '<div id="env-t-profile" style="flex:1;min-height:180px;"></div>' +
+            '</div>';
+    }
+
+    html += '</div>';
+    panel.innerHTML = html;
+
+    // Render hodograph
+    if (profiles && profiles.u && profiles.v) {
+        setTimeout(function() { renderHodograph(profiles, 'env-hodograph'); }, 50);
+    }
+    // Render vertical profiles
+    if (profiles && profiles.plev) {
+        setTimeout(function() {
+            renderRHProfile(profiles, 'env-rh-profile');
+            renderTProfile(profiles, 'env-t-profile');
+        }, 100);
+    }
+}
+
+// ── Hodograph ────────────────────────────────────────────────
+function renderHodograph(profiles, divId) {
+    var el = document.getElementById(divId);
+    if (!el || !profiles.u || !profiles.v) return;
+
+    var u = profiles.u, v = profiles.v, plev = profiles.plev;
+    var n = plev.length;
+
+    // Height-based colors: blue (low) → green (mid) → red (upper)
+    function plevColor(p) {
+        var logMin = Math.log(100), logMax = Math.log(1000);
+        var frac = 1.0 - (Math.log(p) - logMin) / (logMax - logMin);
+        frac = Math.max(0, Math.min(1, frac));
+        if (frac < 0.5) {
+            var t = frac / 0.5;
+            return 'rgb(' + Math.round(30 + t * 0) + ',' + Math.round(100 + t * 155) + ',' + Math.round(255 - t * 100) + ')';
+        } else {
+            var t2 = (frac - 0.5) / 0.5;
+            return 'rgb(' + Math.round(30 + t2 * 225) + ',' + Math.round(255 - t2 * 155) + ',' + Math.round(155 - t2 * 155) + ')';
+        }
+    }
+
+    var colors = plev.map(plevColor);
+
+    // Profile line trace
+    var profileTrace = {
+        x: u, y: v, type: 'scatter', mode: 'lines+markers',
+        marker: { color: colors, size: 7, line: { color: 'rgba(255,255,255,0.6)', width: 1 } },
+        line: { color: 'rgba(180,180,180,0.4)', width: 1.5 },
+        text: plev.map(function(p, i) {
+            return p + ' hPa<br>u=' + (u[i] != null ? u[i].toFixed(1) : '?') + ' v=' + (v[i] != null ? v[i].toFixed(1) : '?') + ' m/s';
+        }),
+        hovertemplate: '%{text}<extra></extra>',
+        showlegend: false,
+    };
+
+    // Shear vector: 850 → 200 hPa
+    var i850 = -1, i200 = -1;
+    for (var i = 0; i < n; i++) {
+        if (plev[i] === 850) i850 = i;
+        if (plev[i] === 200) i200 = i;
+    }
+
+    var traces = [profileTrace];
+    if (i850 >= 0 && i200 >= 0 && u[i850] != null && u[i200] != null) {
+        traces.push({
+            x: [u[i850], u[i200]], y: [v[i850], v[i200]],
+            type: 'scatter', mode: 'lines+markers+text',
+            line: { color: '#f59e0b', width: 2.5, dash: 'dash' },
+            marker: { size: [8, 10], color: '#f59e0b', symbol: ['circle', 'triangle-up'] },
+            text: ['850', '200'], textposition: 'top right',
+            textfont: { color: '#f59e0b', size: 9 },
+            showlegend: false, hoverinfo: 'skip',
+        });
+    }
+
+    // Range rings
+    var shapes = [];
+    var maxWind = 0;
+    for (var j = 0; j < n; j++) {
+        if (u[j] != null && v[j] != null) {
+            maxWind = Math.max(maxWind, Math.sqrt(u[j] * u[j] + v[j] * v[j]));
+        }
+    }
+    var ringMax = Math.ceil(maxWind / 5) * 5 + 5;
+    for (var r = 5; r <= ringMax; r += 5) {
+        shapes.push({
+            type: 'circle', xref: 'x', yref: 'y',
+            x0: -r, y0: -r, x1: r, y1: r,
+            line: { color: 'rgba(255,255,255,0.07)', width: 1 },
+        });
+    }
+    // Crosshairs
+    shapes.push({ type: 'line', xref: 'x', yref: 'y', x0: -ringMax, y0: 0, x1: ringMax, y1: 0,
+        line: { color: 'rgba(255,255,255,0.1)', width: 1 } });
+    shapes.push({ type: 'line', xref: 'x', yref: 'y', x0: 0, y0: -ringMax, x1: 0, y1: ringMax,
+        line: { color: 'rgba(255,255,255,0.1)', width: 1 } });
+
+    var layout = {
+        xaxis: { title: { text: 'u (m/s)', font: { size: 10, color: '#8b9ec2' } },
+            range: [-ringMax, ringMax], scaleanchor: 'y', scaleratio: 1,
+            zeroline: false, gridcolor: 'rgba(255,255,255,0.04)', color: '#8b9ec2', tickfont: { size: 9 } },
+        yaxis: { title: { text: 'v (m/s)', font: { size: 10, color: '#8b9ec2' } },
+            range: [-ringMax, ringMax],
+            zeroline: false, gridcolor: 'rgba(255,255,255,0.04)', color: '#8b9ec2', tickfont: { size: 9 } },
+        shapes: shapes,
+        paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(10,22,40,0.5)',
+        margin: { l: 40, r: 10, t: 25, b: 35 },
+        title: { text: 'Hodograph (200\u2013600 km)', font: { size: 11, color: '#00d4ff' }, x: 0.5, y: 0.98 },
+        showlegend: false,
+    };
+
+    Plotly.newPlot(divId, traces, layout, { responsive: true, displayModeBar: false });
+}
+
+// ── RH Vertical Profile ─────────────────────────────────────
+function renderRHProfile(profiles, divId) {
+    var el = document.getElementById(divId);
+    if (!el || !profiles.rh) return;
+
+    var trace = {
+        x: profiles.rh, y: profiles.plev, type: 'scatter', mode: 'lines+markers',
+        fill: 'tozerox', fillcolor: 'rgba(53,151,143,0.2)',
+        line: { color: '#35978f', width: 2 },
+        marker: { color: '#35978f', size: 5 },
+        hovertemplate: '%{y} hPa: %{x:.0f}%<extra>RH</extra>',
+    };
+    var layout = {
+        xaxis: { title: { text: 'RH (%)', font: { size: 9, color: '#8b9ec2' } },
+            range: [0, 105], color: '#8b9ec2', tickfont: { size: 8 } },
+        yaxis: { title: { text: 'Pressure (hPa)', font: { size: 9, color: '#8b9ec2' } },
+            autorange: 'reversed', type: 'log', color: '#8b9ec2', tickfont: { size: 8 },
+            tickvals: [1000, 850, 700, 500, 300, 200, 100] },
+        paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(10,22,40,0.5)',
+        margin: { l: 45, r: 5, t: 22, b: 30 },
+        title: { text: 'RH Profile', font: { size: 10, color: '#00d4ff' }, x: 0.5, y: 0.98 },
+    };
+    Plotly.newPlot(divId, [trace], layout, { responsive: true, displayModeBar: false });
+}
+
+// ── Temperature Vertical Profile ─────────────────────────────
+function renderTProfile(profiles, divId) {
+    var el = document.getElementById(divId);
+    if (!el || !profiles.t) return;
+
+    // Compute anomaly from a simple reference (mean at each level)
+    var tAnom = profiles.t.map(function(t) { return t != null ? t - 273.15 : null; });
+
+    var trace = {
+        x: tAnom, y: profiles.plev, type: 'scatter', mode: 'lines+markers',
+        line: { color: '#ef4444', width: 2 },
+        marker: { color: '#ef4444', size: 5 },
+        hovertemplate: '%{y} hPa: %{x:.1f}\u00b0C<extra>Temp</extra>',
+    };
+    var layout = {
+        xaxis: { title: { text: 'T (\u00b0C)', font: { size: 9, color: '#8b9ec2' } },
+            color: '#8b9ec2', tickfont: { size: 8 } },
+        yaxis: { title: '', autorange: 'reversed', type: 'log', color: '#8b9ec2', tickfont: { size: 8 },
+            tickvals: [1000, 850, 700, 500, 300, 200, 100] },
+        paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(10,22,40,0.5)',
+        margin: { l: 30, r: 5, t: 22, b: 30 },
+        title: { text: 'Temperature', font: { size: 10, color: '#00d4ff' }, x: 0.5, y: 0.98 },
+    };
+    Plotly.newPlot(divId, [trace], layout, { responsive: true, displayModeBar: false });
+}
+
+// ── ERA5 cleanup ─────────────────────────────────────────────
+function cleanupERA5() {
+    removeERA5MapOverlay();
+    _era5Data = null;
+    _era5PlotlyVisible = false;
+    _era5EnvPanelVisible = false;
+    var panel = document.getElementById('env-panel');
+    if (panel) panel.style.display = 'none';
+    var menu = document.getElementById('era5-field-menu');
+    if (menu) menu.remove();
+}
+
+// ══════════════════════════════════════════════════════════════
+// IR Satellite Imagery Module
+// ══════════════════════════════════════════════════════════════
+
+// ── IR state ─────────────────────────────────────────────────
+var _irData = null;
+var _irMapOverlay = null;
+var _irCanvases = [];
+var _irAnimFrame = 0;
+var _irAnimTimer = null;
+var _irAnimPlaying = false;
+var _irMapVisible = true;
+var _irPlotlyVisible = false;
+var _irFetching = false;
+
+// ── IR colormap (NOAA-style enhanced IR) ─────────────────────
+var _irColorStops = [
+    { pos: 0.00, r: 8,   g: 8,   b: 8   },
+    { pos: 0.15, r: 40,  g: 40,  b: 40  },
+    { pos: 0.30, r: 90,  g: 90,  b: 90  },
+    { pos: 0.40, r: 140, g: 140, b: 140 },
+    { pos: 0.50, r: 200, g: 200, b: 200 },
+    { pos: 0.55, r: 0,   g: 180, b: 255 },
+    { pos: 0.60, r: 0,   g: 100, b: 255 },
+    { pos: 0.65, r: 0,   g: 255, b: 0   },
+    { pos: 0.70, r: 255, g: 255, b: 0   },
+    { pos: 0.75, r: 255, g: 180, b: 0   },
+    { pos: 0.80, r: 255, g: 80,  b: 0   },
+    { pos: 0.85, r: 255, g: 0,   b: 0   },
+    { pos: 0.90, r: 180, g: 0,   b: 180 },
+    { pos: 0.95, r: 255, g: 180, b: 255 },
+    { pos: 1.00, r: 255, g: 255, b: 255 },
+];
+
+function _irTbToColor(tb, vmin, vmax) {
+    if (tb === null || tb === undefined || isNaN(tb)) return [0, 0, 0, 0];
+    var frac = 1.0 - (tb - vmin) / (vmax - vmin);
+    frac = Math.max(0, Math.min(1, frac));
+    var lo = _irColorStops[0], hi = _irColorStops[_irColorStops.length - 1];
+    for (var i = 0; i < _irColorStops.length - 1; i++) {
+        if (frac >= _irColorStops[i].pos && frac <= _irColorStops[i + 1].pos) {
+            lo = _irColorStops[i]; hi = _irColorStops[i + 1]; break;
+        }
+    }
+    var t = (hi.pos === lo.pos) ? 0 : (frac - lo.pos) / (hi.pos - lo.pos);
+    return [
+        Math.round(lo.r + t * (hi.r - lo.r)),
+        Math.round(lo.g + t * (hi.g - lo.g)),
+        Math.round(lo.b + t * (hi.b - lo.b)),
+        220
+    ];
+}
+
+function _irRenderCanvas(frame, vmin, vmax) {
+    var nLat = frame.length, nLon = frame[0].length;
+    var canvas = document.createElement('canvas');
+    canvas.width = nLon; canvas.height = nLat;
+    var ctx = canvas.getContext('2d');
+    var imgData = ctx.createImageData(nLon, nLat);
+    var d = imgData.data;
+    for (var yi = 0; yi < nLat; yi++) {
+        var srcRow = nLat - 1 - yi;
+        for (var xi = 0; xi < nLon; xi++) {
+            var idx = (yi * nLon + xi) * 4;
+            var rgba = _irTbToColor(frame[srcRow][xi], vmin, vmax);
+            d[idx] = rgba[0]; d[idx + 1] = rgba[1]; d[idx + 2] = rgba[2]; d[idx + 3] = rgba[3];
+        }
+    }
+    ctx.putImageData(imgData, 0, 0);
+    return canvas;
+}
+
+// ── IR data fetch ────────────────────────────────────────────
+function fetchIRData(caseIndex, callback) {
+    if (_irFetching) return;
+    _irFetching = true;
+    var url = API_BASE + '/ir?case_index=' + caseIndex;
+    fetch(url)
+        .then(function(r) {
+            if (!r.ok) { _irFetching = false; if (callback) callback(null); return null; }
+            return r.json();
+        })
+        .then(function(data) {
+            _irFetching = false;
+            if (!data) return;
+            _irData = data;
+            _irCanvases = [];
+            for (var i = 0; i < data.Tb.length; i++) {
+                _irCanvases.push(_irRenderCanvas(data.Tb[i], data.vmin, data.vmax));
+            }
+            if (callback) callback(data);
+        })
+        .catch(function(err) {
+            console.warn('IR fetch failed:', err);
+            _irFetching = false; _irData = null;
+            if (callback) callback(null);
+        });
+}
+
+// ── Leaflet map overlay ──────────────────────────────────────
+function _irGetBounds(data) {
+    var latOff = data.lat_offsets, lonOff = data.lon_offsets;
+    return L.latLngBounds(
+        [data.center_lat + latOff[0], data.center_lon + lonOff[0]],
+        [data.center_lat + latOff[latOff.length - 1], data.center_lon + lonOff[lonOff.length - 1]]
+    );
+}
+
+function showIRMapOverlay(frameIdx) {
+    if (!_irData || !_irCanvases.length) return;
+    var idx = (frameIdx !== undefined) ? frameIdx : _irAnimFrame;
+    idx = Math.max(0, Math.min(idx, _irCanvases.length - 1));
+    _irAnimFrame = idx;
+    var bounds = _irGetBounds(_irData);
+    var url = _irCanvases[idx].toDataURL();
+    if (_irMapOverlay) {
+        _irMapOverlay.setUrl(url);
+        _irMapOverlay.setBounds(bounds);
+    } else {
+        _irMapOverlay = L.imageOverlay(url, bounds, { opacity: 0.75, interactive: false, zIndex: 200 });
+        _irMapOverlay.addTo(map);
+    }
+    var label = document.getElementById('ir-map-label');
+    if (label) {
+        var lagHr = _irData.lag_hours[idx];
+        var dtStr = _irData.ir_datetimes[idx] || '';
+        label.textContent = 'IR ' + (lagHr > 0 ? 't\u2212' + lagHr.toFixed(1) + 'h' : 't=0') + (dtStr ? ' | ' + dtStr : '');
+    }
+}
+
+function removeIRMapOverlay() {
+    irAnimStop();
+    if (_irMapOverlay) { map.removeLayer(_irMapOverlay); _irMapOverlay = null; }
+    _irData = null; _irCanvases = []; _irAnimFrame = 0; _irMapVisible = true;
+    var ctrl = document.getElementById('ir-map-controls');
+    if (ctrl) ctrl.remove();
+}
+
+function irAnimStep(dir) {
+    if (!_irData) return;
+    var n = _irCanvases.length;
+    _irAnimFrame = (_irAnimFrame + dir + n) % n;
+    showIRMapOverlay(_irAnimFrame);
+    _updateIRSlider();
+}
+
+function irAnimToggle() {
+    if (_irAnimPlaying) { irAnimStop(); }
+    else { _irAnimPlaying = true; _updateIRPlayBtn(); irAnimTick(); }
+}
+
+function irAnimTick() {
+    if (!_irAnimPlaying) return;
+    irAnimStep(-1);
+    if (_irAnimFrame === 0) {
+        _irAnimTimer = setTimeout(function() {
+            _irAnimFrame = _irCanvases.length - 1;
+            showIRMapOverlay(_irAnimFrame);
+            _updateIRSlider();
+            _irAnimTimer = setTimeout(irAnimTick, 600);
+        }, 1500);
+    } else {
+        _irAnimTimer = setTimeout(irAnimTick, 600);
+    }
+}
+
+function irAnimStop() {
+    _irAnimPlaying = false;
+    if (_irAnimTimer) { clearTimeout(_irAnimTimer); _irAnimTimer = null; }
+    _updateIRPlayBtn();
+}
+
+function _updateIRPlayBtn() {
+    var btn = document.getElementById('ir-play-btn');
+    if (btn) btn.textContent = _irAnimPlaying ? '\u23F8' : '\u25B6';
+}
+
+function _updateIRSlider() {
+    var slider = document.getElementById('ir-frame-slider');
+    if (slider) slider.value = _irAnimFrame;
+}
+
+function toggleIRMapVisibility() {
+    _irMapVisible = !_irMapVisible;
+    if (_irMapOverlay) _irMapOverlay.setOpacity(_irMapVisible ? 0.75 : 0);
+    var btn = document.getElementById('ir-toggle-btn');
+    if (btn) btn.textContent = _irMapVisible ? '\uD83C\uDF0D IR On' : '\uD83C\uDF11 IR Off';
+}
+
+function _injectIRMapControls() {
+    if (document.getElementById('ir-map-controls')) return;
+    var mapWrapper = document.getElementById('map-wrapper');
+    if (!mapWrapper) return;
+    var n = _irCanvases.length;
+    var ctrl = document.createElement('div');
+    ctrl.id = 'ir-map-controls';
+    ctrl.className = 'ir-map-controls';
+    ctrl.innerHTML =
+        '<div class="ir-ctrl-row">' +
+            '<button class="ir-ctrl-btn" id="ir-toggle-btn" onclick="toggleIRMapVisibility()">\uD83C\uDF0D IR On</button>' +
+            '<button class="ir-ctrl-btn" onclick="irAnimStep(1)" title="Previous (earlier)">\u25C0</button>' +
+            '<button class="ir-ctrl-btn" id="ir-play-btn" onclick="irAnimToggle()" title="Play/Pause">\u25B6</button>' +
+            '<button class="ir-ctrl-btn" onclick="irAnimStep(-1)" title="Next (later)">\u25B6</button>' +
+            '<input type="range" id="ir-frame-slider" min="0" max="' + (n - 1) + '" value="' + (n - 1) + '" ' +
+                'oninput="showIRMapOverlay(parseInt(this.value))" class="ir-slider">' +
+            '<span class="ir-label" id="ir-map-label">IR t\u22124.0h</span>' +
+        '</div>';
+    mapWrapper.appendChild(ctrl);
+}
+
+// ── Plotly IR underlay ───────────────────────────────────────
+function buildIRPlotlyTrace(irData) {
+    if (!irData || !irData.Tb || !irData.Tb[0]) return null;
+    var frame = irData.Tb[0];
+    var latOff = irData.lat_offsets, lonOff = irData.lon_offsets;
+    var centerLat = irData.center_lat;
+    var cosLat = Math.cos(centerLat * Math.PI / 180);
+    var yKm = latOff.map(function(d) { return d * 111.0; });
+    var xKm = lonOff.map(function(d) { return d * 111.0 * cosLat; });
+    return {
+        z: frame, x: xKm, y: yKm, type: 'heatmap',
+        colorscale: irData.colormap, zmin: irData.vmin, zmax: irData.vmax,
+        showscale: false, hoverongaps: false, opacity: 0.35,
+        hovertemplate: '<b>IR Tb</b>: %{z:.1f} K<extra>satellite</extra>',
+    };
+}
+
+function toggleIRPlotlyUnderlay() {
+    _irPlotlyVisible = !_irPlotlyVisible;
+    var plotDiv = document.getElementById('plotly-chart');
+    if (!plotDiv || !plotDiv.data) { _irPlotlyVisible = false; return; }
+    if (_irPlotlyVisible && _irData) {
+        var irTrace = buildIRPlotlyTrace(_irData);
+        if (irTrace) {
+            Plotly.addTraces('plotly-chart', irTrace, 0);
+            var fsdiv = document.getElementById('plotly-fullscreen');
+            if (fsdiv && fsdiv.data) Plotly.addTraces('plotly-fullscreen', irTrace, 0);
+        }
+    } else {
+        _irPlotlyVisible = false;
+        if (plotDiv.data.length > 1 && plotDiv.data[0].hovertemplate &&
+            plotDiv.data[0].hovertemplate.indexOf('satellite') !== -1) {
+            Plotly.deleteTraces('plotly-chart', 0);
+            var fsdiv2 = document.getElementById('plotly-fullscreen');
+            if (fsdiv2 && fsdiv2.data && fsdiv2.data[0].hovertemplate &&
+                fsdiv2.data[0].hovertemplate.indexOf('satellite') !== -1) {
+                Plotly.deleteTraces('plotly-fullscreen', 0);
+            }
+        }
+    }
+    var btn = document.getElementById('ir-underlay-btn');
+    if (btn) {
+        btn.classList.toggle('active', _irPlotlyVisible);
+        btn.textContent = _irPlotlyVisible ? '\uD83D\uDEF0 IR On' : '\uD83D\uDEF0 IR Off';
+    }
+}
+
+
 
 function _hurricaneLoadingHTML(message, compact) {
     var id = 'hurricane-anim-' + Date.now();
