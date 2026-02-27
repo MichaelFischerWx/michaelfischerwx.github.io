@@ -313,7 +313,9 @@ function openSidePanel(caseData, fromQuickSelect) {
 
     // Fetch IR satellite data for this case
     _irData = null; _irCanvases = []; _irPlotlyVisible = false;
+    _showIRLoadingIndicator();
     fetchIRData(caseData.case_index, function(data) {
+        _removeIRLoadingIndicator();
         if (data && currentCaseIndex === caseData.case_index) {
             var irBtn = document.getElementById('ir-underlay-btn');
             if (irBtn) irBtn.disabled = false;
@@ -980,6 +982,28 @@ function _irRenderCanvas(frame, vmin, vmax) {
 }
 
 // ── IR data fetch ────────────────────────────────────────────
+// ── IR loading indicator on map ───────────────────────────────
+function _showIRLoadingIndicator() {
+    if (document.getElementById('ir-loading-indicator')) return;
+    var mapEl = document.getElementById('map-container');
+    if (!mapEl) return;
+    var div = document.createElement('div');
+    div.id = 'ir-loading-indicator';
+    div.style.cssText = 'position:absolute;bottom:14px;left:14px;z-index:999;' +
+        'background:rgba(10,22,40,0.88);backdrop-filter:blur(6px);' +
+        'border:1px solid rgba(255,255,255,0.12);border-radius:8px;' +
+        'padding:8px 16px;display:flex;align-items:center;gap:8px;';
+    div.innerHTML =
+        '<div style="width:14px;height:14px;border:2px solid rgba(255,255,255,0.15);' +
+        'border-top:2px solid #60a5fa;border-radius:50%;animation:spin 1s linear infinite;"></div>' +
+        '<span style="font-size:11px;color:#93c5fd;font-family:\'JetBrains Mono\',monospace;">IR loading\u2026</span>';
+    mapEl.appendChild(div);
+}
+function _removeIRLoadingIndicator() {
+    var el = document.getElementById('ir-loading-indicator');
+    if (el) el.remove();
+}
+
 function fetchIRData(caseIndex, callback) {
     if (_irFetching) return;
     _irFetching = true;
@@ -1039,6 +1063,7 @@ function showIRMapOverlay(frameIdx) {
 
 function removeIRMapOverlay() {
     irAnimStop();
+    _removeIRLoadingIndicator();
     if (_irMapOverlay) { map.removeLayer(_irMapOverlay); _irMapOverlay = null; }
     _irData = null; _irCanvases = []; _irAnimFrame = 0; _irMapVisible = true;
     var ctrl = document.getElementById('ir-map-controls');
@@ -1055,15 +1080,22 @@ function irAnimStep(dir) {
 
 function irAnimToggle() {
     if (_irAnimPlaying) { irAnimStop(); }
-    else { _irAnimPlaying = true; _updateIRPlayBtn(); irAnimTick(); }
+    else {
+        _irAnimPlaying = true;
+        _irAnimFrame = 0;
+        showIRMapOverlay(_irAnimFrame);
+        _updateIRSlider();
+        _updateIRPlayBtn();
+        irAnimTick();
+    }
 }
 
 function irAnimTick() {
     if (!_irAnimPlaying) return;
-    irAnimStep(-1);
-    if (_irAnimFrame === 0) {
+    irAnimStep(1);
+    if (_irAnimFrame === _irCanvases.length - 1) {
         _irAnimTimer = setTimeout(function() {
-            _irAnimFrame = _irCanvases.length - 1;
+            _irAnimFrame = 0;
             showIRMapOverlay(_irAnimFrame);
             _updateIRSlider();
             _irAnimTimer = setTimeout(irAnimTick, 600);
@@ -1107,9 +1139,9 @@ function _injectIRMapControls() {
     ctrl.innerHTML =
         '<div class="ir-ctrl-row">' +
             '<button class="ir-ctrl-btn" id="ir-toggle-btn" onclick="toggleIRMapVisibility()">\uD83C\uDF0D IR On</button>' +
-            '<button class="ir-ctrl-btn" onclick="irAnimStep(1)" title="Previous (earlier)">\u25C0</button>' +
+            '<button class="ir-ctrl-btn" onclick="irAnimStep(-1)" title="Previous (earlier)">\u25C0</button>' +
             '<button class="ir-ctrl-btn" id="ir-play-btn" onclick="irAnimToggle()" title="Play/Pause">\u25B6</button>' +
-            '<button class="ir-ctrl-btn" onclick="irAnimStep(-1)" title="Next (later)">\u25B6</button>' +
+            '<button class="ir-ctrl-btn" onclick="irAnimStep(1)" title="Next (later)">\u25B6</button>' +
             '<input type="range" id="ir-frame-slider" min="0" max="' + (n - 1) + '" value="' + (n - 1) + '" ' +
                 'oninput="showIRMapOverlay(parseInt(this.value))" class="ir-slider">' +
             '<span class="ir-label" id="ir-map-label">IR t\u22124.0h</span>' +
