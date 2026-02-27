@@ -325,7 +325,7 @@ function openSidePanel(caseData, fromQuickSelect) {
     document.getElementById('side-panel').classList.add('open');
 
     // Fetch IR satellite data for this case
-    _irData = null; _irFrameURLs = []; _irPlotlyVisible = false; _irAllFramesLoaded = false;
+    _irData = null; _irFrameURLs = []; _irPlotlyVisible = false; _irAllFramesLoaded = false; _irLoadedCount = 0;
     _showIRLoadingIndicator();
     fetchIRData(caseData.case_index, function(data) {
         _removeIRLoadingIndicator();
@@ -961,11 +961,13 @@ function _removeIRLoadingIndicator() {
 }
 
 var _irAllFramesLoaded = false;
+var _irLoadedCount = 0;
 
 function fetchIRData(caseIndex, callback) {
     if (_irFetching) return;
     _irFetching = true;
     _irAllFramesLoaded = false;
+    _irLoadedCount = 0;
 
     // Phase 1: Fetch metadata + t=0 frame for instant display
     var url = API_BASE + '/ir?case_index=' + caseIndex;
@@ -979,14 +981,18 @@ function fetchIRData(caseIndex, callback) {
             if (!data) return;
             _irData = data;
             // Initialize frame array with just frame0 in position 0
-            _irFrameURLs = new Array(data.n_frames || 9);
-            for (var i = 0; i < _irFrameURLs.length; i++) _irFrameURLs[i] = null;
-            if (data.frame0) _irFrameURLs[0] = data.frame0;
+            var n = data.n_frames || 9;
+            _irFrameURLs = new Array(n);
+            for (var i = 0; i < n; i++) _irFrameURLs[i] = null;
+            if (data.frame0) {
+                _irFrameURLs[0] = data.frame0;
+                _irLoadedCount = 1;
+            }
 
             if (callback) callback(data);
 
-            // Phase 2: Background-fetch all animation frames
-            _fetchIRAnimFrames(caseIndex);
+            // Phase 2: Progressively fetch remaining frames (1, 2, 3, ...)
+            _fetchIRFrameSequential(caseIndex, 1);
         })
         .catch(function(err) {
             console.warn('IR fetch failed:', err);
@@ -995,30 +1001,75 @@ function fetchIRData(caseIndex, callback) {
         });
 }
 
-function _fetchIRAnimFrames(caseIndex) {
-    var url = API_BASE + '/ir_frames?case_index=' + caseIndex;
+function _fetchIRFrameSequential(caseIndex, lagIndex) {
+    // Stop if case changed, all frames loaded, or out of range
+    if (!_irData || _irData.case_index !== caseIndex) return;
+    if (lagIndex >= _irFrameURLs.length) {
+        _irAllFramesLoaded = true;
+        _updateIRLoadingLabel();
+        return;
+    }
+
+    var url = API_BASE + '/ir_frame?case_index=' + caseIndex + '&lag_index=' + lagIndex;
     fetch(url)
         .then(function(r) { return r.ok ? r.json() : null; })
         .then(function(data) {
-            if (!data || !data.frames) return;
-            // Only apply if we're still looking at the same case
-            if (_irData && _irData.case_index === data.case_index) {
-                _irFrameURLs = data.frames;
-                _irAllFramesLoaded = true;
-                // Enable animation controls if they exist
-                var playBtn = document.getElementById('ir-play-btn');
-                if (playBtn) playBtn.classList.remove('ir-ctrl-disabled');
-                var stepBack = document.getElementById('ir-step-back');
-                if (stepBack) stepBack.classList.remove('ir-ctrl-disabled');
-                var stepFwd = document.getElementById('ir-step-fwd');
-                if (stepFwd) stepFwd.classList.remove('ir-ctrl-disabled');
-                var slider = document.getElementById('ir-frame-slider');
-                if (slider) slider.disabled = false;
+            if (!data || !_irData || _irData.case_index !== caseIndex) return;
+            if (data.frame) {
+                _irFrameURLs[data.lag_index] = data.frame;
             }
+            _irLoadedCount = _countLoadedFrames();
+            _updateIRLoadingLabel();
+
+            // Enable animation controls once we have 2+ frames
+            if (_irLoadedCount >= 2) {
+                _enableIRAnimControls();
+            }
+
+            // Fetch next frame
+            _fetchIRFrameSequential(caseIndex, lagIndex + 1);
         })
         .catch(function(err) {
-            console.warn('IR animation frames fetch failed:', err);
+            console.warn('IR frame ' + lagIndex + ' fetch failed:', err);
+            // Continue to next frame even if one fails
+            _fetchIRFrameSequential(caseIndex, lagIndex + 1);
         });
+}
+
+function _countLoadedFrames() {
+    var count = 0;
+    for (var i = 0; i < _irFrameURLs.length; i++) {
+        if (_irFrameURLs[i]) count++;
+    }
+    return count;
+}
+
+function _enableIRAnimControls() {
+    var playBtn = document.getElementById('ir-play-btn');
+    if (playBtn) playBtn.classList.remove('ir-ctrl-disabled');
+    var stepBack = document.getElementById('ir-step-back');
+    if (stepBack) stepBack.classList.remove('ir-ctrl-disabled');
+    var stepFwd = document.getElementById('ir-step-fwd');
+    if (stepFwd) stepFwd.classList.remove('ir-ctrl-disabled');
+    var slider = document.getElementById('ir-frame-slider');
+    if (slider) slider.disabled = false;
+}
+
+function _updateIRLoadingLabel() {
+    var label = document.getElementById('ir-map-label');
+    if (!label || !_irData) return;
+    if (_irAllFramesLoaded) {
+        // Show current frame info
+        var lagHr = _irData.lag_hours[_irAnimFrame];
+        var dtStr = _irData.ir_datetimes[_irAnimFrame] || '';
+        label.textContent = 'IR ' + (lagHr > 0 ? 't\u2212' + lagHr.toFixed(1) + 'h' : 't=0') + (dtStr ? ' | ' + dtStr : '');
+    } else {
+        // Show loading progress alongside current frame info
+        var lagHr = _irData.lag_hours[_irAnimFrame];
+        var dtStr = _irData.ir_datetimes[_irAnimFrame] || '';
+        var frameInfo = 'IR ' + (lagHr > 0 ? 't\u2212' + lagHr.toFixed(1) + 'h' : 't=0');
+        label.textContent = frameInfo + ' | Loading ' + _irLoadedCount + '/' + _irFrameURLs.length + '...';
+    }
 }
 
 // ── Leaflet map overlay ──────────────────────────────────────
@@ -1045,37 +1096,40 @@ function showIRMapOverlay(frameIdx) {
         _irMapOverlay = L.imageOverlay(url, bounds, { opacity: 0.75, interactive: false, zIndex: 200 });
         _irMapOverlay.addTo(map);
     }
-    var label = document.getElementById('ir-map-label');
-    if (label) {
-        var lagHr = _irData.lag_hours[idx];
-        var dtStr = _irData.ir_datetimes[idx] || '';
-        label.textContent = 'IR ' + (lagHr > 0 ? 't\u2212' + lagHr.toFixed(1) + 'h' : 't=0') + (dtStr ? ' | ' + dtStr : '');
-    }
+    _updateIRLoadingLabel();
 }
 
 function removeIRMapOverlay() {
     irAnimStop();
     _removeIRLoadingIndicator();
     if (_irMapOverlay) { map.removeLayer(_irMapOverlay); _irMapOverlay = null; }
-    _irData = null; _irFrameURLs = []; _irAnimFrame = 0; _irMapVisible = true; _irAllFramesLoaded = false;
+    _irData = null; _irFrameURLs = []; _irAnimFrame = 0; _irMapVisible = true; _irAllFramesLoaded = false; _irLoadedCount = 0;
     var ctrl = document.getElementById('ir-map-controls');
     if (ctrl) ctrl.remove();
 }
 
 function irAnimStep(dir) {
-    if (!_irData || !_irAllFramesLoaded) return;
+    if (!_irData || _irLoadedCount < 2) return;
     var n = _irFrameURLs.length;
-    _irAnimFrame = (_irAnimFrame + dir + n) % n;
+    // Step in direction, skipping null frames
+    var startFrame = _irAnimFrame;
+    for (var i = 0; i < n; i++) {
+        _irAnimFrame = (_irAnimFrame + dir + n) % n;
+        if (_irFrameURLs[_irAnimFrame]) break;
+    }
     showIRMapOverlay(_irAnimFrame);
     _updateIRSlider();
 }
 
 function irAnimToggle() {
-    if (!_irAllFramesLoaded) return;
+    if (_irLoadedCount < 2) return;
     if (_irAnimPlaying) { irAnimStop(); }
     else {
         _irAnimPlaying = true;
-        _irAnimFrame = _irFrameURLs.length - 1;
+        // Start from the earliest (highest-index) loaded frame
+        for (var i = _irFrameURLs.length - 1; i >= 0; i--) {
+            if (_irFrameURLs[i]) { _irAnimFrame = i; break; }
+        }
         showIRMapOverlay(_irAnimFrame);
         _updateIRSlider();
         _updateIRPlayBtn();
@@ -1088,7 +1142,10 @@ function irAnimTick() {
     irAnimStep(-1);
     if (_irAnimFrame === 0) {
         _irAnimTimer = setTimeout(function() {
-            _irAnimFrame = _irFrameURLs.length - 1;
+            // Reset to the earliest (highest-index) loaded frame
+            for (var i = _irFrameURLs.length - 1; i >= 0; i--) {
+                if (_irFrameURLs[i]) { _irAnimFrame = i; break; }
+            }
             showIRMapOverlay(_irAnimFrame);
             _updateIRSlider();
             _irAnimTimer = setTimeout(irAnimTick, 600);
