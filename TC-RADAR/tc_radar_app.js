@@ -970,6 +970,7 @@ function fetchIRData(caseIndex, callback) {
     _irFetching = true;
     _irAllFramesLoaded = false;
     _irLoadedCount = 0;
+    _irBoundsSet = false;  // force setBounds() on new case (center may differ)
 
     // Phase 1: Fetch metadata + t=0 frame for instant display
     var url = API_BASE + '/ir?case_index=' + caseIndex;
