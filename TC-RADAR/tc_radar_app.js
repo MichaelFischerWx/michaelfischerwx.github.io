@@ -52,8 +52,8 @@ function enterFocusMode(caseData) {
     setTimeout(function() {
         map.invalidateSize();
         // If IR data was already fetched before focus mode, show it now
-        if (_irData && _irCanvases.length) {
-            showIRMapOverlay(_irCanvases.length - 1);
+        if (_irData && _irFrameURLs.length) {
+            showIRMapOverlay(_irFrameURLs.length - 1);
             _injectIRMapControls();
         }
     }, 380);
@@ -325,7 +325,7 @@ function openSidePanel(caseData, fromQuickSelect) {
     document.getElementById('side-panel').classList.add('open');
 
     // Fetch IR satellite data for this case
-    _irData = null; _irCanvases = []; _irPlotlyVisible = false;
+    _irData = null; _irFrameURLs = []; _irPlotlyVisible = false;
     _showIRLoadingIndicator();
     fetchIRData(caseData.case_index, function(data) {
         _removeIRLoadingIndicator();
@@ -333,7 +333,7 @@ function openSidePanel(caseData, fromQuickSelect) {
             var irBtn = document.getElementById('ir-underlay-btn');
             if (irBtn) irBtn.disabled = false;
             if (_focusMode) {
-                showIRMapOverlay(data.Tb.length - 1);
+                showIRMapOverlay(data.frames.length - 1);
                 _injectIRMapControls();
             }
         }
@@ -929,70 +929,13 @@ function cleanupERA5() {
 // ── IR state ─────────────────────────────────────────────────
 var _irData = null;
 var _irMapOverlay = null;
-var _irCanvases = [];
+var _irFrameURLs = [];
 var _irAnimFrame = 0;
 var _irAnimTimer = null;
 var _irAnimPlaying = false;
 var _irMapVisible = true;
 var _irPlotlyVisible = false;
 var _irFetching = false;
-
-// ── IR colormap (NOAA-style enhanced IR) ─────────────────────
-var _irColorStops = [
-    { pos: 0.00, r: 8,   g: 8,   b: 8   },
-    { pos: 0.15, r: 40,  g: 40,  b: 40  },
-    { pos: 0.30, r: 90,  g: 90,  b: 90  },
-    { pos: 0.40, r: 140, g: 140, b: 140 },
-    { pos: 0.50, r: 200, g: 200, b: 200 },
-    { pos: 0.55, r: 0,   g: 180, b: 255 },
-    { pos: 0.60, r: 0,   g: 100, b: 255 },
-    { pos: 0.65, r: 0,   g: 255, b: 0   },
-    { pos: 0.70, r: 255, g: 255, b: 0   },
-    { pos: 0.75, r: 255, g: 180, b: 0   },
-    { pos: 0.80, r: 255, g: 80,  b: 0   },
-    { pos: 0.85, r: 255, g: 0,   b: 0   },
-    { pos: 0.90, r: 180, g: 0,   b: 180 },
-    { pos: 0.95, r: 255, g: 180, b: 255 },
-    { pos: 1.00, r: 255, g: 255, b: 255 },
-];
-
-function _irTbToColor(tb, vmin, vmax) {
-    if (tb === null || tb === undefined || isNaN(tb)) return [0, 0, 0, 0];
-    var frac = 1.0 - (tb - vmin) / (vmax - vmin);
-    frac = Math.max(0, Math.min(1, frac));
-    var lo = _irColorStops[0], hi = _irColorStops[_irColorStops.length - 1];
-    for (var i = 0; i < _irColorStops.length - 1; i++) {
-        if (frac >= _irColorStops[i].pos && frac <= _irColorStops[i + 1].pos) {
-            lo = _irColorStops[i]; hi = _irColorStops[i + 1]; break;
-        }
-    }
-    var t = (hi.pos === lo.pos) ? 0 : (frac - lo.pos) / (hi.pos - lo.pos);
-    return [
-        Math.round(lo.r + t * (hi.r - lo.r)),
-        Math.round(lo.g + t * (hi.g - lo.g)),
-        Math.round(lo.b + t * (hi.b - lo.b)),
-        220
-    ];
-}
-
-function _irRenderCanvas(frame, vmin, vmax) {
-    var nLat = frame.length, nLon = frame[0].length;
-    var canvas = document.createElement('canvas');
-    canvas.width = nLon; canvas.height = nLat;
-    var ctx = canvas.getContext('2d');
-    var imgData = ctx.createImageData(nLon, nLat);
-    var d = imgData.data;
-    for (var yi = 0; yi < nLat; yi++) {
-        var srcRow = nLat - 1 - yi;
-        for (var xi = 0; xi < nLon; xi++) {
-            var idx = (yi * nLon + xi) * 4;
-            var rgba = _irTbToColor(frame[srcRow][xi], vmin, vmax);
-            d[idx] = rgba[0]; d[idx + 1] = rgba[1]; d[idx + 2] = rgba[2]; d[idx + 3] = rgba[3];
-        }
-    }
-    ctx.putImageData(imgData, 0, 0);
-    return canvas;
-}
 
 // ── IR data fetch ────────────────────────────────────────────
 // ── IR loading indicator on map ───────────────────────────────
@@ -1030,10 +973,9 @@ function fetchIRData(caseIndex, callback) {
             _irFetching = false;
             if (!data) return;
             _irData = data;
-            _irCanvases = [];
-            for (var i = 0; i < data.Tb.length; i++) {
-                _irCanvases.push(_irRenderCanvas(data.Tb[i], data.vmin, data.vmax));
-            }
+            // Server returns pre-rendered PNG data-URLs in data.frames
+            // Keep nulls in place to preserve index alignment with lag_hours/ir_datetimes
+            _irFrameURLs = data.frames || [];
             if (callback) callback(data);
         })
         .catch(function(err) {
@@ -1053,12 +995,13 @@ function _irGetBounds(data) {
 }
 
 function showIRMapOverlay(frameIdx) {
-    if (!_irData || !_irCanvases.length) return;
+    if (!_irData || !_irFrameURLs.length) return;
     var idx = (frameIdx !== undefined) ? frameIdx : _irAnimFrame;
-    idx = Math.max(0, Math.min(idx, _irCanvases.length - 1));
+    idx = Math.max(0, Math.min(idx, _irFrameURLs.length - 1));
     _irAnimFrame = idx;
+    var url = _irFrameURLs[idx];
+    if (!url) return;  // skip null frames
     var bounds = _irGetBounds(_irData);
-    var url = _irCanvases[idx].toDataURL();
     if (_irMapOverlay) {
         _irMapOverlay.setUrl(url);
         _irMapOverlay.setBounds(bounds);
@@ -1078,14 +1021,14 @@ function removeIRMapOverlay() {
     irAnimStop();
     _removeIRLoadingIndicator();
     if (_irMapOverlay) { map.removeLayer(_irMapOverlay); _irMapOverlay = null; }
-    _irData = null; _irCanvases = []; _irAnimFrame = 0; _irMapVisible = true;
+    _irData = null; _irFrameURLs = []; _irAnimFrame = 0; _irMapVisible = true;
     var ctrl = document.getElementById('ir-map-controls');
     if (ctrl) ctrl.remove();
 }
 
 function irAnimStep(dir) {
     if (!_irData) return;
-    var n = _irCanvases.length;
+    var n = _irFrameURLs.length;
     _irAnimFrame = (_irAnimFrame + dir + n) % n;
     showIRMapOverlay(_irAnimFrame);
     _updateIRSlider();
@@ -1095,7 +1038,7 @@ function irAnimToggle() {
     if (_irAnimPlaying) { irAnimStop(); }
     else {
         _irAnimPlaying = true;
-        _irAnimFrame = _irCanvases.length - 1;
+        _irAnimFrame = _irFrameURLs.length - 1;
         showIRMapOverlay(_irAnimFrame);
         _updateIRSlider();
         _updateIRPlayBtn();
@@ -1108,7 +1051,7 @@ function irAnimTick() {
     irAnimStep(-1);
     if (_irAnimFrame === 0) {
         _irAnimTimer = setTimeout(function() {
-            _irAnimFrame = _irCanvases.length - 1;
+            _irAnimFrame = _irFrameURLs.length - 1;
             showIRMapOverlay(_irAnimFrame);
             _updateIRSlider();
             _irAnimTimer = setTimeout(irAnimTick, 600);
@@ -1131,7 +1074,7 @@ function _updateIRPlayBtn() {
 
 function _updateIRSlider() {
     var slider = document.getElementById('ir-frame-slider');
-    if (slider) slider.value = (_irCanvases.length - 1) - _irAnimFrame;
+    if (slider) slider.value = (_irFrameURLs.length - 1) - _irAnimFrame;
 }
 
 function toggleIRMapVisibility() {
@@ -1145,7 +1088,7 @@ function _injectIRMapControls() {
     if (document.getElementById('ir-map-controls')) return;
     var mapWrapper = document.getElementById('map-wrapper');
     if (!mapWrapper) return;
-    var n = _irCanvases.length;
+    var n = _irFrameURLs.length;
     var ctrl = document.createElement('div');
     ctrl.id = 'ir-map-controls';
     ctrl.className = 'ir-map-controls';
@@ -1163,19 +1106,24 @@ function _injectIRMapControls() {
 }
 
 // ── Plotly IR underlay ───────────────────────────────────────
-function buildIRPlotlyTrace(irData) {
-    if (!irData || !irData.Tb || !irData.Tb[0]) return null;
-    var frame = irData.Tb[0];
+function buildIRPlotlyImage(irData) {
+    if (!irData || !_irFrameURLs.length) return null;
+    // Use the t=0 frame (index 0 in the frames array)
+    var url = _irFrameURLs[0];
+    if (!url) return null;
     var latOff = irData.lat_offsets, lonOff = irData.lon_offsets;
     var centerLat = irData.center_lat;
     var cosLat = Math.cos(centerLat * Math.PI / 180);
-    var yKm = latOff.map(function(d) { return d * 111.0; });
-    var xKm = lonOff.map(function(d) { return d * 111.0 * cosLat; });
+    var yMin = latOff[0] * 111.0;
+    var yMax = latOff[latOff.length - 1] * 111.0;
+    var xMin = lonOff[0] * 111.0 * cosLat;
+    var xMax = lonOff[lonOff.length - 1] * 111.0 * cosLat;
     return {
-        z: frame, x: xKm, y: yKm, type: 'heatmap',
-        colorscale: irData.colormap, zmin: irData.vmin, zmax: irData.vmax,
-        showscale: false, hoverongaps: false, opacity: 0.35,
-        hovertemplate: '<b>IR Tb</b>: %{z:.1f} K<extra>satellite</extra>',
+        source: url,
+        xref: 'x', yref: 'y',
+        x: xMin, y: yMax,
+        sizex: xMax - xMin, sizey: yMax - yMin,
+        sizing: 'stretch', opacity: 0.35, layer: 'below',
     };
 }
 
@@ -1184,22 +1132,37 @@ function toggleIRPlotlyUnderlay() {
     var plotDiv = document.getElementById('plotly-chart');
     if (!plotDiv || !plotDiv.data) { _irPlotlyVisible = false; return; }
     if (_irPlotlyVisible && _irData) {
-        var irTrace = buildIRPlotlyTrace(_irData);
-        if (irTrace) {
-            Plotly.addTraces('plotly-chart', irTrace, 0);
+        var irImg = buildIRPlotlyImage(_irData);
+        if (irImg) {
+            var existingImages = (plotDiv.layout.images || []).filter(function(img) {
+                return !img._irUnderlay;
+            });
+            irImg._irUnderlay = true;
+            existingImages.push(irImg);
+            Plotly.relayout('plotly-chart', { images: existingImages });
             var fsdiv = document.getElementById('plotly-fullscreen');
-            if (fsdiv && fsdiv.data) Plotly.addTraces('plotly-fullscreen', irTrace, 0);
+            if (fsdiv && fsdiv.layout) {
+                var fsImages = (fsdiv.layout.images || []).filter(function(img) {
+                    return !img._irUnderlay;
+                });
+                var fsImg = JSON.parse(JSON.stringify(irImg));
+                fsImg._irUnderlay = true;
+                fsImages.push(fsImg);
+                Plotly.relayout('plotly-fullscreen', { images: fsImages });
+            }
         }
     } else {
         _irPlotlyVisible = false;
-        if (plotDiv.data.length > 1 && plotDiv.data[0].hovertemplate &&
-            plotDiv.data[0].hovertemplate.indexOf('satellite') !== -1) {
-            Plotly.deleteTraces('plotly-chart', 0);
-            var fsdiv2 = document.getElementById('plotly-fullscreen');
-            if (fsdiv2 && fsdiv2.data && fsdiv2.data[0].hovertemplate &&
-                fsdiv2.data[0].hovertemplate.indexOf('satellite') !== -1) {
-                Plotly.deleteTraces('plotly-fullscreen', 0);
-            }
+        var cleanImages = (plotDiv.layout.images || []).filter(function(img) {
+            return !img._irUnderlay;
+        });
+        Plotly.relayout('plotly-chart', { images: cleanImages });
+        var fsdiv2 = document.getElementById('plotly-fullscreen');
+        if (fsdiv2 && fsdiv2.layout) {
+            var fsClean = (fsdiv2.layout.images || []).filter(function(img) {
+                return !img._irUnderlay;
+            });
+            Plotly.relayout('plotly-fullscreen', { images: fsClean });
         }
     }
     var btn = document.getElementById('ir-underlay-btn');
