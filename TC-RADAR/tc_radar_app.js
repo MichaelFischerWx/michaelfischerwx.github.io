@@ -991,8 +991,8 @@ function fetchIRData(caseIndex, callback) {
 
             if (callback) callback(data);
 
-            // Phase 2: Progressively fetch remaining frames (1, 2, 3, ...)
-            _fetchIRFrameSequential(caseIndex, 1);
+            // Phase 2: Fetch remaining frames in parallel
+            _fetchRemainingFramesParallel(caseIndex, 1);
         })
         .catch(function(err) {
             console.warn('IR fetch failed:', err);
@@ -1001,39 +1001,53 @@ function fetchIRData(caseIndex, callback) {
         });
 }
 
-function _fetchIRFrameSequential(caseIndex, lagIndex) {
-    // Stop if case changed, all frames loaded, or out of range
+function _fetchRemainingFramesParallel(caseIndex, startIdx) {
+    // Stop if case changed or out of range
     if (!_irData || _irData.case_index !== caseIndex) return;
-    if (lagIndex >= _irFrameURLs.length) {
+    if (startIdx >= _irFrameURLs.length) {
         _irAllFramesLoaded = true;
         _updateIRLoadingLabel();
         return;
     }
 
-    var url = API_BASE + '/ir_frame?case_index=' + caseIndex + '&lag_index=' + lagIndex;
-    fetch(url)
-        .then(function(r) { return r.ok ? r.json() : null; })
-        .then(function(data) {
-            if (!data || !_irData || _irData.case_index !== caseIndex) return;
-            if (data.frame) {
-                _irFrameURLs[data.lag_index] = data.frame;
-            }
-            _irLoadedCount = _countLoadedFrames();
-            _updateIRLoadingLabel();
+    var promises = [];
+    for (var i = startIdx; i < _irFrameURLs.length; i++) {
+        (function(lagIdx) {
+            var url = API_BASE + '/ir_frame?case_index=' + caseIndex + '&lag_index=' + lagIdx;
+            promises.push(
+                fetch(url)
+                    .then(function(r) { return r.ok ? r.json() : null; })
+                    .then(function(data) {
+                        // Guard: user may have navigated away
+                        if (!data || !_irData || _irData.case_index !== caseIndex) return;
+                        if (data.frame) {
+                            _irFrameURLs[data.lag_index] = data.frame;
+                        }
+                        // Update progress as each frame lands
+                        _irLoadedCount = _countLoadedFrames();
+                        _updateIRLoadingLabel();
+                        if (_irLoadedCount >= 2) {
+                            _enableIRAnimControls();
+                        }
+                    })
+                    .catch(function(err) {
+                        console.warn('IR frame ' + lagIdx + ' fetch failed:', err);
+                    })
+            );
+        })(i);
+    }
 
-            // Enable animation controls once we have 2+ frames
+    Promise.all(promises).then(function() {
+        // Final update once every request has resolved (success or failure)
+        if (_irData && _irData.case_index === caseIndex) {
+            _irLoadedCount = _countLoadedFrames();
+            _irAllFramesLoaded = true;
+            _updateIRLoadingLabel();
             if (_irLoadedCount >= 2) {
                 _enableIRAnimControls();
             }
-
-            // Fetch next frame
-            _fetchIRFrameSequential(caseIndex, lagIndex + 1);
-        })
-        .catch(function(err) {
-            console.warn('IR frame ' + lagIndex + ' fetch failed:', err);
-            // Continue to next frame even if one fails
-            _fetchIRFrameSequential(caseIndex, lagIndex + 1);
-        });
+        }
+    });
 }
 
 function _countLoadedFrames() {
