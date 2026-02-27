@@ -2669,7 +2669,7 @@ function fetch3DVolume() {
 
     var controller = new AbortController();
     var timeout = setTimeout(function() { controller.abort(); }, 120000);
-    var url = API_BASE + '/volume?case_index=' + currentCaseIndex + '&variable=' + variable + '&data_type=' + _activeDataType + '&stride=2&max_height_km=15';
+    var url = API_BASE + '/volume?case_index=' + currentCaseIndex + '&variable=' + variable + '&data_type=' + _activeDataType + '&stride=2&max_height_km=15&compact=true';
     fetch(url, { signal: controller.signal })
         .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
         .then(function(json) {
@@ -2757,13 +2757,44 @@ function render3DIsosurface() {
         (meta.vmax_kt !== null && meta.vmax_kt !== undefined ? ' [' + meta.vmax_kt + ' kt]' : '') +
         '<br><span style="font-size:12px;">' + vi.display_name + ' (' + vi.units + ')  \u2014  3D Isosurface</span>';
 
+    // Handle both compact (x_axis/y_axis/z_axis) and legacy (x/y/z) formats.
+    // Compact sends 1D axis vectors; we reconstruct the flattened meshgrid here.
+    // Legacy sends pre-flattened meshgrid arrays directly.
+    var xFlat, yFlat, zFlat;
+    if (json.x_axis) {
+        // Compact format: reconstruct flattened meshgrid from 1D axes
+        var xA = json.x_axis, yA = json.y_axis, zA = json.z_axis;
+        var shape = json.grid_shape;
+        var nz = shape[0], ny = shape[1], nx = shape[2];
+        var total = nz * ny * nx;
+        xFlat = new Array(total);
+        yFlat = new Array(total);
+        zFlat = new Array(total);
+        var idx = 0;
+        for (var iz = 0; iz < nz; iz++) {
+            for (var iy = 0; iy < ny; iy++) {
+                for (var ix = 0; ix < nx; ix++) {
+                    xFlat[idx] = xA[ix];
+                    yFlat[idx] = yA[iy];
+                    zFlat[idx] = zA[iz];
+                    idx++;
+                }
+            }
+        }
+    } else {
+        // Legacy format: use pre-flattened arrays directly
+        xFlat = json.x;
+        yFlat = json.y;
+        zFlat = json.z;
+    }
+
     var plotBg = '#0d1117';
 
     var trace = {
         type: 'isosurface',
-        x: json.x,
-        y: json.y,
-        z: json.z,
+        x: xFlat,
+        y: yFlat,
+        z: zFlat,
         value: json.value,
         isomin: isoMin,
         isomax: isoMax,
@@ -2797,11 +2828,19 @@ function render3DIsosurface() {
         lightposition: { x: 1000, y: 1000, z: 2000 }
     };
 
-    // Determine axis ranges from grid shape
+    // Determine axis ranges — use compact axis vectors if available (faster),
+    // otherwise fall back to first/last of flattened arrays
     var gs = json.grid_shape; // [nz, ny, nx]
-    var xRange = [json.x[0], json.x[json.x.length - 1]];
-    var yRange = [json.y[0], json.y[json.y.length - 1]];
-    var zRange = [json.z[0], json.z[json.z.length - 1]];
+    var xRange, yRange, zRange;
+    if (json.x_axis) {
+        xRange = [json.x_axis[0], json.x_axis[json.x_axis.length - 1]];
+        yRange = [json.y_axis[0], json.y_axis[json.y_axis.length - 1]];
+        zRange = [json.z_axis[0], json.z_axis[json.z_axis.length - 1]];
+    } else {
+        xRange = [xFlat[0], xFlat[xFlat.length - 1]];
+        yRange = [yFlat[0], yFlat[yFlat.length - 1]];
+        zRange = [zFlat[0], zFlat[zFlat.length - 1]];
+    }
 
     // Horizontal span (km) vs vertical span
     var hSpan = Math.max(xRange[1] - xRange[0], yRange[1] - yRange[0]);
