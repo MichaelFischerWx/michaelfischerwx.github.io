@@ -971,9 +971,10 @@ function renderSkewT(profiles, divId) {
     }
 
     // ── Conventional skew: ~45° tilt across the diagram ──
-    // With log-P y-axis spanning ~1 decade (100–1000 hPa), a skewFactor
-    // of ~37 gives the classic ~45° isotherms at mid-troposphere.
-    var skewFactor = 37;
+    // With log-P y-axis spanning ~1 decade (100–1000 hPa) and a typical
+    // chart aspect ratio (~500×400 px), a skewFactor of ~70 gives the
+    // classic ~45° isotherms.
+    var skewFactor = 70;
     var pRef = 1000;
 
     function skewX(tempC, pHpa) {
@@ -1104,12 +1105,12 @@ function renderSkewT(profiles, divId) {
         var xIso = [], yIso = [];
         pRange.forEach(function(p) {
             var sx = skewX(tIso, p);
-            if (sx >= -45 && sx <= 75) { xIso.push(sx); yIso.push(p); }
+            if (sx >= -70 && sx <= 120) { xIso.push(sx); yIso.push(p); }
         });
         if (xIso.length > 1) {
             isothermTraces.push({
                 x: xIso, y: yIso, type: 'scatter', mode: 'lines',
-                line: { color: tIso === 0 ? 'rgba(100,200,255,0.45)' : 'rgba(100,160,220,0.18)',
+                line: { color: tIso === 0 ? 'rgba(100,200,255,0.5)' : 'rgba(100,160,220,0.25)',
                         width: tIso === 0 ? 1.3 : 0.7,
                         dash: tIso === 0 ? 'dot' : 'solid' },
                 showlegend: false, hoverinfo: 'skip',
@@ -1126,7 +1127,7 @@ function renderSkewT(profiles, divId) {
         pRange.forEach(function(p) {
             var tAtP = thetaK * Math.pow(p / 1000.0, 0.286) - 273.15;
             var sx = skewX(tAtP, p);
-            if (sx >= -45 && sx <= 75) { xDry.push(sx); yDry.push(p); }
+            if (sx >= -70 && sx <= 120) { xDry.push(sx); yDry.push(p); }
         });
         if (xDry.length > 1) {
             dryAdiabatTraces.push({
@@ -1145,7 +1146,7 @@ function renderSkewT(profiles, divId) {
         var tCur = tBase;
         for (var p = 1000; p >= 100; p -= 5) {
             var sx = skewX(tCur, p);
-            if (sx >= -45 && sx <= 75) { xMoist.push(sx); yMoist.push(p); }
+            if (sx >= -70 && sx <= 120) { xMoist.push(sx); yMoist.push(p); }
             tCur -= moistLapseRate(tCur, p) * 5;
         }
         if (xMoist.length > 2) {
@@ -1170,7 +1171,7 @@ function renderSkewT(profiles, divId) {
                 var lnEM = Math.log(eMix / 6.112);
                 var tMix = 243.5 * lnEM / (17.67 - lnEM);
                 var sx = skewX(tMix, p);
-                if (sx >= -45 && sx <= 75 && tMix > -50 && tMix < 50) {
+                if (sx >= -70 && sx <= 120 && tMix > -50 && tMix < 50) {
                     xMix.push(sx); yMix.push(p);
                 }
             }
@@ -1294,7 +1295,7 @@ function renderSkewT(profiles, divId) {
     var layout = {
         xaxis: {
             title: { text: 'Temperature (\u00b0C)', font: { size: 9, color: '#8b9ec2' } },
-            range: [-30, 55],
+            range: [-40, 70],
             tickvals: xTickVals, ticktext: xTickText,
             color: '#8b9ec2', tickfont: { size: 8 },
             zeroline: false, gridcolor: 'rgba(255,255,255,0.03)',
@@ -1302,7 +1303,7 @@ function renderSkewT(profiles, divId) {
         },
         yaxis: {
             title: { text: 'Pressure (hPa)', font: { size: 9, color: '#8b9ec2' } },
-            autorange: 'reversed', type: 'log',
+            autorange: false, type: 'log',
             range: [Math.log10(1050), Math.log10(100)],
             color: '#8b9ec2', tickfont: { size: 8 },
             tickvals: [1000, 850, 700, 500, 400, 300, 200, 150, 100],
