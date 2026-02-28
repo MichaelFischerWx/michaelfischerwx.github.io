@@ -4589,16 +4589,70 @@ function initCompositePanel() {
                         '</div>' +
                     '</div>' +
                 '</div>' +
+                    // ── Environment Composite Controls ──
+                    '<div class="comp-section-title" style="margin-top:14px;">\uD83C\uDF0D Environment Composite</div>' +
+                    '<div class="comp-filter-row"><label>ERA5 Field</label>' +
+                        '<select class="explorer-select" id="comp-env-field" style="font-size:11px;">' +
+                            '<option value="shear_mag">Deep-Layer Shear (200\u2013850 hPa)</option>' +
+                            '<option value="rh_mid">Mid-Level RH (500\u2013700 hPa)</option>' +
+                            '<option value="div200">200 hPa Divergence</option>' +
+                            '<option value="sst">Sea Surface Temperature</option>' +
+                            '<option value="entropy_def">Entropy Deficit (\u03c7\u2098)</option>' +
+                        '</select>' +
+                    '</div>' +
+                    '<div class="comp-filter-row">' +
+                        '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">' +
+                            '<input type="checkbox" id="comp-env-vectors" style="width:14px;height:14px;accent-color:var(--cyan);"> ' +
+                            '<span>Include Shear Vectors</span>' +
+                        '</label>' +
+                    '</div>' +
+                    '<div class="comp-filter-row"><label>Crop Radius</label>' +
+                        '<div style="display:flex;align-items:center;gap:6px;">' +
+                            '<input type="range" id="comp-env-radius" min="100" max="1000" step="50" value="500" class="az-cov-slider" oninput="document.getElementById(\'comp-env-radius-val\').textContent=this.value+\' km\'">' +
+                            '<span id="comp-env-radius-val" style="font-size:11px;font-weight:600;color:var(--cyan);min-width:52px;font-family:\'JetBrains Mono\',monospace;">500 km</span>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="comp-actions">' +
+                        '<button class="comp-btn" id="comp-btn-env" onclick="generateEnvComposite()" style="background:rgba(0,180,100,0.15);border-color:rgba(0,180,100,0.5);color:#6ee7b7;">\uD83C\uDF0D Generate Env Composite</button>' +
+                    '</div>' +
+                    '<div id="comp-env-diff-wrap" style="display:none;">' +
+                        '<div class="comp-actions">' +
+                            '<button class="comp-btn comp-btn-diff" id="comp-btn-env-diff" onclick="generateEnvCompDiff()">\u0394 Env Composite (A\u2212B)</button>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
                 // ── Right: Results ──
                 '<div class="composite-results">' +
-                    '<div class="comp-result-placeholder" id="comp-result-placeholder">' +
-                        '<div class="comp-result-icon">\uD83C\uDF00</div>' +
-                        '<div class="comp-result-msg">Set filter criteria and click a generate button to compute a composite.</div>' +
+                    // Tab bar for TDR vs Environment
+                    '<div class="comp-tab-bar" id="comp-tab-bar">' +
+                        '<button class="comp-tab active" id="comp-tab-tdr" onclick="_switchCompTab(\'tdr\')">TDR Composites</button>' +
+                        '<button class="comp-tab" id="comp-tab-env" onclick="_switchCompTab(\'env\')">Environment</button>' +
                     '</div>' +
-                    '<div id="comp-status" style="display:none;"></div>' +
-                    '<div id="comp-result-az" style="display:none;"></div>' +
-                    '<div id="comp-result-sq" style="display:none;"></div>' +
-                    '<div id="comp-result-pv" style="display:none;"></div>' +
+                    // TDR results (existing)
+                    '<div class="comp-tab-content" id="comp-tab-content-tdr">' +
+                        '<div class="comp-result-placeholder" id="comp-result-placeholder">' +
+                            '<div class="comp-result-icon">\uD83C\uDF00</div>' +
+                            '<div class="comp-result-msg">Set filter criteria and click a generate button to compute a composite.</div>' +
+                        '</div>' +
+                        '<div id="comp-status" style="display:none;"></div>' +
+                        '<div id="comp-result-az" style="display:none;"></div>' +
+                        '<div id="comp-result-sq" style="display:none;"></div>' +
+                        '<div id="comp-result-pv" style="display:none;"></div>' +
+                    '</div>' +
+                    // Environment results (new)
+                    '<div class="comp-tab-content" id="comp-tab-content-env" style="display:none;">' +
+                        '<div class="comp-result-placeholder" id="comp-env-placeholder">' +
+                            '<div class="comp-result-icon">\uD83C\uDF0D</div>' +
+                            '<div class="comp-result-msg">Set filter criteria and click <strong>Generate Env Composite</strong> to compute environmental composites using the same case subset.</div>' +
+                        '</div>' +
+                        '<div id="comp-env-status" style="display:none;"></div>' +
+                        '<div id="comp-env-scalars" style="display:none;"></div>' +
+                        '<div id="comp-env-plan-view" style="display:none;"></div>' +
+                        '<div class="comp-env-row" style="display:none;" id="comp-env-thermo-row">' +
+                            '<div id="comp-env-skewt" style="flex:1;min-width:0;"></div>' +
+                            '<div id="comp-env-hodo" style="flex:1;min-width:0;"></div>' +
+                        '</div>' +
+                    '</div>' +
                 '</div>' +
             '</div>' +
         '</div>';
@@ -5620,6 +5674,8 @@ function _toggleDiffMode() {
     document.getElementById('comp-group-b-wrap').style.display = on ? 'block' : 'none';
     var groupALabel = document.getElementById('comp-group-a-label');
     if (groupALabel) groupALabel.style.display = on ? 'inline' : 'none';
+    var envDiffWrap = document.getElementById('comp-env-diff-wrap');
+    if (envDiffWrap) envDiffWrap.style.display = on ? 'block' : 'none';
     if (on) _updateGroupBCount();
 }
 
@@ -6255,6 +6311,761 @@ function _renderDiffPlanView(targetId, diffJson, jsonA, jsonB, filtersA, filters
                  '<br>\u0394 Plan View @ ' + levelKm + ' km: ' + varInfoA.display_name + dtypeLabel + normLabel + shearLabel;
     buildPvPlot('comp-diff-pv-d', diffJson.plan_view, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, diffVarInfo.units);
 }
+
+// ══════════════════════════════════════════════════════════════
+// Environmental Composite Functions
+// ══════════════════════════════════════════════════════════════
+
+function _switchCompTab(tab) {
+    var tdrTab = document.getElementById('comp-tab-tdr');
+    var envTab = document.getElementById('comp-tab-env');
+    var tdrContent = document.getElementById('comp-tab-content-tdr');
+    var envContent = document.getElementById('comp-tab-content-env');
+    if (!tdrTab || !envTab || !tdrContent || !envContent) return;
+    if (tab === 'env') {
+        tdrTab.classList.remove('active');
+        envTab.classList.add('active');
+        tdrContent.style.display = 'none';
+        envContent.style.display = '';
+    } else {
+        tdrTab.classList.add('active');
+        envTab.classList.remove('active');
+        tdrContent.style.display = '';
+        envContent.style.display = 'none';
+    }
+}
+
+function _showEnvCompStatus(cls, msg) {
+    var el = document.getElementById('comp-env-status');
+    if (!el) return;
+    el.style.display = 'block';
+    el.className = 'explorer-status ' + cls;
+    el.innerHTML = msg;
+}
+
+// ── Main generation function ──
+function generateEnvComposite() {
+    var filters = _getCompositeFilters();
+    var dataType = document.getElementById('comp-dtype').value || 'swath';
+    var field = document.getElementById('comp-env-field').value || 'shear_mag';
+    var includeVec = document.getElementById('comp-env-vectors').checked;
+    var radiusKm = parseInt(document.getElementById('comp-env-radius').value) || 500;
+    var qs = _compositeQueryString(filters) + '&data_type=' + dataType;
+
+    // Switch to env tab and show loading
+    _switchCompTab('env');
+    document.getElementById('comp-env-placeholder').style.display = 'none';
+    _showEnvCompStatus('loading', '\u23F3 Computing environmental composites\u2026');
+
+    // Hide previous results
+    ['comp-env-scalars', 'comp-env-plan-view', 'comp-env-thermo-row'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    });
+
+    // Launch 3 parallel requests
+    var planViewUrl = API_BASE + '/composite/era5_plan_view?' + qs +
+        '&field=' + field + '&radius_km=' + radiusKm + '&include_vectors=' + includeVec;
+    var profilesUrl = API_BASE + '/composite/era5_profiles?' + qs;
+    var scalarsUrl = API_BASE + '/composite/era5_scalars?' + qs;
+
+    Promise.all([
+        fetch(planViewUrl).then(function(r) { return r.ok ? r.json() : null; }),
+        fetch(profilesUrl).then(function(r) { return r.ok ? r.json() : null; }),
+        fetch(scalarsUrl).then(function(r) { return r.ok ? r.json() : null; })
+    ]).then(function(results) {
+        var pvData = results[0];
+        var profData = results[1];
+        var scalarData = results[2];
+        var nCases = (pvData && pvData.n_cases) || (profData && profData.n_cases) || (scalarData && scalarData.n_cases) || 0;
+
+        if (!pvData && !profData && !scalarData) {
+            _showEnvCompStatus('error', '\u2717 No environmental data available for matching cases.');
+            return;
+        }
+
+        var summary = _compositeFilterSummary(filters, nCases);
+        _showEnvCompStatus('', '\u2713 ' + summary);
+
+        if (scalarData) renderEnvCompositeScalars(scalarData);
+        if (pvData) renderEnvCompositePlanView(pvData, filters);
+        if (profData) renderEnvCompositeThermo(profData, filters);
+    }).catch(function(err) {
+        _showEnvCompStatus('error', '\u2717 Error: ' + err.message);
+    });
+}
+
+// ── Scalar cards rendering ──
+function renderEnvCompositeScalars(data) {
+    var container = document.getElementById('comp-env-scalars');
+    if (!container || !data.scalars) return;
+    container.style.display = 'block';
+
+    var html = '<div class="comp-env-section-title">\uD83D\uDCCA Scalar Diagnostics <span style="font-size:10px;color:#6b7280;">(N=' + data.n_cases + ')</span></div>';
+    html += '<div class="env-comp-scalars-grid">';
+
+    var order = ['shear_mag_env', 'rh_mid_env', 'sst_env', 'chi_m', 'v_pi', 'vent_index', 'div200_env', 'shear_dir_env'];
+    for (var i = 0; i < order.length; i++) {
+        var key = order[i];
+        var s = data.scalars[key];
+        if (!s) continue;
+
+        var highlightClass = '';
+        if (key === 'shear_mag_env') highlightClass = s.mean > 10 ? 'highlight-bad' : s.mean > 5 ? 'highlight-warn' : 'highlight-good';
+        else if (key === 'rh_mid_env') highlightClass = s.mean > 60 ? 'highlight-good' : s.mean > 40 ? 'highlight-warn' : 'highlight-bad';
+        else if (key === 'sst_env') highlightClass = s.mean > 28 ? 'highlight-good' : s.mean > 26 ? 'highlight-warn' : 'highlight-bad';
+
+        html += '<div class="env-scard ' + highlightClass + '" data-scalar-key="' + key + '" onclick="_toggleScalarBoxWhisker(this, \'' + key + '\')" style="cursor:pointer;" title="Click for box-whisker">';
+        html += '<div class="env-scard-value">' + s.mean + '</div>';
+        html += '<div class="env-scard-unit">\u00b1 ' + s.std + ' ' + s.units + '</div>';
+        html += '<div class="env-scard-label">' + s.display_name + '</div>';
+        html += '<div class="env-scard-sub">med: ' + s.median + ' | IQR: ' + s.p25 + '\u2013' + s.p75 + '</div>';
+        html += '</div>';
+    }
+    html += '</div>';
+    html += '<div id="comp-env-boxwhisker" style="display:none;height:200px;margin-top:8px;"></div>';
+    container.innerHTML = html;
+
+    // Store scalar data for box-whisker expansion
+    container._scalarData = data.scalars;
+}
+
+var _activeBoxWhiskerKey = null;
+function _toggleScalarBoxWhisker(card, key) {
+    var container = document.getElementById('comp-env-boxwhisker');
+    var scalarsEl = document.getElementById('comp-env-scalars');
+    if (!container || !scalarsEl || !scalarsEl._scalarData) return;
+
+    if (_activeBoxWhiskerKey === key) {
+        container.style.display = 'none';
+        _activeBoxWhiskerKey = null;
+        return;
+    }
+    _activeBoxWhiskerKey = key;
+    var s = scalarsEl._scalarData[key];
+    if (!s || !s.values) return;
+
+    container.style.display = 'block';
+    var trace = {
+        y: s.values,
+        type: 'box',
+        name: s.display_name,
+        marker: { color: 'rgba(0,212,255,0.6)' },
+        line: { color: '#00d4ff' },
+        boxpoints: 'outliers',
+        jitter: 0.3,
+        pointpos: -1.5
+    };
+    var layout = {
+        paper_bgcolor: '#0a1628', plot_bgcolor: '#0f2140',
+        font: { color: '#e2e8f0', family: 'DM Sans, sans-serif', size: 11 },
+        margin: { t: 30, b: 30, l: 50, r: 20 },
+        yaxis: { title: s.display_name + ' (' + s.units + ')', gridcolor: 'rgba(255,255,255,0.06)' },
+        showlegend: false
+    };
+    Plotly.newPlot(container, [trace], layout, { responsive: true, displayModeBar: false });
+}
+
+// ── Plan-view composite rendering ──
+function renderEnvCompositePlanView(data, filters) {
+    var container = document.getElementById('comp-env-plan-view');
+    if (!container) return;
+    container.style.display = 'block';
+    container.innerHTML = '<div id="comp-env-pv-plot" style="width:100%;height:500px;"></div>';
+
+    var cfg = data.field_config || {};
+    var colorscale = cfg.colorscale || 'Viridis';
+    var traces = [];
+
+    // Main heatmap
+    traces.push({
+        z: data.mean, x: data.x_km, y: data.y_km,
+        type: 'heatmap',
+        colorscale: colorscale,
+        zmin: cfg.vmin, zmax: cfg.vmax,
+        colorbar: { title: cfg.units || '', titleside: 'right', thickness: 14, len: 0.8 },
+        hovertemplate: '%{z:.2f} ' + (cfg.units || '') + '<br>x: %{x} km<br>y: %{y} km<extra></extra>'
+    });
+
+    // Vector arrows overlay
+    if (data.vectors) {
+        var stride = data.vectors.stride || 1;
+        var xSub = [], ySub = [], uArr = [], vArr = [];
+        var vU = data.vectors.u, vV = data.vectors.v;
+        for (var j = 0; j < vU.length; j++) {
+            for (var k = 0; k < vU[j].length; k++) {
+                if (vU[j][k] !== null && vV[j][k] !== null) {
+                    xSub.push(data.x_km[k * stride]);
+                    ySub.push(data.y_km[j * stride]);
+                    var u = vU[j][k], v = vV[j][k];
+                    var mag = Math.sqrt(u * u + v * v);
+                    var scale = 35;
+                    uArr.push(u / Math.max(mag, 0.01) * scale);
+                    vArr.push(v / Math.max(mag, 0.01) * scale);
+                }
+            }
+        }
+        // Draw arrows as annotation arrows
+        var annotations = [];
+        for (var a = 0; a < xSub.length; a++) {
+            annotations.push({
+                x: xSub[a] + uArr[a], y: ySub[a] + vArr[a],
+                ax: xSub[a], ay: ySub[a],
+                xref: 'x', yref: 'y', axref: 'x', ayref: 'y',
+                showarrow: true,
+                arrowhead: 2, arrowsize: 1, arrowwidth: 1.5,
+                arrowcolor: 'rgba(255,255,255,0.6)'
+            });
+        }
+    }
+
+    // TC center marker
+    traces.push({
+        x: [0], y: [0], mode: 'markers',
+        marker: { symbol: 'x', size: 12, color: '#fff', line: { width: 1 } },
+        showlegend: false, hoverinfo: 'skip'
+    });
+
+    var title = (cfg.display_name || data.field) + ' Composite (N=' + data.n_cases + ')';
+    var layout = {
+        paper_bgcolor: '#0a1628', plot_bgcolor: '#0f2140',
+        font: { color: '#e2e8f0', family: 'DM Sans, sans-serif', size: 11 },
+        title: { text: title, font: { size: 13 } },
+        xaxis: { title: 'East\u2013West (km)', gridcolor: 'rgba(255,255,255,0.06)', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)' },
+        yaxis: { title: 'North\u2013South (km)', gridcolor: 'rgba(255,255,255,0.06)', scaleanchor: 'x', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)' },
+        margin: { t: 50, b: 50, l: 60, r: 20 },
+        annotations: annotations || []
+    };
+
+    Plotly.newPlot('comp-env-pv-plot', traces, layout, { responsive: true });
+}
+
+// ── Composite Skew-T + Hodograph rendering ──
+function renderEnvCompositeThermo(profData, filters) {
+    var thermoRow = document.getElementById('comp-env-thermo-row');
+    if (!thermoRow) return;
+    thermoRow.style.display = 'flex';
+
+    renderCompositeSkewT(profData);
+    renderCompositeHodograph(profData);
+}
+
+// ── Composite Skew-T with mean ± 1σ envelope ──
+function renderCompositeSkewT(profData) {
+    var container = document.getElementById('comp-env-skewt');
+    if (!container) return;
+    container.innerHTML = '<div id="comp-env-skewt-plot" style="width:100%;height:520px;"></div>';
+
+    var plev = profData.plev;
+    var tMean = profData.t.mean;
+    var tStd = profData.t.std;
+    var tdMean = profData.td.mean;
+    var tdStd = profData.td.std;
+    var nCases = profData.n_cases;
+
+    // Skew-T coordinate: skewX = T_C + skewFactor * log10(1000/p)
+    var skewFactor = 70;
+    function skewX(tc, p) { return tc + skewFactor * Math.log10(1000 / p); }
+
+    // Convert K to C
+    function kToC(k) { return k !== null ? k - 273.15 : null; }
+
+    var traces = [];
+
+    // Background isotherms
+    for (var iso = -80; iso <= 50; iso += 10) {
+        var isoX = [], isoY = [];
+        for (var pp = 1050; pp >= 100; pp -= 10) {
+            isoX.push(skewX(iso, pp));
+            isoY.push(pp);
+        }
+        traces.push({
+            x: isoX, y: isoY, mode: 'lines',
+            line: { color: iso === 0 ? 'rgba(0,212,255,0.4)' : 'rgba(100,150,200,0.15)', width: iso === 0 ? 1.5 : 0.5 },
+            showlegend: false, hoverinfo: 'skip'
+        });
+    }
+
+    // ±1σ envelope for Temperature (red shading)
+    var tUpperX = [], tUpperY = [], tLowerX = [], tLowerY = [];
+    for (var i = 0; i < plev.length; i++) {
+        if (tMean[i] !== null && tStd[i] !== null) {
+            var tc = kToC(tMean[i]);
+            var sd = tStd[i];
+            tUpperX.push(skewX(tc + sd, plev[i]));
+            tUpperY.push(plev[i]);
+        }
+    }
+    for (var i = plev.length - 1; i >= 0; i--) {
+        if (tMean[i] !== null && tStd[i] !== null) {
+            var tc = kToC(tMean[i]);
+            var sd = tStd[i];
+            tLowerX.push(skewX(tc - sd, plev[i]));
+            tLowerY.push(plev[i]);
+        }
+    }
+    if (tUpperX.length > 0) {
+        traces.push({
+            x: tUpperX.concat(tLowerX), y: tUpperY.concat(tLowerY),
+            fill: 'toself', fillcolor: 'rgba(255,80,80,0.15)',
+            line: { color: 'transparent' }, showlegend: false, hoverinfo: 'skip'
+        });
+    }
+
+    // ±1σ envelope for Dewpoint (blue shading)
+    var tdUpperX = [], tdUpperY = [], tdLowerX = [], tdLowerY = [];
+    for (var i = 0; i < plev.length; i++) {
+        if (tdMean[i] !== null && tdStd[i] !== null) {
+            var tdc = kToC(tdMean[i]);
+            var sd = tdStd[i];
+            tdUpperX.push(skewX(tdc + sd, plev[i]));
+            tdUpperY.push(plev[i]);
+        }
+    }
+    for (var i = plev.length - 1; i >= 0; i--) {
+        if (tdMean[i] !== null && tdStd[i] !== null) {
+            var tdc = kToC(tdMean[i]);
+            var sd = tdStd[i];
+            tdLowerX.push(skewX(tdc - sd, plev[i]));
+            tdLowerY.push(plev[i]);
+        }
+    }
+    if (tdUpperX.length > 0) {
+        traces.push({
+            x: tdUpperX.concat(tdLowerX), y: tdUpperY.concat(tdLowerY),
+            fill: 'toself', fillcolor: 'rgba(80,150,255,0.15)',
+            line: { color: 'transparent' }, showlegend: false, hoverinfo: 'skip'
+        });
+    }
+
+    // Mean temperature line
+    var tLineX = [], tLineY = [];
+    for (var i = 0; i < plev.length; i++) {
+        if (tMean[i] !== null) {
+            tLineX.push(skewX(kToC(tMean[i]), plev[i]));
+            tLineY.push(plev[i]);
+        }
+    }
+    traces.push({
+        x: tLineX, y: tLineY, mode: 'lines',
+        line: { color: '#ff4444', width: 2.5 },
+        name: 'T (mean)', hovertemplate: '%{text}\u00b0C @ %{y} hPa<extra></extra>',
+        text: plev.map(function(p, i) { return tMean[i] !== null ? kToC(tMean[i]).toFixed(1) : ''; })
+    });
+
+    // Mean dewpoint line
+    var tdLineX = [], tdLineY = [];
+    for (var i = 0; i < plev.length; i++) {
+        if (tdMean[i] !== null) {
+            tdLineX.push(skewX(kToC(tdMean[i]), plev[i]));
+            tdLineY.push(plev[i]);
+        }
+    }
+    traces.push({
+        x: tdLineX, y: tdLineY, mode: 'lines',
+        line: { color: '#4488ff', width: 2.5 },
+        name: 'Td (mean)', hovertemplate: '%{text}\u00b0C @ %{y} hPa<extra></extra>',
+        text: plev.map(function(p, i) { return tdMean[i] !== null ? kToC(tdMean[i]).toFixed(1) : ''; })
+    });
+
+    var layout = {
+        paper_bgcolor: '#0a1628', plot_bgcolor: '#0f2140',
+        font: { color: '#e2e8f0', family: 'DM Sans, sans-serif', size: 10 },
+        title: { text: 'Composite Skew-T (N=' + nCases + ')', font: { size: 12 } },
+        xaxis: {
+            range: [-40, 90], showticklabels: false,
+            gridcolor: 'rgba(255,255,255,0.04)', zeroline: false
+        },
+        yaxis: {
+            type: 'log', autorange: 'reversed',
+            range: [Math.log10(1050), Math.log10(100)],
+            title: 'Pressure (hPa)',
+            tickvals: [1000, 850, 700, 500, 300, 200, 100],
+            ticktext: ['1000', '850', '700', '500', '300', '200', '100'],
+            gridcolor: 'rgba(255,255,255,0.08)'
+        },
+        margin: { t: 40, b: 40, l: 50, r: 10 },
+        legend: { x: 0.01, y: 0.01, bgcolor: 'rgba(10,22,40,0.8)', font: { size: 10 } },
+        showlegend: true
+    };
+
+    Plotly.newPlot('comp-env-skewt-plot', traces, layout, { responsive: true, displayModeBar: false });
+}
+
+// ── Composite Hodograph with spread ellipses ──
+function renderCompositeHodograph(profData) {
+    var container = document.getElementById('comp-env-hodo');
+    if (!container) return;
+    container.innerHTML = '<div id="comp-env-hodo-plot" style="width:100%;height:520px;"></div>';
+
+    var plev = profData.plev;
+    var uMean = profData.u.mean;
+    var vMean = profData.v.mean;
+    var uStd = profData.u.std;
+    var vStd = profData.v.std;
+    var nCases = profData.n_cases;
+
+    // Color scale by pressure level (warm colors low, cool colors high)
+    var colors = [];
+    for (var i = 0; i < plev.length; i++) {
+        var frac = i / Math.max(plev.length - 1, 1);
+        var r = Math.round(255 * (1 - frac));
+        var g = Math.round(100 + 100 * (1 - Math.abs(frac - 0.5) * 2));
+        var b = Math.round(255 * frac);
+        colors.push('rgb(' + r + ',' + g + ',' + b + ')');
+    }
+
+    var traces = [];
+
+    // Spread ellipses at each level
+    for (var i = 0; i < plev.length; i++) {
+        if (uMean[i] === null || vMean[i] === null || uStd[i] === null || vStd[i] === null) continue;
+        var eX = [], eY = [];
+        var su = uStd[i], sv = vStd[i];
+        for (var a = 0; a <= 360; a += 10) {
+            var rad = a * Math.PI / 180;
+            eX.push(uMean[i] + su * Math.cos(rad));
+            eY.push(vMean[i] + sv * Math.sin(rad));
+        }
+        traces.push({
+            x: eX, y: eY, mode: 'lines',
+            line: { color: colors[i], width: 0.8 },
+            fill: 'toself', fillcolor: colors[i].replace('rgb', 'rgba').replace(')', ',0.08)'),
+            showlegend: false, hoverinfo: 'skip'
+        });
+    }
+
+    // Mean hodograph line
+    var hodoU = [], hodoV = [], hodoText = [];
+    for (var i = 0; i < plev.length; i++) {
+        if (uMean[i] !== null && vMean[i] !== null) {
+            hodoU.push(uMean[i]);
+            hodoV.push(vMean[i]);
+            hodoText.push(plev[i] + ' hPa');
+        }
+    }
+    traces.push({
+        x: hodoU, y: hodoV, mode: 'lines+markers',
+        line: { color: '#00d4ff', width: 2 },
+        marker: { size: 6, color: colors.slice(0, hodoU.length), line: { width: 1, color: '#fff' } },
+        name: 'Mean Hodograph',
+        text: hodoText, hovertemplate: '%{text}<br>u=%{x:.1f} m/s<br>v=%{y:.1f} m/s<extra></extra>'
+    });
+
+    // Range circles (10, 20, 30 m/s)
+    for (var r = 10; r <= 30; r += 10) {
+        var cx = [], cy = [];
+        for (var a = 0; a <= 360; a += 5) {
+            cx.push(r * Math.cos(a * Math.PI / 180));
+            cy.push(r * Math.sin(a * Math.PI / 180));
+        }
+        traces.push({
+            x: cx, y: cy, mode: 'lines',
+            line: { color: 'rgba(255,255,255,0.1)', width: 0.5, dash: 'dot' },
+            showlegend: false, hoverinfo: 'skip'
+        });
+    }
+
+    // Find max extent for axes
+    var maxVal = 10;
+    for (var i = 0; i < hodoU.length; i++) {
+        maxVal = Math.max(maxVal, Math.abs(hodoU[i]) + 5, Math.abs(hodoV[i]) + 5);
+    }
+    maxVal = Math.ceil(maxVal / 5) * 5;
+
+    var layout = {
+        paper_bgcolor: '#0a1628', plot_bgcolor: '#0f2140',
+        font: { color: '#e2e8f0', family: 'DM Sans, sans-serif', size: 10 },
+        title: { text: 'Composite Hodograph (N=' + nCases + ')', font: { size: 12 } },
+        xaxis: {
+            title: 'u (m/s)', range: [-maxVal, maxVal],
+            gridcolor: 'rgba(255,255,255,0.06)', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)',
+            scaleanchor: 'y'
+        },
+        yaxis: {
+            title: 'v (m/s)', range: [-maxVal, maxVal],
+            gridcolor: 'rgba(255,255,255,0.06)', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)'
+        },
+        margin: { t: 40, b: 50, l: 50, r: 10 },
+        showlegend: false
+    };
+
+    // Level annotations
+    var annotations = [];
+    for (var i = 0; i < plev.length; i++) {
+        if (uMean[i] !== null && vMean[i] !== null && (plev[i] === 1000 || plev[i] === 850 || plev[i] === 500 || plev[i] === 200)) {
+            annotations.push({
+                x: uMean[i], y: vMean[i],
+                text: plev[i] + '', font: { size: 9, color: colors[i] },
+                showarrow: false, xshift: 10, yshift: 5
+            });
+        }
+    }
+    layout.annotations = annotations;
+
+    Plotly.newPlot('comp-env-hodo-plot', traces, layout, { responsive: true, displayModeBar: false });
+}
+
+// ══════════════════════════════════════════════════════════════
+// Environmental Composite Difference Mode (A − B)
+// ══════════════════════════════════════════════════════════════
+
+function generateEnvCompDiff() {
+    var filtersA = _getCompositeFilters();
+    var filtersB = _getCompGroupBFilters();
+    var dataType = document.getElementById('comp-dtype').value || 'swath';
+    var field = document.getElementById('comp-env-field').value || 'shear_mag';
+    var includeVec = document.getElementById('comp-env-vectors').checked;
+    var radiusKm = parseInt(document.getElementById('comp-env-radius').value) || 500;
+
+    _switchCompTab('env');
+    _showEnvCompStatus('loading', '\u23F3 Computing \u0394 environmental composites (A\u2212B)\u2026');
+    ['comp-env-scalars', 'comp-env-plan-view', 'comp-env-thermo-row'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    });
+
+    var qsA = _compositeQueryString(filtersA) + '&data_type=' + dataType;
+    var qsB = _compositeQueryString(filtersB) + '&data_type=' + dataType;
+
+    // 6 parallel requests: plan-view, profiles, scalars for each group
+    Promise.all([
+        fetch(API_BASE + '/composite/era5_plan_view?' + qsA + '&field=' + field + '&radius_km=' + radiusKm + '&include_vectors=' + includeVec).then(function(r) { return r.ok ? r.json() : null; }),
+        fetch(API_BASE + '/composite/era5_plan_view?' + qsB + '&field=' + field + '&radius_km=' + radiusKm + '&include_vectors=' + includeVec).then(function(r) { return r.ok ? r.json() : null; }),
+        fetch(API_BASE + '/composite/era5_profiles?' + qsA).then(function(r) { return r.ok ? r.json() : null; }),
+        fetch(API_BASE + '/composite/era5_profiles?' + qsB).then(function(r) { return r.ok ? r.json() : null; }),
+        fetch(API_BASE + '/composite/era5_scalars?' + qsA).then(function(r) { return r.ok ? r.json() : null; }),
+        fetch(API_BASE + '/composite/era5_scalars?' + qsB).then(function(r) { return r.ok ? r.json() : null; })
+    ]).then(function(results) {
+        var pvA = results[0], pvB = results[1];
+        var profA = results[2], profB = results[3];
+        var scA = results[4], scB = results[5];
+
+        if (!pvA && !profA && !scA) {
+            _showEnvCompStatus('error', '\u2717 No data for Group A.');
+            return;
+        }
+        if (!pvB && !profB && !scB) {
+            _showEnvCompStatus('error', '\u2717 No data for Group B.');
+            return;
+        }
+
+        var nA = (pvA && pvA.n_cases) || 0, nB = (pvB && pvB.n_cases) || 0;
+        _showEnvCompStatus('', '\u2713 \u0394 Environment: A (N=' + nA + ') \u2212 B (N=' + nB + ')');
+
+        // Difference scalars
+        if (scA && scB) renderEnvDiffScalars(scA, scB);
+
+        // Difference plan-view
+        if (pvA && pvB) renderEnvDiffPlanView(pvA, pvB);
+
+        // Overlay Skew-Ts
+        if (profA && profB) renderEnvDiffThermo(profA, profB);
+    }).catch(function(err) {
+        _showEnvCompStatus('error', '\u2717 \u0394 Error: ' + err.message);
+    });
+}
+
+function renderEnvDiffScalars(scA, scB) {
+    var container = document.getElementById('comp-env-scalars');
+    if (!container) return;
+    container.style.display = 'block';
+
+    var html = '<div class="comp-env-section-title">\u0394 Scalar Diagnostics (A: N=' + scA.n_cases + ' | B: N=' + scB.n_cases + ')</div>';
+    html += '<div class="env-comp-scalars-grid">';
+
+    var order = ['shear_mag_env', 'rh_mid_env', 'sst_env', 'chi_m', 'v_pi', 'vent_index', 'div200_env', 'shear_dir_env'];
+    for (var i = 0; i < order.length; i++) {
+        var key = order[i];
+        var a = scA.scalars[key], b = scB.scalars[key];
+        if (!a || !b) continue;
+        var diff = (a.mean - b.mean);
+        var diffStr = (diff >= 0 ? '+' : '') + diff.toFixed(a.units === '' ? 2 : 1);
+
+        html += '<div class="env-scard">';
+        html += '<div class="env-scard-value" style="color:' + (diff > 0 ? '#f87171' : diff < 0 ? '#60a5fa' : '#e2e8f0') + ';">\u0394 ' + diffStr + '</div>';
+        html += '<div class="env-scard-unit">' + a.units + '</div>';
+        html += '<div class="env-scard-label">' + a.display_name + '</div>';
+        html += '<div class="env-scard-sub"><span style="color:#60a5fa;">A: ' + a.mean + '</span> | <span style="color:#f59e0b;">B: ' + b.mean + '</span></div>';
+        html += '</div>';
+    }
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function renderEnvDiffPlanView(pvA, pvB) {
+    var container = document.getElementById('comp-env-plan-view');
+    if (!container) return;
+    container.style.display = 'block';
+    container.innerHTML = '<div id="comp-env-pv-plot" style="width:100%;height:500px;"></div>';
+
+    // Element-wise A - B
+    var diff2d = [];
+    for (var j = 0; j < pvA.mean.length; j++) {
+        var row = [];
+        for (var k = 0; k < pvA.mean[j].length; k++) {
+            var a = pvA.mean[j][k], b = pvB.mean[j][k];
+            row.push(a !== null && b !== null ? a - b : null);
+        }
+        diff2d.push(row);
+    }
+
+    // Symmetric color range
+    var maxAbs = 0;
+    for (var j = 0; j < diff2d.length; j++) {
+        for (var k = 0; k < diff2d[j].length; k++) {
+            if (diff2d[j][k] !== null) maxAbs = Math.max(maxAbs, Math.abs(diff2d[j][k]));
+        }
+    }
+    maxAbs = maxAbs || 1;
+
+    var diffColorscale = [
+        [0, 'rgb(5,48,97)'], [0.1, 'rgb(33,102,172)'], [0.2, 'rgb(67,147,195)'],
+        [0.3, 'rgb(146,197,222)'], [0.4, 'rgb(209,229,240)'], [0.5, 'rgb(255,255,255)'],
+        [0.6, 'rgb(253,219,199)'], [0.7, 'rgb(244,165,130)'], [0.8, 'rgb(214,96,77)'],
+        [0.9, 'rgb(178,24,43)'], [1.0, 'rgb(103,0,31)']
+    ];
+
+    var cfg = pvA.field_config || {};
+    var traces = [{
+        z: diff2d, x: pvA.x_km, y: pvA.y_km,
+        type: 'heatmap', colorscale: diffColorscale,
+        zmin: -maxAbs, zmax: maxAbs,
+        colorbar: { title: '\u0394 ' + (cfg.units || ''), titleside: 'right', thickness: 14, len: 0.8 },
+        hovertemplate: '\u0394 %{z:.3f}<br>x: %{x} km<br>y: %{y} km<extra></extra>'
+    }, {
+        x: [0], y: [0], mode: 'markers',
+        marker: { symbol: 'x', size: 12, color: '#fff' },
+        showlegend: false, hoverinfo: 'skip'
+    }];
+
+    var title = '\u0394 ' + (cfg.display_name || pvA.field) + ' (A: N=' + pvA.n_cases + ' \u2212 B: N=' + pvB.n_cases + ')';
+    Plotly.newPlot('comp-env-pv-plot', traces, {
+        paper_bgcolor: '#0a1628', plot_bgcolor: '#0f2140',
+        font: { color: '#e2e8f0', family: 'DM Sans, sans-serif', size: 11 },
+        title: { text: title, font: { size: 13 } },
+        xaxis: { title: 'East\u2013West (km)', gridcolor: 'rgba(255,255,255,0.06)', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)' },
+        yaxis: { title: 'North\u2013South (km)', gridcolor: 'rgba(255,255,255,0.06)', scaleanchor: 'x', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)' },
+        margin: { t: 50, b: 50, l: 60, r: 20 }
+    }, { responsive: true });
+}
+
+function renderEnvDiffThermo(profA, profB) {
+    var thermoRow = document.getElementById('comp-env-thermo-row');
+    if (!thermoRow) return;
+    thermoRow.style.display = 'flex';
+
+    // Overlay both group Skew-Ts on same diagram
+    renderDiffCompositeSkewT(profA, profB);
+    renderDiffCompositeHodograph(profA, profB);
+}
+
+function renderDiffCompositeSkewT(profA, profB) {
+    var container = document.getElementById('comp-env-skewt');
+    if (!container) return;
+    container.innerHTML = '<div id="comp-env-skewt-plot" style="width:100%;height:520px;"></div>';
+
+    var plev = profA.plev;
+    var skewFactor = 70;
+    function skewX(tc, p) { return tc + skewFactor * Math.log10(1000 / p); }
+    function kToC(k) { return k !== null ? k - 273.15 : null; }
+
+    var traces = [];
+
+    // Background isotherms
+    for (var iso = -80; iso <= 50; iso += 10) {
+        var isoX = [], isoY = [];
+        for (var pp = 1050; pp >= 100; pp -= 10) { isoX.push(skewX(iso, pp)); isoY.push(pp); }
+        traces.push({
+            x: isoX, y: isoY, mode: 'lines',
+            line: { color: iso === 0 ? 'rgba(0,212,255,0.4)' : 'rgba(100,150,200,0.15)', width: iso === 0 ? 1.5 : 0.5 },
+            showlegend: false, hoverinfo: 'skip'
+        });
+    }
+
+    // Group A: T and Td (blue)
+    function addProfile(tArr, color, name, dash) {
+        var lx = [], ly = [];
+        for (var i = 0; i < plev.length; i++) {
+            if (tArr[i] !== null) { lx.push(skewX(kToC(tArr[i]), plev[i])); ly.push(plev[i]); }
+        }
+        traces.push({ x: lx, y: ly, mode: 'lines', line: { color: color, width: 2, dash: dash || 'solid' }, name: name });
+    }
+
+    addProfile(profA.t.mean, '#60a5fa', 'T (Group A)');
+    addProfile(profA.td.mean, '#93c5fd', 'Td (Group A)', 'dash');
+    addProfile(profB.t.mean, '#f59e0b', 'T (Group B)');
+    addProfile(profB.td.mean, '#fbbf24', 'Td (Group B)', 'dash');
+
+    Plotly.newPlot('comp-env-skewt-plot', traces, {
+        paper_bgcolor: '#0a1628', plot_bgcolor: '#0f2140',
+        font: { color: '#e2e8f0', family: 'DM Sans, sans-serif', size: 10 },
+        title: { text: '\u0394 Skew-T (A: N=' + profA.n_cases + ', B: N=' + profB.n_cases + ')', font: { size: 12 } },
+        xaxis: { range: [-40, 90], showticklabels: false, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
+        yaxis: {
+            type: 'log', autorange: 'reversed',
+            range: [Math.log10(1050), Math.log10(100)],
+            title: 'Pressure (hPa)',
+            tickvals: [1000, 850, 700, 500, 300, 200, 100],
+            ticktext: ['1000', '850', '700', '500', '300', '200', '100'],
+            gridcolor: 'rgba(255,255,255,0.08)'
+        },
+        margin: { t: 40, b: 40, l: 50, r: 10 },
+        legend: { x: 0.01, y: 0.01, bgcolor: 'rgba(10,22,40,0.8)', font: { size: 9 } },
+        showlegend: true
+    }, { responsive: true, displayModeBar: false });
+}
+
+function renderDiffCompositeHodograph(profA, profB) {
+    var container = document.getElementById('comp-env-hodo');
+    if (!container) return;
+    container.innerHTML = '<div id="comp-env-hodo-plot" style="width:100%;height:520px;"></div>';
+
+    var plev = profA.plev;
+    var traces = [];
+
+    // Range circles
+    for (var r = 10; r <= 30; r += 10) {
+        var cx = [], cy = [];
+        for (var a = 0; a <= 360; a += 5) { cx.push(r * Math.cos(a * Math.PI / 180)); cy.push(r * Math.sin(a * Math.PI / 180)); }
+        traces.push({ x: cx, y: cy, mode: 'lines', line: { color: 'rgba(255,255,255,0.1)', width: 0.5, dash: 'dot' }, showlegend: false, hoverinfo: 'skip' });
+    }
+
+    // Group A hodograph (blue)
+    var uA = [], vA = [], textA = [];
+    for (var i = 0; i < plev.length; i++) {
+        if (profA.u.mean[i] !== null && profA.v.mean[i] !== null) {
+            uA.push(profA.u.mean[i]); vA.push(profA.v.mean[i]); textA.push(plev[i] + ' hPa');
+        }
+    }
+    traces.push({ x: uA, y: vA, mode: 'lines+markers', line: { color: '#60a5fa', width: 2 }, marker: { size: 5 }, name: 'Group A', text: textA, hovertemplate: '%{text}<br>u=%{x:.1f}<br>v=%{y:.1f}<extra></extra>' });
+
+    // Group B hodograph (orange)
+    var uB = [], vB = [], textB = [];
+    for (var i = 0; i < plev.length; i++) {
+        if (profB.u.mean[i] !== null && profB.v.mean[i] !== null) {
+            uB.push(profB.u.mean[i]); vB.push(profB.v.mean[i]); textB.push(plev[i] + ' hPa');
+        }
+    }
+    traces.push({ x: uB, y: vB, mode: 'lines+markers', line: { color: '#f59e0b', width: 2 }, marker: { size: 5 }, name: 'Group B', text: textB, hovertemplate: '%{text}<br>u=%{x:.1f}<br>v=%{y:.1f}<extra></extra>' });
+
+    var maxVal = 10;
+    uA.concat(uB).forEach(function(v) { maxVal = Math.max(maxVal, Math.abs(v) + 5); });
+    vA.concat(vB).forEach(function(v) { maxVal = Math.max(maxVal, Math.abs(v) + 5); });
+    maxVal = Math.ceil(maxVal / 5) * 5;
+
+    Plotly.newPlot('comp-env-hodo-plot', traces, {
+        paper_bgcolor: '#0a1628', plot_bgcolor: '#0f2140',
+        font: { color: '#e2e8f0', family: 'DM Sans, sans-serif', size: 10 },
+        title: { text: '\u0394 Hodograph (A vs B)', font: { size: 12 } },
+        xaxis: { title: 'u (m/s)', range: [-maxVal, maxVal], gridcolor: 'rgba(255,255,255,0.06)', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)', scaleanchor: 'y' },
+        yaxis: { title: 'v (m/s)', range: [-maxVal, maxVal], gridcolor: 'rgba(255,255,255,0.06)', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)' },
+        margin: { t: 40, b: 50, l: 50, r: 10 },
+        legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(10,22,40,0.8)', font: { size: 10 } },
+        showlegend: true
+    }, { responsive: true, displayModeBar: false });
+}
+
 
 // Close composite panel on Escape
 (function() {
