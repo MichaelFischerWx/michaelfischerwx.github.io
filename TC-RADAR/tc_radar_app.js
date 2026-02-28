@@ -908,6 +908,141 @@ function renderThetaProfile(profiles, divId) {
     Plotly.newPlot(divId, traces, layout, { responsive: true, displayModeBar: false });
 }
 
+// ── Wind barb helper for Skew-T ──────────────────────────────
+// Draws standard meteorological wind barbs as Plotly shape arrays.
+// Each barb: staff pointing INTO the wind, feathers on left side.
+// Convention: half barb = 5 kt, full barb = 10 kt, flag = 50 kt.
+function _buildWindBarbShapes(u, v, plev, xPos, staffLen) {
+    // u, v in m/s; convert to knots for barb encoding
+    var shapes = [];
+    if (!u || !v) return shapes;
+    var barbLevels = [1000, 975, 950, 925, 900, 850, 800, 750, 700, 650,
+                      600, 550, 500, 450, 400, 350, 300, 250, 200, 150, 100];
+    var staffPx = staffLen || 6;   // length in x-axis data units
+    var barbPx = staffPx * 0.38;   // feather length
+    var barbGap = staffPx * 0.12;  // gap between feathers along staff
+    var flagW = staffPx * 0.38;    // flag width
+    var flagH = staffPx * 0.18;    // flag height along staff
+    var lineColor = 'rgba(220,220,240,0.85)';
+    var lineWidth = 1.4;
+
+    for (var bi = 0; bi < barbLevels.length; bi++) {
+        var pTarget = barbLevels[bi];
+        // Find closest level in plev
+        var bestIdx = -1, bestDist = 1e9;
+        for (var pi = 0; pi < plev.length; pi++) {
+            if (u[pi] == null || v[pi] == null) continue;
+            var d = Math.abs(plev[pi] - pTarget);
+            if (d < bestDist) { bestDist = d; bestIdx = pi; }
+        }
+        if (bestIdx < 0 || bestDist > 15) continue;
+
+        var uMs = u[bestIdx], vMs = v[bestIdx];
+        var spdKt = Math.sqrt(uMs * uMs + vMs * vMs) * 1.944;
+        if (spdKt < 2.5) {
+            // Calm: draw a circle (use a small annotation instead)
+            continue;
+        }
+        // Meteorological: wind FROM direction → staff points into the wind
+        // Angle: direction wind is coming FROM (measured from North, CW)
+        var dirRad = Math.atan2(-uMs, -vMs); // radians, 0 = from North
+        var cosD = Math.cos(dirRad), sinD = Math.sin(dirRad);
+
+        // Staff end point (tip) and base (origin where feathers are)
+        var yBase = pTarget; // in hPa (log axis)
+        var xBase = xPos;
+        // Staff extends in the "from" direction — in plot coords, x = horizontal, y = log(p)
+        // We map dirRad onto the plot plane: x component = sin(dir), y component = cos(dir)
+        // But y-axis is log-scaled, so we work in log10(p) space for proportions
+        var logBase = Math.log10(yBase);
+        var xTip = xBase + staffPx * sinD;
+        // Scale y movement to ~match visual length on log axis
+        var logTip = logBase - staffPx * cosD * 0.012;
+        var yTip = Math.pow(10, logTip);
+
+        // Draw staff line
+        shapes.push({
+            type: 'line', xref: 'x', yref: 'y',
+            x0: xBase, y0: yBase, x1: xTip, y1: yTip,
+            line: { color: lineColor, width: lineWidth },
+        });
+
+        // Build feathers from tip downward along staff
+        var remaining = Math.round(spdKt / 5) * 5; // round to nearest 5
+        var nFlags = Math.floor(remaining / 50); remaining -= nFlags * 50;
+        var nFull = Math.floor(remaining / 10); remaining -= nFull * 10;
+        var nHalf = Math.floor(remaining / 5);
+
+        var featherPos = 0; // distance along staff from tip (0 = at tip)
+        // Feathers perpendicular to staff, on left side (relative to "from" direction)
+        // Left perpendicular: rotate staff direction by +90°
+        var perpX = cosD;   // sin(dir + 90°) = cos(dir)
+        var perpY = sinD;   // -cos(dir + 90°) = sin(dir) ... adjusted for log
+
+        for (var fi = 0; fi < nFlags; fi++) {
+            // Flag = filled triangle (approximate with two lines forming a V)
+            var frac = featherPos / staffPx;
+            var fx = xTip - (xTip - xBase) * frac;
+            var fLog = logTip - (logTip - logBase) * frac;
+
+            var frac2 = (featherPos + flagH) / staffPx;
+            var fx2 = xTip - (xTip - xBase) * frac2;
+            var fLog2 = logTip - (logTip - logBase) * frac2;
+
+            // Triangle point (outward)
+            var midFrac = (featherPos + flagH * 0.5) / staffPx;
+            var midX = xTip - (xTip - xBase) * midFrac;
+
+            var outX = midX + flagW * perpX;
+            var outLog = (fLog + fLog2) * 0.5 + flagW * perpY * 0.012;
+
+            // Two lines forming the flag triangle
+            shapes.push({
+                type: 'line', xref: 'x', yref: 'y',
+                x0: fx, y0: Math.pow(10, fLog), x1: outX, y1: Math.pow(10, outLog),
+                line: { color: lineColor, width: lineWidth },
+            });
+            shapes.push({
+                type: 'line', xref: 'x', yref: 'y',
+                x0: outX, y0: Math.pow(10, outLog), x1: fx2, y1: Math.pow(10, fLog2),
+                line: { color: lineColor, width: lineWidth },
+            });
+            featherPos += flagH + barbGap * 0.3;
+        }
+
+        for (var fb = 0; fb < nFull; fb++) {
+            var frac = featherPos / staffPx;
+            var bx = xTip - (xTip - xBase) * frac;
+            var bLog = logTip - (logTip - logBase) * frac;
+
+            var endX = bx + barbPx * perpX;
+            var endLog = bLog + barbPx * perpY * 0.012;
+            shapes.push({
+                type: 'line', xref: 'x', yref: 'y',
+                x0: bx, y0: Math.pow(10, bLog), x1: endX, y1: Math.pow(10, endLog),
+                line: { color: lineColor, width: lineWidth },
+            });
+            featherPos += barbGap;
+        }
+
+        for (var hb = 0; hb < nHalf; hb++) {
+            var frac = featherPos / staffPx;
+            var hx = xTip - (xTip - xBase) * frac;
+            var hLog = logTip - (logTip - logBase) * frac;
+
+            var endX = hx + barbPx * 0.55 * perpX;
+            var endLog = hLog + barbPx * 0.55 * perpY * 0.012;
+            shapes.push({
+                type: 'line', xref: 'x', yref: 'y',
+                x0: hx, y0: Math.pow(10, hLog), x1: endX, y1: Math.pow(10, endLog),
+                line: { color: lineColor, width: lineWidth },
+            });
+            featherPos += barbGap;
+        }
+    }
+    return shapes;
+}
+
 // ── Skew-T / Log-P Diagram ────────────────────────────────────
 function renderSkewT(profiles, divId) {
     var el = document.getElementById(divId);
@@ -1324,10 +1459,25 @@ function renderSkewT(profiles, divId) {
         xTickText.push(tTick + '\u00b0C');
     }
 
+    // ── Wind barbs (right side of diagram) ──
+    var hasWind = profiles.u && profiles.v && profiles.u.length > 0;
+    var barbXPos = 68;    // x-position for barb base (right edge of plot area)
+    var barbShapes = [];
+    var windAnnotations = [];
+    if (hasWind) {
+        barbShapes = _buildWindBarbShapes(profiles.u, profiles.v, plev, barbXPos, 5.5);
+        // Add a thin vertical line to separate barbs from the diagram
+        barbShapes.push({
+            type: 'line', xref: 'x', yref: 'y',
+            x0: barbXPos - 2, y0: 1050, x1: barbXPos - 2, y1: 100,
+            line: { color: 'rgba(255,255,255,0.08)', width: 0.5 },
+        });
+    }
+
     var layout = {
         xaxis: {
             title: { text: 'Temperature (\u00b0C)', font: { size: 9, color: '#8b9ec2' } },
-            range: [-40, 70],
+            range: [-40, hasWind ? 80 : 70],
             tickvals: xTickVals, ticktext: xTickText,
             color: '#8b9ec2', tickfont: { size: 8 },
             zeroline: false, gridcolor: 'rgba(255,255,255,0.03)',
@@ -1346,8 +1496,9 @@ function renderSkewT(profiles, divId) {
         plot_bgcolor: 'rgba(10,22,40,0.5)',
         margin: { l: 45, r: 10, t: 22, b: 35 },
         title: { text: 'Skew-T / Log-P', font: { size: 10, color: '#00d4ff' }, x: 0.5, y: 0.98 },
-        legend: { font: { color: '#ccc', size: 9 }, x: 0.78, y: 0.98, bgcolor: 'rgba(0,0,0,0.4)' },
+        legend: { font: { color: '#ccc', size: 9 }, x: 0.68, y: 0.98, bgcolor: 'rgba(0,0,0,0.4)' },
         showlegend: true,
+        shapes: barbShapes,
     };
     Plotly.newPlot(divId, traces, layout, { responsive: true, displayModeBar: false });
 }
