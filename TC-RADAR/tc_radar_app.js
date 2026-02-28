@@ -3147,6 +3147,7 @@ function initCompositePanel() {
                         '<div class="comp-actions">' +
                             '<button class="comp-btn comp-btn-diff" id="comp-btn-diff-az" onclick="generateCompDiffAzMean()">\u0394 Az Mean (A\u2212B)</button>' +
                             '<button class="comp-btn comp-btn-diff" id="comp-btn-diff-sq" onclick="generateCompDiffQuadMean()">\u0394 Quad Mean (A\u2212B)</button>' +
+                            '<button class="comp-btn comp-btn-diff" id="comp-btn-diff-pv" onclick="generateCompDiffPlanView()">\u0394 Plan View (A\u2212B)</button>' +
                         '</div>' +
                     '</div>' +
                 '</div>' +
@@ -4275,12 +4276,13 @@ function generateCompDiffAzMean() {
     var overlay = (document.getElementById('comp-overlay') || {}).value || '';
 
     // Disable buttons
-    var btns = ['comp-btn-az','comp-btn-sq','comp-btn-diff-az','comp-btn-diff-sq'];
+    var btns = ['comp-btn-az','comp-btn-sq','comp-btn-pv','comp-btn-diff-az','comp-btn-diff-sq','comp-btn-diff-pv'];
     btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = true; });
     var btnDiffAz = document.getElementById('comp-btn-diff-az');
     btnDiffAz.textContent = '\u23F3 Computing\u2026';
     document.getElementById('comp-result-placeholder').style.display = 'none';
     document.getElementById('comp-result-sq').style.display = 'none';
+    document.getElementById('comp-result-pv').style.display = 'none';
     _showCompStatus('loading', 'Computing difference composite (A\u2212B) azimuthal mean\u2026');
 
     var baseQS = '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage;
@@ -4351,12 +4353,13 @@ function generateCompDiffQuadMean() {
     var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
     var overlay = (document.getElementById('comp-overlay') || {}).value || '';
 
-    var btns = ['comp-btn-az','comp-btn-sq','comp-btn-diff-az','comp-btn-diff-sq'];
+    var btns = ['comp-btn-az','comp-btn-sq','comp-btn-pv','comp-btn-diff-az','comp-btn-diff-sq','comp-btn-diff-pv'];
     btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = true; });
     var btnDiffSq = document.getElementById('comp-btn-diff-sq');
     btnDiffSq.textContent = '\u23F3 Computing\u2026';
     document.getElementById('comp-result-placeholder').style.display = 'none';
     document.getElementById('comp-result-az').style.display = 'none';
+    document.getElementById('comp-result-pv').style.display = 'none';
     _showCompStatus('loading', 'Computing difference composite (A\u2212B) shear quadrants\u2026');
 
     var baseQS = '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage;
@@ -4629,6 +4632,190 @@ function _renderDiffQuadMean(targetId, diffJson, jsonA, jsonB, filtersA, filters
     var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) + diffVmaxNote +
                  '<br>\u0394 Shear-Relative Quadrant Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
     buildQuadPlot('comp-diff-sq-d', diffJson.quadrant_means, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, diffVarInfo.units);
+}
+
+// ── Composite Difference Plan View ──────────────────
+
+function generateCompDiffPlanView() {
+    var filtersA = _getCompositeFilters();
+    var filtersB = _getCompGroupBFilters();
+    var pvParams = _getCompositePlanViewParams();
+    var variable = document.getElementById('comp-var').value;
+    var dataType = document.getElementById('comp-dtype').value;
+    var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
+    var overlay = (document.getElementById('comp-overlay') || {}).value || '';
+
+    // Disable all buttons
+    var btns = ['comp-btn-az','comp-btn-sq','comp-btn-pv','comp-btn-diff-az','comp-btn-diff-sq','comp-btn-diff-pv'];
+    btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = true; });
+    var btnDiffPv = document.getElementById('comp-btn-diff-pv');
+    btnDiffPv.textContent = '\u23F3 Computing\u2026';
+    document.getElementById('comp-result-placeholder').style.display = 'none';
+    document.getElementById('comp-result-az').style.display = 'none';
+    document.getElementById('comp-result-sq').style.display = 'none';
+    _showCompStatus('loading', 'Computing difference plan-view composite (A\u2212B) at ' + pvParams.level_km + ' km\u2026');
+
+    var baseQS = '&variable=' + encodeURIComponent(variable) +
+        '&data_type=' + dataType + '&coverage_min=' + coverage +
+        '&level_km=' + pvParams.level_km +
+        '&normalize_rmw=' + (pvParams.normalize_rmw ? 'true' : 'false') +
+        '&max_r_rmw=' + pvParams.max_r_rmw +
+        '&dr_rmw=' + pvParams.dr_rmw +
+        '&shear_relative=' + (pvParams.shear_relative ? 'true' : 'false');
+    if (overlay) baseQS += '&overlay=' + encodeURIComponent(overlay);
+    var urlA = API_BASE + '/composite/plan_view?' + _compositeQueryString(filtersA) + baseQS;
+    var urlB = API_BASE + '/composite/plan_view?' + _compositeQueryString(filtersB) + baseQS;
+
+    Promise.all([
+        fetch(urlA).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group A: '+(e.detail||'error'));}); return r.json(); }),
+        fetch(urlB).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group B: '+(e.detail||'error'));}); return r.json(); })
+    ]).then(function(results) {
+        var jsonA = results[0], jsonB = results[1];
+        var diffData = _subtractArrays2D(jsonA.plan_view, jsonB.plan_view);
+        var symRange = _symmetricRange(diffData);
+
+        var diffJson = {
+            plan_view: diffData,
+            x_axis: jsonA.x_axis,
+            y_axis: jsonA.y_axis,
+            x_label: jsonA.x_label,
+            y_label: jsonA.y_label,
+            level_km: jsonA.level_km,
+            normalize_rmw: jsonA.normalize_rmw,
+            shear_relative: jsonA.shear_relative,
+            coverage_min: jsonA.coverage_min,
+            n_cases: jsonA.n_cases,
+            case_list: jsonA.case_list,
+            _isDiff: true,
+            _nA: jsonA.n_cases,
+            _nB: jsonB.n_cases,
+            _filtersA: filtersA,
+            _filtersB: filtersB,
+            variable: {
+                key: jsonA.variable.key,
+                display_name: '\u0394 ' + jsonA.variable.display_name,
+                units: jsonA.variable.units,
+                vmin: -symRange,
+                vmax: symRange,
+                colorscale: _DIFF_COLORSCALE,
+            }
+        };
+        // Overlay difference
+        if (jsonA.overlay && jsonB.overlay) {
+            var ovDiff = _subtractArrays2D(jsonA.overlay.plan_view, jsonB.overlay.plan_view);
+            diffJson.overlay = {
+                display_name: '\u0394 ' + jsonA.overlay.display_name,
+                key: jsonA.overlay.key,
+                units: jsonA.overlay.units,
+                plan_view: ovDiff,
+                vmin: jsonA.overlay.vmin,
+                vmax: jsonA.overlay.vmax,
+            };
+        }
+
+        _showCompStatus('success', '\u2713 Difference computed: Group A (' + jsonA.n_cases + ' cases) \u2212 Group B (' + jsonB.n_cases + ' cases)');
+        _renderDiffPlanView('comp-result-pv', diffJson, jsonA, jsonB, filtersA, filtersB, pvParams);
+    }).catch(function(err) {
+        _showCompStatus('error', '\u2717 ' + err.message);
+    }).finally(function() {
+        btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = false; });
+        btnDiffPv.textContent = '\u0394 Plan View (A\u2212B)';
+    });
+}
+
+function _renderDiffPlanView(targetId, diffJson, jsonA, jsonB, filtersA, filtersB, pvParams) {
+    var el = document.getElementById(targetId); if (!el) return;
+    el.style.display = 'block';
+    _lastCompJson = diffJson; _lastCompType = 'pv';
+
+    // Create 3 stacked chart containers + toolbar
+    el.innerHTML =
+        '<div style="margin-bottom:4px;padding:6px 10px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#60a5fa;">\uD83D\uDD35 Group A</div>' +
+        '<div id="comp-diff-pv-a" style="width:100%;height:520px;border-radius:8px;overflow:hidden;"></div>' +
+        '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#f59e0b;">\uD83D\uDFE0 Group B</div>' +
+        '<div id="comp-diff-pv-b" style="width:100%;height:520px;border-radius:8px;overflow:hidden;"></div>' +
+        '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#ef4444;">\u0394 Difference (A \u2212 B)</div>' +
+        '<div id="comp-diff-pv-d" style="width:100%;height:520px;border-radius:8px;overflow:hidden;"></div>' +
+        _buildCompToolbar();
+
+    var plotOpts = { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] };
+    var plotBg = '#0a1628';
+    var varInfoA = jsonA.variable;
+    var levelKm = jsonA.level_km;
+    var xAxis = jsonA.x_axis, yAxis = jsonA.y_axis;
+    var xLabel = jsonA.x_label, yLabel = jsonA.y_label;
+    var dtypeLabel = (document.getElementById('comp-dtype') && document.getElementById('comp-dtype').value === 'merge') ? ' (Merge)' : '';
+    var normLabel = jsonA.normalize_rmw ? ' (RMW-norm)' : '';
+    var shearLabel = jsonA.shear_relative ? ' [Shear \u2192 Right]' : '';
+    var fontSize = { title:13, axis:11, tick:10, cbar:11, cbarTick:10, hover:12 };
+
+    // Helper: build an RMW circle scatter trace
+    function rmwCircleTrace() {
+        if (!jsonA.normalize_rmw) return [];
+        var nPts = 120, cx = [], cy = [];
+        for (var j = 0; j <= nPts; j++) {
+            var a = 2 * Math.PI * j / nPts;
+            cx.push(parseFloat(Math.cos(a).toFixed(4)));
+            cy.push(parseFloat(Math.sin(a).toFixed(4)));
+        }
+        return [{ x:cx, y:cy, type:'scatter', mode:'lines', line:{color:'white',width:1.5,dash:'dash'}, showlegend:false, hoverinfo:'skip' }];
+    }
+
+    // Helper: build a shear arrow
+    function shearShapes() {
+        if (!jsonA.shear_relative) return { shapes:[], annotations:[] };
+        return buildShearInset(90, true);
+    }
+
+    // Helper to build a single plan-view plot
+    function buildPvPlot(chartId, data, titleText, colorscale, zmin, zmax, units) {
+        var hm = {
+            z: data, x: xAxis, y: yAxis, type: 'heatmap',
+            colorscale: colorscale, zmin: zmin, zmax: zmax,
+            colorbar: { title:{text:units,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:14, len:0.85 },
+            hovertemplate: '%{z:.2f} ' + units + '<br>' + xLabel + ': %{x:.1f}<br>' + yLabel + ': %{y:.1f}<extra></extra>',
+            hoverongaps: false
+        };
+        var sInset = shearShapes();
+        var layout = {
+            title: { text:titleText, font:{color:'#e5e7eb',size:fontSize.title}, y:0.97, x:0.5, xanchor:'center' },
+            paper_bgcolor:plotBg, plot_bgcolor:plotBg,
+            xaxis: { title:{text:xLabel,font:{color:'#aaa',size:fontSize.axis}}, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:true, zerolinecolor:'rgba(255,255,255,0.12)' },
+            yaxis: { title:{text:yLabel,font:{color:'#aaa',size:fontSize.axis}}, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:true, zerolinecolor:'rgba(255,255,255,0.12)', scaleanchor:'x', scaleratio:1 },
+            margin:{ l:60, r:24, t:100, b:50 },
+            shapes: sInset.shapes || [], annotations: sInset.annotations || [],
+            hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
+            showlegend:false
+        };
+        Plotly.newPlot(chartId, [hm].concat(rmwCircleTrace()), layout, plotOpts);
+    }
+
+    // ── Group A plot ──
+    var meanVmaxA = _computeCompositeMeanVmax(filtersA);
+    var vmaxNoteA = meanVmaxA !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxA + ' kt' : '';
+    var titleA = _compositeFilterSummary(filtersA, jsonA.n_cases) + vmaxNoteA +
+                 '<br>Plan View @ ' + levelKm + ' km: ' + varInfoA.display_name + dtypeLabel + normLabel + shearLabel;
+    buildPvPlot('comp-diff-pv-a', jsonA.plan_view, titleA, varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax, varInfoA.units);
+
+    // ── Group B plot ──
+    var meanVmaxB = _computeCompositeMeanVmax(filtersB);
+    var vmaxNoteB = meanVmaxB !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxB + ' kt' : '';
+    var titleB = _compositeFilterSummary(filtersB, jsonB.n_cases) + vmaxNoteB +
+                 '<br>Plan View @ ' + levelKm + ' km: ' + varInfoA.display_name + dtypeLabel + normLabel + shearLabel;
+    buildPvPlot('comp-diff-pv-b', jsonB.plan_view, titleB, varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax, varInfoA.units);
+
+    // ── Difference plot ──
+    var diffVarInfo = diffJson.variable;
+    var diffVmaxNote = '';
+    if (meanVmaxA !== null || meanVmaxB !== null) {
+        diffVmaxNote = ' | V\u0305<sub>max</sub>: ';
+        if (meanVmaxA !== null) diffVmaxNote += '<span style="color:#60a5fa;">A=' + meanVmaxA + '</span>';
+        if (meanVmaxA !== null && meanVmaxB !== null) diffVmaxNote += ', ';
+        if (meanVmaxB !== null) diffVmaxNote += '<span style="color:#f59e0b;">B=' + meanVmaxB + '</span>';
+    }
+    var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) + diffVmaxNote +
+                 '<br>\u0394 Plan View @ ' + levelKm + ' km: ' + varInfoA.display_name + dtypeLabel + normLabel + shearLabel;
+    buildPvPlot('comp-diff-pv-d', diffJson.plan_view, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, diffVarInfo.units);
 }
 
 // Close composite panel on Escape
