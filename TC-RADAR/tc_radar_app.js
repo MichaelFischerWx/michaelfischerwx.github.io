@@ -342,7 +342,8 @@ function openSidePanel(caseData, fromQuickSelect) {
     });
 
     // Fetch ERA5 environmental data for this case
-    _era5Data = null; _era5PlotlyVisible = false;     fetchERA5Data(caseData.case_index, 'shear_mag', function(data) {
+    _era5Data = null; _era5PlotlyVisible = false;
+    fetchERA5Data(caseData.case_index, 'shear_mag', function(data) {
         if (data && currentCaseIndex === caseData.case_index) {
             var era5Btn = document.getElementById('era5-underlay-btn');
             if (era5Btn) era5Btn.disabled = false;
@@ -391,7 +392,7 @@ var _era5Data = null;
 var _era5MapField = 'shear_mag';
 var _era5Fetching = false;
 var _era5PlotlyVisible = false;
-var 
+
 // ── ERA5 colormaps ───────────────────────────────────────────
 var _era5Colormaps = {
     shear_mag: {
