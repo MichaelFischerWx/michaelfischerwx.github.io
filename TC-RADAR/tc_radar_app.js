@@ -4711,6 +4711,12 @@ function initCompositePanel() {
                                         '<label for="comp-env-vectors" style="font-size:11px;color:#9ca3af;">Include Shear Vectors</label>' +
                                     '</div>' +
                                 '</div>' +
+                                '<div class="wizard-config-row">' +
+                                    '<div class="wizard-config-inline">' +
+                                        '<input type="checkbox" id="comp-env-shear-rel">' +
+                                        '<label for="comp-env-shear-rel" style="font-size:11px;color:#9ca3af;">Shear-Relative Rotation</label>' +
+                                    '</div>' +
+                                '</div>' +
                                 '<div class="wizard-config-row"><label>Crop Radius</label>' +
                                     '<div class="wizard-slider-row">' +
                                         '<input type="range" id="comp-env-radius" min="100" max="1000" step="50" value="500" oninput="document.getElementById(\'comp-env-radius-val\').textContent=this.value+\' km\'">' +
@@ -6617,6 +6623,7 @@ function generateEnvComposite() {
     var dataType = document.getElementById('comp-dtype').value || 'swath';
     var field = document.getElementById('comp-env-field').value || 'shear_mag';
     var includeVec = document.getElementById('comp-env-vectors').checked;
+    var envShearRel = !!(document.getElementById('comp-env-shear-rel') || {}).checked;
     var radiusKm = parseInt(document.getElementById('comp-env-radius').value) || 500;
     var qs = _compositeQueryString(filters) + '&data_type=' + dataType;
 
@@ -6633,7 +6640,8 @@ function generateEnvComposite() {
 
     // Launch 3 parallel requests
     var planViewUrl = API_BASE + '/composite/era5_plan_view?' + qs +
-        '&field=' + field + '&radius_km=' + radiusKm + '&include_vectors=' + includeVec;
+        '&field=' + field + '&radius_km=' + radiusKm + '&include_vectors=' + includeVec +
+        '&shear_relative=' + envShearRel;
     var profilesUrl = API_BASE + '/composite/era5_profiles?' + qs;
     var scalarsUrl = API_BASE + '/composite/era5_scalars?' + qs;
 
@@ -6794,15 +6802,29 @@ function renderEnvCompositePlanView(data, filters) {
         showlegend: false, hoverinfo: 'skip'
     });
 
-    var title = (cfg.display_name || data.field) + ' Composite (N=' + data.n_cases + ')';
+    var shearRel = data.shear_relative;
+    var shearLabel = shearRel ? ' [Shear \u2192 Right]' : '';
+    var title = (cfg.display_name || data.field) + ' Composite (N=' + data.n_cases + ')' + shearLabel;
+    var xLabel = shearRel ? 'Downshear Left/Right (km)' : 'East\u2013West (km)';
+    var yLabel = shearRel ? 'Upshear/Downshear (km)' : 'North\u2013South (km)';
+    var shearAnnotations = [];
+    if (shearRel) {
+        // Shear arrow pointing right
+        shearAnnotations.push({
+            x: 0.97, y: 0.97, xref: 'paper', yref: 'paper',
+            text: 'Shear \u2192', font: { size: 12, color: '#fbbf24', family: 'JetBrains Mono, monospace' },
+            showarrow: false, xanchor: 'right', yanchor: 'top',
+            bgcolor: 'rgba(0,0,0,0.5)', borderpad: 3
+        });
+    }
     var layout = {
         paper_bgcolor: '#0a1628', plot_bgcolor: '#0f2140',
         font: { color: '#e2e8f0', family: 'DM Sans, sans-serif', size: 11 },
         title: { text: title, font: { size: 13 } },
-        xaxis: { title: 'East\u2013West (km)', gridcolor: 'rgba(255,255,255,0.06)', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)' },
-        yaxis: { title: 'North\u2013South (km)', gridcolor: 'rgba(255,255,255,0.06)', scaleanchor: 'x', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)' },
+        xaxis: { title: xLabel, gridcolor: 'rgba(255,255,255,0.06)', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)' },
+        yaxis: { title: yLabel, gridcolor: 'rgba(255,255,255,0.06)', scaleanchor: 'x', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)' },
         margin: { t: 50, b: 50, l: 60, r: 20 },
-        annotations: annotations || []
+        annotations: (annotations || []).concat(shearAnnotations)
     };
 
     Plotly.newPlot('comp-env-pv-plot', traces, layout, { responsive: true });
@@ -7084,6 +7106,7 @@ function generateEnvCompDiff() {
     var dataType = document.getElementById('comp-dtype').value || 'swath';
     var field = document.getElementById('comp-env-field').value || 'shear_mag';
     var includeVec = document.getElementById('comp-env-vectors').checked;
+    var envShearRel = !!(document.getElementById('comp-env-shear-rel') || {}).checked;
     var radiusKm = parseInt(document.getElementById('comp-env-radius').value) || 500;
 
     _switchCompTab('env');
@@ -7095,11 +7118,12 @@ function generateEnvCompDiff() {
 
     var qsA = _compositeQueryString(filtersA) + '&data_type=' + dataType;
     var qsB = _compositeQueryString(filtersB) + '&data_type=' + dataType;
+    var pvSuffix = '&field=' + field + '&radius_km=' + radiusKm + '&include_vectors=' + includeVec + '&shear_relative=' + envShearRel;
 
     // 6 parallel requests: plan-view, profiles, scalars for each group
     Promise.all([
-        fetch(API_BASE + '/composite/era5_plan_view?' + qsA + '&field=' + field + '&radius_km=' + radiusKm + '&include_vectors=' + includeVec).then(function(r) { return r.ok ? r.json() : null; }),
-        fetch(API_BASE + '/composite/era5_plan_view?' + qsB + '&field=' + field + '&radius_km=' + radiusKm + '&include_vectors=' + includeVec).then(function(r) { return r.ok ? r.json() : null; }),
+        fetch(API_BASE + '/composite/era5_plan_view?' + qsA + pvSuffix).then(function(r) { return r.ok ? r.json() : null; }),
+        fetch(API_BASE + '/composite/era5_plan_view?' + qsB + pvSuffix).then(function(r) { return r.ok ? r.json() : null; }),
         fetch(API_BASE + '/composite/era5_profiles?' + qsA).then(function(r) { return r.ok ? r.json() : null; }),
         fetch(API_BASE + '/composite/era5_profiles?' + qsB).then(function(r) { return r.ok ? r.json() : null; }),
         fetch(API_BASE + '/composite/era5_scalars?' + qsA).then(function(r) { return r.ok ? r.json() : null; }),
