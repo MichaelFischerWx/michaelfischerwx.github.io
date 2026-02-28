@@ -1,5 +1,53 @@
 const API_BASE = 'https://tc-radar-api.onrender.com';
 
+// ── Toast notification system ────────────────────────────────
+function showToast(message, type, duration) {
+    type = type || 'info';
+    duration = duration || 5000;
+    var container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.style.cssText = 'position:fixed;top:60px;right:16px;z-index:100000;display:flex;flex-direction:column;gap:8px;pointer-events:none;';
+        document.body.appendChild(container);
+    }
+    var toast = document.createElement('div');
+    var bgColor = type === 'error' ? 'rgba(239,68,68,0.95)' : type === 'warn' ? 'rgba(245,158,11,0.95)' : 'rgba(14,45,90,0.95)';
+    var borderColor = type === 'error' ? '#f87171' : type === 'warn' ? '#fbbf24' : '#60a5fa';
+    toast.style.cssText = 'background:' + bgColor + ';color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;font-family:DM Sans,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.4);border:1px solid ' + borderColor + ';backdrop-filter:blur(8px);pointer-events:auto;max-width:380px;opacity:0;transform:translateX(30px);transition:all 0.3s ease;';
+    toast.textContent = message;
+    container.appendChild(toast);
+    requestAnimationFrame(function() { toast.style.opacity = '1'; toast.style.transform = 'translateX(0)'; });
+    setTimeout(function() {
+        toast.style.opacity = '0'; toast.style.transform = 'translateX(30px)';
+        setTimeout(function() { toast.remove(); }, 300);
+    }, duration);
+}
+
+// ── API cold-start pre-warming ───────────────────────────────
+var _apiReady = false;
+(function warmAPI() {
+    var start = Date.now();
+    fetch(API_BASE + '/health', { method: 'GET' })
+        .then(function(r) {
+            _apiReady = true;
+            var elapsed = Date.now() - start;
+            if (elapsed > 3000) {
+                showToast('API server is ready (' + (elapsed / 1000).toFixed(1) + 's warm-up)', 'info', 3000);
+            }
+        })
+        .catch(function() {
+            // API might be cold-starting — retry once after 5s
+            setTimeout(function() {
+                fetch(API_BASE + '/health', { method: 'GET' })
+                    .then(function() { _apiReady = true; })
+                    .catch(function() {
+                        showToast('API server may be waking up — first requests could take 30–60s', 'warn', 8000);
+                    });
+            }, 5000);
+        });
+})();
+
 let allData = null;
 var _activeDataType = 'swath';  // 'swath' or 'merge'
 function _getActiveData() { return _activeDataType === 'merge' ? mergeData : allData; }
@@ -29,6 +77,8 @@ function toggleFilterDrawer() {
     const drawer = document.getElementById('filter-drawer');
     const btn = document.getElementById('filter-toggle');
     drawer.classList.toggle('open');
+    var isOpen = drawer.classList.contains('open');
+    btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
     btn.classList.toggle('active');
 }
 
@@ -954,6 +1004,11 @@ function initEnvOverlay() {
 }
 
 function toggleEnvOverlay() {
+    // Ensure Plotly is loaded for ERA5 visualizations
+    if (typeof Plotly === 'undefined') {
+        ensurePlotly(function() { toggleEnvOverlay(); });
+        return;
+    }
     initEnvOverlay();
     var panel = document.getElementById('env-overlay');
     panel.classList.toggle('active');
@@ -1996,6 +2051,13 @@ function _removeRubberBand() {
 
 function generateCustomPlot(callback) {
     if (currentCaseIndex === null) return;
+    // Ensure Plotly is loaded before generating any plots
+    if (typeof Plotly === 'undefined') {
+        ensurePlotly(function() { generateCustomPlot(callback); });
+        var resultDiv = document.getElementById('ep-result');
+        if (resultDiv) resultDiv.innerHTML = '<div class="explorer-status loading">Loading visualization library\u2026</div>';
+        return;
+    }
     _lastAzJson = null;
     _lastSqJson = null;
     var variable = document.getElementById('ep-var').value;
