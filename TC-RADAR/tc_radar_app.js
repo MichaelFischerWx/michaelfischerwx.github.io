@@ -242,6 +242,9 @@ function openSidePanel(caseData, fromQuickSelect) {
                     '<button class="cs-btn" id="vol-btn" onclick="fetch3DVolume()" disabled>\uD83D\uDDA5 3D Volume</button>' +
                     '<button class="cs-btn" id="ir-underlay-btn" onclick="toggleIRPlotlyUnderlay()" disabled>\uD83D\uDEF0 IR Off</button>' +
                 '</div>' +
+                '<div class="display-actions" style="margin-top:4px;">' +
+                    '<button class="cs-btn env-case-btn" id="env-case-btn" onclick="toggleEnvOverlay()" style="background:rgba(0,180,100,0.12);border-color:rgba(0,180,100,0.35);color:#6ee7b7;flex:1;">\uD83C\uDF0D Environment Diagnostics</button>' +
+                '</div>' +
             '</div>' +
 
             // ── RIGHT: Controls panel ──
@@ -5106,7 +5109,17 @@ function updateCompositeCount() {
     el.textContent = '\u2026';
     fetch(API_BASE + '/composite/count?' + _compositeQueryString(filters) + '&data_type=' + dataType)
         .then(function(r) { return r.json(); })
-        .then(function(json) { el.textContent = json.count; })
+        .then(function(json) {
+            el.textContent = json.count;
+            if (json.capped) {
+                el.textContent = json.count + ' (max ' + json.max_cases + ')';
+                el.style.color = '#fbbf24';
+                el.title = 'Only the first ' + json.max_cases + ' cases will be used to prevent server memory issues.';
+            } else {
+                el.style.color = '';
+                el.title = '';
+            }
+        })
         .catch(function() { el.textContent = '?'; });
 }
 
@@ -5160,6 +5173,27 @@ function _computeCompositeMeanVmax(filters) {
         sum += v; count++;
     });
     return count > 0 ? Math.round(sum / count) : null;
+}
+
+/**
+ * Fetch with a timeout — rejects with a clear message if the server doesn't
+ * respond within `ms` milliseconds.  Helps surface OOM crashes on the
+ * 512 MB free-tier Render server instead of leaving the user with a
+ * perpetual spinner.
+ */
+function _fetchWithTimeout(url, ms) {
+    if (!ms) ms = 180000; // 3 minutes default
+    var controller = new AbortController();
+    var timer = setTimeout(function() { controller.abort(); }, ms);
+    return fetch(url, { signal: controller.signal })
+        .then(function(r) { clearTimeout(timer); return r; })
+        .catch(function(err) {
+            clearTimeout(timer);
+            if (err.name === 'AbortError') {
+                throw new Error('Server timed out — the composite may be too large. Try narrowing your filters to reduce the case count.');
+            }
+            throw err;
+        });
 }
 
 function _showCompStatus(cls, msg) {
@@ -5713,7 +5747,7 @@ function generateCompositeAzMean() {
     var overlay = (document.getElementById('comp-overlay') || {}).value || '';
     var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage;
     if (overlay) qs += '&overlay=' + encodeURIComponent(overlay);
-    fetch(API_BASE + '/composite/azimuthal_mean?' + qs)
+    _fetchWithTimeout(API_BASE + '/composite/azimuthal_mean?' + qs)
         .then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error(e.detail||'API error');}); return r.json(); })
         .then(function(json) {
             _showCompStatus('success', '\u2713 Composite computed: ' + json.n_cases + ' cases processed');
@@ -5743,7 +5777,7 @@ function generateCompositeQuadMean() {
     var overlay = (document.getElementById('comp-overlay') || {}).value || '';
     var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage;
     if (overlay) qs += '&overlay=' + encodeURIComponent(overlay);
-    fetch(API_BASE + '/composite/quadrant_mean?' + qs)
+    _fetchWithTimeout(API_BASE + '/composite/quadrant_mean?' + qs)
         .then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error(e.detail||'API error');}); return r.json(); })
         .then(function(json) {
             _showCompStatus('success', '\u2713 Composite computed: ' + json.n_cases + ' cases processed (' + json.n_with_shear + ' with shear data)');
@@ -5798,7 +5832,7 @@ function generateCompositePlanView() {
         '&shear_relative=' + (pvParams.shear_relative ? 'true' : 'false');
     if (overlay) qs += '&overlay=' + encodeURIComponent(overlay);
 
-    fetch(API_BASE + '/composite/plan_view?' + qs)
+    _fetchWithTimeout(API_BASE + '/composite/plan_view?' + qs)
         .then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error(e.detail||'API error');}); return r.json(); })
         .then(function(json) {
             _showCompStatus('success', '\u2713 Plan-view composite computed: ' + json.n_cases + ' cases processed');
@@ -5997,7 +6031,17 @@ function _updateGroupBCount() {
     el.textContent = '\u2026';
     fetch(API_BASE + '/composite/count?' + _compositeQueryString(filters) + '&data_type=' + dataType)
         .then(function(r) { return r.json(); })
-        .then(function(json) { el.textContent = json.count; })
+        .then(function(json) {
+            el.textContent = json.count;
+            if (json.capped) {
+                el.textContent = json.count + ' (max ' + json.max_cases + ')';
+                el.style.color = '#fbbf24';
+                el.title = 'Only the first ' + json.max_cases + ' cases will be used to prevent server memory issues.';
+            } else {
+                el.style.color = '';
+                el.title = '';
+            }
+        })
         .catch(function() { el.textContent = '?'; });
 }
 
@@ -6073,8 +6117,8 @@ function generateCompDiffAzMean() {
     var urlB = API_BASE + '/composite/azimuthal_mean?' + _compositeQueryString(filtersB) + baseQS;
 
     Promise.all([
-        fetch(urlA).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group A: '+(e.detail||'error'));}); return r.json(); }),
-        fetch(urlB).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group B: '+(e.detail||'error'));}); return r.json(); })
+        _fetchWithTimeout(urlA).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group A: '+(e.detail||'error'));}); return r.json(); }),
+        _fetchWithTimeout(urlB).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group B: '+(e.detail||'error'));}); return r.json(); })
     ]).then(function(results) {
         var jsonA = results[0], jsonB = results[1];
         var diffData = _subtractArrays2D(jsonA.azimuthal_mean, jsonB.azimuthal_mean);
@@ -6150,8 +6194,8 @@ function generateCompDiffQuadMean() {
     var urlB = API_BASE + '/composite/quadrant_mean?' + _compositeQueryString(filtersB) + baseQS;
 
     Promise.all([
-        fetch(urlA).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group A: '+(e.detail||'error'));}); return r.json(); }),
-        fetch(urlB).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group B: '+(e.detail||'error'));}); return r.json(); })
+        _fetchWithTimeout(urlA).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group A: '+(e.detail||'error'));}); return r.json(); }),
+        _fetchWithTimeout(urlB).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group B: '+(e.detail||'error'));}); return r.json(); })
     ]).then(function(results) {
         var jsonA = results[0], jsonB = results[1];
         var diffQuads = {};
@@ -6449,8 +6493,8 @@ function generateCompDiffPlanView() {
     var urlB = API_BASE + '/composite/plan_view?' + _compositeQueryString(filtersB) + baseQS;
 
     Promise.all([
-        fetch(urlA).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group A: '+(e.detail||'error'));}); return r.json(); }),
-        fetch(urlB).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group B: '+(e.detail||'error'));}); return r.json(); })
+        _fetchWithTimeout(urlA).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group A: '+(e.detail||'error'));}); return r.json(); }),
+        _fetchWithTimeout(urlB).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group B: '+(e.detail||'error'));}); return r.json(); })
     ]).then(function(results) {
         var jsonA = results[0], jsonB = results[1];
         var diffData = _subtractArrays2D(jsonA.plan_view, jsonB.plan_view);
@@ -6646,9 +6690,9 @@ function generateEnvComposite() {
     var scalarsUrl = API_BASE + '/composite/era5_scalars?' + qs;
 
     Promise.all([
-        fetch(planViewUrl).then(function(r) { return r.ok ? r.json() : null; }),
-        fetch(profilesUrl).then(function(r) { return r.ok ? r.json() : null; }),
-        fetch(scalarsUrl).then(function(r) { return r.ok ? r.json() : null; })
+        _fetchWithTimeout(planViewUrl).then(function(r) { return r.ok ? r.json() : null; }),
+        _fetchWithTimeout(profilesUrl).then(function(r) { return r.ok ? r.json() : null; }),
+        _fetchWithTimeout(scalarsUrl).then(function(r) { return r.ok ? r.json() : null; })
     ]).then(function(results) {
         var pvData = results[0];
         var profData = results[1];
@@ -7122,12 +7166,12 @@ function generateEnvCompDiff() {
 
     // 6 parallel requests: plan-view, profiles, scalars for each group
     Promise.all([
-        fetch(API_BASE + '/composite/era5_plan_view?' + qsA + pvSuffix).then(function(r) { return r.ok ? r.json() : null; }),
-        fetch(API_BASE + '/composite/era5_plan_view?' + qsB + pvSuffix).then(function(r) { return r.ok ? r.json() : null; }),
-        fetch(API_BASE + '/composite/era5_profiles?' + qsA).then(function(r) { return r.ok ? r.json() : null; }),
-        fetch(API_BASE + '/composite/era5_profiles?' + qsB).then(function(r) { return r.ok ? r.json() : null; }),
-        fetch(API_BASE + '/composite/era5_scalars?' + qsA).then(function(r) { return r.ok ? r.json() : null; }),
-        fetch(API_BASE + '/composite/era5_scalars?' + qsB).then(function(r) { return r.ok ? r.json() : null; })
+        _fetchWithTimeout(API_BASE + '/composite/era5_plan_view?' + qsA + pvSuffix).then(function(r) { return r.ok ? r.json() : null; }),
+        _fetchWithTimeout(API_BASE + '/composite/era5_plan_view?' + qsB + pvSuffix).then(function(r) { return r.ok ? r.json() : null; }),
+        _fetchWithTimeout(API_BASE + '/composite/era5_profiles?' + qsA).then(function(r) { return r.ok ? r.json() : null; }),
+        _fetchWithTimeout(API_BASE + '/composite/era5_profiles?' + qsB).then(function(r) { return r.ok ? r.json() : null; }),
+        _fetchWithTimeout(API_BASE + '/composite/era5_scalars?' + qsA).then(function(r) { return r.ok ? r.json() : null; }),
+        _fetchWithTimeout(API_BASE + '/composite/era5_scalars?' + qsB).then(function(r) { return r.ok ? r.json() : null; })
     ]).then(function(results) {
         var pvA = results[0], pvB = results[1];
         var profA = results[2], profB = results[3];
