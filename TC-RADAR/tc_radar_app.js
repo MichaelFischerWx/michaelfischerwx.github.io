@@ -189,7 +189,7 @@ function openSidePanel(caseData, fromQuickSelect) {
                     '<button class="cs-btn" id="sq-btn" onclick="fetchShearQuadrants()" disabled>\u25D1 Shear Quads</button>' +
                     '<button class="cs-btn" id="vol-btn" onclick="fetch3DVolume()" disabled>\uD83D\uDDA5 3D Volume</button>' +
                     '<button class="cs-btn" id="ir-underlay-btn" onclick="toggleIRPlotlyUnderlay()" disabled>\uD83D\uDEF0 IR Off</button>' +
-                    '<button class="cs-btn" id="era5-underlay-btn" onclick="toggleERA5PlotlyUnderlay()" oncontextmenu="event.preventDefault();showERA5FieldMenu();return false;" disabled>\uD83C\uDF0D Env Off</button>' +
+                    '<button class="cs-btn" id="era5-underlay-btn" onclick="showERA5FieldMenu()" disabled>\uD83C\uDF0D Env Off</button>' +
                     '<button class="cs-btn" id="env-panel-btn" onclick="toggleEnvPanel()" disabled>\uD83C\uDF21 Env Panel</button>' +
                 '</div>' +
             '</div>' +
@@ -604,6 +604,19 @@ function showERA5FieldMenu() {
     var menu = document.createElement('div');
     menu.id = 'era5-field-menu';
     menu.className = 'env-field-dropdown';
+
+    // ── Toggle row at top ──
+    var toggleRow = document.createElement('div');
+    toggleRow.className = 'env-field-option env-toggle-row' + (_era5PlotlyVisible ? ' active' : '');
+    toggleRow.textContent = _era5PlotlyVisible ? '\u2705 Overlay On' : '\u274C Overlay Off';
+    toggleRow.style.cssText = 'border-bottom:1px solid rgba(255,255,255,0.15);font-weight:bold;';
+    toggleRow.onclick = function() {
+        menu.remove();
+        toggleERA5PlotlyUnderlay();
+    };
+    menu.appendChild(toggleRow);
+
+    // ── Field options ──
     var fields = [
         { key: 'shear_mag', label: '\uD83C\uDF2C Shear (200\u2013850 hPa)' },
         { key: 'rh_mid',    label: '\uD83D\uDCA7 Mid-Level RH (500\u2013700)' },
@@ -619,7 +632,11 @@ function showERA5FieldMenu() {
             if (currentCaseIndex !== null) {
                 fetchERA5Data(currentCaseIndex, f.key, function(data) {
                     if (data) {
-                        if (_era5PlotlyVisible) {
+                        // Turn on underlay if not already visible
+                        if (!_era5PlotlyVisible) {
+                            toggleERA5PlotlyUnderlay();
+                        } else {
+                            // Already visible — swap the field
                             _era5PlotlyVisible = false;
                             toggleERA5PlotlyUnderlay();
                         }
