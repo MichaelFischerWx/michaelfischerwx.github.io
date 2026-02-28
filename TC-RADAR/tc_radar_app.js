@@ -956,32 +956,96 @@ function toggleEnvOverlay() {
     initEnvOverlay();
     var panel = document.getElementById('env-overlay');
     panel.classList.toggle('active');
-    if (panel.classList.contains('active') && _era5Data) {
-        // If overlay crop radius differs from explorer's 300km, re-fetch
+    if (!panel.classList.contains('active')) return;
+
+    // Determine which case to show
+    var caseIdx = currentCaseIndex;
+    var caseData = currentCaseData;
+
+    // If no case is actively explored, check the dropdown
+    if (caseIdx === null || caseIdx === undefined) {
+        var caseSelect = document.getElementById('case-select');
+        if (caseSelect && caseSelect.value) {
+            caseIdx = parseInt(caseSelect.value);
+            if (!isNaN(caseIdx) && _getActiveData()) {
+                caseData = _getActiveData().cases.find(function(c) { return c.case_index === caseIdx; });
+                // Set globals so the overlay can reference them
+                currentCaseIndex = caseIdx;
+                currentCaseData = caseData || null;
+            } else {
+                caseIdx = null;
+            }
+        }
+    }
+
+    // Case 1: No case selected at all — show placeholder
+    if (caseIdx === null || caseIdx === undefined) {
+        _envOverlayData = null;
+        renderEnvOverlay();
+        return;
+    }
+
+    // Case 2: ERA5 data already loaded from the explorer
+    if (_era5Data && _era5Data.case_index === caseIdx) {
         var radiusKm = parseInt(document.getElementById('env-ov-radius').value) || 500;
-        if (radiusKm !== 300 && currentCaseIndex !== null) {
-            var field = document.getElementById('env-ov-field').value || 'shear_mag';
-            var url = API_BASE + '/era5?case_index=' + currentCaseIndex + '&field=' + field + '&radius_km=' + radiusKm;
-            fetch(url)
-                .then(function(r) { return r.ok ? r.json() : null; })
-                .then(function(data) {
-                    if (data) {
-                        _envOverlayData = data;
-                        renderEnvOverlay();
-                    } else {
-                        _envOverlayData = _era5Data;
-                        renderEnvOverlay();
-                    }
-                })
-                .catch(function() {
-                    _envOverlayData = _era5Data;
-                    renderEnvOverlay();
-                });
+        if (radiusKm !== 300) {
+            _envOverlayFetchAndRender(caseIdx, radiusKm);
         } else {
             _envOverlayData = _era5Data;
             renderEnvOverlay();
         }
+        return;
     }
+
+    // Case 3: Case selected but no ERA5 data yet — fetch it
+    _envOverlayShowLoading();
+    var radiusKm2 = parseInt(document.getElementById('env-ov-radius').value) || 500;
+    _envOverlayFetchAndRender(caseIdx, radiusKm2);
+}
+
+function _envOverlayShowLoading() {
+    var display = document.getElementById('env-ov-display');
+    if (!display) return;
+    display.innerHTML =
+        '<div class="env-no-case" style="display:flex;">' +
+            '<div class="env-no-case-icon" style="animation:hurricanePulse 2s ease-in-out infinite;">\uD83C\uDF0A</div>' +
+            '<div class="env-no-case-msg">Loading ERA5 environmental data\u2026</div>' +
+        '</div>';
+    // Update case info in the controls
+    var caseInfo = document.getElementById('env-ov-case-info');
+    if (caseInfo && currentCaseData) {
+        caseInfo.style.display = 'block';
+        var cd = currentCaseData;
+        caseInfo.innerHTML =
+            '<div class="env-case-name">' + (cd.storm_name || 'Unknown') + '</div>' +
+            '<div class="env-case-detail">' + (cd.datetime || '') + '</div>' +
+            '<div class="env-case-detail">' +
+                (cd.latitude != null ? cd.latitude.toFixed(1) + '\u00b0N' : '') + ', ' +
+                (cd.longitude != null ? cd.longitude.toFixed(1) + '\u00b0E' : '') +
+                (cd.vmax_kt != null ? ' \u00b7 ' + cd.vmax_kt + ' kt' : '') +
+            '</div>';
+    }
+}
+
+function _envOverlayFetchAndRender(caseIdx, radiusKm) {
+    var field = document.getElementById('env-ov-field').value || 'shear_mag';
+    var url = API_BASE + '/era5?case_index=' + caseIdx + '&field=' + field + '&radius_km=' + radiusKm;
+    fetch(url)
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+            if (data) {
+                _era5Data = _era5Data || data;  // cache for explorer too
+                _envOverlayData = data;
+                renderEnvOverlay();
+            } else {
+                _envOverlayData = null;
+                renderEnvOverlay();
+            }
+        })
+        .catch(function() {
+            _envOverlayData = null;
+            renderEnvOverlay();
+        });
 }
 
 function renderEnvOverlay() {
@@ -991,7 +1055,27 @@ function renderEnvOverlay() {
     var recomputeBtn = document.getElementById('env-ov-recompute');
 
     if (!_envOverlayData) {
-        if (placeholder) placeholder.style.display = 'flex';
+        // Show a context-aware placeholder
+        if (display) {
+            var hasCase = document.getElementById('case-select') && document.getElementById('case-select').value;
+            var hasStorm = document.getElementById('storm-select') && document.getElementById('storm-select').value;
+            var msg, icon;
+            if (!hasStorm) {
+                icon = '\uD83C\uDF0A';
+                msg = 'Select a <strong>storm</strong> and <strong>case</strong> from the toolbar dropdowns above, then open this panel to view ERA5 environmental diagnostics.';
+            } else if (!hasCase) {
+                icon = '\uD83C\uDF00';
+                msg = 'Good \u2014 you\'ve selected a storm. Now choose a <strong>case</strong> from the toolbar dropdown, then reopen this panel.';
+            } else {
+                icon = '\u26A0\uFE0F';
+                msg = 'ERA5 data could not be loaded for this case. It may not be available in the ERA5 store.';
+            }
+            display.innerHTML =
+                '<div class="env-no-case" style="display:flex;">' +
+                    '<div class="env-no-case-icon">' + icon + '</div>' +
+                    '<div class="env-no-case-msg">' + msg + '</div>' +
+                '</div>';
+        }
         if (caseInfo) caseInfo.style.display = 'none';
         if (recomputeBtn) recomputeBtn.disabled = true;
         return;
