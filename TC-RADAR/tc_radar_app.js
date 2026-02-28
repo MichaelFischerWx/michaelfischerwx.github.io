@@ -930,11 +930,17 @@ function renderSkewT(profiles, divId) {
     var qIsGkg = maxQ > 0.5;
 
     // Compute dewpoint from specific humidity and pressure
+    // Cap vapor pressure at saturation (annular averaging can produce q > q_sat)
     var tdC = [];
     for (var i = 0; i < plev.length; i++) {
         if (qRaw && qRaw[i] != null && plev[i] != null && qRaw[i] > 0) {
             var qKg = qIsGkg ? qRaw[i] / 1000.0 : qRaw[i];
             var e = qKg * plev[i] / (0.622 + 0.378 * qKg);
+            // Prevent supersaturation: cap e at saturation vapor pressure
+            if (tC[i] != null) {
+                var esSfc = 6.112 * Math.exp(17.67 * tC[i] / (tC[i] + 243.5));
+                if (e > esSfc) e = esSfc;
+            }
             if (e > 0.001) {
                 var lnE = Math.log(e / 6.112);
                 tdC.push(243.5 * lnE / (17.67 - lnE));
@@ -1994,6 +2000,23 @@ function envOverlayRecomputeSkewT() {
         if (data && data.profiles) {
             renderSkewT(data.profiles, 'env-ov-skewt');
             _renderSkewTInfo(data.profiles);
+            // Warn user if API fell back to precomputed annulus (radius ignored)
+            if (data.source === 'precomputed') {
+                var note = document.getElementById('env-ov-skewt-fallback-note');
+                if (!note) {
+                    note = document.createElement('div');
+                    note.id = 'env-ov-skewt-fallback-note';
+                    note.style.cssText = 'font-size:10px;color:#fbbf24;margin-top:4px;padding:4px 8px;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.2);border-radius:4px;';
+                    var skewDiv = document.getElementById('env-ov-skewt');
+                    if (skewDiv && skewDiv.parentNode) skewDiv.parentNode.appendChild(note);
+                }
+                note.textContent = '\u26A0 3D fields not available \u2014 showing precomputed ' +
+                    (data.precomputed_domain || '200\u2013600 km annulus') +
+                    ' mean (radius slider has no effect)';
+            } else {
+                var existing = document.getElementById('env-ov-skewt-fallback-note');
+                if (existing) existing.remove();
+            }
         }
     });
 }
