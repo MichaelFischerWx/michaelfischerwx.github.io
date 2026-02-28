@@ -707,6 +707,12 @@ function renderEnvPanel() {
     var rhMid = scalars.rh_mid_env;
     var div200 = scalars.div200_env;
 
+    var sst = scalars.sst_env;
+    var vpi = scalars.v_pi;
+    var vpiKt = vpi !== null && vpi !== undefined ? (vpi * 1.944).toFixed(0) : null;
+    var chiM = scalars.chi_m;
+    var ventIdx = scalars.vent_index;
+
     html += '<div class="env-scalar-section">' +
         '<div class="env-scalar-row"><span class="env-scalar-label">Deep-Layer Shear</span>' +
         '<span class="env-scalar-value">' + (shearMs != null ? shearMs.toFixed(1) + ' m/s (' + shearKt + ' kt)' : '\u2014') + '</span></div>' +
@@ -723,13 +729,21 @@ function renderEnvPanel() {
         '<span class="env-scalar-value">' + (rhMid != null ? rhMid.toFixed(0) + '%' : '\u2014') + '</span></div>' +
         '<div class="env-scalar-row"><span class="env-scalar-label">200 hPa Divergence</span>' +
         '<span class="env-scalar-value">' + (div200 != null ? (div200 * 1e5).toFixed(1) + ' \u00d710\u207b\u2075 s\u207b\u00b9' : '\u2014') + '</span></div>' +
+        '<div class="env-scalar-row"><span class="env-scalar-label">SST</span>' +
+        '<span class="env-scalar-value">' + (sst != null ? sst.toFixed(1) + ' \u00b0C' : '\u2014') + '</span></div>' +
+        '<div class="env-scalar-row"><span class="env-scalar-label">Potential Intensity</span>' +
+        '<span class="env-scalar-value">' + (vpi != null ? vpi.toFixed(1) + ' m/s (' + vpiKt + ' kt)' : '\u2014') + '</span></div>' +
+        '<div class="env-scalar-row"><span class="env-scalar-label">Entropy Deficit (\u03c7<sub>m</sub>)</span>' +
+        '<span class="env-scalar-value">' + (chiM != null ? chiM.toFixed(2) : '\u2014') + '</span></div>' +
+        '<div class="env-scalar-row"><span class="env-scalar-label">Ventilation Index (\u039b)</span>' +
+        '<span class="env-scalar-value">' + (ventIdx != null ? ventIdx.toFixed(3) : '\u2014') + '</span></div>' +
         '</div></div>';
 
     // Profile plots row
     if (profiles && profiles.plev) {
         html += '<div class="env-profiles-row" style="display:flex;gap:8px;margin-top:8px;">' +
             '<div id="env-rh-profile" style="flex:1;min-height:180px;"></div>' +
-            '<div id="env-t-profile" style="flex:1;min-height:180px;"></div>' +
+            '<div id="env-theta-profile" style="flex:1;min-height:180px;"></div>' +
             '</div>';
     }
 
@@ -744,7 +758,7 @@ function renderEnvPanel() {
     if (profiles && profiles.plev) {
         setTimeout(function() {
             renderRHProfile(profiles, 'env-rh-profile');
-            renderTProfile(profiles, 'env-t-profile');
+            renderThetaProfile(profiles, 'env-theta-profile');
         }, 100);
     }
 }
@@ -869,30 +883,61 @@ function renderRHProfile(profiles, divId) {
     Plotly.newPlot(divId, [trace], layout, { responsive: true, displayModeBar: false });
 }
 
-// ── Temperature Vertical Profile ─────────────────────────────
-function renderTProfile(profiles, divId) {
+// ── Theta / Theta-e Vertical Profile ─────────────────────────
+function renderThetaProfile(profiles, divId) {
     var el = document.getElementById(divId);
-    if (!el || !profiles.t) return;
+    if (!el) return;
 
-    // Compute anomaly from a simple reference (mean at each level)
-    var tAnom = profiles.t.map(function(t) { return t != null ? t - 273.15 : null; });
+    var traces = [];
 
-    var trace = {
-        x: tAnom, y: profiles.plev, type: 'scatter', mode: 'lines+markers',
-        line: { color: '#ef4444', width: 2 },
-        marker: { color: '#ef4444', size: 5 },
-        hovertemplate: '%{y} hPa: %{x:.1f}\u00b0C<extra>Temp</extra>',
-    };
+    // θ profile (potential temperature)
+    if (profiles.theta) {
+        traces.push({
+            x: profiles.theta, y: profiles.plev, type: 'scatter', mode: 'lines+markers',
+            name: '\u03b8',
+            line: { color: '#f59e0b', width: 2 },
+            marker: { color: '#f59e0b', size: 5 },
+            hovertemplate: '%{y} hPa: \u03b8 = %{x:.1f} K<extra></extra>',
+        });
+    }
+
+    // θe profile (equivalent potential temperature)
+    if (profiles.theta_e) {
+        traces.push({
+            x: profiles.theta_e, y: profiles.plev, type: 'scatter', mode: 'lines+markers',
+            name: '\u03b8e',
+            line: { color: '#ef4444', width: 2 },
+            marker: { color: '#ef4444', size: 5 },
+            hovertemplate: '%{y} hPa: \u03b8e = %{x:.1f} K<extra></extra>',
+        });
+    }
+
+    // Fallback to plain T if no theta data
+    if (!traces.length && profiles.t) {
+        var tC = profiles.t.map(function(t) { return t != null ? t - 273.15 : null; });
+        traces.push({
+            x: tC, y: profiles.plev, type: 'scatter', mode: 'lines+markers',
+            name: 'T',
+            line: { color: '#ef4444', width: 2 },
+            marker: { color: '#ef4444', size: 5 },
+            hovertemplate: '%{y} hPa: %{x:.1f}\u00b0C<extra>Temp</extra>',
+        });
+    }
+
+    if (!traces.length) return;
+
     var layout = {
-        xaxis: { title: { text: 'T (\u00b0C)', font: { size: 9, color: '#8b9ec2' } },
+        xaxis: { title: { text: 'K', font: { size: 9, color: '#8b9ec2' } },
             color: '#8b9ec2', tickfont: { size: 8 } },
         yaxis: { title: '', autorange: 'reversed', type: 'log', color: '#8b9ec2', tickfont: { size: 8 },
             tickvals: [1000, 850, 700, 500, 300, 200, 100] },
         paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(10,22,40,0.5)',
         margin: { l: 30, r: 5, t: 22, b: 30 },
-        title: { text: 'Temperature', font: { size: 10, color: '#00d4ff' }, x: 0.5, y: 0.98 },
+        title: { text: '\u03b8 / \u03b8e Profile', font: { size: 10, color: '#00d4ff' }, x: 0.5, y: 0.98 },
+        legend: { font: { color: '#ccc', size: 9 }, x: 0.02, y: 0.02, bgcolor: 'rgba(0,0,0,0.3)' },
+        showlegend: true,
     };
-    Plotly.newPlot(divId, [trace], layout, { responsive: true, displayModeBar: false });
+    Plotly.newPlot(divId, traces, layout, { responsive: true, displayModeBar: false });
 }
 
 // ── ERA5 cleanup ─────────────────────────────────────────────
