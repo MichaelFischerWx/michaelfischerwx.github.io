@@ -322,6 +322,173 @@
         }
 
 
+        /* ── Environment Overlay Panel ───────────────────── */
+        .env-overlay {
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 3000; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px);
+            overflow-y: auto;
+        }
+        .env-overlay.active { display: flex; align-items: flex-start; justify-content: center; padding: 20px; }
+        .env-box {
+            width: 100%; max-width: 1440px; background: var(--navy);
+            border: 1px solid var(--border); border-radius: 12px;
+            overflow: hidden; box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+        }
+        .env-ov-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 14px 24px; border-bottom: 1px solid rgba(255,255,255,0.06);
+            background: rgba(255,255,255,0.02);
+        }
+        .env-ov-header-left { display: flex; align-items: center; gap: 10px; }
+        .env-ov-logo { font-size: 20px; }
+        .env-ov-title { font-size: 18px; font-weight: 700; color: #e5e7eb; font-family: 'JetBrains Mono', monospace; }
+        .env-ov-subtitle { font-size: 12px; color: #6b7280; margin-left: 4px; }
+        .env-ov-close {
+            background: none; border: 1px solid rgba(255,255,255,0.1); color: #9ca3af;
+            font-size: 18px; width: 36px; height: 36px; border-radius: 8px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            transition: all 0.15s;
+        }
+        .env-ov-close:hover { background: rgba(255,255,255,0.05); color: #e5e7eb; }
+        .env-ov-body { display: flex; min-height: 640px; }
+        .env-ov-controls {
+            width: 280px; min-width: 280px; padding: 20px;
+            border-right: 1px solid rgba(255,255,255,0.06);
+            overflow-y: auto; max-height: calc(100vh - 120px);
+        }
+        .env-ov-display {
+            flex: 1; padding: 20px; overflow-y: auto;
+            max-height: calc(100vh - 120px);
+        }
+        .env-section-title {
+            font-size: 11px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 1.5px; color: var(--cyan); margin-bottom: 10px;
+            padding-bottom: 6px; border-bottom: 1px solid rgba(34,211,238,0.15);
+        }
+        .env-ctrl-row { margin-bottom: 12px; }
+        .env-ctrl-row label {
+            display: block; font-size: 11px; font-weight: 600;
+            color: #9ca3af; margin-bottom: 3px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .env-ctrl-select {
+            width: 100%; padding: 6px 8px; border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 6px; font-size: 12px; background: var(--navy);
+            color: var(--text); font-family: 'DM Sans', sans-serif;
+        }
+        .env-ctrl-select option { background: var(--navy); }
+        .env-slider-row {
+            display: flex; align-items: center; gap: 8px;
+        }
+        .env-slider-row input[type="range"] {
+            flex: 1; -webkit-appearance: none; appearance: none;
+            height: 4px; background: var(--navy-mid); border-radius: 2px;
+        }
+        .env-slider-row input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 14px; height: 14px;
+            background: var(--cyan); border-radius: 50%; cursor: pointer;
+        }
+        .env-slider-val {
+            font-size: 11px; font-weight: 600; color: var(--cyan);
+            min-width: 52px; font-family: 'JetBrains Mono', monospace;
+            text-align: right;
+        }
+        .env-case-info {
+            padding: 12px; background: rgba(34,211,238,0.05);
+            border: 1px solid rgba(34,211,238,0.15); border-radius: 8px;
+            margin-bottom: 16px;
+        }
+        .env-case-name {
+            font-size: 14px; font-weight: 700; color: var(--text);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .env-case-detail {
+            font-size: 11px; color: #9ca3af; margin-top: 2px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .env-domain-note {
+            font-size: 10px; color: #6b7280; margin-top: 6px;
+            padding: 6px 8px; background: rgba(255,255,255,0.02);
+            border-radius: 4px; border: 1px solid rgba(255,255,255,0.04);
+            line-height: 1.5;
+        }
+        .env-recompute-btn {
+            width: 100%; padding: 8px; border: none; border-radius: 6px;
+            font-size: 12px; font-weight: 600; cursor: pointer;
+            font-family: 'JetBrains Mono', monospace; transition: all 0.15s;
+            background: var(--cyan); color: var(--navy); margin-top: 8px;
+        }
+        .env-recompute-btn:hover { background: #67e8f9; }
+        .env-recompute-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* ── Dashboard grid inside display area ─────────── */
+        .env-dash-row { display: grid; gap: 16px; margin-bottom: 16px; }
+        .env-dash-row.two-col { grid-template-columns: 1fr 1fr; }
+        .env-dash-row.three-col { grid-template-columns: 1fr 1fr 1fr; }
+        .env-dash-card {
+            background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 10px; overflow: hidden;
+        }
+        .env-dash-card-header {
+            padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.04);
+            font-size: 11px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 1px; color: var(--cyan);
+        }
+        .env-dash-card-body { padding: 12px; }
+
+        /* ── Scalar diagnostic cards ────────────────────── */
+        .env-scalars-grid {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+        }
+        .env-scard {
+            background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 8px; padding: 14px 12px; text-align: center;
+            transition: border-color 0.2s;
+        }
+        .env-scard:hover { border-color: rgba(255,255,255,0.12); }
+        .env-scard-value {
+            font-size: 20px; font-weight: 700; color: var(--text);
+            font-family: 'JetBrains Mono', monospace; line-height: 1.2;
+        }
+        .env-scard-unit {
+            font-size: 10px; font-weight: 500; color: #6b7280;
+            margin-top: 2px;
+        }
+        .env-scard-label {
+            font-size: 10px; font-weight: 600; color: var(--slate);
+            text-transform: uppercase; letter-spacing: 0.5px; margin-top: 6px;
+        }
+        .env-scard-sub {
+            font-size: 9px; color: #6b7280; margin-top: 3px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .env-scard.highlight-good { border-color: rgba(16,185,129,0.3); }
+        .env-scard.highlight-warn { border-color: rgba(245,158,11,0.3); }
+        .env-scard.highlight-bad  { border-color: rgba(239,68,68,0.3); }
+        .env-scard.highlight-good .env-scard-value { color: #34d399; }
+        .env-scard.highlight-warn .env-scard-value { color: #fbbf24; }
+        .env-scard.highlight-bad  .env-scard-value { color: #f87171; }
+
+        /* ── No-case prompt ─────────────────────────────── */
+        .env-no-case {
+            flex: 1; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; color: #4b5563;
+            padding: 60px 20px; text-align: center;
+        }
+        .env-no-case-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.4; }
+        .env-no-case-msg { font-size: 13px; max-width: 360px; line-height: 1.6; }
+
+        @media (max-width: 1100px) {
+            .env-scalars-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 900px) {
+            .env-ov-body { flex-direction: column; }
+            .env-ov-controls { width: 100%; min-width: auto; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.06); max-height: none; }
+            .env-ov-display { min-height: 500px; }
+            .env-dash-row.two-col { grid-template-columns: 1fr; }
+            .env-scalars-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
         /* ── Leaflet popups (dark) ────────────────────────── */
         .leaflet-popup-content-wrapper { border-radius: var(--radius-lg); box-shadow: 0 8px 24px rgba(0,0,0,0.4); background: var(--surface-raised); color: var(--text); }
         .leaflet-popup-tip { background: var(--surface-raised); }
@@ -476,6 +643,7 @@
             </div>
             <ul class="topbar-nav">
                 <li><a href="javascript:void(0)" onclick="toggleCompositePanel()">Composites</a></li>
+                <li><a href="javascript:void(0)" onclick="toggleEnvOverlay()">Environment</a></li>
                 <li><a href="#about">About</a></li>
                 <li><a href="#features">Features</a></li>
                 <li><a href="#download">Download</a></li>

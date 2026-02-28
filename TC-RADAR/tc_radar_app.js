@@ -6,6 +6,7 @@ function _getActiveData() { return _activeDataType === 'merge' ? mergeData : all
 let markers = null;
 let allMarkers = [];
 let currentCaseIndex = null;
+var currentCaseData = null;
 
 const filters = {
     minIntensity:0, maxIntensity:200,
@@ -140,6 +141,7 @@ function exploreCaseGo() {
 // ── Side panel ───────────────────────────────────────────────
 function openSidePanel(caseData, fromQuickSelect) {
     currentCaseIndex = caseData.case_index;
+    currentCaseData = caseData;
     _currentSddc = (caseData.sddc !== null && caseData.sddc !== undefined && caseData.sddc !== 9999) ? caseData.sddc : null;
     const idx = caseData.case_index;
     const padded = String(idx).padStart(4, '0');
@@ -190,7 +192,7 @@ function openSidePanel(caseData, fromQuickSelect) {
                     '<button class="cs-btn" id="vol-btn" onclick="fetch3DVolume()" disabled>\uD83D\uDDA5 3D Volume</button>' +
                     '<button class="cs-btn" id="ir-underlay-btn" onclick="toggleIRPlotlyUnderlay()" disabled>\uD83D\uDEF0 IR Off</button>' +
                     '<button class="cs-btn" id="era5-underlay-btn" onclick="showERA5FieldMenu()" disabled>\uD83C\uDF0D Env Off</button>' +
-                    '<button class="cs-btn" id="env-panel-btn" onclick="toggleEnvPanel()" disabled>\uD83C\uDF21 Env Panel</button>' +
+                    '<button class="cs-btn" id="env-panel-btn" onclick="toggleEnvOverlay()" disabled>\uD83C\uDF21 Environment</button>' +
                 '</div>' +
             '</div>' +
 
@@ -356,6 +358,7 @@ function openSidePanel(caseData, fromQuickSelect) {
 function closeSidePanel() {
     document.getElementById('side-panel').classList.remove('open');
     currentCaseIndex = null;
+    currentCaseData = null;
     animStop();
     removeIRMapOverlay();
     _irPlotlyVisible = false;
@@ -424,6 +427,30 @@ var _era5Colormaps = {
             { pos: 0.55, r: 209, g: 229, b: 240 },
             { pos: 0.75, r: 103, g: 169, b: 207 },
             { pos: 1.00, r: 33,  g: 102, b: 172 },
+        ],
+    },
+    sst: {
+        stops: [
+            { pos: 0.00, r: 49,  g: 54,  b: 149 },
+            { pos: 0.15, r: 69,  g: 117, b: 180 },
+            { pos: 0.30, r: 116, g: 173, b: 209 },
+            { pos: 0.45, r: 171, g: 217, b: 233 },
+            { pos: 0.55, r: 253, g: 174, b: 97  },
+            { pos: 0.70, r: 244, g: 109, b: 67  },
+            { pos: 0.85, r: 215, g: 48,  b: 39  },
+            { pos: 1.00, r: 165, g: 0,   b: 38  },
+        ],
+    },
+    entropy_def: {
+        stops: [
+            { pos: 0.00, r: 247, g: 252, b: 245 },
+            { pos: 0.15, r: 199, g: 233, b: 192 },
+            { pos: 0.30, r: 161, g: 217, b: 155 },
+            { pos: 0.45, r: 116, g: 196, b: 118 },
+            { pos: 0.60, r: 49,  g: 163, b: 84  },
+            { pos: 0.75, r: 0,   g: 109, b: 44  },
+            { pos: 0.90, r: 0,   g: 68,  b: 27  },
+            { pos: 1.00, r: 0,   g: 40,  b: 16  },
         ],
     },
 };
@@ -618,9 +645,11 @@ function showERA5FieldMenu() {
 
     // ── Field options ──
     var fields = [
-        { key: 'shear_mag', label: '\uD83C\uDF2C Shear (200\u2013850 hPa)' },
-        { key: 'rh_mid',    label: '\uD83D\uDCA7 Mid-Level RH (500\u2013700)' },
-        { key: 'div200',    label: '\u2B06 200 hPa Divergence' },
+        { key: 'shear_mag',   label: '\uD83C\uDF2C Shear (200\u2013850 hPa)' },
+        { key: 'rh_mid',      label: '\uD83D\uDCA7 Mid-Level RH (500\u2013700)' },
+        { key: 'div200',      label: '\u2B06 200 hPa Divergence' },
+        { key: 'sst',         label: '\uD83C\uDF0A Sea Surface Temperature' },
+        { key: 'entropy_def', label: '\uD83C\uDF21 Entropy Deficit (\u03c7\u2098)' },
     ];
     fields.forEach(function(f) {
         var opt = document.createElement('div');
@@ -940,15 +969,451 @@ function renderThetaProfile(profiles, divId) {
     Plotly.newPlot(divId, traces, layout, { responsive: true, displayModeBar: false });
 }
 
+// ══════════════════════════════════════════════════════════════
+// Environment Overlay Panel (full-screen ERA5 dashboard)
+// ══════════════════════════════════════════════════════════════
+var _envOverlayInit = false;
+var _envOverlayField = 'shear_mag';
+var _envOverlayCropKm = 500;
+var _envOverlayData = null;  // separate ERA5 data for the overlay
+
+function initEnvOverlay() {
+    if (_envOverlayInit) return;
+    _envOverlayInit = true;
+    var overlay = document.createElement('div');
+    overlay.id = 'env-overlay';
+    overlay.className = 'env-overlay';
+    overlay.innerHTML =
+        '<div class="env-box">' +
+            '<div class="env-ov-header">' +
+                '<div class="env-ov-header-left">' +
+                    '<span class="env-ov-logo">\uD83C\uDF21</span> ' +
+                    '<span class="env-ov-title">Environmental Context</span>' +
+                    '<span class="env-ov-subtitle">ERA5 Reanalysis Diagnostics</span>' +
+                '</div>' +
+                '<button class="env-ov-close" onclick="toggleEnvOverlay()">\u2715</button>' +
+            '</div>' +
+            '<div class="env-ov-body">' +
+                // ── Left: Controls ──
+                '<div class="env-ov-controls">' +
+                    '<div id="env-ov-case-info" class="env-case-info" style="display:none;"></div>' +
+                    '<div class="env-section-title">\uD83C\uDF0D 2D Field Display</div>' +
+                    '<div class="env-ctrl-row"><label>Field</label>' +
+                        '<select class="env-ctrl-select" id="env-ov-field" onchange="envOverlayChangeField(this.value)">' +
+                            '<option value="shear_mag">Deep-Layer Shear (200\u2013850 hPa)</option>' +
+                            '<option value="rh_mid">Mid-Level RH (500\u2013700 hPa)</option>' +
+                            '<option value="div200">200 hPa Divergence</option>' +
+                            '<option value="sst">Sea Surface Temperature</option>' +
+                            '<option value="entropy_def">Entropy Deficit (\u03c7\u2098)</option>' +
+                        '</select>' +
+                    '</div>' +
+                    '<div class="env-ctrl-row"><label>Crop Radius</label>' +
+                        '<div class="env-slider-row">' +
+                            '<input type="range" id="env-ov-radius" min="100" max="1000" step="50" value="500" oninput="envOverlayRadiusChange(this.value)">' +
+                            '<span class="env-slider-val" id="env-ov-radius-val">500 km</span>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="env-section-title" style="margin-top:18px;">\uD83D\uDCCA Scalar Domain</div>' +
+                    '<div class="env-ctrl-row"><label>Inner Radius</label>' +
+                        '<div class="env-slider-row">' +
+                            '<input type="range" id="env-ov-inner" min="0" max="600" step="50" value="200" oninput="document.getElementById(\'env-ov-inner-val\').textContent=this.value+\' km\'">' +
+                            '<span class="env-slider-val" id="env-ov-inner-val">200 km</span>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="env-ctrl-row"><label>Outer Radius</label>' +
+                        '<div class="env-slider-row">' +
+                            '<input type="range" id="env-ov-outer" min="200" max="1200" step="50" value="800" oninput="document.getElementById(\'env-ov-outer-val\').textContent=this.value+\' km\'">' +
+                            '<span class="env-slider-val" id="env-ov-outer-val">800 km</span>' +
+                        '</div>' +
+                    '</div>' +
+                    '<button class="env-recompute-btn" id="env-ov-recompute" onclick="envOverlayRecomputeScalars()" disabled>Recompute Scalars</button>' +
+                    '<div class="env-domain-note" style="margin-top:12px;">' +
+                        '<strong>Precomputed domains:</strong><br>' +
+                        'Profiles: 200\u2013600 km annulus<br>' +
+                        'Shear: 200\u2013800 km annulus<br>' +
+                        'Thermo (RH, div, SST): 0\u2013500 km disc<br>' +
+                        '\u03c7\u2098: inner 0\u2013100 km, env 100\u2013300 km<br>' +
+                        'PI: 100\u2013300 km environment' +
+                    '</div>' +
+                '</div>' +
+                // ── Right: Display area ──
+                '<div class="env-ov-display" id="env-ov-display">' +
+                    '<div class="env-no-case" id="env-ov-placeholder">' +
+                        '<div class="env-no-case-icon">\uD83C\uDF0A</div>' +
+                        '<div class="env-no-case-msg">Select a TC-RADAR case from the map and click <strong>Explore</strong> to load ERA5 environmental diagnostics.</div>' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+    document.body.appendChild(overlay);
+
+    // Close on ESC
+    overlay.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') toggleEnvOverlay();
+    });
+    // Close on backdrop click
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) toggleEnvOverlay();
+    });
+}
+
+function toggleEnvOverlay() {
+    initEnvOverlay();
+    var panel = document.getElementById('env-overlay');
+    panel.classList.toggle('active');
+    if (panel.classList.contains('active') && _era5Data) {
+        // If overlay crop radius differs from explorer's 300km, re-fetch
+        var radiusKm = parseInt(document.getElementById('env-ov-radius').value) || 500;
+        if (radiusKm !== 300 && currentCaseIndex !== null) {
+            var field = document.getElementById('env-ov-field').value || 'shear_mag';
+            var url = API_BASE + '/era5?case_index=' + currentCaseIndex + '&field=' + field + '&radius_km=' + radiusKm;
+            fetch(url)
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(data) {
+                    if (data) {
+                        _envOverlayData = data;
+                        renderEnvOverlay();
+                    } else {
+                        _envOverlayData = _era5Data;
+                        renderEnvOverlay();
+                    }
+                })
+                .catch(function() {
+                    _envOverlayData = _era5Data;
+                    renderEnvOverlay();
+                });
+        } else {
+            _envOverlayData = _era5Data;
+            renderEnvOverlay();
+        }
+    }
+}
+
+function renderEnvOverlay() {
+    var display = document.getElementById('env-ov-display');
+    var placeholder = document.getElementById('env-ov-placeholder');
+    var caseInfo = document.getElementById('env-ov-case-info');
+    var recomputeBtn = document.getElementById('env-ov-recompute');
+
+    if (!_envOverlayData) {
+        if (placeholder) placeholder.style.display = 'flex';
+        if (caseInfo) caseInfo.style.display = 'none';
+        if (recomputeBtn) recomputeBtn.disabled = true;
+        return;
+    }
+    if (placeholder) placeholder.style.display = 'none';
+    if (recomputeBtn) recomputeBtn.disabled = false;
+
+    // Show case info
+    if (caseInfo && currentCaseData) {
+        caseInfo.style.display = 'block';
+        var cd = currentCaseData;
+        caseInfo.innerHTML =
+            '<div class="env-case-name">' + (cd.storm_name || 'Unknown') + '</div>' +
+            '<div class="env-case-detail">' + (cd.datetime || '') + '</div>' +
+            '<div class="env-case-detail">' +
+                (cd.latitude != null ? cd.latitude.toFixed(1) + '\u00b0N' : '') + ', ' +
+                (cd.longitude != null ? cd.longitude.toFixed(1) + '\u00b0E' : '') +
+                (cd.vmax_kt != null ? ' \u00b7 ' + cd.vmax_kt + ' kt' : '') +
+            '</div>';
+    }
+
+    // Build dashboard HTML
+    var data = _envOverlayData;
+    var scalars = data.scalars || {};
+    var profiles = data.profiles;
+
+    var html = '';
+
+    // ── Row 1: 2D Map + Hodograph ──
+    html += '<div class="env-dash-row two-col">' +
+        '<div class="env-dash-card"><div class="env-dash-card-header">2D Spatial Field</div>' +
+            '<div class="env-dash-card-body"><div id="env-ov-map" style="height:340px;"></div></div></div>' +
+        '<div class="env-dash-card"><div class="env-dash-card-header">Hodograph (200\u2013600 km)</div>' +
+            '<div class="env-dash-card-body"><div id="env-ov-hodo" style="height:340px;"></div></div></div>' +
+    '</div>';
+
+    // ── Row 2: Scalar cards ──
+    html += '<div class="env-dash-card" style="margin-bottom:16px;">' +
+        '<div class="env-dash-card-header">\uD83D\uDCCA Environmental Diagnostics</div>' +
+        '<div class="env-dash-card-body">' +
+            '<div class="env-scalars-grid" id="env-ov-scalars"></div>' +
+        '</div></div>';
+
+    // ── Row 3: Vertical profiles ──
+    html += '<div class="env-dash-row two-col">' +
+        '<div class="env-dash-card"><div class="env-dash-card-header">Relative Humidity Profile</div>' +
+            '<div class="env-dash-card-body"><div id="env-ov-rh-prof" style="height:300px;"></div></div></div>' +
+        '<div class="env-dash-card"><div class="env-dash-card-header">\u03b8 / \u03b8e Profile</div>' +
+            '<div class="env-dash-card-body"><div id="env-ov-theta-prof" style="height:300px;"></div></div></div>' +
+    '</div>';
+
+    display.innerHTML = html;
+
+    // Render each component
+    setTimeout(function() {
+        renderEnvOverlayMap(data);
+        renderEnvOverlayScalars(scalars);
+        if (profiles && profiles.u && profiles.v) {
+            renderHodograph(profiles, 'env-ov-hodo');
+        }
+        if (profiles && profiles.plev) {
+            renderRHProfile(profiles, 'env-ov-rh-prof');
+            renderThetaProfile(profiles, 'env-ov-theta-prof');
+        }
+    }, 60);
+}
+
+// ── 2D map inside the overlay ────────────────────────────────
+function renderEnvOverlayMap(data) {
+    if (!data || !data.data) return;
+    var frame = data.data;
+    var latOff = data.lat_offsets, lonOff = data.lon_offsets;
+    var centerLat = data.center_lat;
+    var cosLat = Math.cos(centerLat * Math.PI / 180);
+    var yKm = latOff.map(function(d) { return d * 111.0; });
+    var xKm = lonOff.map(function(d) { return d * 111.0 * cosLat; });
+
+    var traces = [{
+        z: frame, x: xKm, y: yKm, type: 'heatmap',
+        colorscale: data.field_config.colorscale,
+        zmin: data.field_config.vmin, zmax: data.field_config.vmax,
+        colorbar: {
+            title: { text: data.field_config.units, font: { size: 10, color: '#8b9ec2' } },
+            tickfont: { size: 9, color: '#8b9ec2' },
+            len: 0.9, thickness: 12,
+        },
+        hoverongaps: false,
+        hovertemplate: '<b>' + data.field_config.display_name + '</b><br>%{z:.2f} ' + data.field_config.units + '<br>(%{x:.0f}, %{y:.0f}) km<extra></extra>',
+    }];
+
+    // Add quiver vectors if available
+    if (data.vectors) {
+        var vecs = data.vectors;
+        var stride = vecs.stride;
+        var arrowScale = 50;
+        for (var yi = 0; yi < vecs.u.length; yi++) {
+            for (var xi = 0; xi < vecs.u[yi].length; xi++) {
+                var u = vecs.u[yi][xi], v = vecs.v[yi][xi];
+                if (u === null || v === null) continue;
+                var x0 = lonOff[xi * stride] * 111.0 * cosLat;
+                var y0 = latOff[yi * stride] * 111.0;
+                var mag = Math.sqrt(u * u + v * v);
+                if (mag < 0.5) continue;
+                var scale = arrowScale * mag / 20;
+                traces.push({
+                    x: [x0, x0 + u / mag * scale], y: [y0, y0 + v / mag * scale],
+                    type: 'scatter', mode: 'lines',
+                    line: { color: 'rgba(255,255,255,0.5)', width: 1.5 },
+                    showlegend: false, hoverinfo: 'skip',
+                });
+            }
+        }
+    }
+
+    // Add TC center marker
+    traces.push({
+        x: [0], y: [0], type: 'scatter', mode: 'markers',
+        marker: { symbol: 'x', size: 12, color: '#ffffff', line: { width: 2, color: '#000' } },
+        showlegend: false, hoverinfo: 'skip',
+    });
+
+    // Add annulus rings for scalar domain
+    var innerKm = parseInt(document.getElementById('env-ov-inner') ? document.getElementById('env-ov-inner').value : '200');
+    var outerKm = parseInt(document.getElementById('env-ov-outer') ? document.getElementById('env-ov-outer').value : '800');
+    var ringPts = 72;
+    function circleTrace(r, color, dash) {
+        var cx = [], cy = [];
+        for (var i = 0; i <= ringPts; i++) {
+            var angle = 2 * Math.PI * i / ringPts;
+            cx.push(r * Math.cos(angle));
+            cy.push(r * Math.sin(angle));
+        }
+        return { x: cx, y: cy, type: 'scatter', mode: 'lines',
+            line: { color: color, width: 1.5, dash: dash || 'solid' },
+            showlegend: false, hoverinfo: 'skip' };
+    }
+    traces.push(circleTrace(innerKm, 'rgba(255,255,255,0.4)', 'dash'));
+    traces.push(circleTrace(outerKm, 'rgba(255,255,255,0.4)', 'dash'));
+
+    var maxR = Math.max(Math.abs(xKm[0]), Math.abs(xKm[xKm.length-1]), Math.abs(yKm[0]), Math.abs(yKm[yKm.length-1]));
+
+    var layout = {
+        xaxis: { title: { text: 'km (east)', font: { size: 10, color: '#8b9ec2' } },
+            range: [-maxR, maxR], scaleanchor: 'y', scaleratio: 1,
+            zeroline: false, gridcolor: 'rgba(255,255,255,0.04)', color: '#8b9ec2', tickfont: { size: 9 } },
+        yaxis: { title: { text: 'km (north)', font: { size: 10, color: '#8b9ec2' } },
+            range: [-maxR, maxR],
+            zeroline: false, gridcolor: 'rgba(255,255,255,0.04)', color: '#8b9ec2', tickfont: { size: 9 } },
+        paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(10,22,40,0.5)',
+        margin: { l: 50, r: 10, t: 10, b: 45 },
+        showlegend: false,
+    };
+    Plotly.newPlot('env-ov-map', traces, layout, { responsive: true, displayModeBar: false });
+}
+
+// ── Scalar diagnostic cards ──────────────────────────────────
+function renderEnvOverlayScalars(scalars) {
+    var el = document.getElementById('env-ov-scalars');
+    if (!el) return;
+
+    function scard(label, value, unit, sub, highlightClass) {
+        return '<div class="env-scard' + (highlightClass ? ' ' + highlightClass : '') + '">' +
+            '<div class="env-scard-value">' + value + '</div>' +
+            '<div class="env-scard-unit">' + unit + '</div>' +
+            '<div class="env-scard-label">' + label + '</div>' +
+            (sub ? '<div class="env-scard-sub">' + sub + '</div>' : '') +
+        '</div>';
+    }
+
+    // Shear
+    var shearMs = scalars.shear_mag_env;
+    var shearKt = shearMs != null ? (shearMs * 1.944).toFixed(0) : null;
+    var shearDir = scalars.shear_dir_env;
+    var shearHl = shearMs != null ? (shearMs < 5 ? 'highlight-good' : shearMs < 12 ? 'highlight-warn' : 'highlight-bad') : '';
+    var shearVal = shearMs != null ? shearMs.toFixed(1) : '\u2014';
+    var shearSub = '';
+    if (shearKt != null) shearSub += shearKt + ' kt';
+    if (shearDir != null) shearSub += ' from ' + shearDir.toFixed(0) + '\u00b0';
+
+    // RH
+    var rh = scalars.rh_mid_env;
+    var rhHl = rh != null ? (rh > 70 ? 'highlight-good' : rh > 45 ? 'highlight-warn' : 'highlight-bad') : '';
+
+    // Divergence
+    var div = scalars.div200_env;
+    var divScaled = div != null ? (div * 1e5).toFixed(1) : '\u2014';
+    var divHl = div != null ? (div > 0.5e-5 ? 'highlight-good' : div > -0.5e-5 ? 'highlight-warn' : 'highlight-bad') : '';
+
+    // SST
+    var sst = scalars.sst_env;
+    var sstHl = sst != null ? (sst >= 28 ? 'highlight-good' : sst >= 26 ? 'highlight-warn' : 'highlight-bad') : '';
+
+    // PI
+    var vpi = scalars.v_pi;
+    var vpiKt = vpi != null ? (vpi * 1.944).toFixed(0) : null;
+    var piHl = vpi != null ? (vpi >= 60 ? 'highlight-good' : vpi >= 40 ? 'highlight-warn' : 'highlight-bad') : '';
+
+    // Entropy deficit
+    var chiM = scalars.chi_m;
+    var chiHl = chiM != null ? (chiM < 0.4 ? 'highlight-good' : chiM < 0.8 ? 'highlight-warn' : 'highlight-bad') : '';
+
+    // Ventilation Index
+    var ventIdx = scalars.vent_index;
+    var ventHl = ventIdx != null ? (ventIdx < 0.1 ? 'highlight-good' : ventIdx < 0.2 ? 'highlight-warn' : 'highlight-bad') : '';
+
+    // SHIPS comparison
+    var shearShips = '';
+    if (_currentSddc !== null && shearDir != null) {
+        shearShips = 'SHIPS SDDC: ' + _currentSddc.toFixed(0) + '\u00b0 (\u0394' + Math.abs(shearDir - _currentSddc).toFixed(0) + '\u00b0)';
+    }
+
+    var html = '';
+    html += scard('Deep-Layer Shear', shearVal, 'm/s', shearSub + (shearShips ? '<br>' + shearShips : ''), shearHl);
+    html += scard('Mid-Level RH', rh != null ? rh.toFixed(0) : '\u2014', '%', '500\u2013700 hPa mean', rhHl);
+    html += scard('200 hPa Div', divScaled, '\u00d710\u207b\u2075 s\u207b\u00b9', 'Positive = outflow', divHl);
+    html += scard('SST', sst != null ? sst.toFixed(1) : '\u2014', '\u00b0C', '26\u00b0C threshold', sstHl);
+    html += scard('Potential Intensity', vpi != null ? vpi.toFixed(1) : '\u2014', 'm/s', vpiKt != null ? vpiKt + ' kt (gradient level)' : '', piHl);
+    html += scard('Entropy Deficit', chiM != null ? chiM.toFixed(2) : '\u2014', '\u03c7\u2098', 'Tang & Emanuel 2012', chiHl);
+    html += scard('Ventilation Index', ventIdx != null ? ventIdx.toFixed(3) : '\u2014', '\u039b', 'V\u209b\u2095 \u00d7 \u03c7\u2098 / V\u209a\u1d62', ventHl);
+
+    // Intensity vs PI gauge
+    if (currentCaseData && currentCaseData.vmax_kt != null && vpi != null) {
+        var vmaxMs = currentCaseData.vmax_kt / 1.944;
+        var ratio = vmaxMs / vpi;
+        var gaugeHl = ratio < 0.5 ? 'highlight-good' : ratio < 0.8 ? 'highlight-warn' : 'highlight-bad';
+        html += scard('V / V\u209a\u1d62', (ratio * 100).toFixed(0) + '%', 'of PI', currentCaseData.vmax_kt + ' kt / ' + vpiKt + ' kt', gaugeHl);
+    }
+
+    el.innerHTML = html;
+}
+
+// ── Field change handler ─────────────────────────────────────
+function envOverlayChangeField(field) {
+    _envOverlayField = field;
+    if (!currentCaseIndex && currentCaseIndex !== 0) return;
+    var radiusKm = parseInt(document.getElementById('env-ov-radius').value) || 500;
+    var url = API_BASE + '/era5?case_index=' + currentCaseIndex + '&field=' + field + '&radius_km=' + radiusKm;
+    fetch(url)
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+            if (data) {
+                _envOverlayData = data;
+                renderEnvOverlayMap(data);
+                renderEnvOverlayScalars(data.scalars || {});
+            }
+        });
+}
+
+// ── Radius change handler ────────────────────────────────────
+function envOverlayRadiusChange(val) {
+    _envOverlayCropKm = parseInt(val);
+    document.getElementById('env-ov-radius-val').textContent = val + ' km';
+    // Debounce: re-fetch with new radius after brief pause
+    if (window._envRadiusTimer) clearTimeout(window._envRadiusTimer);
+    window._envRadiusTimer = setTimeout(function() {
+        if (!currentCaseIndex && currentCaseIndex !== 0) return;
+        var field = document.getElementById('env-ov-field').value || 'shear_mag';
+        var url = API_BASE + '/era5?case_index=' + currentCaseIndex + '&field=' + field + '&radius_km=' + _envOverlayCropKm;
+        fetch(url)
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(data) {
+                if (data) {
+                    _envOverlayData = data;
+                    renderEnvOverlayMap(data);
+                    renderEnvOverlayScalars(data.scalars || {});
+                }
+            });
+    }, 400);
+}
+
+// ── Recompute scalars at custom annulus ───────────────────────
+function envOverlayRecomputeScalars() {
+    if (!currentCaseIndex && currentCaseIndex !== 0) return;
+    var innerKm = parseInt(document.getElementById('env-ov-inner').value) || 200;
+    var outerKm = parseInt(document.getElementById('env-ov-outer').value) || 800;
+    var btn = document.getElementById('env-ov-recompute');
+    if (btn) { btn.disabled = true; btn.textContent = 'Computing...'; }
+
+    var url = API_BASE + '/era5_scalars?case_index=' + currentCaseIndex +
+        '&inner_km=' + innerKm + '&outer_km=' + outerKm;
+    fetch(url)
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+            if (btn) { btn.disabled = false; btn.textContent = 'Recompute Scalars'; }
+            if (data) {
+                // Merge recomputed scalars into the overlay data
+                var merged = Object.assign({}, _envOverlayData.scalars || {}, data);
+                renderEnvOverlayScalars(merged);
+                // Re-render map to update annulus rings
+                renderEnvOverlayMap(_envOverlayData);
+            }
+        })
+        .catch(function() {
+            if (btn) { btn.disabled = false; btn.textContent = 'Recompute Scalars'; }
+        });
+}
+
 // ── ERA5 cleanup ─────────────────────────────────────────────
 function cleanupERA5() {
     _era5Data = null;
     _era5PlotlyVisible = false;
     _era5EnvPanelVisible = false;
+    _envOverlayData = null;
     var panel = document.getElementById('env-panel');
     if (panel) panel.style.display = 'none';
     var menu = document.getElementById('era5-field-menu');
     if (menu) menu.remove();
+    // Reset overlay display if open
+    var ovDisplay = document.getElementById('env-ov-display');
+    var ovPlaceholder = document.getElementById('env-ov-placeholder');
+    if (ovDisplay && ovPlaceholder) {
+        ovDisplay.innerHTML = '';
+        ovDisplay.appendChild(ovPlaceholder);
+        ovPlaceholder.style.display = 'flex';
+    }
+    var caseInfo = document.getElementById('env-ov-case-info');
+    if (caseInfo) caseInfo.style.display = 'none';
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -4853,6 +5318,8 @@ function _renderDiffPlanView(targetId, diffJson, jsonA, jsonB, filtersA, filters
     var orig = document.onkeydown;
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
+            var ep = document.getElementById('env-overlay');
+            if (ep && ep.classList.contains('active')) { toggleEnvOverlay(); e.stopPropagation(); return; }
             var cp = document.getElementById('composite-panel');
             if (cp && cp.classList.contains('active')) { toggleCompositePanel(); e.stopPropagation(); }
         }
