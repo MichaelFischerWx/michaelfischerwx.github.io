@@ -4451,200 +4451,294 @@ function initCompositePanel() {
     if (_compositePanel) return;
     var overlay = document.createElement('div');
     overlay.id = 'composite-panel';
-    overlay.className = 'composite-overlay';
+    overlay.className = 'wizard-overlay';
+
+    // ── Height level options ──
+    var levelOpts = '';
+    for (var h = 0.5; h <= 18; h += 0.5) {
+        levelOpts += '<option value="' + h.toFixed(1) + '"' + (h === 2.0 ? ' selected' : '') + '>' + h.toFixed(1) + ' km</option>';
+    }
+
+    // ── Build filter rows helper (compact wizard style) ──
+    function wfRow(label, idBase, min, max, step, defaultMin, defaultMax, units) {
+        return '<div class="wizard-filter-row">' +
+            '<span class="wf-label">' + label + '</span>' +
+            '<input type="number" id="' + idBase + '-min" value="' + defaultMin + '" min="' + min + '" max="' + max + '" step="' + step + '">' +
+            '<span class="wf-sep">\u2013</span>' +
+            '<input type="number" id="' + idBase + '-max" value="' + defaultMax + '" min="' + min + '" max="' + max + '" step="' + step + '">' +
+            '<span class="wf-unit">' + units + '</span>' +
+        '</div>';
+    }
+
+    // ── Build one filter column ──
+    function filterCol(prefix) {
+        return wfRow('Intensity', prefix + '-int', 0, 200, 5, 0, 200, 'kt') +
+            wfRow('\u0394V\u2098\u2090\u2093 (24h)', prefix + '-dv', -100, 85, 5, -100, 85, 'kt') +
+            wfRow('Tilt', prefix + '-tilt', 0, 200, 5, 0, 200, 'km') +
+            wfRow('Year', prefix + '-year', 1997, 2024, 1, 1997, 2024, '') +
+            wfRow('Shear Mag', prefix + '-shrmag', 0, 100, 2, 0, 100, 'kt') +
+            wfRow('Shear Dir', prefix + '-shrdir', 0, 360, 5, 0, 360, '\u00b0');
+    }
+
     overlay.innerHTML =
-        '<div class="composite-box">' +
-            '<div class="composite-header">' +
-                '<div class="composite-header-left">' +
-                    '<span class="composite-logo">\uD83D\uDCCA</span> ' +
-                    '<span class="composite-title">Composite Analysis</span>' +
-                    '<span class="composite-subtitle">Multi-case averaged fields</span>' +
+        '<div class="wizard-box">' +
+            // ── Header ──
+            '<div class="wizard-header">' +
+                '<div class="wizard-header-left">' +
+                    '<span class="wizard-header-logo">\uD83D\uDCCA</span>' +
+                    '<span class="wizard-header-title">Composite Analysis</span>' +
+                    '<span class="wizard-header-sub">Multi-case averaged fields</span>' +
                 '</div>' +
-                '<button class="composite-close" onclick="toggleCompositePanel()">\u2715</button>' +
+                '<button class="wizard-close" onclick="toggleCompositePanel()">\u2715</button>' +
             '</div>' +
-            '<div class="composite-body">' +
-                // ── Left: Controls ──
-                '<div class="composite-controls">' +
-                    '<div class="comp-section-title">\uD83C\uDFAF Variable & Grid</div>' +
-                    '<div class="comp-filter-row"><label>Variable</label>' + _varOptionsHTML('comp') + '</div>' +
-                    '<div class="comp-filter-row"><label>Data Type</label>' +
-                        '<select class="explorer-select" id="comp-dtype"><option value="swath">Swath</option><option value="merge">Merge</option></select>' +
-                    '</div>' +
-                    '<div class="comp-filter-row"><label>Coverage</label>' +
-                        '<div style="display:flex;align-items:center;gap:6px;">' +
-                            '<input type="range" id="comp-coverage" min="0" max="100" step="5" value="50" class="az-cov-slider" oninput="document.getElementById(\'comp-cov-val\').textContent=this.value+\'%\'">' +
-                            '<span id="comp-cov-val" style="font-size:11px;font-weight:600;color:var(--cyan);min-width:32px;font-family:\'JetBrains Mono\',monospace;">50%</span>' +
+
+            // ── Step indicator ──
+            '<div class="wizard-stepper">' +
+                '<div class="wizard-step-item active" onclick="_wizardGoToStep(1)">' +
+                    '<div class="wizard-step-circle">1</div>' +
+                    '<span class="wizard-step-label">Select</span>' +
+                '</div>' +
+                '<div class="wizard-step-connector"></div>' +
+                '<div class="wizard-step-item" onclick="_wizardGoToStep(2)">' +
+                    '<div class="wizard-step-circle">2</div>' +
+                    '<span class="wizard-step-label">Filter</span>' +
+                '</div>' +
+                '<div class="wizard-step-connector"></div>' +
+                '<div class="wizard-step-item" onclick="_wizardGoToStep(3)">' +
+                    '<div class="wizard-step-circle">3</div>' +
+                    '<span class="wizard-step-label">Configure</span>' +
+                '</div>' +
+                '<div class="wizard-step-connector"></div>' +
+                '<div class="wizard-step-item" onclick="_wizardGoToStep(4)">' +
+                    '<div class="wizard-step-circle">4</div>' +
+                    '<span class="wizard-step-label">Results</span>' +
+                '</div>' +
+            '</div>' +
+
+            // ── Summary strip ──
+            '<div class="wizard-summary" id="wizard-summary"></div>' +
+
+            // ── Body (step content) ──
+            '<div class="wizard-body">' +
+
+                // ═══ STEP 1: Select ═══
+                '<div class="wizard-step-content active" id="wizard-step-1">' +
+                    '<div class="wizard-section-title">Analysis Mode</div>' +
+                    '<div class="wizard-mode-cards">' +
+                        '<div class="wizard-mode-card selected" id="wiz-mode-single" onclick="_wizardSetMode(\'single\')">' +
+                            '<div class="wizard-mode-icon">\uD83C\uDF00</div>' +
+                            '<div class="wizard-mode-title">Single Group</div>' +
+                            '<div class="wizard-mode-desc">Composite one set of cases defined by filter criteria</div>' +
+                        '</div>' +
+                        '<div class="wizard-mode-card" id="wiz-mode-diff" onclick="_wizardSetMode(\'diff\')">' +
+                            '<div class="wizard-mode-icon">\u0394</div>' +
+                            '<div class="wizard-mode-title">Compare (A vs B)</div>' +
+                            '<div class="wizard-mode-desc">Define two groups and compute difference composites</div>' +
                         '</div>' +
                     '</div>' +
-                    '<div class="comp-section-title" style="margin-top:14px;">\uD83D\uDDFA Plan-View Options</div>' +
-                    '<div class="comp-filter-row"><label>Height Level</label>' +
-                        '<select class="explorer-select" id="comp-level" style="font-size:11px;">' +
-                            (function(){var o='';for(var h=0.5;h<=18;h+=0.5){o+='<option value="'+h.toFixed(1)+'"'+(h===2.0?' selected':'')+'>'+h.toFixed(1)+' km</option>';}return o;}()) +
-                        '</select>' +
-                    '</div>' +
-                    '<div class="comp-filter-row">' +
-                        '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">' +
-                            '<input type="checkbox" id="comp-norm-rmw" style="width:14px;height:14px;accent-color:var(--cyan);"> ' +
-                            '<span>Normalize by RMW (2-km)</span>' +
-                        '</label>' +
-                    '</div>' +
-                    '<div id="comp-rmw-opts" style="display:none;">' +
-                        '<div class="comp-filter-row"><label style="font-size:10px;">Max Extent (R/RMW)</label>' +
-                            '<input type="number" id="comp-max-r-rmw" value="5.0" min="1" max="20" step="0.5" style="width:100%;padding:3px 6px;font-size:11px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+
+                    '<div class="wizard-section-title">TDR Radar Outputs</div>' +
+                    '<div class="wizard-output-grid">' +
+                        '<div class="wizard-output-item checked" id="wiz-out-az" onclick="_wizardToggleOutput(this)">' +
+                            '<input type="checkbox" id="wiz-chk-az" checked>' +
+                            '<label for="wiz-chk-az">\u27F3 Azimuthal Mean<small>Radius\u2013height cross-section</small></label>' +
                         '</div>' +
-                        '<div class="comp-filter-row"><label style="font-size:10px;">Bin Width (R/RMW)</label>' +
-                            '<input type="number" id="comp-dr-rmw" value="0.1" min="0.05" max="1" step="0.05" style="width:100%;padding:3px 6px;font-size:11px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                        '<div class="wizard-output-item" id="wiz-out-sq" onclick="_wizardToggleOutput(this)">' +
+                            '<input type="checkbox" id="wiz-chk-sq">' +
+                            '<label for="wiz-chk-sq">\u25D1 Shear Quadrants<small>4-panel shear-relative</small></label>' +
+                        '</div>' +
+                        '<div class="wizard-output-item" id="wiz-out-pv" onclick="_wizardToggleOutput(this)">' +
+                            '<input type="checkbox" id="wiz-chk-pv">' +
+                            '<label for="wiz-chk-pv">\uD83D\uDDFA Plan View<small>Horizontal map at height</small></label>' +
                         '</div>' +
                     '</div>' +
-                    '<div class="comp-filter-row">' +
-                        '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">' +
-                            '<input type="checkbox" id="comp-shear-rel" style="width:14px;height:14px;accent-color:var(--cyan);"> ' +
-                            '<span>Shear-Relative Rotation</span>' +
-                        '</label>' +
-                    '</div>' +
-                    '<div class="comp-filter-row"><label>Contour Overlay</label>' +
-                        '<select class="explorer-select" id="comp-overlay" style="font-size:11px;">' +
-                            '<option value="">None</option>' +
-                            '<optgroup label="WCM Recentered (2 km)">' +
-                                '<option value="recentered_tangential_wind">Tangential Wind</option>' +
-                                '<option value="recentered_radial_wind">Radial Wind</option>' +
-                                '<option value="recentered_upward_air_velocity">Vertical Velocity</option>' +
-                                '<option value="recentered_reflectivity">Reflectivity</option>' +
-                                '<option value="recentered_wind_speed">Wind Speed</option>' +
-                                '<option value="recentered_relative_vorticity">Relative Vorticity</option>' +
-                                '<option value="recentered_divergence">Divergence</option>' +
-                            '</optgroup>' +
-                            '<optgroup label="Tilt-Relative">' +
-                                '<option value="total_recentered_tangential_wind">Tangential Wind</option>' +
-                                '<option value="total_recentered_radial_wind">Radial Wind</option>' +
-                                '<option value="total_recentered_upward_air_velocity">Vertical Velocity</option>' +
-                                '<option value="total_recentered_reflectivity">Reflectivity</option>' +
-                                '<option value="total_recentered_wind_speed">Wind Speed</option>' +
-                            '</optgroup>' +
-                            '<optgroup label="Original Swath" id="comp-overlay-original">' +
-                                '<option value="swath_tangential_wind">Tangential Wind</option>' +
-                                '<option value="swath_radial_wind">Radial Wind</option>' +
-                                '<option value="swath_reflectivity">Reflectivity</option>' +
-                                '<option value="swath_wind_speed">Wind Speed</option>' +
-                            '</optgroup>' +
-                        '</select>' +
-                        '<div style="display:flex;align-items:center;gap:5px;margin-top:2px;">' +
-                            '<label style="font-size:9px;white-space:nowrap;margin:0;">Int:</label>' +
-                            '<input type="number" id="comp-contour-int" value="" placeholder="auto" style="width:55px;padding:2px 4px;font-size:10px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);color:var(--text);">' +
+
+                    '<div class="wizard-section-title env">Environment Outputs</div>' +
+                    '<div class="wizard-output-grid">' +
+                        '<div class="wizard-output-item env-item" id="wiz-out-env-pv" onclick="_wizardToggleOutput(this)">' +
+                            '<input type="checkbox" id="wiz-chk-env-pv">' +
+                            '<label for="wiz-chk-env-pv">\uD83C\uDF0D ERA5 Plan View<small>Spatial environmental field</small></label>' +
+                        '</div>' +
+                        '<div class="wizard-output-item env-item" id="wiz-out-env-sc" onclick="_wizardToggleOutput(this)">' +
+                            '<input type="checkbox" id="wiz-chk-env-sc">' +
+                            '<label for="wiz-chk-env-sc">\uD83D\uDCCA Scalar Diagnostics<small>SHIPS-style parameters</small></label>' +
+                        '</div>' +
+                        '<div class="wizard-output-item env-item" id="wiz-out-env-th" onclick="_wizardToggleOutput(this)">' +
+                            '<input type="checkbox" id="wiz-chk-env-th">' +
+                            '<label for="wiz-chk-env-th">\uD83C\uDF21 Thermo Profiles<small>Skew-T & Hodograph</small></label>' +
                         '</div>' +
                     '</div>' +
-                    '<div class="comp-section-title" style="margin-top:14px;">\uD83C\uDFA8 Display</div>' +
-                    '<div class="comp-filter-row"><label>Colormap</label>' +
-                        '<select class="explorer-select" id="comp-cmap" style="font-size:11px;" onchange="applyCompCmap()">' +
-                            '<option value="">Default (from variable)</option>' +
-                            '<optgroup label="Sequential"><option value="Viridis">Viridis</option><option value="Inferno">Inferno</option><option value="Magma">Magma</option><option value="Plasma">Plasma</option><option value="Cividis">Cividis</option><option value="Hot">Hot</option><option value="YlOrRd">YlOrRd</option><option value="YlGnBu">YlGnBu</option><option value="Blues">Blues</option><option value="Reds">Reds</option><option value="Greys">Greys</option></optgroup>' +
-                            '<optgroup label="Diverging"><option value="RdBu">RdBu (red-blue)</option><option value=\'[[0,"rgb(5,10,172)"],[0.5,"rgb(255,255,255)"],[1,"rgb(178,10,28)"]]\'>BuWtRd (blue-white-red)</option><option value="Picnic">Picnic</option><option value="Portland">Portland</option></optgroup>' +
-                            '<optgroup label="Other"><option value="Jet">Jet</option><option value="Rainbow">Rainbow</option><option value="Electric">Electric</option><option value="Earth">Earth</option><option value="Blackbody">Blackbody</option></optgroup>' +
-                        '</select>' +
+
+                    '<div class="wizard-dtype-row">' +
+                        '<label>Data Type</label>' +
+                        '<select id="comp-dtype"><option value="swath">Swath</option><option value="merge">Merge</option></select>' +
                     '</div>' +
-                    '<div class="comp-filter-row"><label>Color Range</label>' +
-                        '<div style="display:flex;align-items:center;gap:4px;">' +
-                            '<input type="number" id="comp-vmin" placeholder="min" step="any" style="width:60px;padding:2px 4px;font-size:10px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);color:var(--text);" onchange="applyCompColorRange()">' +
-                            '<span style="font-size:10px;color:var(--slate);">to</span>' +
-                            '<input type="number" id="comp-vmax" placeholder="max" step="any" style="width:60px;padding:2px 4px;font-size:10px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);color:var(--text);" onchange="applyCompColorRange()">' +
-                            '<button onclick="resetCompColorRange()" title="Reset to default" style="padding:2px 5px;font-size:9px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);cursor:pointer;color:var(--slate);">\u21BA</button>' +
+                '</div>' +
+
+                // ═══ STEP 2: Filter ═══
+                '<div class="wizard-step-content" id="wizard-step-2">' +
+                    '<div class="wizard-filter-columns" id="wizard-filter-cols">' +
+                        // Group A (always shown)
+                        '<div class="wizard-group-col group-a">' +
+                            '<div class="wizard-group-label" id="wiz-group-a-title">Filter Criteria</div>' +
+                            filterCol('comp') +
+                            '<div class="wizard-case-count">' +
+                                '<div class="wcc-label">Matching cases</div>' +
+                                '<div class="wcc-num" id="comp-count-num">\u2014</div>' +
+                            '</div>' +
                         '</div>' +
-                    '</div>' +
-                    '<div class="comp-section-title" style="margin-top:14px;">\uD83D\uDD0D Filter Criteria <span id="comp-group-a-label" style="display:none;color:#60a5fa;font-size:10px;">(Group A)</span></div>' +
-                    _buildRangeRow('Intensity', 'comp-int', 0, 200, 5, 0, 200, 'kt') +
-                    _buildRangeRow('24-h \u0394V<sub>max</sub>', 'comp-dv', -100, 85, 5, -100, 85, 'kt') +
-                    _buildRangeRow('Tilt', 'comp-tilt', 0, 200, 5, 0, 200, 'km') +
-                    _buildRangeRow('Year', 'comp-year', 1997, 2024, 1, 1997, 2024, '') +
-                    _buildRangeRow('Shear Mag', 'comp-shrmag', 0, 100, 2, 0, 100, 'kt') +
-                    _buildRangeRow('Shear Dir', 'comp-shrdir', 0, 360, 5, 0, 360, '\u00b0') +
-                    '<div class="comp-case-count" id="comp-count-display">' +
-                        '<span class="comp-count-label">Matching cases:</span> ' +
-                        '<span class="comp-count-num" id="comp-count-num">\u2014</span>' +
-                    '</div>' +
-                    '<div class="comp-actions">' +
-                        '<button class="comp-btn comp-btn-primary" id="comp-btn-az" onclick="generateCompositeAzMean()">\u27F3 Azimuthal Mean</button>' +
-                        '<button class="comp-btn comp-btn-accent" id="comp-btn-sq" onclick="generateCompositeQuadMean()">\u25D1 Shear Quadrants</button>' +
-                        '<button class="comp-btn comp-btn-pv" id="comp-btn-pv" onclick="generateCompositePlanView()">\uD83D\uDDFA Plan View</button>' +
-                    '</div>' +
-                    // ── Difference Mode ──
-                    '<div class="comp-diff-toggle">' +
-                        '<label class="comp-diff-label"><input type="checkbox" id="comp-diff-check" onchange="_toggleDiffMode()"> <span>\u0394 Difference Mode</span></label>' +
-                    '</div>' +
-                    '<div id="comp-group-b-wrap" style="display:none;">' +
-                        '<div class="comp-section-title comp-group-b-title">\uD83D\uDD0D Group B Filters</div>' +
-                        _buildRangeRow('Intensity', 'compb-int', 0, 200, 5, 0, 200, 'kt') +
-                        _buildRangeRow('24-h \u0394V<sub>max</sub>', 'compb-dv', -100, 85, 5, -100, 85, 'kt') +
-                        _buildRangeRow('Tilt', 'compb-tilt', 0, 200, 5, 0, 200, 'km') +
-                        _buildRangeRow('Year', 'compb-year', 1997, 2024, 1, 1997, 2024, '') +
-                        _buildRangeRow('Shear Mag', 'compb-shrmag', 0, 100, 2, 0, 100, 'kt') +
-                        _buildRangeRow('Shear Dir', 'compb-shrdir', 0, 360, 5, 0, 360, '\u00b0') +
-                        '<div class="comp-case-count" id="compb-count-display">' +
-                            '<span class="comp-count-label">Group B cases:</span> ' +
-                            '<span class="comp-count-num" id="compb-count-num">\u2014</span>' +
-                        '</div>' +
-                        '<div class="comp-actions">' +
-                            '<button class="comp-btn comp-btn-diff" id="comp-btn-diff-az" onclick="generateCompDiffAzMean()">\u0394 Az Mean (A\u2212B)</button>' +
-                            '<button class="comp-btn comp-btn-diff" id="comp-btn-diff-sq" onclick="generateCompDiffQuadMean()">\u0394 Quad Mean (A\u2212B)</button>' +
-                            '<button class="comp-btn comp-btn-diff" id="comp-btn-diff-pv" onclick="generateCompDiffPlanView()">\u0394 Plan View (A\u2212B)</button>' +
+                        // Group B (hidden unless diff mode)
+                        '<div class="wizard-group-col group-b" id="wiz-group-b-col" style="display:none;">' +
+                            '<div class="wizard-group-label">Group B</div>' +
+                            filterCol('compb') +
+                            '<div class="wizard-case-count">' +
+                                '<div class="wcc-label">Group B cases</div>' +
+                                '<div class="wcc-num" id="compb-count-num">\u2014</div>' +
+                            '</div>' +
                         '</div>' +
                     '</div>' +
                 '</div>' +
-                    // ── Environment Composite Controls ──
-                    '<div class="comp-section-title" style="margin-top:14px;">\uD83C\uDF0D Environment Composite</div>' +
-                    '<div class="comp-filter-row"><label>ERA5 Field</label>' +
-                        '<select class="explorer-select" id="comp-env-field" style="font-size:11px;">' +
-                            '<option value="shear_mag">Deep-Layer Shear (200\u2013850 hPa)</option>' +
-                            '<option value="rh_mid">Mid-Level RH (500\u2013700 hPa)</option>' +
-                            '<option value="div200">200 hPa Divergence</option>' +
-                            '<option value="sst">Sea Surface Temperature</option>' +
-                            '<option value="entropy_def">Entropy Deficit (\u03c7\u2098)</option>' +
-                        '</select>' +
-                    '</div>' +
-                    '<div class="comp-filter-row">' +
-                        '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">' +
-                            '<input type="checkbox" id="comp-env-vectors" style="width:14px;height:14px;accent-color:var(--cyan);"> ' +
-                            '<span>Include Shear Vectors</span>' +
-                        '</label>' +
-                    '</div>' +
-                    '<div class="comp-filter-row"><label>Crop Radius</label>' +
-                        '<div style="display:flex;align-items:center;gap:6px;">' +
-                            '<input type="range" id="comp-env-radius" min="100" max="1000" step="50" value="500" class="az-cov-slider" oninput="document.getElementById(\'comp-env-radius-val\').textContent=this.value+\' km\'">' +
-                            '<span id="comp-env-radius-val" style="font-size:11px;font-weight:600;color:var(--cyan);min-width:52px;font-family:\'JetBrains Mono\',monospace;">500 km</span>' +
+
+                // ═══ STEP 3: Configure ═══
+                '<div class="wizard-step-content" id="wizard-step-3">' +
+                    '<div class="wizard-config-cols">' +
+                        // TDR config section
+                        '<div class="wizard-config-section" id="wiz-cfg-tdr">' +
+                            '<div class="wizard-config-section-title" onclick="_wizardToggleSection(this.parentElement)">' +
+                                '<span class="wcs-icon">\uD83C\uDF00</span> TDR Settings' +
+                                '<span class="wcs-toggle">\u25BC</span>' +
+                            '</div>' +
+                            '<div class="wizard-config-body">' +
+                                '<div class="wizard-config-row"><label>Variable</label>' + _varOptionsHTML('comp') + '</div>' +
+                                '<div class="wizard-config-row"><label>Height Level</label>' +
+                                    '<select id="comp-level">' + levelOpts + '</select>' +
+                                '</div>' +
+                                '<div class="wizard-config-row"><label>Coverage Threshold</label>' +
+                                    '<div class="wizard-slider-row">' +
+                                        '<input type="range" id="comp-coverage" min="0" max="100" step="5" value="50" oninput="document.getElementById(\'comp-cov-val\').textContent=this.value+\'%\'">' +
+                                        '<span class="wizard-slider-val" id="comp-cov-val">50%</span>' +
+                                    '</div>' +
+                                '</div>' +
+                                '<div class="wizard-config-row">' +
+                                    '<div class="wizard-config-inline">' +
+                                        '<input type="checkbox" id="comp-norm-rmw">' +
+                                        '<label for="comp-norm-rmw" style="font-size:11px;color:#9ca3af;">Normalize by RMW (2-km)</label>' +
+                                    '</div>' +
+                                '</div>' +
+                                '<div id="comp-rmw-opts" style="display:none;">' +
+                                    '<div class="wizard-config-row"><label>Max Extent (R/RMW)</label>' +
+                                        '<input type="number" id="comp-max-r-rmw" value="5.0" min="1" max="20" step="0.5" style="width:80px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                                    '</div>' +
+                                    '<div class="wizard-config-row"><label>Bin Width (R/RMW)</label>' +
+                                        '<input type="number" id="comp-dr-rmw" value="0.1" min="0.05" max="1" step="0.05" style="width:80px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                                    '</div>' +
+                                '</div>' +
+                                '<div class="wizard-config-row">' +
+                                    '<div class="wizard-config-inline">' +
+                                        '<input type="checkbox" id="comp-shear-rel">' +
+                                        '<label for="comp-shear-rel" style="font-size:11px;color:#9ca3af;">Shear-Relative Rotation</label>' +
+                                    '</div>' +
+                                '</div>' +
+                                '<div class="wizard-config-row"><label>Contour Overlay</label>' +
+                                    '<select id="comp-overlay">' +
+                                        '<option value="">None</option>' +
+                                        '<optgroup label="WCM Recentered (2 km)">' +
+                                            '<option value="recentered_tangential_wind">Tangential Wind</option>' +
+                                            '<option value="recentered_radial_wind">Radial Wind</option>' +
+                                            '<option value="recentered_upward_air_velocity">Vertical Velocity</option>' +
+                                            '<option value="recentered_reflectivity">Reflectivity</option>' +
+                                            '<option value="recentered_wind_speed">Wind Speed</option>' +
+                                            '<option value="recentered_relative_vorticity">Relative Vorticity</option>' +
+                                            '<option value="recentered_divergence">Divergence</option>' +
+                                        '</optgroup>' +
+                                        '<optgroup label="Tilt-Relative">' +
+                                            '<option value="total_recentered_tangential_wind">Tangential Wind</option>' +
+                                            '<option value="total_recentered_radial_wind">Radial Wind</option>' +
+                                            '<option value="total_recentered_upward_air_velocity">Vertical Velocity</option>' +
+                                            '<option value="total_recentered_reflectivity">Reflectivity</option>' +
+                                            '<option value="total_recentered_wind_speed">Wind Speed</option>' +
+                                        '</optgroup>' +
+                                        '<optgroup label="Original Swath" id="comp-overlay-original">' +
+                                            '<option value="swath_tangential_wind">Tangential Wind</option>' +
+                                            '<option value="swath_radial_wind">Radial Wind</option>' +
+                                            '<option value="swath_reflectivity">Reflectivity</option>' +
+                                            '<option value="swath_wind_speed">Wind Speed</option>' +
+                                        '</optgroup>' +
+                                    '</select>' +
+                                    '<div style="display:flex;align-items:center;gap:5px;margin-top:4px;">' +
+                                        '<label style="font-size:9px;white-space:nowrap;margin:0;color:#9ca3af;">Interval:</label>' +
+                                        '<input type="number" id="comp-contour-int" value="" placeholder="auto" style="width:55px;padding:2px 4px;font-size:10px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);">' +
+                                    '</div>' +
+                                '</div>' +
+                                '<div class="wizard-config-row"><label>Colormap</label>' +
+                                    '<select id="comp-cmap" onchange="applyCompCmap()">' +
+                                        '<option value="">Default (from variable)</option>' +
+                                        '<optgroup label="Sequential"><option value="Viridis">Viridis</option><option value="Inferno">Inferno</option><option value="Magma">Magma</option><option value="Plasma">Plasma</option><option value="Cividis">Cividis</option><option value="Hot">Hot</option><option value="YlOrRd">YlOrRd</option><option value="YlGnBu">YlGnBu</option><option value="Blues">Blues</option><option value="Reds">Reds</option><option value="Greys">Greys</option></optgroup>' +
+                                        '<optgroup label="Diverging"><option value="RdBu">RdBu (red-blue)</option><option value=\'[[0,"rgb(5,10,172)"],[0.5,"rgb(255,255,255)"],[1,"rgb(178,10,28)"]]\'>BuWtRd (blue-white-red)</option><option value="Picnic">Picnic</option><option value="Portland">Portland</option></optgroup>' +
+                                        '<optgroup label="Other"><option value="Jet">Jet</option><option value="Rainbow">Rainbow</option><option value="Electric">Electric</option><option value="Earth">Earth</option><option value="Blackbody">Blackbody</option></optgroup>' +
+                                    '</select>' +
+                                '</div>' +
+                                '<div class="wizard-config-row"><label>Color Range</label>' +
+                                    '<div class="wizard-color-range">' +
+                                        '<input type="number" id="comp-vmin" placeholder="min" step="any" onchange="applyCompColorRange()">' +
+                                        '<span class="wcr-sep">to</span>' +
+                                        '<input type="number" id="comp-vmax" placeholder="max" step="any" onchange="applyCompColorRange()">' +
+                                        '<button onclick="resetCompColorRange()" title="Reset">\u21BA</button>' +
+                                    '</div>' +
+                                '</div>' +
+                            '</div>' +
                         '</div>' +
-                    '</div>' +
-                    '<div class="comp-actions">' +
-                        '<button class="comp-btn" id="comp-btn-env" onclick="generateEnvComposite()" style="background:rgba(0,180,100,0.15);border-color:rgba(0,180,100,0.5);color:#6ee7b7;">\uD83C\uDF0D Generate Env Composite</button>' +
-                    '</div>' +
-                    '<div id="comp-env-diff-wrap" style="display:none;">' +
-                        '<div class="comp-actions">' +
-                            '<button class="comp-btn comp-btn-diff" id="comp-btn-env-diff" onclick="generateEnvCompDiff()">\u0394 Env Composite (A\u2212B)</button>' +
+
+                        // Environment config section
+                        '<div class="wizard-config-section" id="wiz-cfg-env">' +
+                            '<div class="wizard-config-section-title" onclick="_wizardToggleSection(this.parentElement)">' +
+                                '<span class="wcs-icon">\uD83C\uDF0D</span> Environment Settings' +
+                                '<span class="wcs-toggle">\u25BC</span>' +
+                            '</div>' +
+                            '<div class="wizard-config-body">' +
+                                '<div class="wizard-config-row"><label>ERA5 Field</label>' +
+                                    '<select id="comp-env-field">' +
+                                        '<option value="shear_mag">Deep-Layer Shear (200\u2013850 hPa)</option>' +
+                                        '<option value="rh_mid">Mid-Level RH (500\u2013700 hPa)</option>' +
+                                        '<option value="div200">200 hPa Divergence</option>' +
+                                        '<option value="sst">Sea Surface Temperature</option>' +
+                                        '<option value="entropy_def">Entropy Deficit (\u03c7\u2098)</option>' +
+                                    '</select>' +
+                                '</div>' +
+                                '<div class="wizard-config-row">' +
+                                    '<div class="wizard-config-inline">' +
+                                        '<input type="checkbox" id="comp-env-vectors">' +
+                                        '<label for="comp-env-vectors" style="font-size:11px;color:#9ca3af;">Include Shear Vectors</label>' +
+                                    '</div>' +
+                                '</div>' +
+                                '<div class="wizard-config-row"><label>Crop Radius</label>' +
+                                    '<div class="wizard-slider-row">' +
+                                        '<input type="range" id="comp-env-radius" min="100" max="1000" step="50" value="500" oninput="document.getElementById(\'comp-env-radius-val\').textContent=this.value+\' km\'">' +
+                                        '<span class="wizard-slider-val" id="comp-env-radius-val">500 km</span>' +
+                                    '</div>' +
+                                '</div>' +
+                            '</div>' +
                         '</div>' +
                     '</div>' +
                 '</div>' +
-                // ── Right: Results ──
-                '<div class="composite-results">' +
-                    // Tab bar for TDR vs Environment
-                    '<div class="comp-tab-bar" id="comp-tab-bar">' +
-                        '<button class="comp-tab active" id="comp-tab-tdr" onclick="_switchCompTab(\'tdr\')">TDR Composites</button>' +
-                        '<button class="comp-tab" id="comp-tab-env" onclick="_switchCompTab(\'env\')">Environment</button>' +
+
+                // ═══ STEP 4: Results ═══
+                '<div class="wizard-step-content" id="wizard-step-4">' +
+                    '<div class="wizard-generate-bar">' +
+                        '<button class="wizard-generate-btn" id="wiz-generate-btn" onclick="_wizardGenerateSelected()">\u25B6 Generate Selected</button>' +
+                        '<span class="wizard-generate-summary" id="wiz-generate-summary"></span>' +
                     '</div>' +
-                    // TDR results (existing)
-                    '<div class="comp-tab-content" id="comp-tab-content-tdr">' +
-                        '<div class="comp-result-placeholder" id="comp-result-placeholder">' +
-                            '<div class="comp-result-icon">\uD83C\uDF00</div>' +
-                            '<div class="comp-result-msg">Set filter criteria and click a generate button to compute a composite.</div>' +
+                    '<div class="wizard-results-area" id="wizard-results-area">' +
+                        '<div class="wizard-result-placeholder" id="wiz-result-placeholder">' +
+                            '<div class="wrp-icon">\uD83C\uDF00</div>' +
+                            '<div class="wrp-msg">Select outputs in Step 1, set filters in Step 2, then click <strong>Generate Selected</strong> to compute composites.</div>' +
                         '</div>' +
+                        // TDR result containers
                         '<div id="comp-status" style="display:none;"></div>' +
                         '<div id="comp-result-az" style="display:none;"></div>' +
                         '<div id="comp-result-sq" style="display:none;"></div>' +
                         '<div id="comp-result-pv" style="display:none;"></div>' +
-                    '</div>' +
-                    // Environment results (new)
-                    '<div class="comp-tab-content" id="comp-tab-content-env" style="display:none;">' +
-                        '<div class="comp-result-placeholder" id="comp-env-placeholder">' +
-                            '<div class="comp-result-icon">\uD83C\uDF0D</div>' +
-                            '<div class="comp-result-msg">Set filter criteria and click <strong>Generate Env Composite</strong> to compute environmental composites using the same case subset.</div>' +
-                        '</div>' +
+                        // Environment result containers
                         '<div id="comp-env-status" style="display:none;"></div>' +
                         '<div id="comp-env-scalars" style="display:none;"></div>' +
                         '<div id="comp-env-plan-view" style="display:none;"></div>' +
@@ -4654,26 +4748,25 @@ function initCompositePanel() {
                         '</div>' +
                     '</div>' +
                 '</div>' +
+
+            '</div>' + // end wizard-body
+
+            // ── Bottom navigation ──
+            '<div class="wizard-nav">' +
+                '<button class="wizard-nav-btn secondary" id="wiz-back-btn" onclick="_wizardBack()" style="visibility:hidden;">\u2190 Back</button>' +
+                '<div></div>' +
+                '<button class="wizard-nav-btn primary" id="wiz-next-btn" onclick="_wizardNext()">Next \u2192</button>' +
             '</div>' +
-        '</div>';
+
+        '</div>'; // end wizard-box
+
     document.body.appendChild(overlay);
     _compositePanel = overlay;
 
-    // Wire up live case count on filter changes
-    var filterInputs = overlay.querySelectorAll('.composite-controls > .comp-filter-row input[type="number"], .composite-controls > .comp-filter-row select, .composite-controls > div > select, .composite-controls > div input[type="range"]');
-    filterInputs.forEach(function(inp) {
-        inp.addEventListener('change', _debouncedCompositeCount);
-        inp.addEventListener('input', _debouncedCompositeCount);
-    });
+    // ── Wire up live case counts ──
+    _wizardWireFilters();
 
-    // Wire up Group B filter inputs
-    var groupBInputs = document.querySelectorAll('#comp-group-b-wrap input[type="number"]');
-    groupBInputs.forEach(function(inp) {
-        inp.addEventListener('change', _debouncedGroupBCount);
-        inp.addEventListener('input', _debouncedGroupBCount);
-    });
-
-    // Wire up data type change to swap original-domain variable options
+    // ── Wire up data type change ──
     var dtypeSelect = document.getElementById('comp-dtype');
     if (dtypeSelect) {
         dtypeSelect.addEventListener('change', function() {
@@ -4681,11 +4774,11 @@ function initCompositePanel() {
             _updateOriginalVarGroup('comp', varType);
             _updateCompOverlayOriginalGroup(varType);
             _debouncedCompositeCount();
-            if (document.getElementById('comp-diff-check').checked) _debouncedGroupBCount();
+            if (_wizardMode === 'diff') _debouncedGroupBCount();
         });
     }
 
-    // Wire up RMW normalize checkbox to show/hide max-extent & bin-width fields
+    // ── Wire up RMW normalize toggle ──
     var normCheck = document.getElementById('comp-norm-rmw');
     if (normCheck) {
         normCheck.addEventListener('change', function() {
@@ -4694,49 +4787,235 @@ function initCompositePanel() {
         });
     }
 
-    _injectCompositeStyles();
+    // ── Wire up output checkboxes to update config visibility ──
+    overlay.querySelectorAll('.wizard-output-item input[type="checkbox"]').forEach(function(cb) {
+        cb.addEventListener('change', function() { _wizardUpdateConfigVisibility(); _wizardUpdateSummary(); });
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ── WIZARD STATE & NAVIGATION ─────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+
+var _wizardCurrentStep = 1;
+var _wizardMode = 'single'; // 'single' or 'diff'
+
+function _wizardGoToStep(n) {
+    if (n < 1 || n > 4) return;
+    _wizardCurrentStep = n;
+
+    // Update step content visibility
+    for (var i = 1; i <= 4; i++) {
+        var content = document.getElementById('wizard-step-' + i);
+        if (content) { content.classList.toggle('active', i === n); }
+    }
+
+    // Update step indicator
+    var items = document.querySelectorAll('.wizard-step-item');
+    var connectors = document.querySelectorAll('.wizard-step-connector');
+    items.forEach(function(item, idx) {
+        var stepNum = idx + 1;
+        item.classList.remove('active', 'completed');
+        if (stepNum === n) item.classList.add('active');
+        else if (stepNum < n) item.classList.add('completed');
+        // Update circle content for completed steps
+        var circle = item.querySelector('.wizard-step-circle');
+        if (circle) circle.innerHTML = stepNum < n ? '\u2713' : String(stepNum);
+    });
+    connectors.forEach(function(conn, idx) {
+        conn.classList.toggle('completed', idx < n - 1);
+    });
+
+    // Update nav buttons
+    var backBtn = document.getElementById('wiz-back-btn');
+    var nextBtn = document.getElementById('wiz-next-btn');
+    if (backBtn) backBtn.style.visibility = n === 1 ? 'hidden' : 'visible';
+    if (nextBtn) {
+        if (n === 4) {
+            nextBtn.style.display = 'none';
+        } else {
+            nextBtn.style.display = '';
+            nextBtn.textContent = 'Next \u2192';
+        }
+    }
+
+    // Update summary
+    _wizardUpdateSummary();
+
+    // When entering step 2, trigger count update
+    if (n === 2) {
+        updateCompositeCount();
+        if (_wizardMode === 'diff') _updateGroupBCount();
+    }
+
+    // When entering step 3, update config section visibility
+    if (n === 3) _wizardUpdateConfigVisibility();
+
+    // When entering step 4, update generate summary
+    if (n === 4) _wizardUpdateGenerateSummary();
+}
+
+function _wizardNext() { _wizardGoToStep(_wizardCurrentStep + 1); }
+function _wizardBack() { _wizardGoToStep(_wizardCurrentStep - 1); }
+
+function _wizardSetMode(mode) {
+    _wizardMode = mode;
+    var singleCard = document.getElementById('wiz-mode-single');
+    var diffCard = document.getElementById('wiz-mode-diff');
+    var groupBCol = document.getElementById('wiz-group-b-col');
+    var groupATitle = document.getElementById('wiz-group-a-title');
+
+    if (mode === 'diff') {
+        singleCard.classList.remove('selected');
+        diffCard.classList.add('selected', 'diff');
+        if (groupBCol) groupBCol.style.display = '';
+        if (groupATitle) groupATitle.textContent = 'Group A';
+    } else {
+        singleCard.classList.add('selected');
+        diffCard.classList.remove('selected', 'diff');
+        if (groupBCol) groupBCol.style.display = 'none';
+        if (groupATitle) groupATitle.textContent = 'Filter Criteria';
+    }
+    _wizardUpdateSummary();
+}
+
+function _wizardToggleOutput(el) {
+    var cb = el.querySelector('input[type="checkbox"]');
+    if (cb) { cb.checked = !cb.checked; }
+    el.classList.toggle('checked', cb && cb.checked);
+    _wizardUpdateConfigVisibility();
+    _wizardUpdateSummary();
+}
+
+function _wizardToggleSection(section) {
+    section.classList.toggle('collapsed');
+}
+
+function _wizardUpdateConfigVisibility() {
+    var anyTDR = document.getElementById('wiz-chk-az').checked ||
+                 document.getElementById('wiz-chk-sq').checked ||
+                 document.getElementById('wiz-chk-pv').checked;
+    var anyEnv = document.getElementById('wiz-chk-env-pv').checked ||
+                 document.getElementById('wiz-chk-env-sc').checked ||
+                 document.getElementById('wiz-chk-env-th').checked;
+    var tdrCfg = document.getElementById('wiz-cfg-tdr');
+    var envCfg = document.getElementById('wiz-cfg-env');
+    if (tdrCfg) tdrCfg.style.display = anyTDR ? '' : 'none';
+    if (envCfg) envCfg.style.display = anyEnv ? '' : 'none';
+    // If neither selected, show a message
+    if (!anyTDR && !anyEnv) {
+        if (tdrCfg) tdrCfg.style.display = '';
+        if (envCfg) envCfg.style.display = '';
+    }
+}
+
+function _wizardUpdateSummary() {
+    var el = document.getElementById('wizard-summary');
+    if (!el) return;
+    var parts = [];
+
+    // Mode
+    parts.push('<span class="ws-tag' + (_wizardMode === 'diff' ? ' amber' : ' cyan') + '">' +
+        (_wizardMode === 'diff' ? '\u0394 Diff Mode' : 'Single Group') + '</span>');
+
+    // Outputs
+    var outputs = [];
+    if (document.getElementById('wiz-chk-az') && document.getElementById('wiz-chk-az').checked) outputs.push('Az Mean');
+    if (document.getElementById('wiz-chk-sq') && document.getElementById('wiz-chk-sq').checked) outputs.push('Quad');
+    if (document.getElementById('wiz-chk-pv') && document.getElementById('wiz-chk-pv').checked) outputs.push('Plan');
+    if (document.getElementById('wiz-chk-env-pv') && document.getElementById('wiz-chk-env-pv').checked) outputs.push('Env PV');
+    if (document.getElementById('wiz-chk-env-sc') && document.getElementById('wiz-chk-env-sc').checked) outputs.push('Env Scalars');
+    if (document.getElementById('wiz-chk-env-th') && document.getElementById('wiz-chk-env-th').checked) outputs.push('Env Thermo');
+    if (outputs.length > 0) {
+        parts.push('<span class="ws-tag blue">' + outputs.join(', ') + '</span>');
+    }
+
+    // Case counts (if step 2+ and counts are available)
+    var countA = document.getElementById('comp-count-num');
+    if (countA && countA.textContent !== '\u2014' && countA.textContent !== '\u2026') {
+        if (_wizardMode === 'diff') {
+            var countB = document.getElementById('compb-count-num');
+            var bText = countB ? countB.textContent : '?';
+            parts.push('<span class="ws-tag green">N=' + countA.textContent + ' vs ' + bText + '</span>');
+        } else {
+            parts.push('<span class="ws-tag green">N=' + countA.textContent + '</span>');
+        }
+    }
+
+    // Data type
+    var dtype = document.getElementById('comp-dtype');
+    if (dtype) parts.push('<span class="ws-tag">' + dtype.value + '</span>');
+
+    el.innerHTML = parts.join(' ');
+}
+
+function _wizardUpdateGenerateSummary() {
+    var el = document.getElementById('wiz-generate-summary');
+    if (!el) return;
+    var outputs = [];
+    if (document.getElementById('wiz-chk-az').checked) outputs.push('Azimuthal Mean');
+    if (document.getElementById('wiz-chk-sq').checked) outputs.push('Shear Quadrants');
+    if (document.getElementById('wiz-chk-pv').checked) outputs.push('Plan View');
+    if (document.getElementById('wiz-chk-env-pv').checked) outputs.push('ERA5 Plan View');
+    if (document.getElementById('wiz-chk-env-sc').checked) outputs.push('Scalar Diagnostics');
+    if (document.getElementById('wiz-chk-env-th').checked) outputs.push('Thermo Profiles');
+    if (outputs.length === 0) {
+        el.textContent = 'No outputs selected. Go back to Step 1 to choose outputs.';
+    } else {
+        el.textContent = 'Will generate: ' + outputs.join(', ') +
+            (_wizardMode === 'diff' ? ' (with A\u2212B differences)' : '');
+    }
+}
+
+function _wizardWireFilters() {
+    // Group A
+    var groupAInputs = document.querySelectorAll('.wizard-group-col.group-a input[type="number"]');
+    groupAInputs.forEach(function(inp) {
+        inp.addEventListener('change', _debouncedCompositeCount);
+        inp.addEventListener('input', _debouncedCompositeCount);
+    });
+    // Group B
+    var groupBInputs = document.querySelectorAll('.wizard-group-col.group-b input[type="number"]');
+    groupBInputs.forEach(function(inp) {
+        inp.addEventListener('change', _debouncedGroupBCount);
+        inp.addEventListener('input', _debouncedGroupBCount);
+    });
+}
+
+// ── Master generate function ──
+function _wizardGenerateSelected() {
+    var placeholder = document.getElementById('wiz-result-placeholder');
+    if (placeholder) placeholder.style.display = 'none';
+
+    var isDiff = _wizardMode === 'diff';
+
+    // TDR outputs
+    if (document.getElementById('wiz-chk-az').checked) {
+        if (isDiff) generateCompDiffAzMean(); else generateCompositeAzMean();
+    }
+    if (document.getElementById('wiz-chk-sq').checked) {
+        if (isDiff) generateCompDiffQuadMean(); else generateCompositeQuadMean();
+    }
+    if (document.getElementById('wiz-chk-pv').checked) {
+        if (isDiff) generateCompDiffPlanView(); else generateCompositePlanView();
+    }
+
+    // Environment outputs
+    var anyEnv = document.getElementById('wiz-chk-env-pv').checked ||
+                 document.getElementById('wiz-chk-env-sc').checked ||
+                 document.getElementById('wiz-chk-env-th').checked;
+    if (anyEnv) {
+        if (isDiff) generateEnvCompDiff(); else generateEnvComposite();
+    }
 }
 
 function _injectCompositeStyles() {
+    // Styles now in external CSS file (tc_radar_styles.css)
+    // Keep the old injected styles as fallback for any existing class references
     if (document.getElementById('composite-styles')) return;
     var style = document.createElement('style');
     style.id = 'composite-styles';
     style.textContent =
-        '.composite-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; z-index:3000; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px); overflow-y:auto; }' +
-        '.composite-overlay.active { display:flex; align-items:flex-start; justify-content:center; padding:20px; }' +
-        '.composite-box { width:100%; max-width:1400px; background:var(--navy, #0a1628); border:1px solid rgba(255,255,255,0.08); border-radius:12px; overflow:hidden; box-shadow:0 25px 50px rgba(0,0,0,0.5); }' +
-        '.composite-header { display:flex; justify-content:space-between; align-items:center; padding:16px 24px; border-bottom:1px solid rgba(255,255,255,0.06); background:rgba(255,255,255,0.02); }' +
-        '.composite-header-left { display:flex; align-items:center; gap:10px; }' +
-        '.composite-logo { font-size:20px; }' +
-        '.composite-title { font-size:18px; font-weight:700; color:#e5e7eb; font-family:"JetBrains Mono",monospace; }' +
-        '.composite-subtitle { font-size:12px; color:#6b7280; margin-left:4px; }' +
-        '.composite-close { background:none; border:1px solid rgba(255,255,255,0.1); color:#9ca3af; font-size:18px; width:36px; height:36px; border-radius:8px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.15s; }' +
-        '.composite-close:hover { background:rgba(255,255,255,0.05); color:#e5e7eb; }' +
-        '.composite-body { display:flex; min-height:600px; }' +
-        '.composite-controls { width:320px; min-width:320px; padding:20px; border-right:1px solid rgba(255,255,255,0.06); overflow-y:auto; max-height:calc(100vh - 120px); }' +
-        '.composite-results { flex:1; padding:20px; overflow-y:auto; max-height:calc(100vh - 120px); display:flex; flex-direction:column; }' +
-        '.comp-section-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; color:var(--cyan, #22d3ee); margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid rgba(34,211,238,0.15); }' +
-        '.comp-filter-row { margin-bottom:10px; }' +
-        '.comp-filter-row label { display:block; font-size:11px; font-weight:600; color:#9ca3af; margin-bottom:3px; font-family:"JetBrains Mono",monospace; }' +
-        '.comp-range-inputs { display:flex; align-items:center; gap:5px; }' +
-        '.comp-range-inputs input[type="number"] { width:65px; padding:4px 6px; font-size:11px; border:1px solid rgba(255,255,255,0.1); border-radius:4px; background:rgba(255,255,255,0.03); color:#e5e7eb; font-family:"JetBrains Mono",monospace; }' +
-        '.comp-range-sep { font-size:10px; color:#6b7280; }' +
-        '.comp-range-unit { font-size:10px; color:#6b7280; min-width:18px; }' +
-        '.comp-case-count { margin:16px 0; padding:12px; background:rgba(34,211,238,0.05); border:1px solid rgba(34,211,238,0.15); border-radius:8px; text-align:center; }' +
-        '.comp-count-label { font-size:11px; color:#9ca3af; }' +
-        '.comp-count-num { font-size:22px; font-weight:700; color:var(--cyan, #22d3ee); font-family:"JetBrains Mono",monospace; }' +
-        '.comp-actions { display:flex; flex-direction:column; gap:8px; margin-top:8px; }' +
-        '.comp-btn { padding:10px 16px; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family:"JetBrains Mono",monospace; transition:all 0.15s; }' +
-        '.comp-btn:disabled { opacity:0.4; cursor:not-allowed; }' +
-        '.comp-btn-primary { background:var(--cyan, #22d3ee); color:#0a1628; }' +
-        '.comp-btn-primary:hover:not(:disabled) { background:#67e8f9; }' +
-        '.comp-btn-accent { background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3); }' +
-        '.comp-btn-accent:hover:not(:disabled) { background:rgba(245,158,11,0.25); }' +
-        '.comp-btn-pv { background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3); }' +
-        '.comp-btn-pv:hover:not(:disabled) { background:rgba(16,185,129,0.25); }' +
-        '.comp-result-placeholder { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#4b5563; }' +
-        '.comp-result-icon { font-size:48px; margin-bottom:12px; opacity:0.4; }' +
-        '.comp-result-msg { font-size:13px; text-align:center; max-width:320px; line-height:1.6; }' +
         '.comp-status { padding:12px 16px; border-radius:8px; font-size:12px; font-family:"JetBrains Mono",monospace; margin-bottom:12px; }' +
         '.comp-status.loading { background:rgba(34,211,238,0.08); color:var(--cyan, #22d3ee); border:1px solid rgba(34,211,238,0.2); }' +
         '.comp-status.success { background:rgba(16,185,129,0.08); color:#10b981; border:1px solid rgba(16,185,129,0.2); }' +
@@ -4757,31 +5036,34 @@ function _injectCompositeStyles() {
         '.comp-cl-copy { font-size:10px !important; padding:3px 8px !important; }' +
         '.comp-link-btn { border-color:rgba(34,211,238,0.25); color:var(--cyan, #22d3ee); }' +
         '.comp-link-btn:hover { background:rgba(34,211,238,0.1); border-color:rgba(34,211,238,0.4); }' +
-        // Difference mode styles
-        '.comp-diff-toggle { margin-top:14px; padding:8px 0; border-top:1px solid rgba(255,255,255,0.06); }' +
-        '.comp-diff-label { display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; font-weight:600; color:#f59e0b; font-family:"JetBrains Mono",monospace; }' +
-        '.comp-diff-label input { accent-color:#f59e0b; cursor:pointer; }' +
-        '.comp-group-b-title { color:#f59e0b !important; border-top:1px dashed rgba(245,158,11,0.25); padding-top:10px; margin-top:10px; }' +
-        '#comp-group-b-wrap .comp-filter-row label { color:#d97706; }' +
-        '#comp-group-b-wrap .comp-range-inputs input { border-color:rgba(245,158,11,0.2); }' +
+        '.comp-btn { padding:10px 16px; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family:"JetBrains Mono",monospace; transition:all 0.15s; }' +
+        '.comp-btn:disabled { opacity:0.4; cursor:not-allowed; }' +
+        '.comp-btn-primary { background:var(--cyan, #22d3ee); color:#0a1628; }' +
+        '.comp-btn-primary:hover:not(:disabled) { background:#67e8f9; }' +
+        '.comp-btn-accent { background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3); }' +
+        '.comp-btn-accent:hover:not(:disabled) { background:rgba(245,158,11,0.25); }' +
+        '.comp-btn-pv { background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3); }' +
+        '.comp-btn-pv:hover:not(:disabled) { background:rgba(16,185,129,0.25); }' +
         '.comp-btn-diff { background:rgba(245,158,11,0.12); color:#f59e0b; border:1px solid rgba(245,158,11,0.25); font-weight:600; }' +
         '.comp-btn-diff:hover:not(:disabled) { background:rgba(245,158,11,0.22); }' +
         '.hurricane-loader { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:16px 0 8px; }' +
         '.hurricane-pre { font-family:"JetBrains Mono","Fira Code",Consolas,monospace; line-height:1.1; letter-spacing:0.3px; margin:0; text-align:center; color:rgba(34,211,238,0.5); user-select:none; }' +
         '.hurricane-msg { margin-top:10px; font-size:12px; font-weight:600; color:#9ca3af; font-family:"JetBrains Mono",monospace; text-align:center; animation:hurricanePulse 2s ease-in-out infinite; }' +
-        '@keyframes hurricanePulse { 0%,100% { opacity:0.5; } 50% { opacity:1; } }' +
-        '@media (max-width:900px) { .composite-body { flex-direction:column; } .composite-controls { width:100%; min-width:auto; border-right:none; border-bottom:1px solid rgba(255,255,255,0.06); max-height:none; } .composite-results { min-height:500px; } }';
+        '@keyframes hurricanePulse { 0%,100% { opacity:0.5; } 50% { opacity:1; } }';
     document.head.appendChild(style);
 }
 
 function toggleCompositePanel() {
     initCompositePanel();
+    _injectCompositeStyles();
     var panel = document.getElementById('composite-panel');
     panel.classList.toggle('active');
     if (panel.classList.contains('active')) {
         updateCompositeCount();
+        _wizardUpdateSummary();
     }
 }
+
 
 function _getCompositeFilters() {
     return {
@@ -5090,10 +5372,13 @@ function _applyCompHashParams(params) {
     // Update the count then auto-generate if a view was specified
     updateCompositeCount();
     if (params.view === 'az') {
+        _wizardGoToStep(4);
         setTimeout(generateCompositeAzMean, 600);
     } else if (params.view === 'sq') {
+        _wizardGoToStep(4);
         setTimeout(generateCompositeQuadMean, 600);
     } else if (params.view === 'pv') {
+        _wizardGoToStep(4);
         setTimeout(generateCompositePlanView, 600);
     }
     return true;
@@ -5412,9 +5697,9 @@ function generateCompositeAzMean() {
     var dataType = document.getElementById('comp-dtype').value;
     var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
     var btnAz = document.getElementById('comp-btn-az'), btnSq = document.getElementById('comp-btn-sq'), btnPv = document.getElementById('comp-btn-pv');
-    btnAz.disabled = true; btnSq.disabled = true; if (btnPv) btnPv.disabled = true;
-    btnAz.textContent = '\u23F3 Computing\u2026';
-    document.getElementById('comp-result-placeholder').style.display = 'none';
+    if (btnAz) if (btnAz) btnAz.disabled = true; if (btnSq) if (btnSq) btnSq.disabled = true; if (btnPv) if (btnPv) btnPv.disabled = true;
+    if (btnAz) btnAz.textContent = '\u23F3 Computing\u2026';
+    var _crp = document.getElementById('comp-result-placeholder') || document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
     document.getElementById('comp-result-sq').style.display = 'none';
     document.getElementById('comp-result-pv').style.display = 'none';
     _showCompStatus('loading', 'Computing composite azimuthal mean \u2014 this may take 30\u201390 seconds for many cases\u2026');
@@ -5431,8 +5716,8 @@ function generateCompositeAzMean() {
         })
         .catch(function(err) { _showCompStatus('error', '\u2717 ' + err.message); })
         .finally(function() {
-            btnAz.disabled = false; btnSq.disabled = false; if (btnPv) btnPv.disabled = false;
-            btnAz.textContent = '\u27F3 Azimuthal Mean';
+            if (btnAz) btnAz.disabled = false; if (btnSq) btnSq.disabled = false; if (btnPv) if (btnPv) btnPv.disabled = false;
+            if (btnAz) btnAz.textContent = '\u27F3 Azimuthal Mean';
         });
 }
 
@@ -5442,9 +5727,9 @@ function generateCompositeQuadMean() {
     var dataType = document.getElementById('comp-dtype').value;
     var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
     var btnAz = document.getElementById('comp-btn-az'), btnSq = document.getElementById('comp-btn-sq'), btnPv = document.getElementById('comp-btn-pv');
-    btnAz.disabled = true; btnSq.disabled = true; if (btnPv) btnPv.disabled = true;
-    btnSq.textContent = '\u23F3 Computing\u2026';
-    document.getElementById('comp-result-placeholder').style.display = 'none';
+    if (btnAz) if (btnAz) btnAz.disabled = true; if (btnSq) if (btnSq) btnSq.disabled = true; if (btnPv) if (btnPv) btnPv.disabled = true;
+    if (btnSq) btnSq.textContent = '\u23F3 Computing\u2026';
+    var _crp = document.getElementById('comp-result-placeholder') || document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
     document.getElementById('comp-result-az').style.display = 'none';
     document.getElementById('comp-result-pv').style.display = 'none';
     _showCompStatus('loading', 'Computing composite shear quadrants \u2014 this may take 30\u201390 seconds for many cases\u2026');
@@ -5461,8 +5746,8 @@ function generateCompositeQuadMean() {
         })
         .catch(function(err) { _showCompStatus('error', '\u2717 ' + err.message); })
         .finally(function() {
-            btnAz.disabled = false; btnSq.disabled = false; if (btnPv) btnPv.disabled = false;
-            btnSq.textContent = '\u25D1 Shear Quadrants';
+            if (btnAz) btnAz.disabled = false; if (btnSq) btnSq.disabled = false; if (btnPv) if (btnPv) btnPv.disabled = false;
+            if (btnSq) btnSq.textContent = '\u25D1 Shear Quadrants';
         });
 }
 
@@ -5488,9 +5773,9 @@ function generateCompositePlanView() {
     var btnPv = document.getElementById('comp-btn-pv');
     var btnAz = document.getElementById('comp-btn-az');
     var btnSq = document.getElementById('comp-btn-sq');
-    btnPv.disabled = true; btnAz.disabled = true; btnSq.disabled = true;
-    btnPv.textContent = '\u23F3 Computing\u2026';
-    document.getElementById('comp-result-placeholder').style.display = 'none';
+    if (btnPv) btnPv.disabled = true; if (btnAz) btnAz.disabled = true; if (btnSq) btnSq.disabled = true;
+    if (btnPv) btnPv.textContent = '\u23F3 Computing\u2026';
+    var _crp = document.getElementById('comp-result-placeholder') || document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
     document.getElementById('comp-result-az').style.display = 'none';
     document.getElementById('comp-result-sq').style.display = 'none';
     _showCompStatus('loading', 'Computing plan-view composite at ' + pvParams.level_km + ' km \u2014 this may take 30\u201390 seconds for many cases\u2026');
@@ -5516,8 +5801,8 @@ function generateCompositePlanView() {
         })
         .catch(function(err) { _showCompStatus('error', '\u2717 ' + err.message); })
         .finally(function() {
-            btnPv.disabled = false; btnAz.disabled = false; btnSq.disabled = false;
-            btnPv.textContent = '\uD83D\uDDFA Plan View';
+            if (btnPv) btnPv.disabled = false; if (btnAz) btnAz.disabled = false; if (btnSq) btnSq.disabled = false;
+            if (btnPv) btnPv.textContent = '\uD83D\uDDFA Plan View';
         });
 }
 
@@ -5670,12 +5955,9 @@ function renderCompositePlanViewInto(targetId, json, filters, pvParams) {
 var _groupBCountTimeout;
 
 function _toggleDiffMode() {
-    var on = document.getElementById('comp-diff-check').checked;
-    document.getElementById('comp-group-b-wrap').style.display = on ? 'block' : 'none';
-    var groupALabel = document.getElementById('comp-group-a-label');
-    if (groupALabel) groupALabel.style.display = on ? 'inline' : 'none';
-    var envDiffWrap = document.getElementById('comp-env-diff-wrap');
-    if (envDiffWrap) envDiffWrap.style.display = on ? 'block' : 'none';
+    // Now handled by wizard mode cards (_wizardSetMode)
+    // Keep as no-op for backward compatibility
+    var on = _wizardMode === 'diff';
     if (on) _updateGroupBCount();
 }
 
@@ -5773,8 +6055,8 @@ function generateCompDiffAzMean() {
     var btns = ['comp-btn-az','comp-btn-sq','comp-btn-pv','comp-btn-diff-az','comp-btn-diff-sq','comp-btn-diff-pv'];
     btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = true; });
     var btnDiffAz = document.getElementById('comp-btn-diff-az');
-    btnDiffAz.textContent = '\u23F3 Computing\u2026';
-    document.getElementById('comp-result-placeholder').style.display = 'none';
+    if (btnDiffAz) btnDiffAz.textContent = '\u23F3 Computing\u2026';
+    var _crp = document.getElementById('comp-result-placeholder') || document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
     document.getElementById('comp-result-sq').style.display = 'none';
     document.getElementById('comp-result-pv').style.display = 'none';
     _showCompStatus('loading', 'Computing difference composite (A\u2212B) azimuthal mean\u2026');
@@ -5835,7 +6117,7 @@ function generateCompDiffAzMean() {
         _showCompStatus('error', '\u2717 ' + err.message);
     }).finally(function() {
         btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = false; });
-        btnDiffAz.textContent = '\u0394 Az Mean (A\u2212B)';
+        if (btnDiffAz) btnDiffAz.textContent = '\u0394 Az Mean (A\u2212B)';
     });
 }
 
@@ -5850,8 +6132,8 @@ function generateCompDiffQuadMean() {
     var btns = ['comp-btn-az','comp-btn-sq','comp-btn-pv','comp-btn-diff-az','comp-btn-diff-sq','comp-btn-diff-pv'];
     btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = true; });
     var btnDiffSq = document.getElementById('comp-btn-diff-sq');
-    btnDiffSq.textContent = '\u23F3 Computing\u2026';
-    document.getElementById('comp-result-placeholder').style.display = 'none';
+    if (btnDiffSq) btnDiffSq.textContent = '\u23F3 Computing\u2026';
+    var _crp = document.getElementById('comp-result-placeholder') || document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
     document.getElementById('comp-result-az').style.display = 'none';
     document.getElementById('comp-result-pv').style.display = 'none';
     _showCompStatus('loading', 'Computing difference composite (A\u2212B) shear quadrants\u2026');
@@ -5930,7 +6212,7 @@ function generateCompDiffQuadMean() {
         _showCompStatus('error', '\u2717 ' + err.message);
     }).finally(function() {
         btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = false; });
-        btnDiffSq.textContent = '\u0394 Quad Mean (A\u2212B)';
+        if (btnDiffSq) btnDiffSq.textContent = '\u0394 Quad Mean (A\u2212B)';
     });
 }
 
@@ -6143,8 +6425,8 @@ function generateCompDiffPlanView() {
     var btns = ['comp-btn-az','comp-btn-sq','comp-btn-pv','comp-btn-diff-az','comp-btn-diff-sq','comp-btn-diff-pv'];
     btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = true; });
     var btnDiffPv = document.getElementById('comp-btn-diff-pv');
-    btnDiffPv.textContent = '\u23F3 Computing\u2026';
-    document.getElementById('comp-result-placeholder').style.display = 'none';
+    if (btnDiffPv) btnDiffPv.textContent = '\u23F3 Computing\u2026';
+    var _crp = document.getElementById('comp-result-placeholder') || document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
     document.getElementById('comp-result-az').style.display = 'none';
     document.getElementById('comp-result-sq').style.display = 'none';
     _showCompStatus('loading', 'Computing difference plan-view composite (A\u2212B) at ' + pvParams.level_km + ' km\u2026');
@@ -6213,7 +6495,7 @@ function generateCompDiffPlanView() {
         _showCompStatus('error', '\u2717 ' + err.message);
     }).finally(function() {
         btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = false; });
-        btnDiffPv.textContent = '\u0394 Plan View (A\u2212B)';
+        if (btnDiffPv) btnDiffPv.textContent = '\u0394 Plan View (A\u2212B)';
     });
 }
 
@@ -6317,22 +6599,8 @@ function _renderDiffPlanView(targetId, diffJson, jsonA, jsonB, filtersA, filters
 // ══════════════════════════════════════════════════════════════
 
 function _switchCompTab(tab) {
-    var tdrTab = document.getElementById('comp-tab-tdr');
-    var envTab = document.getElementById('comp-tab-env');
-    var tdrContent = document.getElementById('comp-tab-content-tdr');
-    var envContent = document.getElementById('comp-tab-content-env');
-    if (!tdrTab || !envTab || !tdrContent || !envContent) return;
-    if (tab === 'env') {
-        tdrTab.classList.remove('active');
-        envTab.classList.add('active');
-        tdrContent.style.display = 'none';
-        envContent.style.display = '';
-    } else {
-        tdrTab.classList.add('active');
-        envTab.classList.remove('active');
-        tdrContent.style.display = '';
-        envContent.style.display = 'none';
-    }
+    // Tab system replaced by wizard steps. No-op for backward compatibility.
+    // Results now display in unified Step 4.
 }
 
 function _showEnvCompStatus(cls, msg) {
@@ -6354,7 +6622,7 @@ function generateEnvComposite() {
 
     // Switch to env tab and show loading
     _switchCompTab('env');
-    document.getElementById('comp-env-placeholder').style.display = 'none';
+    var _cep = document.getElementById('comp-env-placeholder') || document.getElementById('wiz-result-placeholder'); if (_cep) _cep.style.display = 'none';
     _showEnvCompStatus('loading', '\u23F3 Computing environmental composites\u2026');
 
     // Hide previous results
