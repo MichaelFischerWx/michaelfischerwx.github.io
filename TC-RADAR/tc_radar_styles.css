@@ -331,7 +331,7 @@ input[type="range"]::-moz-range-track { height: 4px; background: transparent; bo
 .env-ov-controls {
     width: 280px; min-width: 280px; padding: 20px;
     border-right: 1px solid rgba(255,255,255,0.06);
-    overflow-y: auto; max-height: calc(100vh - 120px);
+    overflow-y: auto; overflow-x: hidden; max-height: calc(100vh - 120px);
 }
 .env-ov-display {
     flex: 1; padding: 20px; overflow-y: auto;

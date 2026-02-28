@@ -915,22 +915,33 @@ function renderSkewT(profiles, divId) {
 
     var plev = profiles.plev;
     var tK = profiles.t;
-    var qGkg = profiles.q;  // g/kg
+    var qRaw = profiles.q;  // may be g/kg or kg/kg depending on Zarr source
 
     // Convert T from K to °C
     var tC = tK.map(function(v) { return v != null ? v - 273.15 : null; });
 
+    // Detect q units: if max(q) > 0.5 it's g/kg, otherwise already kg/kg
+    var maxQ = 0;
+    if (qRaw) {
+        for (var qi = 0; qi < qRaw.length; qi++) {
+            if (qRaw[qi] != null && qRaw[qi] > maxQ) maxQ = qRaw[qi];
+        }
+    }
+    var qIsGkg = maxQ > 0.5;
+
     // Compute dewpoint from specific humidity and pressure
     // Td = (243.5 * ln(e/6.112)) / (17.67 - ln(e/6.112))
-    // where e = (q/1000) * p / (0.622 + q/1000 * 0.378)
+    // where e = q_kgkg * p / (0.622 + 0.378 * q_kgkg)
     var tdC = [];
     for (var i = 0; i < plev.length; i++) {
-        if (qGkg && qGkg[i] != null && plev[i] != null) {
-            var qKg = qGkg[i] / 1000.0;
-            var e = qKg * plev[i] / (0.622 + 0.378 * qKg);  // hPa
-            if (e > 0) {
+        if (qRaw && qRaw[i] != null && plev[i] != null && qRaw[i] > 0) {
+            var qKg = qIsGkg ? qRaw[i] / 1000.0 : qRaw[i];  // ensure kg/kg
+            var e = qKg * plev[i] / (0.622 + 0.378 * qKg);  // vapor pressure in hPa
+            if (e > 0.001) {
                 var lnE = Math.log(e / 6.112);
-                tdC.push(243.5 * lnE / (17.67 - lnE));
+                var td = 243.5 * lnE / (17.67 - lnE);
+                // Sanity check: dewpoint should not exceed temperature
+                tdC.push(td);
             } else {
                 tdC.push(null);
             }
@@ -1106,7 +1117,7 @@ function renderSkewT(profiles, divId) {
     var layout = {
         xaxis: {
             title: { text: 'Temperature (°C, skewed)', font: { size: 9, color: '#8b9ec2' } },
-            range: [-15, 65],
+            range: [-35, 70],
             tickvals: xTickVals, ticktext: xTickText,
             color: '#8b9ec2', tickfont: { size: 8 },
             zeroline: false, gridcolor: 'rgba(255,255,255,0.03)',
@@ -1685,17 +1696,26 @@ function _renderSkewTInfo(profiles) {
 
     var plev = profiles.plev;
     var tK = profiles.t;
-    var qGkg = profiles.q;
+    var qRaw = profiles.q;
     var rh = profiles.rh;
+
+    // Detect q units: if max(q) > 0.5 it's g/kg, otherwise kg/kg
+    var maxQ = 0;
+    if (qRaw) {
+        for (var qi = 0; qi < qRaw.length; qi++) {
+            if (qRaw[qi] != null && qRaw[qi] > maxQ) maxQ = qRaw[qi];
+        }
+    }
+    var qIsGkg = maxQ > 0.5;
 
     // Compute dewpoint
     var tdC = [];
     var tC = tK.map(function(v) { return v != null ? v - 273.15 : null; });
     for (var i = 0; i < plev.length; i++) {
-        if (qGkg && qGkg[i] != null && plev[i] != null) {
-            var qKg = qGkg[i] / 1000.0;
+        if (qRaw && qRaw[i] != null && plev[i] != null && qRaw[i] > 0) {
+            var qKg = qIsGkg ? qRaw[i] / 1000.0 : qRaw[i];
             var e = qKg * plev[i] / (0.622 + 0.378 * qKg);
-            if (e > 0) {
+            if (e > 0.001) {
                 var lnE = Math.log(e / 6.112);
                 tdC.push(243.5 * lnE / (17.67 - lnE));
             } else { tdC.push(null); }
@@ -1716,12 +1736,17 @@ function _renderSkewTInfo(profiles) {
     for (var j = 0; j < plev.length; j++) {
         var rowColor = plev[j] <= 200 ? 'rgba(100,160,255,0.6)' :
                        plev[j] <= 500 ? 'rgba(200,200,200,0.6)' : 'rgba(255,200,150,0.6)';
+        // Always display q in g/kg
+        var qDisplay = null;
+        if (qRaw && qRaw[j] != null) {
+            qDisplay = qIsGkg ? qRaw[j] : qRaw[j] * 1000.0;
+        }
         html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);color:' + rowColor + ';">' +
             '<td style="padding:2px 4px;">' + plev[j] + '</td>' +
             '<td style="text-align:right;padding:2px 4px;">' + (tC[j] != null ? tC[j].toFixed(1) : '\u2014') + '</td>' +
             '<td style="text-align:right;padding:2px 4px;">' + (tdC[j] != null ? tdC[j].toFixed(1) : '\u2014') + '</td>' +
             '<td style="text-align:right;padding:2px 4px;">' + (rh && rh[j] != null ? rh[j].toFixed(0) : '\u2014') + '</td>' +
-            '<td style="text-align:right;padding:2px 4px;">' + (qGkg && qGkg[j] != null ? qGkg[j].toFixed(1) : '\u2014') + '</td></tr>';
+            '<td style="text-align:right;padding:2px 4px;">' + (qDisplay != null ? qDisplay.toFixed(1) : '\u2014') + '</td></tr>';
     }
     html += '</table>';
 
