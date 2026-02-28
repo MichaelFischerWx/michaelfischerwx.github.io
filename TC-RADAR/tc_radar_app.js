@@ -915,7 +915,7 @@ function renderSkewT(profiles, divId) {
 
     var plev = profiles.plev;
     var tK = profiles.t;
-    var qRaw = profiles.q;  // may be g/kg or kg/kg depending on Zarr source
+    var qRaw = profiles.q;
 
     // Convert T from K to °C
     var tC = tK.map(function(v) { return v != null ? v - 273.15 : null; });
@@ -930,118 +930,255 @@ function renderSkewT(profiles, divId) {
     var qIsGkg = maxQ > 0.5;
 
     // Compute dewpoint from specific humidity and pressure
-    // Td = (243.5 * ln(e/6.112)) / (17.67 - ln(e/6.112))
-    // where e = q_kgkg * p / (0.622 + 0.378 * q_kgkg)
     var tdC = [];
     for (var i = 0; i < plev.length; i++) {
         if (qRaw && qRaw[i] != null && plev[i] != null && qRaw[i] > 0) {
-            var qKg = qIsGkg ? qRaw[i] / 1000.0 : qRaw[i];  // ensure kg/kg
-            var e = qKg * plev[i] / (0.622 + 0.378 * qKg);  // vapor pressure in hPa
+            var qKg = qIsGkg ? qRaw[i] / 1000.0 : qRaw[i];
+            var e = qKg * plev[i] / (0.622 + 0.378 * qKg);
             if (e > 0.001) {
                 var lnE = Math.log(e / 6.112);
-                var td = 243.5 * lnE / (17.67 - lnE);
-                // Sanity check: dewpoint should not exceed temperature
-                tdC.push(td);
-            } else {
-                tdC.push(null);
-            }
-        } else {
-            tdC.push(null);
-        }
+                tdC.push(243.5 * lnE / (17.67 - lnE));
+            } else { tdC.push(null); }
+        } else { tdC.push(null); }
     }
 
-    // Skew factor: rotate T axis so isotherms tilt right with decreasing pressure
-    var skewFactor = 35;  // degrees of skew per decade of pressure
-    var pRef = 1000;      // reference pressure (hPa)
+    // ── Thermodynamic helper functions ──
+    var Rd = 287.04, Rv = 461.5, Cp = 1005.7, Lv = 2.501e6, g = 9.81, eps = 0.622;
+
+    function satVaporPres(tCelsius) {
+        return 6.112 * Math.exp(17.67 * tCelsius / (tCelsius + 243.5));
+    }
+    function satMixRatio(tCelsius, pHpa) {
+        var es = satVaporPres(tCelsius);
+        return es > pHpa ? 0.04 : eps * es / (pHpa - es);
+    }
+    function moistLapseRate(tCelsius, pHpa) {
+        var tKel = tCelsius + 273.15;
+        var rs = satMixRatio(tCelsius, pHpa);
+        var num = (Rd * tKel / pHpa) + (Lv * rs / pHpa);
+        var den = Cp + (Lv * Lv * rs * eps / (Rd * tKel * tKel));
+        return num / den;
+    }
+    // Lift parcel moist-adiabatically from startP to endP (endP < startP)
+    function liftMoist(tStart, pStart, pEnd) {
+        var t = tStart, p = pStart, dp = 2;
+        while (p > pEnd) {
+            var step = Math.min(dp, p - pEnd);
+            t -= moistLapseRate(t, p) * step;
+            p -= step;
+        }
+        return t;
+    }
+
+    // ── Conventional skew: ~45° tilt across the diagram ──
+    // With log-P y-axis spanning ~1 decade (100–1000 hPa), a skewFactor
+    // of ~37 gives the classic ~45° isotherms at mid-troposphere.
+    var skewFactor = 37;
+    var pRef = 1000;
 
     function skewX(tempC, pHpa) {
         if (tempC == null || pHpa == null) return null;
         return tempC + skewFactor * Math.log10(pRef / pHpa);
     }
 
-    // Compute skewed coordinates for temperature and dewpoint
-    var tSkew = [], tdSkew = [], pValid = [];
+    // ── Compute derived quantities (store on profiles for info panel) ──
+    // Find surface (highest pressure with valid T, Td)
+    var sfcIdx = -1;
+    for (var si = 0; si < plev.length; si++) {
+        if (tC[si] != null && tdC[si] != null) { sfcIdx = si; break; }
+    }
+
+    var derived = { cape: null, cin: null, pwat: null, lcl_p: null, lfc_p: null, el_p: null, freezing_p: null };
+
+    if (sfcIdx >= 0) {
+        var sfcT = tC[sfcIdx], sfcTd = tdC[sfcIdx], sfcP = plev[sfcIdx];
+
+        // Mixed-layer averages (lowest 100 hPa)
+        var mlDepth = 100, mlTsum = 0, mlTdSum = 0, mlN = 0;
+        for (var mi = sfcIdx; mi < plev.length; mi++) {
+            if (plev[mi] < sfcP - mlDepth) break;
+            if (tC[mi] != null && tdC[mi] != null) {
+                mlTsum += tC[mi]; mlTdSum += tdC[mi]; mlN++;
+            }
+        }
+        var mlT = mlN > 0 ? mlTsum / mlN : sfcT;
+        var mlTd = mlN > 0 ? mlTdSum / mlN : sfcTd;
+
+        // LCL via iterative dry lift until T == Td
+        var lclP = sfcP, lclT = mlT, lclTd = mlTd;
+        while (lclP > 100) {
+            if (lclT <= lclTd + 0.1) break;
+            lclP -= 2;
+            lclT = (mlT + 273.15) * Math.pow(lclP / sfcP, 0.286) - 273.15;
+            // Dewpoint approximately constant under dry lift, but slight correction:
+            var eS = satVaporPres(mlTd);
+            var rS = eps * eS / (sfcP - eS);
+            var eNew = rS * lclP / (eps + rS);
+            if (eNew > 0.001) {
+                var lnEN = Math.log(eNew / 6.112);
+                lclTd = 243.5 * lnEN / (17.67 - lnEN);
+            }
+        }
+        derived.lcl_p = lclP;
+
+        // Lift moist from LCL upward → build parcel profile, compute CAPE & CIN
+        var parcelT = []; // parcel temperature at each plev
+        var cape = 0, cin = 0, lfcP = null, elP = null, foundLFC = false;
+        for (var pi = 0; pi < plev.length; pi++) {
+            var pp = plev[pi];
+            if (pp > sfcP) { parcelT.push(null); continue; }
+            if (pp >= lclP) {
+                // Dry adiabatic lift from surface
+                parcelT.push((mlT + 273.15) * Math.pow(pp / sfcP, 0.286) - 273.15);
+            } else {
+                // Moist adiabatic lift from LCL
+                parcelT.push(liftMoist(lclT, lclP, pp));
+            }
+            // Buoyancy integration
+            if (tC[pi] != null && parcelT[pi] != null && pi > sfcIdx) {
+                var envTv = (tC[pi] + 273.15) * (1 + 0.61 * satMixRatio(tdC[pi] != null ? tdC[pi] : tC[pi] - 30, pp));
+                var parTv = (parcelT[pi] + 273.15) * (1 + 0.61 * satMixRatio(parcelT[pi], pp));
+                var buoy = (parTv - envTv) / envTv;
+                // Pressure layer thickness
+                var dpLayer = 0;
+                if (pi > 0 && plev[pi-1] != null) {
+                    dpLayer = (plev[pi-1] - pp);
+                }
+                var dzApprox = dpLayer * 100 / (plev[pi] / 100 * g); // rough dz
+                if (buoy > 0) {
+                    cape += buoy * g * Math.abs(dzApprox);
+                    if (!foundLFC) { lfcP = pp; foundLFC = true; }
+                    elP = pp; // keep updating → last positive = EL
+                } else if (!foundLFC && pp < lclP) {
+                    cin += buoy * g * Math.abs(dzApprox);
+                }
+            }
+        }
+        derived.cape = cape > 0 ? Math.round(cape) : 0;
+        derived.cin = cin < 0 ? Math.round(cin) : 0;
+        derived.lfc_p = lfcP;
+        derived.el_p = elP;
+
+        // Total Precipitable Water: PWAT = (1/g) * ∫ q dp
+        var pwat = 0;
+        for (var pw = 0; pw < plev.length - 1; pw++) {
+            if (qRaw && qRaw[pw] != null && qRaw[pw+1] != null) {
+                var q1 = qIsGkg ? qRaw[pw] / 1000.0 : qRaw[pw];
+                var q2 = qIsGkg ? qRaw[pw+1] / 1000.0 : qRaw[pw+1];
+                var dpp = Math.abs(plev[pw] - plev[pw+1]) * 100; // Pa
+                pwat += 0.5 * (q1 + q2) * dpp / g;
+            }
+        }
+        derived.pwat = pwat > 0 ? pwat : null; // kg/m² ≈ mm
+
+        // 0°C level
+        for (var fk = 0; fk < plev.length - 1; fk++) {
+            if (tC[fk] != null && tC[fk+1] != null && tC[fk] > 0 && tC[fk+1] <= 0) {
+                var frac = tC[fk] / (tC[fk] - tC[fk+1]);
+                derived.freezing_p = plev[fk] + frac * (plev[fk+1] - plev[fk]);
+                break;
+            }
+        }
+    }
+
+    // Store derived quantities for the info panel
+    profiles._derived = derived;
+    profiles._parcelT = (typeof parcelT !== 'undefined') ? parcelT : null;
+    profiles._tC = tC;
+    profiles._tdC = tdC;
+
+    // Compute skewed coordinates
+    var tSkew = [], tdSkew = [];
     for (var j = 0; j < plev.length; j++) {
         tSkew.push(skewX(tC[j], plev[j]));
         tdSkew.push(skewX(tdC[j], plev[j]));
     }
 
     // ── Background reference lines ──
-
-    // Dry adiabats: θ = T * (1000/p)^0.286 → T(p) = θ * (p/1000)^0.286
-    var dryAdiabatTraces = [];
-    var thetaVals = [-30, -20, -10, 0, 10, 20, 30, 40, 50, 60, 70, 80];
     var pRange = [];
-    for (var pp = 1050; pp >= 100; pp -= 10) pRange.push(pp);
+    for (var pp2 = 1050; pp2 >= 100; pp2 -= 5) pRange.push(pp2);
+
+    // Isotherms
+    var isothermTraces = [];
+    for (var tIso = -80; tIso <= 50; tIso += 10) {
+        var xIso = [], yIso = [];
+        pRange.forEach(function(p) {
+            var sx = skewX(tIso, p);
+            if (sx >= -45 && sx <= 75) { xIso.push(sx); yIso.push(p); }
+        });
+        if (xIso.length > 1) {
+            isothermTraces.push({
+                x: xIso, y: yIso, type: 'scatter', mode: 'lines',
+                line: { color: tIso === 0 ? 'rgba(100,200,255,0.45)' : 'rgba(100,160,220,0.18)',
+                        width: tIso === 0 ? 1.3 : 0.7,
+                        dash: tIso === 0 ? 'dot' : 'solid' },
+                showlegend: false, hoverinfo: 'skip',
+            });
+        }
+    }
+
+    // Dry adiabats
+    var dryAdiabatTraces = [];
+    var thetaVals = [-30, -20, -10, 0, 10, 20, 30, 40, 50, 60, 70, 80, 100, 120, 150];
     thetaVals.forEach(function(theta) {
         var xDry = [], yDry = [];
         var thetaK = theta + 273.15;
         pRange.forEach(function(p) {
             var tAtP = thetaK * Math.pow(p / 1000.0, 0.286) - 273.15;
             var sx = skewX(tAtP, p);
-            if (sx >= -50 && sx <= 80) {
-                xDry.push(sx);
-                yDry.push(p);
-            }
+            if (sx >= -45 && sx <= 75) { xDry.push(sx); yDry.push(p); }
         });
         if (xDry.length > 1) {
             dryAdiabatTraces.push({
                 x: xDry, y: yDry, type: 'scatter', mode: 'lines',
-                line: { color: 'rgba(200,120,80,0.2)', width: 0.8 },
+                line: { color: 'rgba(200,120,80,0.22)', width: 0.8 },
                 showlegend: false, hoverinfo: 'skip',
             });
         }
     });
 
-    // Isotherms (vertical in non-skewed, tilted in skewed)
-    var isothermTraces = [];
-    for (var tIso = -80; tIso <= 40; tIso += 10) {
-        var xIso = [], yIso = [];
-        pRange.forEach(function(p) {
-            var sx = skewX(tIso, p);
-            if (sx >= -50 && sx <= 80) {
-                xIso.push(sx);
-                yIso.push(p);
-            }
-        });
-        if (xIso.length > 1) {
-            isothermTraces.push({
-                x: xIso, y: yIso, type: 'scatter', mode: 'lines',
-                line: { color: 'rgba(100,160,220,0.15)', width: 0.7 },
-                showlegend: false, hoverinfo: 'skip',
-            });
-        }
-    }
-
-    // Moist adiabats (simplified: use Bolton 1980 pseudoadiabat)
+    // Moist adiabats (Bolton 1980 pseudoadiabat)
     var moistAdiabatTraces = [];
-    var moistThetaVals = [-10, 0, 10, 16, 20, 24, 28, 32, 36];
+    var moistThetaVals = [-10, 0, 6, 10, 14, 18, 22, 26, 30, 34, 38];
     moistThetaVals.forEach(function(tBase) {
         var xMoist = [], yMoist = [];
-        // Integrate upward from 1000 hPa using moist lapse rate
         var tCur = tBase;
-        for (var p = 1000; p >= 100; p -= 10) {
+        for (var p = 1000; p >= 100; p -= 5) {
             var sx = skewX(tCur, p);
-            if (sx >= -50 && sx <= 80) {
-                xMoist.push(sx);
-                yMoist.push(p);
-            }
-            // Approximate moist adiabatic lapse rate
-            var tKcur = tCur + 273.15;
-            var es = 6.112 * Math.exp(17.67 * tCur / (tCur + 243.5));
-            var rs = 0.622 * es / (p - es);
-            var Lv = 2.501e6;
-            var Cp = 1005.7;
-            var Rd = 287.04;
-            var numerator = (Rd * tKcur / p) + (Lv * rs / p);
-            var denominator = Cp + (Lv * Lv * rs * 0.622 / (Rd * tKcur * tKcur));
-            var dtdp = numerator / denominator;
-            tCur -= dtdp * 10;  // dp = -10 hPa step
+            if (sx >= -45 && sx <= 75) { xMoist.push(sx); yMoist.push(p); }
+            tCur -= moistLapseRate(tCur, p) * 5;
         }
         if (xMoist.length > 2) {
             moistAdiabatTraces.push({
                 x: xMoist, y: yMoist, type: 'scatter', mode: 'lines',
-                line: { color: 'rgba(80,200,120,0.2)', width: 0.8 },
+                line: { color: 'rgba(80,200,120,0.22)', width: 0.8, dash: 'dot' },
+                showlegend: false, hoverinfo: 'skip',
+            });
+        }
+    });
+
+    // Mixing ratio lines (constant w, in g/kg)
+    var mixRatioTraces = [];
+    var wVals = [0.4, 1, 2, 4, 7, 10, 16, 24];
+    wVals.forEach(function(wGkg) {
+        var w = wGkg / 1000.0;
+        var xMix = [], yMix = [];
+        pRange.forEach(function(p) {
+            // e = w * p / (eps + w); T from inverted Clausius-Clapeyron
+            var eMix = w * p / (eps + w);
+            if (eMix > 0.001 && eMix < p) {
+                var lnEM = Math.log(eMix / 6.112);
+                var tMix = 243.5 * lnEM / (17.67 - lnEM);
+                var sx = skewX(tMix, p);
+                if (sx >= -45 && sx <= 75 && tMix > -50 && tMix < 50) {
+                    xMix.push(sx); yMix.push(p);
+                }
+            }
+        });
+        if (xMix.length > 2) {
+            mixRatioTraces.push({
+                x: xMix, y: yMix, type: 'scatter', mode: 'lines',
+                line: { color: 'rgba(160,120,200,0.2)', width: 0.6, dash: 'dash' },
                 showlegend: false, hoverinfo: 'skip',
             });
         }
@@ -1049,75 +1186,115 @@ function renderSkewT(profiles, divId) {
 
     // ── Main data traces ──
     var traces = [];
+    traces = traces.concat(isothermTraces, dryAdiabatTraces, moistAdiabatTraces, mixRatioTraces);
 
-    // Background lines first
-    traces = traces.concat(isothermTraces, dryAdiabatTraces, moistAdiabatTraces);
-
-    // 0°C isotherm (highlight)
-    var xFreeze = [], yFreeze = [];
-    pRange.forEach(function(p) {
-        var sx = skewX(0, p);
-        if (sx >= -50 && sx <= 80) { xFreeze.push(sx); yFreeze.push(p); }
-    });
-    traces.push({
-        x: xFreeze, y: yFreeze, type: 'scatter', mode: 'lines',
-        line: { color: 'rgba(100,200,255,0.35)', width: 1.2, dash: 'dot' },
-        showlegend: false, hoverinfo: 'skip',
-    });
+    // CAPE / CIN shading between parcel and environment
+    if (profiles._parcelT && derived.cape > 0) {
+        // Positive buoyancy (CAPE) shading
+        var capeX = [], capeY = [], cinX = [], cinY = [];
+        for (var ci = 0; ci < plev.length; ci++) {
+            if (profiles._parcelT[ci] != null && tC[ci] != null && plev[ci] <= (sfcP || 1050)) {
+                var pTv = profiles._parcelT[ci], eTv = tC[ci];
+                if (pTv > eTv) {
+                    // Positive buoyancy
+                    capeX.push(skewX(pTv, plev[ci]));
+                    capeX.push(skewX(eTv, plev[ci]));
+                    capeY.push(plev[ci]);
+                    capeY.push(plev[ci]);
+                }
+            }
+        }
+        // Build polygon for CAPE region (between LFC and EL)
+        if (derived.lfc_p && derived.el_p) {
+            var capeFwdX = [], capeFwdY = [], capeRevX = [], capeRevY = [];
+            for (var cci = 0; cci < plev.length; cci++) {
+                if (profiles._parcelT[cci] != null && tC[cci] != null &&
+                    plev[cci] <= derived.lfc_p && plev[cci] >= derived.el_p) {
+                    capeFwdX.push(skewX(profiles._parcelT[cci], plev[cci]));
+                    capeFwdY.push(plev[cci]);
+                    capeRevX.unshift(skewX(tC[cci], plev[cci]));
+                    capeRevY.unshift(plev[cci]);
+                }
+            }
+            if (capeFwdX.length > 1) {
+                traces.push({
+                    x: capeFwdX.concat(capeRevX), y: capeFwdY.concat(capeRevY),
+                    type: 'scatter', mode: 'lines', fill: 'toself',
+                    fillcolor: 'rgba(239,68,68,0.12)', line: { color: 'transparent' },
+                    showlegend: false, hoverinfo: 'skip',
+                });
+            }
+        }
+        // CIN region (between LCL and LFC)
+        if (derived.lcl_p && derived.lfc_p && derived.lcl_p > derived.lfc_p) {
+            var cinFwdX = [], cinFwdY = [], cinRevX2 = [], cinRevY2 = [];
+            for (var cni = 0; cni < plev.length; cni++) {
+                if (profiles._parcelT[cni] != null && tC[cni] != null &&
+                    plev[cni] <= derived.lcl_p && plev[cni] >= derived.lfc_p &&
+                    profiles._parcelT[cni] < tC[cni]) {
+                    cinFwdX.push(skewX(profiles._parcelT[cni], plev[cni]));
+                    cinFwdY.push(plev[cni]);
+                    cinRevX2.unshift(skewX(tC[cni], plev[cni]));
+                    cinRevY2.unshift(plev[cni]);
+                }
+            }
+            if (cinFwdX.length > 1) {
+                traces.push({
+                    x: cinFwdX.concat(cinRevX2), y: cinFwdY.concat(cinRevY2),
+                    type: 'scatter', mode: 'lines', fill: 'toself',
+                    fillcolor: 'rgba(96,165,250,0.12)', line: { color: 'transparent' },
+                    showlegend: false, hoverinfo: 'skip',
+                });
+            }
+        }
+    }
 
     // Dewpoint trace (green)
     traces.push({
-        x: tdSkew, y: plev, type: 'scatter', mode: 'lines+markers',
-        name: 'Td',
-        line: { color: '#22c55e', width: 2.5 },
-        marker: { color: '#22c55e', size: 4 },
+        x: tdSkew, y: plev, type: 'scatter', mode: 'lines',
+        name: 'Td', line: { color: '#22c55e', width: 2.5 },
         hovertemplate: '%{text}<extra>Dewpoint</extra>',
         text: plev.map(function(p, idx) {
-            return p + ' hPa: Td = ' + (tdC[idx] != null ? tdC[idx].toFixed(1) : '—') + '°C';
+            return p + ' hPa: Td = ' + (tdC[idx] != null ? tdC[idx].toFixed(1) : '\u2014') + '\u00b0C';
         }),
     });
 
     // Temperature trace (red)
     traces.push({
-        x: tSkew, y: plev, type: 'scatter', mode: 'lines+markers',
-        name: 'T',
-        line: { color: '#ef4444', width: 2.5 },
-        marker: { color: '#ef4444', size: 4 },
+        x: tSkew, y: plev, type: 'scatter', mode: 'lines',
+        name: 'T', line: { color: '#ef4444', width: 2.5 },
         hovertemplate: '%{text}<extra>Temperature</extra>',
         text: plev.map(function(p, idx) {
-            return p + ' hPa: T = ' + (tC[idx] != null ? tC[idx].toFixed(1) : '—') + '°C';
+            return p + ' hPa: T = ' + (tC[idx] != null ? tC[idx].toFixed(1) : '\u2014') + '\u00b0C';
         }),
     });
 
-    // CAPE shading between T and Td traces (filled region)
-    // Simple fill between T and Td for visual effect
-    var fillX = tdSkew.slice().reverse().concat(tSkew);
-    var fillY = plev.slice().reverse().concat(plev.slice());
-    // Only add if we have valid data
-    var hasValidFill = tSkew.some(function(v) { return v != null; }) && tdSkew.some(function(v) { return v != null; });
-    if (hasValidFill) {
-        traces.splice(traces.length - 2, 0, {
-            x: fillX, y: fillY, type: 'scatter', mode: 'lines',
-            fill: 'toself', fillcolor: 'rgba(100,180,100,0.08)',
-            line: { color: 'transparent' },
-            showlegend: false, hoverinfo: 'skip',
+    // Parcel path (dashed purple)
+    if (profiles._parcelT) {
+        var parcelSkew = profiles._parcelT.map(function(t, idx) {
+            return t != null ? skewX(t, plev[idx]) : null;
+        });
+        traces.push({
+            x: parcelSkew, y: plev, type: 'scatter', mode: 'lines',
+            name: 'Parcel', line: { color: '#c084fc', width: 1.8, dash: 'dash' },
+            hovertemplate: '%{text}<extra>Parcel</extra>',
+            text: plev.map(function(p, idx) {
+                return p + ' hPa: Tp = ' + (profiles._parcelT[idx] != null ? profiles._parcelT[idx].toFixed(1) : '\u2014') + '\u00b0C';
+            }),
         });
     }
 
-    // ── Axis labels: show actual temperature at key pressure levels ──
-    // Build custom tick text for x-axis showing unskewed temperatures
-    var xTickVals = [];
-    var xTickText = [];
-    for (var tTick = -80; tTick <= 40; tTick += 10) {
-        var skewed = skewX(tTick, 1000);  // reference level for label
-        xTickVals.push(skewed);
-        xTickText.push(tTick + '°C');
+    // ── Axis labels ──
+    var xTickVals = [], xTickText = [];
+    for (var tTick = -40; tTick <= 50; tTick += 10) {
+        xTickVals.push(skewX(tTick, 1000));
+        xTickText.push(tTick + '\u00b0C');
     }
 
     var layout = {
         xaxis: {
-            title: { text: 'Temperature (°C, skewed)', font: { size: 9, color: '#8b9ec2' } },
-            range: [-35, 70],
+            title: { text: 'Temperature (\u00b0C)', font: { size: 9, color: '#8b9ec2' } },
+            range: [-30, 55],
             tickvals: xTickVals, ticktext: xTickText,
             color: '#8b9ec2', tickfont: { size: 8 },
             zeroline: false, gridcolor: 'rgba(255,255,255,0.03)',
@@ -1136,7 +1313,7 @@ function renderSkewT(profiles, divId) {
         plot_bgcolor: 'rgba(10,22,40,0.5)',
         margin: { l: 45, r: 10, t: 22, b: 35 },
         title: { text: 'Skew-T / Log-P', font: { size: 10, color: '#00d4ff' }, x: 0.5, y: 0.98 },
-        legend: { font: { color: '#ccc', size: 9 }, x: 0.85, y: 0.98, bgcolor: 'rgba(0,0,0,0.3)' },
+        legend: { font: { color: '#ccc', size: 9 }, x: 0.78, y: 0.98, bgcolor: 'rgba(0,0,0,0.4)' },
         showlegend: true,
     };
     Plotly.newPlot(divId, traces, layout, { responsive: true, displayModeBar: false });
@@ -1698,8 +1875,11 @@ function _renderSkewTInfo(profiles) {
     var tK = profiles.t;
     var qRaw = profiles.q;
     var rh = profiles.rh;
+    var derived = profiles._derived || {};
+    var tC = profiles._tC || tK.map(function(v) { return v != null ? v - 273.15 : null; });
+    var tdC = profiles._tdC || [];
 
-    // Detect q units: if max(q) > 0.5 it's g/kg, otherwise kg/kg
+    // Detect q units
     var maxQ = 0;
     if (qRaw) {
         for (var qi = 0; qi < qRaw.length; qi++) {
@@ -1708,35 +1888,73 @@ function _renderSkewTInfo(profiles) {
     }
     var qIsGkg = maxQ > 0.5;
 
-    // Compute dewpoint
-    var tdC = [];
-    var tC = tK.map(function(v) { return v != null ? v - 273.15 : null; });
-    for (var i = 0; i < plev.length; i++) {
-        if (qRaw && qRaw[i] != null && plev[i] != null && qRaw[i] > 0) {
-            var qKg = qIsGkg ? qRaw[i] / 1000.0 : qRaw[i];
-            var e = qKg * plev[i] / (0.622 + 0.378 * qKg);
-            if (e > 0.001) {
-                var lnE = Math.log(e / 6.112);
-                tdC.push(243.5 * lnE / (17.67 - lnE));
-            } else { tdC.push(null); }
-        } else { tdC.push(null); }
+    // ── Derived quantities summary (top) ──
+    var html = '<div style="font-family:\'JetBrains Mono\',monospace;">';
+
+    html += '<div style="color:#00d4ff;font-weight:700;margin-bottom:8px;font-size:11px;letter-spacing:1px;">DERIVED PARAMETERS</div>';
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px;">';
+
+    function infoCard(label, value, unit, color) {
+        return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:6px;padding:6px 8px;text-align:center;">' +
+            '<div style="font-size:14px;font-weight:700;color:' + (color || '#e5e7eb') + ';">' + value + '</div>' +
+            '<div style="font-size:8px;color:#6b7280;margin-top:1px;">' + unit + '</div>' +
+            '<div style="font-size:8px;color:#8b9ec2;font-weight:600;">' + label + '</div></div>';
     }
 
-    // Find key levels
-    var html = '<div style="font-family:\'JetBrains Mono\',monospace;line-height:2;">';
-    html += '<div style="color:#00d4ff;font-weight:700;margin-bottom:6px;">SOUNDING TABLE</div>';
+    // CAPE
+    var capeVal = derived.cape != null ? derived.cape : '\u2014';
+    var capeColor = derived.cape > 2500 ? '#ef4444' : derived.cape > 1000 ? '#f59e0b' : derived.cape > 500 ? '#fbbf24' : '#34d399';
+    html += infoCard('CAPE', capeVal, 'J/kg', capeColor);
+
+    // CIN
+    var cinVal = derived.cin != null ? derived.cin : '\u2014';
+    var cinColor = derived.cin < -200 ? '#60a5fa' : derived.cin < -50 ? '#93c5fd' : '#e5e7eb';
+    html += infoCard('CIN', cinVal, 'J/kg', cinColor);
+
+    // PWAT
+    var pwatVal = derived.pwat != null ? derived.pwat.toFixed(1) : '\u2014';
+    var pwatIn = derived.pwat != null ? (derived.pwat / 25.4).toFixed(2) : '\u2014';
+    html += infoCard('PWAT', pwatVal, 'mm (' + pwatIn + ' in)', '#22d3ee');
+
+    // Freezing level
+    var frzVal = derived.freezing_p != null ? Math.round(derived.freezing_p) : '\u2014';
+    html += infoCard('0\u00b0C Level', frzVal, 'hPa', '#60a5fa');
+
+    // LCL
+    var lclVal = derived.lcl_p != null ? Math.round(derived.lcl_p) : '\u2014';
+    html += infoCard('LCL', lclVal, 'hPa', '#a78bfa');
+
+    // LFC
+    var lfcVal = derived.lfc_p != null ? Math.round(derived.lfc_p) : '\u2014';
+    html += infoCard('LFC', lfcVal, 'hPa', '#fb923c');
+
+    // EL
+    var elVal = derived.el_p != null ? Math.round(derived.el_p) : '\u2014';
+    html += infoCard('EL', elVal, 'hPa', '#c084fc');
+
+    // Mean T-Td depression
+    var totalDep = 0, countDep = 0;
+    for (var m = 0; m < plev.length; m++) {
+        if (tC[m] != null && tdC[m] != null) { totalDep += (tC[m] - tdC[m]); countDep++; }
+    }
+    var meanDep = countDep > 0 ? (totalDep / countDep).toFixed(1) : '\u2014';
+    html += infoCard('Mean T\u2013Td', meanDep, '\u00b0C', '#f59e0b');
+
+    html += '</div>';
+
+    // ── Sounding table ──
+    html += '<div style="color:#00d4ff;font-weight:700;margin-bottom:4px;font-size:10px;letter-spacing:1px;">SOUNDING TABLE</div>';
     html += '<table style="width:100%;border-collapse:collapse;font-size:10px;">';
     html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.1);color:#8b9ec2;">' +
-        '<th style="text-align:left;padding:3px 4px;">P (hPa)</th>' +
-        '<th style="text-align:right;padding:3px 4px;">T (°C)</th>' +
-        '<th style="text-align:right;padding:3px 4px;">Td (°C)</th>' +
-        '<th style="text-align:right;padding:3px 4px;">RH (%)</th>' +
-        '<th style="text-align:right;padding:3px 4px;">q (g/kg)</th></tr>';
+        '<th style="text-align:left;padding:3px 4px;">P</th>' +
+        '<th style="text-align:right;padding:3px 4px;">T</th>' +
+        '<th style="text-align:right;padding:3px 4px;">Td</th>' +
+        '<th style="text-align:right;padding:3px 4px;">RH</th>' +
+        '<th style="text-align:right;padding:3px 4px;">q</th></tr>';
 
     for (var j = 0; j < plev.length; j++) {
         var rowColor = plev[j] <= 200 ? 'rgba(100,160,255,0.6)' :
                        plev[j] <= 500 ? 'rgba(200,200,200,0.6)' : 'rgba(255,200,150,0.6)';
-        // Always display q in g/kg
         var qDisplay = null;
         if (qRaw && qRaw[j] != null) {
             qDisplay = qIsGkg ? qRaw[j] : qRaw[j] * 1000.0;
@@ -1748,31 +1966,7 @@ function _renderSkewTInfo(profiles) {
             '<td style="text-align:right;padding:2px 4px;">' + (rh && rh[j] != null ? rh[j].toFixed(0) : '\u2014') + '</td>' +
             '<td style="text-align:right;padding:2px 4px;">' + (qDisplay != null ? qDisplay.toFixed(1) : '\u2014') + '</td></tr>';
     }
-    html += '</table>';
-
-    // Compute approximate 0°C level
-    for (var k = 0; k < plev.length - 1; k++) {
-        if (tC[k] != null && tC[k+1] != null && tC[k] > 0 && tC[k+1] <= 0) {
-            var frac = tC[k] / (tC[k] - tC[k+1]);
-            var freezingP = plev[k] + frac * (plev[k+1] - plev[k]);
-            html += '<div style="margin-top:8px;color:#60a5fa;">0°C level: ~' + freezingP.toFixed(0) + ' hPa</div>';
-            break;
-        }
-    }
-
-    // Compute column-mean dewpoint depression
-    var totalDep = 0, countDep = 0;
-    for (var m = 0; m < plev.length; m++) {
-        if (tC[m] != null && tdC[m] != null) {
-            totalDep += (tC[m] - tdC[m]);
-            countDep++;
-        }
-    }
-    if (countDep > 0) {
-        html += '<div style="color:#f59e0b;">Mean T–Td: ' + (totalDep / countDep).toFixed(1) + '°C</div>';
-    }
-
-    html += '</div>';
+    html += '</table></div>';
     el.innerHTML = html;
 }
 
