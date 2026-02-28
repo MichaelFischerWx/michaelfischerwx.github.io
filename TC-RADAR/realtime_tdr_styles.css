@@ -1,0 +1,129 @@
+/* ══════════════════════════════════════════════════════════════
+   Real-Time TDR Tab — Styles
+   Append these to tc_radar_styles.css (or include as a separate file)
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Nav highlight for Real-Time TDR link ─────────────────── */
+.rt-nav-highlight {
+    color: var(--cyan) !important;
+    font-weight: 600 !important;
+}
+.rt-nav-highlight.active {
+    background: rgba(0, 212, 255, 0.12);
+    border-radius: 6px;
+    padding: 4px 10px !important;
+}
+
+/* ── Section header ───────────────────────────────────────── */
+.rt-header {
+    padding: 32px 32px 16px;
+    text-align: center;
+}
+.rt-header-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 6px;
+}
+.rt-header-desc {
+    font-size: 0.95rem;
+    color: var(--slate);
+    max-width: 640px;
+    margin: 0 auto;
+}
+
+/* ── Toolbar (mission + file selection) ───────────────────── */
+.rt-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+}
+
+/* ── Viz panel layout ─────────────────────────────────────── */
+.rt-viz-panel {
+    padding: 16px 24px;
+    min-height: calc(100vh - 200px);
+}
+.rt-viz-layout {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 20px;
+    align-items: start;
+}
+@media (max-width: 900px) {
+    .rt-viz-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ── Display area (left) ──────────────────────────────────── */
+.rt-viz-display {
+    min-width: 0;
+}
+
+/* ── Controls panel (right) ───────────────────────────────── */
+.rt-viz-controls {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+}
+
+/* ── Metadata panel ───────────────────────────────────────── */
+.rt-meta-panel {
+    margin-bottom: 8px;
+}
+.rt-meta-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 2px;
+}
+.rt-meta-row {
+    font-size: 0.82rem;
+    color: var(--slate);
+    margin-bottom: 10px;
+}
+.rt-meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    padding: 8px 0;
+    border-top: 1px solid var(--border);
+}
+.rt-meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+.rt-meta-label {
+    font-size: 0.7rem;
+    color: var(--slate);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.rt-meta-val {
+    font-size: 0.85rem;
+    color: var(--text);
+    font-weight: 500;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+/* ── Attribution footer ───────────────────────────────────── */
+.rt-attribution {
+    text-align: center;
+    padding: 20px;
+    font-size: 0.8rem;
+    color: var(--slate);
+}
+.rt-attribution a {
+    color: var(--blue-light);
+    text-decoration: none;
+}
+.rt-attribution a:hover {
+    text-decoration: underline;
+}

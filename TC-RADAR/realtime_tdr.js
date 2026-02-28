@@ -1,0 +1,593 @@
+/**
+ * realtime_tdr.js — Real-Time TDR Visualization Tab
+ * ===================================================
+ * Standalone module for browsing and visualizing real-time Tail Doppler
+ * Radar analyses from seb.omao.noaa.gov/pub/flight/radar/.
+ *
+ * This file is completely independent of tc_radar_app.js — it manages
+ * its own state, DOM elements, and API calls within the #realtime-section.
+ *
+ * Depends on: Plotly (loaded globally by index.html)
+ */
+
+(function () {
+    'use strict';
+
+    // ── Configuration ────────────────────────────────────────────
+    var API_BASE = 'https://tc-radar-api.onrender.com';
+    var RT_PREFIX = '/realtime';
+
+    // ── State ────────────────────────────────────────────────────
+    var _rtVisible = false;
+    var _currentFileUrl = null;
+    var _rtDataCache = {};
+    var _rtLast3DJson = null;
+    var _rtLastPlotlyData = null;
+    var _rtCsMode = false;
+    var _rtCsPointA = null;
+    var _rtAnimPlaying = false;
+    var _rtAnimTimer = null;
+    var _rtDefaultColorscale = null;
+    var _rtDefaultVmin = null;
+    var _rtDefaultVmax = null;
+
+    // ── Tab visibility toggle ────────────────────────────────────
+    window.toggleRealtimeTab = function () {
+        var section = document.getElementById('realtime-section');
+        var archiveSections = document.querySelectorAll('#map-section, #about, #features, #download, #contact, footer');
+        _rtVisible = !_rtVisible;
+
+        if (_rtVisible) {
+            // Hide archive, show real-time
+            archiveSections.forEach(function (el) { el.style.display = 'none'; });
+            section.style.display = 'block';
+            // Update nav link style
+            var link = document.getElementById('rt-nav-link');
+            if (link) link.classList.add('active');
+            // Load missions if not yet loaded
+            if (!document.getElementById('rt-mission-select').options.length ||
+                document.getElementById('rt-mission-select').options[0].value === '') {
+                loadMissions();
+            }
+        } else {
+            // Show archive, hide real-time
+            archiveSections.forEach(function (el) { el.style.display = ''; });
+            section.style.display = 'none';
+            var link2 = document.getElementById('rt-nav-link');
+            if (link2) link2.classList.remove('active');
+        }
+    };
+
+    window.showArchiveTab = function () {
+        if (_rtVisible) toggleRealtimeTab();
+    };
+
+    // ── Toast (reuse if available, otherwise standalone) ─────────
+    function rtToast(message, type, duration) {
+        if (typeof showToast === 'function') { showToast(message, type, duration); return; }
+        type = type || 'info'; duration = duration || 5000;
+        var container = document.getElementById('toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toast-container';
+            container.style.cssText = 'position:fixed;top:60px;right:16px;z-index:100000;display:flex;flex-direction:column;gap:8px;pointer-events:none;';
+            document.body.appendChild(container);
+        }
+        var toast = document.createElement('div');
+        var bgColor = type === 'error' ? 'rgba(239,68,68,0.95)' : type === 'warn' ? 'rgba(245,158,11,0.95)' : 'rgba(14,45,90,0.95)';
+        toast.style.cssText = 'background:' + bgColor + ';color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;font-family:DM Sans,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.4);border:1px solid rgba(96,165,250,0.4);pointer-events:auto;max-width:380px;opacity:0;transform:translateX(30px);transition:all 0.3s ease;';
+        toast.textContent = message;
+        container.appendChild(toast);
+        requestAnimationFrame(function () { toast.style.opacity = '1'; toast.style.transform = 'translateX(0)'; });
+        setTimeout(function () { toast.style.opacity = '0'; toast.style.transform = 'translateX(30px)'; setTimeout(function () { toast.remove(); }, 300); }, duration);
+    }
+
+    // ── Hurricane loading animation (reuse pattern from main app) ──
+    function _rtLoadingHTML(msg) {
+        return '<div class="explorer-status loading" style="padding:24px 0;text-align:center;">' +
+            '<div class="spinner" style="margin:0 auto 12px;"></div>' +
+            '<div>' + msg + '</div></div>';
+    }
+
+    // ── Load mission list ────────────────────────────────────────
+    function loadMissions() {
+        var sel = document.getElementById('rt-mission-select');
+        sel.innerHTML = '<option value="">Loading missions…</option>';
+        sel.disabled = true;
+
+        fetch(API_BASE + RT_PREFIX + '/missions')
+            .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+            .then(function (json) {
+                sel.innerHTML = '<option value="">Select a mission…</option>';
+                json.missions.forEach(function (m) {
+                    var opt = document.createElement('option');
+                    opt.value = m;
+                    // Parse a readable label: e.g. "20251028H1" → "2025-10-28 H1"
+                    var label = m;
+                    var match = m.match(/^(\d{4})(\d{2})(\d{2})(.+)$/);
+                    if (match) label = match[1] + '-' + match[2] + '-' + match[3] + ' ' + match[4];
+                    opt.textContent = label;
+                    sel.appendChild(opt);
+                });
+                sel.disabled = false;
+            })
+            .catch(function (err) {
+                sel.innerHTML = '<option value="">Error loading missions</option>';
+                rtToast('Could not load missions: ' + err.message, 'error');
+            });
+    }
+    window._rtLoadMissions = loadMissions;
+
+    // ── Load files for a mission ─────────────────────────────────
+    function loadFiles(mission) {
+        var sel = document.getElementById('rt-file-select');
+        var goBtn = document.getElementById('rt-go-btn');
+        sel.innerHTML = '<option value="">Loading files…</option>';
+        sel.disabled = true;
+        goBtn.disabled = true;
+
+        fetch(API_BASE + RT_PREFIX + '/files?mission=' + encodeURIComponent(mission))
+            .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+            .then(function (json) {
+                sel.innerHTML = '<option value="">Select an analysis…</option>';
+                if (json.files.length === 0) {
+                    sel.innerHTML = '<option value="">No xy analysis files found</option>';
+                    return;
+                }
+                json.files.forEach(function (f) {
+                    var opt = document.createElement('option');
+                    opt.value = f.url;
+                    var timeStr = f.time_label;
+                    if (timeStr.length === 4) {
+                        timeStr = timeStr.substring(0, 2) + ':' + timeStr.substring(2) + ' UTC';
+                    }
+                    opt.textContent = timeStr + '  (' + f.filename + ')';
+                    sel.appendChild(opt);
+                });
+                sel.disabled = false;
+            })
+            .catch(function (err) {
+                sel.innerHTML = '<option value="">Error loading files</option>';
+                rtToast('Could not list files: ' + err.message, 'error');
+            });
+    }
+
+    // ── Event: mission selected ──────────────────────────────────
+    document.addEventListener('DOMContentLoaded', function () {
+        var missionSel = document.getElementById('rt-mission-select');
+        var fileSel = document.getElementById('rt-file-select');
+        var goBtn = document.getElementById('rt-go-btn');
+
+        if (missionSel) {
+            missionSel.addEventListener('change', function () {
+                if (this.value) loadFiles(this.value);
+                else {
+                    fileSel.innerHTML = '<option value="">← Select a mission first</option>';
+                    fileSel.disabled = true;
+                    goBtn.disabled = true;
+                }
+            });
+        }
+        if (fileSel) {
+            fileSel.addEventListener('change', function () {
+                goBtn.disabled = !this.value;
+            });
+        }
+    });
+
+    // ── Go button: load the file and show viz panel ──────────────
+    window.rtExploreFile = function () {
+        var fileUrl = document.getElementById('rt-file-select').value;
+        if (!fileUrl) return;
+        _currentFileUrl = fileUrl;
+        _rtDataCache = {};
+        _rtLast3DJson = null;
+        _rtLastPlotlyData = null;
+        _rtCsMode = false;
+        _rtCsPointA = null;
+
+        // Show the viz panel
+        var panel = document.getElementById('rt-viz-panel');
+        panel.style.display = 'block';
+
+        // Reset display
+        document.getElementById('rt-display-area').innerHTML = _rtLoadingHTML('Loading TDR analysis… (may take ~30s for first file)');
+        document.getElementById('rt-meta-panel').innerHTML = '';
+        document.getElementById('rt-cs-result').innerHTML = '';
+        document.getElementById('rt-cs-status').textContent = '';
+
+        // Enable action buttons
+        var csBtn = document.getElementById('rt-cs-btn'); if (csBtn) csBtn.disabled = true;
+        var volBtn = document.getElementById('rt-vol-btn'); if (volBtn) volBtn.disabled = true;
+
+        // Generate initial plot
+        rtGeneratePlot();
+
+        // Fetch metadata display
+        rtFetchMeta(fileUrl);
+    };
+
+    // ── Fetch and display metadata ───────────────────────────────
+    function rtFetchMeta(fileUrl) {
+        fetch(API_BASE + RT_PREFIX + '/data?file_url=' + encodeURIComponent(fileUrl) + '&variable=' + DEFAULT_RT_VAR + '&level_km=2')
+            .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+            .then(function (json) {
+                var m = json.case_meta || {};
+                var html = '<div class="rt-meta-title">' + (m.storm_name || 'Unknown') + '</div>' +
+                    '<div class="rt-meta-row">' + (m.mission_id || '') + ' · ' + (m.datetime || '') + '</div>' +
+                    '<div class="rt-meta-grid">' +
+                    '<div class="rt-meta-item"><span class="rt-meta-label">Position</span><span class="rt-meta-val">' +
+                    (m.latitude ? m.latitude.toFixed(2) + '°N, ' + Math.abs(m.longitude).toFixed(2) + '°' + (m.longitude < 0 ? 'W' : 'E') : '—') + '</span></div>' +
+                    '<div class="rt-meta-item"><span class="rt-meta-label">Radar</span><span class="rt-meta-val">' + (m.radar || 'TAIL') + '</span></div>' +
+                    '<div class="rt-meta-item"><span class="rt-meta-label">Resolution</span><span class="rt-meta-val">' + (m.resolution_km || 2) + ' km</span></div>' +
+                    '<div class="rt-meta-item"><span class="rt-meta-label">Storm Motion</span><span class="rt-meta-val">' +
+                    (m.storm_motion_north_ms > -999 ? m.storm_motion_north_ms.toFixed(1) + ' N, ' + m.storm_motion_east_ms.toFixed(1) + ' E m/s' : '—') + '</span></div>' +
+                    '<div class="rt-meta-item"><span class="rt-meta-label">Melting Level</span><span class="rt-meta-val">' +
+                    (m.melting_height_km > 0 ? m.melting_height_km.toFixed(1) + ' km' : '—') + '</span></div>' +
+                    '<div class="rt-meta-item"><span class="rt-meta-label">Quality</span><span class="rt-meta-val">' +
+                    (m.analysis_level === '1' ? 'Real-Time' : m.analysis_level === '2' ? 'Research' : m.analysis_level || '—') + '</span></div>' +
+                    '</div>';
+                document.getElementById('rt-meta-panel').innerHTML = html;
+            })
+            .catch(function () { /* metadata will show from the plot fetch anyway */ });
+    }
+
+    // ── Default variable ─────────────────────────────────────────
+    var DEFAULT_RT_VAR = 'TANGENTIAL_WIND';
+
+    // ── Generate plan-view plot ──────────────────────────────────
+    window.rtGeneratePlot = function (callback) {
+        if (!_currentFileUrl) return;
+        var variable = document.getElementById('rt-var').value;
+        var level_km = document.getElementById('rt-level').value;
+        var overlay = (document.getElementById('rt-overlay') || {}).value || '';
+        var resultDiv = document.getElementById('rt-display-area');
+        var btn = document.getElementById('rt-gen-btn');
+        btn.disabled = true; btn.textContent = 'Generating…';
+
+        // Clear dependent results
+        document.getElementById('rt-cs-result').innerHTML = '';
+        document.getElementById('rt-cs-status').textContent = '';
+
+        if (!_rtAnimPlaying) {
+            resultDiv.innerHTML = _rtLoadingHTML('Fetching data from API…');
+        }
+
+        var cacheKey = _currentFileUrl + '_' + variable + '_' + level_km + '_' + overlay;
+        if (_rtDataCache[cacheKey]) {
+            rtRenderPlot(_rtDataCache[cacheKey], resultDiv);
+            btn.disabled = false; btn.textContent = 'Generate Plot';
+            if (callback) callback(); return;
+        }
+
+        var controller = new AbortController();
+        var timeout = setTimeout(function () { controller.abort(); }, 120000);
+        var url = API_BASE + RT_PREFIX + '/data?file_url=' + encodeURIComponent(_currentFileUrl) + '&variable=' + variable + '&level_km=' + level_km;
+        if (overlay) url += '&overlay=' + overlay;
+
+        fetch(url, { signal: controller.signal })
+            .then(function (r) { if (!r.ok) return r.json().then(function (e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
+            .then(function (json) { _rtDataCache[cacheKey] = json; rtRenderPlot(json, resultDiv); if (callback) callback(); })
+            .catch(function (err) {
+                var msg = err.name === 'AbortError' ? '⚠️ Request timed out (120s).' : '⚠️ ' + err.message;
+                resultDiv.innerHTML = '<div class="explorer-status error">' + msg + '</div>';
+                rtAnimStop();
+            })
+            .finally(function () { clearTimeout(timeout); btn.disabled = false; btn.textContent = 'Generate Plot'; });
+    };
+
+    // ── Render plan-view from JSON ───────────────────────────────
+    function rtRenderPlot(json, resultDiv) {
+        resultDiv.innerHTML = '<div style="position:relative;"><div id="rt-plotly-chart" style="width:100%;height:400px;border-radius:6px;overflow:hidden;"></div>' +
+            '<button onclick="rtOpenFullscreen()" title="Expand to fullscreen" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">⛶</button></div>' +
+            '<div style="font-size:11px;color:var(--slate);text-align:center;margin-top:4px;">Hover for values · scroll to zoom · drag to pan · ⛶ expand</div>';
+
+        var zData = json.data, x = json.x, y = json.y, varInfo = json.variable, meta = json.case_meta || {};
+        _rtDefaultColorscale = varInfo.colorscale;
+        _rtDefaultVmin = varInfo.vmin;
+        _rtDefaultVmax = varInfo.vmax;
+
+        var cmapSel = document.getElementById('rt-cmap');
+        var activeColorscale = varInfo.colorscale;
+        if (cmapSel && cmapSel.value) { try { activeColorscale = JSON.parse(cmapSel.value); } catch (e) { activeColorscale = cmapSel.value; } }
+
+        var activeVmin = _rtGetVmin(), activeVmax = _rtGetVmax();
+        var title = (meta.storm_name || 'Real-Time TDR') + ' | ' + (meta.datetime || '') +
+            '<br>' + varInfo.display_name + ' @ ' + json.actual_level_km.toFixed(1) + ' km';
+        if (json.overlay) title += '<br><span style="font-size:0.85em;color:#9ca3af;">Contours: ' + json.overlay.display_name + ' (' + json.overlay.units + ')</span>';
+
+        var heatmap = {
+            z: zData, x: x, y: y, type: 'heatmap',
+            colorscale: activeColorscale,
+            zmin: activeVmin, zmax: activeVmax,
+            colorbar: { title: { text: varInfo.units, font: { color: '#ccc', size: 10 } }, tickfont: { color: '#ccc', size: 9 }, thickness: 12, len: 0.85 },
+            hovertemplate: '<b>' + varInfo.display_name + '</b>: %{z:.2f} ' + varInfo.units + '<br>X: %{x:.0f} km<br>Y: %{y:.0f} km<extra></extra>',
+            hoverongaps: false
+        };
+
+        var plotBg = '#0a1628';
+        var baseLayout = {
+            paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+            xaxis: { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false, scaleanchor: 'y' },
+            yaxis: { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
+            hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 12 } },
+            showlegend: false
+        };
+        var layout = Object.assign({}, baseLayout, {
+            title: { text: title, font: { color: '#e5e7eb', size: 11 }, y: 0.98, x: 0.5, xanchor: 'center' },
+            margin: { l: 52, r: 16, t: json.overlay ? 82 : 66, b: 44 }
+        });
+
+        var overlayTraces = rtBuildOverlayContours(json, x, y, false);
+        var config = { responsive: true, displayModeBar: true, modeBarButtonsToRemove: ['lasso2d', 'select2d', 'toggleSpikelines'], displaylogo: false };
+
+        Plotly.newPlot('rt-plotly-chart', [heatmap].concat(overlayTraces), layout, config);
+        _rtLastPlotlyData = { heatmap: heatmap, overlayTraces: overlayTraces, baseLayout: baseLayout, title: title, config: config, json: json };
+
+        // Enable action buttons
+        var csBtn = document.getElementById('rt-cs-btn'); if (csBtn) csBtn.disabled = false;
+        var volBtn = document.getElementById('rt-vol-btn'); if (volBtn) volBtn.disabled = false;
+
+        // Click handler for cross-section
+        document.getElementById('rt-plotly-chart').on('plotly_click', rtHandlePlotClick);
+    }
+
+    // ── Overlay contours ─────────────────────────────────────────
+    function rtBuildOverlayContours(json, x, y, isCS) {
+        if (!json.overlay) return [];
+        var ov = json.overlay;
+        var ovData = isCS ? ov.cross_section : ov.data;
+        if (!ovData) return [];
+        try {
+            var intInput = document.getElementById('rt-contour-int');
+            var interval = intInput ? parseFloat(intInput.value) : NaN;
+            if (isNaN(interval) || interval <= 0) {
+                var flat = ovData.flat().filter(function (v) { return v !== null && !isNaN(v); });
+                if (flat.length === 0) return [];
+                var mn = Infinity, mx = -Infinity;
+                for (var i = 0; i < flat.length; i++) { if (flat[i] < mn) mn = flat[i]; if (flat[i] > mx) mx = flat[i]; }
+                interval = parseFloat(((mx - mn) / 10).toPrecision(1));
+                if (!isFinite(interval) || interval <= 0) interval = (mx - mn) / 10 || 1;
+            }
+            var xCoord = isCS ? json.distance_km : x;
+            var yCoord = isCS ? json.height_km : y;
+            var baseContour = { z: ovData, x: xCoord, y: yCoord, type: 'contour', showscale: false, hoverongaps: false, contours: { coloring: 'none', showlabels: true, labelfont: { size: 9, color: 'rgba(255,255,255,0.8)' } } };
+            var traces = [];
+            if (ov.vmax > interval) traces.push(Object.assign({}, baseContour, { contours: Object.assign({}, baseContour.contours, { start: interval, end: ov.vmax, size: interval }), line: { color: 'rgba(0,0,0,0.7)', width: 1.2, dash: 'solid' }, hovertemplate: '<b>' + ov.display_name + '</b>: %{z:.2f} ' + ov.units + '<extra>contour</extra>', name: ov.display_name + ' (+)', showlegend: false }));
+            if (ov.vmin < -interval) traces.push(Object.assign({}, baseContour, { contours: Object.assign({}, baseContour.contours, { start: ov.vmin, end: -interval, size: interval }), line: { color: 'rgba(0,0,0,0.7)', width: 1.2, dash: 'dash' }, hovertemplate: '<b>' + ov.display_name + '</b>: %{z:.2f} ' + ov.units + '<extra>contour</extra>', name: ov.display_name + ' (−)', showlegend: false }));
+            return traces;
+        } catch (e) { return []; }
+    }
+
+    // ── Colormap / color range helpers ───────────────────────────
+    function _rtGetVmin() { var inp = document.getElementById('rt-vmin'); if (inp && inp.value !== '') return parseFloat(inp.value); return _rtDefaultVmin; }
+    function _rtGetVmax() { var inp = document.getElementById('rt-vmax'); if (inp && inp.value !== '') return parseFloat(inp.value); return _rtDefaultVmax; }
+
+    window.rtApplyCmap = function () {
+        var sel = document.getElementById('rt-cmap'); if (!sel) return;
+        var cs = sel.value;
+        if (!cs && _rtDefaultColorscale) cs = _rtDefaultColorscale; if (!cs) return;
+        var colorscale; try { colorscale = JSON.parse(cs); } catch (e) { colorscale = cs; }
+        ['rt-plotly-chart', 'rt-fullscreen-chart', 'rt-cs-fullscreen'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el && el.data && el.data.length) Plotly.restyle(el, { colorscale: [colorscale] }, [0]);
+        });
+    };
+
+    window.rtApplyColorRange = function () {
+        var zmin = _rtGetVmin(), zmax = _rtGetVmax(); if (zmin === null || zmax === null) return;
+        ['rt-plotly-chart', 'rt-fullscreen-chart', 'rt-cs-fullscreen'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el && el.data && el.data.length) Plotly.restyle(el, { zmin: [zmin], zmax: [zmax] }, [0]);
+        });
+    };
+
+    window.rtResetColorRange = function () {
+        var vi = document.getElementById('rt-vmin'), va = document.getElementById('rt-vmax');
+        if (vi) vi.value = ''; if (va) va.value = '';
+        if (_rtDefaultVmin !== null && _rtDefaultVmax !== null) {
+            ['rt-plotly-chart', 'rt-fullscreen-chart', 'rt-cs-fullscreen'].forEach(function (id) {
+                var el = document.getElementById(id);
+                if (el && el.data && el.data.length) Plotly.restyle(el, { zmin: [_rtDefaultVmin], zmax: [_rtDefaultVmax] }, [0]);
+            });
+        }
+    };
+
+    // ── Fullscreen modal (reuse the existing plotModal) ──────────
+    window.rtOpenFullscreen = function () {
+        if (!_rtLastPlotlyData) return;
+        var modal = document.getElementById('plotModal');
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+
+        var d = _rtLastPlotlyData;
+        var fullLayout = Object.assign({}, d.baseLayout, {
+            title: { text: d.title, font: { color: '#e5e7eb', size: 14 }, y: 0.97, x: 0.5, xanchor: 'center' },
+            margin: { l: 60, r: 28, t: 80, b: 52 }
+        });
+
+        // Hide cross-section panes from main app
+        var csFull = document.getElementById('cs-fullscreen'); if (csFull) csFull.style.display = 'none';
+        var azFull = document.getElementById('az-fullscreen'); if (azFull) azFull.style.display = 'none';
+        var csDiv = document.getElementById('cs-full-divider'); if (csDiv) csDiv.style.display = 'none';
+        var azDiv = document.getElementById('az-full-divider'); if (azDiv) azDiv.style.display = 'none';
+
+        Plotly.newPlot('plotly-fullscreen', [d.heatmap].concat(d.overlayTraces), fullLayout, d.config);
+        document.getElementById('plotly-fullscreen').on('plotly_click', rtHandlePlotClick);
+    };
+
+    // ── Height animation ─────────────────────────────────────────
+    window.rtAnimToggle = function () { if (_rtAnimPlaying) rtAnimStop(); else rtAnimStart(); };
+    function rtAnimStart() {
+        _rtAnimPlaying = true;
+        var btn = document.getElementById('rt-anim-play'); if (btn) { btn.textContent = '⏸'; btn.classList.add('active'); }
+        rtAnimTick();
+    }
+    function rtAnimStop() {
+        _rtAnimPlaying = false;
+        if (_rtAnimTimer) { clearTimeout(_rtAnimTimer); _rtAnimTimer = null; }
+        var btn = document.getElementById('rt-anim-play'); if (btn) { btn.textContent = '▶'; btn.classList.remove('active'); }
+    }
+    function rtAnimTick() {
+        if (!_rtAnimPlaying) return;
+        rtGeneratePlot(function () {
+            if (!_rtAnimPlaying) return;
+            _rtAnimTimer = setTimeout(function () { rtAnimStep(1); rtAnimTick(); }, 800);
+        });
+    }
+    window.rtAnimStep = function (dir) {
+        var slider = document.getElementById('rt-level'); if (!slider) return;
+        var val = parseFloat(slider.value) + dir * 0.5;
+        if (val > 18) val = 0; if (val < 0) val = 18;
+        slider.value = val;
+        document.getElementById('rt-level-val').textContent = val.toFixed(1) + ' km';
+        if (!_rtAnimPlaying) rtGeneratePlot();
+    };
+
+    // ── Cross-section ────────────────────────────────────────────
+    window.rtToggleCrossSection = function () {
+        _rtCsMode = !_rtCsMode; _rtCsPointA = null;
+        var btn = document.getElementById('rt-cs-btn'), status = document.getElementById('rt-cs-status');
+        if (_rtCsMode) {
+            btn.classList.add('active'); btn.textContent = '✂ Click point A on plot…';
+            if (status) status.textContent = 'Click the starting point on the plan view above';
+        } else {
+            btn.classList.remove('active'); btn.textContent = '✂ Cross Section';
+            if (status) status.textContent = '';
+        }
+    };
+
+    function rtHandlePlotClick(eventData) {
+        if (!_rtCsMode || !eventData.points || !eventData.points.length) return;
+        var pt = eventData.points[0], x = pt.x, y = pt.y;
+        var status = document.getElementById('rt-cs-status');
+        var plotDiv = document.getElementById('rt-plotly-chart');
+
+        if (!_rtCsPointA) {
+            _rtCsPointA = { x: x, y: y };
+            var btn = document.getElementById('rt-cs-btn'); if (btn) btn.textContent = '✂ Click point B…';
+            if (status) status.textContent = 'A: (' + x.toFixed(0) + ', ' + y.toFixed(0) + ') km — now click end point';
+            var shapes = (plotDiv.layout.shapes || []).slice();
+            shapes.push({ type: 'circle', xref: 'x', yref: 'y', x0: x - 4, y0: y - 4, x1: x + 4, y1: y + 4, fillcolor: '#ef4444', line: { color: 'white', width: 1.5 } });
+            Plotly.relayout(plotDiv, { shapes: shapes });
+        } else {
+            var a = _rtCsPointA, b = { x: x, y: y };
+            _rtCsMode = false; _rtCsPointA = null;
+            var btn2 = document.getElementById('rt-cs-btn'); if (btn2) { btn2.classList.remove('active'); btn2.textContent = '✂ Cross Section'; }
+            if (status) status.textContent = 'A→B: (' + a.x.toFixed(0) + ',' + a.y.toFixed(0) + ') → (' + b.x.toFixed(0) + ',' + b.y.toFixed(0) + ') km';
+            var shapes2 = (plotDiv.layout.shapes || []).slice();
+            shapes2.push(
+                { type: 'line', xref: 'x', yref: 'y', x0: a.x, y0: a.y, x1: b.x, y1: b.y, line: { color: '#ef4444', width: 2.5 } },
+                { type: 'circle', xref: 'x', yref: 'y', x0: b.x - 4, y0: b.y - 4, x1: b.x + 4, y1: b.y + 4, fillcolor: '#ef4444', line: { color: 'white', width: 1.5 } }
+            );
+            Plotly.relayout(plotDiv, { shapes: shapes2 });
+            rtFetchCrossSection(a, b);
+        }
+    }
+
+    function rtFetchCrossSection(a, b) {
+        var variable = document.getElementById('rt-var').value;
+        var overlay = (document.getElementById('rt-overlay') || {}).value || '';
+        var csResult = document.getElementById('rt-cs-result');
+        csResult.innerHTML = _rtLoadingHTML('Computing cross-section…');
+
+        var url = API_BASE + RT_PREFIX + '/cross_section?file_url=' + encodeURIComponent(_currentFileUrl) +
+            '&variable=' + variable + '&x0=' + a.x + '&y0=' + a.y + '&x1=' + b.x + '&y1=' + b.y + '&n_points=150';
+        if (overlay) url += '&overlay=' + overlay;
+
+        fetch(url)
+            .then(function (r) { if (!r.ok) return r.json().then(function (e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
+            .then(function (json) {
+                csResult.innerHTML = '<div class="explorer-status" style="color:#10b981;">✓ Cross-section ready</div>';
+                rtRenderCrossSection(json);
+            })
+            .catch(function (err) { csResult.innerHTML = '<div class="explorer-status error">⚠️ ' + err.message + '</div>'; });
+    }
+
+    function rtRenderCrossSection(json) {
+        // Render inline below the plan view
+        var csResult = document.getElementById('rt-cs-result');
+        csResult.innerHTML = '<div id="rt-cs-chart" style="width:100%;height:300px;border-radius:6px;overflow:hidden;margin-top:8px;"></div>';
+
+        var csData = json.cross_section, dist = json.distance_km, hgt = json.height_km, vi = json.variable, ep = json.endpoints;
+
+        var cmapSel = document.getElementById('rt-cmap');
+        var csColorscale = vi.colorscale;
+        if (cmapSel && cmapSel.value) { try { csColorscale = JSON.parse(cmapSel.value); } catch (e) { csColorscale = cmapSel.value; } }
+        var av = _rtGetVmin(), avx = _rtGetVmax();
+
+        var heatmap = {
+            z: csData, x: dist, y: hgt, type: 'heatmap',
+            colorscale: csColorscale,
+            zmin: av !== null ? av : vi.vmin,
+            zmax: avx !== null ? avx : vi.vmax,
+            colorbar: { title: { text: vi.units, font: { color: '#ccc', size: 10 } }, tickfont: { color: '#ccc', size: 9 }, thickness: 10, len: 0.85 },
+            hovertemplate: '<b>' + vi.display_name + '</b>: %{z:.2f} ' + vi.units + '<br>Distance: %{x:.0f} km<br>Height: %{y:.1f} km<extra></extra>',
+            hoverongaps: false
+        };
+
+        var title = 'Cross Section: (' + ep.x0.toFixed(0) + ',' + ep.y0.toFixed(0) + ') → (' + ep.x1.toFixed(0) + ',' + ep.y1.toFixed(0) + ') km';
+        var plotBg = '#0a1628';
+        var layout = {
+            title: { text: title, font: { color: '#e5e7eb', size: 11 }, y: 0.97, x: 0.5, xanchor: 'center' },
+            paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+            xaxis: { title: { text: 'Distance along line (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
+            yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
+            margin: { l: 45, r: 12, t: 44, b: 38 },
+            hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 11 } },
+            showlegend: false
+        };
+
+        var csOverlays = rtBuildOverlayContours(json, null, null, true);
+        Plotly.newPlot('rt-cs-chart', [heatmap].concat(csOverlays), layout, { responsive: true, displayModeBar: true, displaylogo: false, modeBarButtonsToRemove: ['lasso2d', 'select2d', 'toggleSpikelines'] });
+    }
+
+    // ── 3D Volume ────────────────────────────────────────────────
+    window.rtFetch3DVolume = function () {
+        if (!_currentFileUrl) return;
+        var variable = document.getElementById('rt-var').value;
+        var btn = document.getElementById('rt-vol-btn');
+        btn.disabled = true; btn.textContent = '🖥 Loading…';
+
+        var cacheKey = '3d_rt_' + _currentFileUrl + '_' + variable;
+        if (_rtDataCache[cacheKey]) {
+            _rtLast3DJson = _rtDataCache[cacheKey];
+            rtOpen3DModal();
+            btn.disabled = false; btn.textContent = '🖥 3D Volume';
+            return;
+        }
+
+        var controller = new AbortController();
+        var timeout = setTimeout(function () { controller.abort(); }, 120000);
+        var url = API_BASE + RT_PREFIX + '/volume?file_url=' + encodeURIComponent(_currentFileUrl) + '&variable=' + variable + '&stride=2&max_height_km=15';
+
+        fetch(url, { signal: controller.signal })
+            .then(function (r) { if (!r.ok) return r.json().then(function (e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
+            .then(function (json) {
+                _rtDataCache[cacheKey] = json;
+                _rtLast3DJson = json;
+                rtOpen3DModal();
+            })
+            .catch(function (err) {
+                var msg = err.name === 'AbortError' ? 'Request timed out (120s).' : err.message;
+                rtToast('3D Volume: ' + msg, 'error');
+            })
+            .finally(function () { clearTimeout(timeout); btn.disabled = false; btn.textContent = '🖥 3D Volume'; });
+    };
+
+    function rtOpen3DModal() {
+        if (!_rtLast3DJson) return;
+        // Reuse the existing vol3DModal from index.html
+        // Store and swap the global _last3DJson temporarily
+        var saved = window._last3DJson;
+        window._last3DJson = _rtLast3DJson;
+
+        // Call the existing open3DModal function if available
+        if (typeof open3DModal === 'function') {
+            open3DModal();
+        }
+        // Note: we don't restore saved because the modal references _last3DJson
+        // while it's open. It'll be overwritten next time the archive mode uses it.
+    }
+
+})();
