@@ -989,11 +989,21 @@ function renderSkewT(profiles, divId) {
     }
 
     // ── Compute derived quantities (store on profiles for info panel) ──
-    // Find surface (highest pressure with valid T, Td)
+    // Find surface = highest-pressure level with valid T and Td
+    // (robust to either top-down or bottom-up plev ordering)
     var sfcIdx = -1;
+    var maxPressure = -1;
     for (var si = 0; si < plev.length; si++) {
-        if (tC[si] != null && tdC[si] != null) { sfcIdx = si; break; }
+        if (tC[si] != null && tdC[si] != null && plev[si] > maxPressure) {
+            maxPressure = plev[si];
+            sfcIdx = si;
+        }
     }
+
+    // Build a list of level indices sorted by DECREASING pressure (sfc → top)
+    var sortedIdx = [];
+    for (var sii = 0; sii < plev.length; sii++) sortedIdx.push(sii);
+    sortedIdx.sort(function(a, b) { return plev[b] - plev[a]; });
 
     var derived = { cape: null, cin: null, pwat: null, lcl_p: null, lfc_p: null, el_p: null, freezing_p: null };
 
@@ -1002,14 +1012,18 @@ function renderSkewT(profiles, divId) {
 
         // Mixed-layer averages (lowest 100 hPa)
         var mlDepth = 100, mlTsum = 0, mlTdSum = 0, mlN = 0;
-        for (var mi = sfcIdx; mi < plev.length; mi++) {
-            if (plev[mi] < sfcP - mlDepth) break;
-            if (tC[mi] != null && tdC[mi] != null) {
-                mlTsum += tC[mi]; mlTdSum += tdC[mi]; mlN++;
+        for (var mi = 0; mi < plev.length; mi++) {
+            if (plev[mi] <= sfcP && plev[mi] >= sfcP - mlDepth) {
+                if (tC[mi] != null && tdC[mi] != null) {
+                    mlTsum += tC[mi]; mlTdSum += tdC[mi]; mlN++;
+                }
             }
         }
         var mlT = mlN > 0 ? mlTsum / mlN : sfcT;
         var mlTd = mlN > 0 ? mlTdSum / mlN : sfcTd;
+
+        // Surface parcel mixing ratio (conserved during dry lift below LCL)
+        var sfcMixR = satMixRatio(mlTd, sfcP);
 
         // LCL via iterative dry lift until T == Td
         var lclP = sfcP, lclT = mlT, lclTd = mlTd;
@@ -1017,10 +1031,8 @@ function renderSkewT(profiles, divId) {
             if (lclT <= lclTd + 0.1) break;
             lclP -= 2;
             lclT = (mlT + 273.15) * Math.pow(lclP / sfcP, 0.286) - 273.15;
-            // Dewpoint approximately constant under dry lift, but slight correction:
-            var eS = satVaporPres(mlTd);
-            var rS = eps * eS / (sfcP - eS);
-            var eNew = rS * lclP / (eps + rS);
+            // Dewpoint tracks constant mixing ratio under dry lift
+            var eNew = sfcMixR * lclP / (eps + sfcMixR);
             if (eNew > 0.001) {
                 var lnEN = Math.log(eNew / 6.112);
                 lclTd = 243.5 * lnEN / (17.67 - lnEN);
@@ -1029,6 +1041,7 @@ function renderSkewT(profiles, divId) {
         derived.lcl_p = lclP;
 
         // Lift moist from LCL upward → build parcel profile, compute CAPE & CIN
+        // Use pressure-based integration: CAPE = Rd * Σ (Tv_p − Tv_e) × ln(p_lo/p_hi)
         var parcelT = []; // parcel temperature at each plev
         var cape = 0, cin = 0, lfcP = null, elP = null, foundLFC = false;
         for (var pi = 0; pi < plev.length; pi++) {
@@ -1041,24 +1054,37 @@ function renderSkewT(profiles, divId) {
                 // Moist adiabatic lift from LCL
                 parcelT.push(liftMoist(lclT, lclP, pp));
             }
-            // Buoyancy integration
-            if (tC[pi] != null && parcelT[pi] != null && pi > sfcIdx) {
-                var envTv = (tC[pi] + 273.15) * (1 + 0.61 * satMixRatio(tdC[pi] != null ? tdC[pi] : tC[pi] - 30, pp));
-                var parTv = (parcelT[pi] + 273.15) * (1 + 0.61 * satMixRatio(parcelT[pi], pp));
-                var buoy = (parTv - envTv) / envTv;
-                // Pressure layer thickness
-                var dpLayer = 0;
-                if (pi > 0 && plev[pi-1] != null) {
-                    dpLayer = (plev[pi-1] - pp);
-                }
-                var dzApprox = dpLayer * 100 / (plev[pi] / 100 * g); // rough dz
-                if (buoy > 0) {
-                    cape += buoy * g * Math.abs(dzApprox);
-                    if (!foundLFC) { lfcP = pp; foundLFC = true; }
-                    elP = pp; // keep updating → last positive = EL
-                } else if (!foundLFC && pp < lclP) {
-                    cin += buoy * g * Math.abs(dzApprox);
-                }
+        }
+
+        // Buoyancy integration along sorted levels (surface → top)
+        for (var sk = 0; sk < sortedIdx.length; sk++) {
+            var li = sortedIdx[sk];
+            var pp = plev[li];
+            if (pp >= sfcP || tC[li] == null || parcelT[li] == null) continue;
+
+            // Environment virtual temperature
+            var envW = satMixRatio(tdC[li] != null ? tdC[li] : tC[li] - 30, pp);
+            var envTv = (tC[li] + 273.15) * (1 + 0.61 * envW);
+            // Parcel virtual temperature: use actual w below LCL, sat w above
+            var parW = (pp >= lclP) ? sfcMixR : satMixRatio(parcelT[li], pp);
+            var parTv = (parcelT[li] + 273.15) * (1 + 0.61 * parW);
+
+            // Pressure-layer bounds from sorted neighbors
+            var pAbove = (sk + 1 < sortedIdx.length) ? plev[sortedIdx[sk + 1]] : pp;
+            var pBelow = (sk > 0) ? plev[sortedIdx[sk - 1]] : sfcP;
+            // Half-layers on each side
+            var pLo = 0.5 * (pp + pBelow);
+            var pHi = 0.5 * (pp + pAbove);
+            if (pLo <= pHi || pHi <= 0) continue;
+            var dlnP = Math.log(pLo / pHi);
+
+            var dCape = Rd * (parTv - envTv) * dlnP;
+            if (dCape > 0) {
+                cape += dCape;
+                if (!foundLFC) { lfcP = pp; foundLFC = true; }
+                elP = pp;
+            } else if (!foundLFC && pp < lclP) {
+                cin += dCape;
             }
         }
         derived.cape = cape > 0 ? Math.round(cape) : 0;
