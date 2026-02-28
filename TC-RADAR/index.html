@@ -262,40 +262,6 @@
         }
 
         /* ── ERA5 environment panel ─────────────────────────────── */
-        .env-panel {
-            margin-top: 8px;
-            border: 1px solid var(--border-light);
-            border-radius: var(--radius);
-            background: rgba(10, 22, 40, 0.6);
-            overflow: hidden;
-            display: none;
-        }
-        .env-panel-header {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 8px 12px;
-            background: rgba(255,255,255,0.03);
-            border-bottom: 1px solid var(--border);
-            cursor: pointer;
-        }
-        .env-panel-title {
-            font-size: 11px; font-weight: 700; color: var(--cyan);
-            text-transform: uppercase; letter-spacing: 0.04em;
-        }
-        .env-panel-body { padding: 8px; }
-        .env-panel-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-        }
-        .env-scalars-col { display: flex; flex-direction: column; justify-content: center; }
-        .env-scalar-section { display: flex; flex-direction: column; gap: 2px; }
-        .env-scalar-row {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 4px 0; border-bottom: 1px solid var(--border); font-size: 11px;
-        }
-        .env-scalar-label { color: var(--slate); font-weight: 500; }
-        .env-scalar-value { color: var(--text); font-weight: 600; font-family: 'JetBrains Mono', monospace; font-size: 10px; }
-        .env-scalar-ships { color: var(--text-dim); font-size: 9px; font-family: 'JetBrains Mono', monospace; }
         .env-field-dropdown {
             position: absolute; bottom: 100%; left: 0; margin-bottom: 4px;
             background: var(--surface-raised); border: 1px solid var(--border-light);
@@ -613,7 +579,6 @@
             .ir-slider { width: 60px; }
             .ir-label { min-width: 100px; font-size: 9px; }
             .ir-ctrl-btn { font-size: 10px; padding: 2px 6px; }
-            .env-panel-grid { grid-template-columns: 1fr; }
             .env-field-dropdown { min-width: 180px; }
             .vol3d-controls label { font-size: 9px; }
         }

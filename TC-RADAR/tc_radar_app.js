@@ -342,8 +342,7 @@ function openSidePanel(caseData, fromQuickSelect) {
     });
 
     // Fetch ERA5 environmental data for this case
-    _era5Data = null; _era5PlotlyVisible = false; _era5EnvPanelVisible = false;
-    fetchERA5Data(caseData.case_index, 'shear_mag', function(data) {
+    _era5Data = null; _era5PlotlyVisible = false;     fetchERA5Data(caseData.case_index, 'shear_mag', function(data) {
         if (data && currentCaseIndex === caseData.case_index) {
             var era5Btn = document.getElementById('era5-underlay-btn');
             if (era5Btn) era5Btn.disabled = false;
@@ -392,8 +391,7 @@ var _era5Data = null;
 var _era5MapField = 'shear_mag';
 var _era5Fetching = false;
 var _era5PlotlyVisible = false;
-var _era5EnvPanelVisible = false;
-
+var 
 // ── ERA5 colormaps ───────────────────────────────────────────
 var _era5Colormaps = {
     shear_mag: {
@@ -669,7 +667,6 @@ function showERA5FieldMenu() {
                             _era5PlotlyVisible = false;
                             toggleERA5PlotlyUnderlay();
                         }
-                        renderEnvPanel();
                         _updateERA5Buttons();
                     }
                 });
@@ -688,109 +685,7 @@ function showERA5FieldMenu() {
     }, 10);
 }
 
-// ── Environment Panel (hodograph + profiles + scalars) ───────
-function toggleEnvPanel() {
-    _era5EnvPanelVisible = !_era5EnvPanelVisible;
-    var panel = document.getElementById('env-panel');
-    if (_era5EnvPanelVisible && _era5Data) {
-        if (!panel) {
-            panel = document.createElement('div');
-            panel.id = 'env-panel';
-            panel.className = 'env-panel';
-            var displayArea = document.getElementById('display-area');
-            if (displayArea) displayArea.parentElement.appendChild(panel);
-        }
-        panel.style.display = 'block';
-        renderEnvPanel();
-    } else {
-        _era5EnvPanelVisible = false;
-        if (panel) panel.style.display = 'none';
-    }
-    var btn = document.getElementById('env-panel-btn');
-    if (btn) {
-        btn.classList.toggle('active', _era5EnvPanelVisible);
-        btn.textContent = _era5EnvPanelVisible ? '\uD83C\uDF21 Env Panel' : '\uD83C\uDF21 Env Panel';
-    }
-}
 
-function renderEnvPanel() {
-    var panel = document.getElementById('env-panel');
-    if (!panel || !_era5Data) return;
-
-    var scalars = _era5Data.scalars || {};
-    var profiles = _era5Data.profiles;
-
-    // Build panel HTML
-    var html = '<div class="env-panel-header" onclick="toggleEnvPanel()">' +
-        '<span class="env-panel-title">\uD83C\uDF21 Environmental Context (ERA5)</span>' +
-        '<span style="color:var(--slate);font-size:11px;">\u2715</span></div>' +
-        '<div class="env-panel-body">' +
-        '<div class="env-panel-grid">' +
-        '<div id="env-hodograph" style="min-height:220px;"></div>' +
-        '<div class="env-scalars-col">';
-
-    // Scalar diagnostics with SHIPS comparison
-    var shearMs = scalars.shear_mag_env;
-    var shearKt = shearMs !== null && shearMs !== undefined ? (shearMs * 1.944).toFixed(0) : '\u2014';
-    var shearDir = scalars.shear_dir_env;
-    var rhMid = scalars.rh_mid_env;
-    var div200 = scalars.div200_env;
-
-    var sst = scalars.sst_env;
-    var vpi = scalars.v_pi;
-    var vpiKt = vpi !== null && vpi !== undefined ? (vpi * 1.944).toFixed(0) : null;
-    var chiM = scalars.chi_m;
-    var ventIdx = scalars.vent_index;
-
-    html += '<div class="env-scalar-section">' +
-        '<div class="env-scalar-row"><span class="env-scalar-label">Deep-Layer Shear</span>' +
-        '<span class="env-scalar-value">' + (shearMs != null ? shearMs.toFixed(1) + ' m/s (' + shearKt + ' kt)' : '\u2014') + '</span></div>' +
-        '<div class="env-scalar-row"><span class="env-scalar-label">Shear Direction</span>' +
-        '<span class="env-scalar-value">' + (shearDir != null ? shearDir.toFixed(0) + '\u00b0' : '\u2014') + '</span></div>';
-
-    // SHIPS comparison if available
-    if (_currentSddc !== null) {
-        html += '<div class="env-scalar-row"><span class="env-scalar-ships">SHIPS: SDDC=' + _currentSddc.toFixed(0) + '\u00b0</span>' +
-            '<span class="env-scalar-ships">\u0394=' + (shearDir != null ? Math.abs(shearDir - _currentSddc).toFixed(0) : '?') + '\u00b0</span></div>';
-    }
-
-    html += '<div class="env-scalar-row"><span class="env-scalar-label">Mid-Level RH</span>' +
-        '<span class="env-scalar-value">' + (rhMid != null ? rhMid.toFixed(0) + '%' : '\u2014') + '</span></div>' +
-        '<div class="env-scalar-row"><span class="env-scalar-label">200 hPa Divergence</span>' +
-        '<span class="env-scalar-value">' + (div200 != null ? (div200 * 1e5).toFixed(1) + ' \u00d710\u207b\u2075 s\u207b\u00b9' : '\u2014') + '</span></div>' +
-        '<div class="env-scalar-row"><span class="env-scalar-label">SST</span>' +
-        '<span class="env-scalar-value">' + (sst != null ? sst.toFixed(1) + ' \u00b0C' : '\u2014') + '</span></div>' +
-        '<div class="env-scalar-row"><span class="env-scalar-label">Potential Intensity</span>' +
-        '<span class="env-scalar-value">' + (vpi != null ? vpi.toFixed(1) + ' m/s (' + vpiKt + ' kt)' : '\u2014') + '</span></div>' +
-        '<div class="env-scalar-row"><span class="env-scalar-label">Entropy Deficit (\u03c7<sub>m</sub>)</span>' +
-        '<span class="env-scalar-value">' + (chiM != null ? chiM.toFixed(2) : '\u2014') + '</span></div>' +
-        '<div class="env-scalar-row"><span class="env-scalar-label">Ventilation Index (\u039b)</span>' +
-        '<span class="env-scalar-value">' + (ventIdx != null ? ventIdx.toFixed(3) : '\u2014') + '</span></div>' +
-        '</div></div>';
-
-    // Profile plots row
-    if (profiles && profiles.plev) {
-        html += '<div class="env-profiles-row" style="display:flex;gap:8px;margin-top:8px;">' +
-            '<div id="env-rh-profile" style="flex:1;min-height:180px;"></div>' +
-            '<div id="env-theta-profile" style="flex:1;min-height:180px;"></div>' +
-            '</div>';
-    }
-
-    html += '</div>';
-    panel.innerHTML = html;
-
-    // Render hodograph
-    if (profiles && profiles.u && profiles.v) {
-        setTimeout(function() { renderHodograph(profiles, 'env-hodograph'); }, 50);
-    }
-    // Render vertical profiles
-    if (profiles && profiles.plev) {
-        setTimeout(function() {
-            renderRHProfile(profiles, 'env-rh-profile');
-            renderThetaProfile(profiles, 'env-theta-profile');
-        }, 100);
-    }
-}
 
 // ── Hodograph ────────────────────────────────────────────────
 function renderHodograph(profiles, divId) {
@@ -1398,10 +1293,7 @@ function envOverlayRecomputeScalars() {
 function cleanupERA5() {
     _era5Data = null;
     _era5PlotlyVisible = false;
-    _era5EnvPanelVisible = false;
     _envOverlayData = null;
-    var panel = document.getElementById('env-panel');
-    if (panel) panel.style.display = 'none';
     var menu = document.getElementById('era5-field-menu');
     if (menu) menu.remove();
     // Reset overlay display if open
