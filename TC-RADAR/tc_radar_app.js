@@ -3038,6 +3038,32 @@ function initCompositePanel() {
                             '<span id="comp-cov-val" style="font-size:11px;font-weight:600;color:var(--cyan);min-width:32px;font-family:\'JetBrains Mono\',monospace;">50%</span>' +
                         '</div>' +
                     '</div>' +
+                    '<div class="comp-section-title" style="margin-top:14px;">\uD83D\uDDFA Plan-View Options</div>' +
+                    '<div class="comp-filter-row"><label>Height Level</label>' +
+                        '<select class="explorer-select" id="comp-level" style="font-size:11px;">' +
+                            (function(){var o='';for(var h=0.5;h<=18;h+=0.5){o+='<option value="'+h.toFixed(1)+'"'+(h===2.0?' selected':'')+'>'+h.toFixed(1)+' km</option>';}return o;}()) +
+                        '</select>' +
+                    '</div>' +
+                    '<div class="comp-filter-row">' +
+                        '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">' +
+                            '<input type="checkbox" id="comp-norm-rmw" style="width:14px;height:14px;accent-color:var(--cyan);"> ' +
+                            '<span>Normalize by RMW (2-km)</span>' +
+                        '</label>' +
+                    '</div>' +
+                    '<div id="comp-rmw-opts" style="display:none;">' +
+                        '<div class="comp-filter-row"><label style="font-size:10px;">Max Extent (R/RMW)</label>' +
+                            '<input type="number" id="comp-max-r-rmw" value="5.0" min="1" max="20" step="0.5" style="width:100%;padding:3px 6px;font-size:11px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                        '</div>' +
+                        '<div class="comp-filter-row"><label style="font-size:10px;">Bin Width (R/RMW)</label>' +
+                            '<input type="number" id="comp-dr-rmw" value="0.1" min="0.05" max="1" step="0.05" style="width:100%;padding:3px 6px;font-size:11px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="comp-filter-row">' +
+                        '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">' +
+                            '<input type="checkbox" id="comp-shear-rel" style="width:14px;height:14px;accent-color:var(--cyan);"> ' +
+                            '<span>Shear-Relative Rotation</span>' +
+                        '</label>' +
+                    '</div>' +
                     '<div class="comp-filter-row"><label>Contour Overlay</label>' +
                         '<select class="explorer-select" id="comp-overlay" style="font-size:11px;">' +
                             '<option value="">None</option>' +
@@ -3100,6 +3126,7 @@ function initCompositePanel() {
                     '<div class="comp-actions">' +
                         '<button class="comp-btn comp-btn-primary" id="comp-btn-az" onclick="generateCompositeAzMean()">\u27F3 Azimuthal Mean</button>' +
                         '<button class="comp-btn comp-btn-accent" id="comp-btn-sq" onclick="generateCompositeQuadMean()">\u25D1 Shear Quadrants</button>' +
+                        '<button class="comp-btn comp-btn-pv" id="comp-btn-pv" onclick="generateCompositePlanView()">\uD83D\uDDFA Plan View</button>' +
                     '</div>' +
                     // ── Difference Mode ──
                     '<div class="comp-diff-toggle">' +
@@ -3132,6 +3159,7 @@ function initCompositePanel() {
                     '<div id="comp-status" style="display:none;"></div>' +
                     '<div id="comp-result-az" style="display:none;"></div>' +
                     '<div id="comp-result-sq" style="display:none;"></div>' +
+                    '<div id="comp-result-pv" style="display:none;"></div>' +
                 '</div>' +
             '</div>' +
         '</div>';
@@ -3161,6 +3189,15 @@ function initCompositePanel() {
             _updateCompOverlayOriginalGroup(varType);
             _debouncedCompositeCount();
             if (document.getElementById('comp-diff-check').checked) _debouncedGroupBCount();
+        });
+    }
+
+    // Wire up RMW normalize checkbox to show/hide max-extent & bin-width fields
+    var normCheck = document.getElementById('comp-norm-rmw');
+    if (normCheck) {
+        normCheck.addEventListener('change', function() {
+            var opts = document.getElementById('comp-rmw-opts');
+            if (opts) opts.style.display = this.checked ? 'block' : 'none';
         });
     }
 
@@ -3202,6 +3239,8 @@ function _injectCompositeStyles() {
         '.comp-btn-primary:hover:not(:disabled) { background:#67e8f9; }' +
         '.comp-btn-accent { background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3); }' +
         '.comp-btn-accent:hover:not(:disabled) { background:rgba(245,158,11,0.25); }' +
+        '.comp-btn-pv { background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3); }' +
+        '.comp-btn-pv:hover:not(:disabled) { background:rgba(16,185,129,0.25); }' +
         '.comp-result-placeholder { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#4b5563; }' +
         '.comp-result-icon { font-size:48px; margin-bottom:12px; opacity:0.4; }' +
         '.comp-result-msg { font-size:13px; text-align:center; max-width:320px; line-height:1.6; }' +
@@ -3442,6 +3481,13 @@ function _buildCompPermalinkHash() {
     if (coverage && coverage.value !== '50') params.coverage = coverage.value;
     var overlay = document.getElementById('comp-overlay');
     if (overlay && overlay.value) params.overlay = overlay.value;
+    // Plan-view parameters (only when relevant)
+    var pvParams = _getCompositePlanViewParams();
+    if (pvParams.level_km !== 2.0)    params.level_km = pvParams.level_km;
+    if (pvParams.normalize_rmw)        params.normalize_rmw = 'true';
+    if (pvParams.max_r_rmw !== 5.0)   params.max_r_rmw = pvParams.max_r_rmw;
+    if (pvParams.dr_rmw !== 0.1)      params.dr_rmw = pvParams.dr_rmw;
+    if (pvParams.shear_relative)       params.shear_relative = 'true';
     // Which view was generated
     if (_lastCompType) params.view = _lastCompType;
     var qs = Object.keys(params).map(function(k) { return k + '=' + encodeURIComponent(params[k]); }).join('&');
@@ -3522,6 +3568,28 @@ function _applyCompHashParams(params) {
         if (ovSel) ovSel.value = params.overlay;
     }
 
+    // Plan-view parameters
+    if (params.level_km) {
+        var lvlSel = document.getElementById('comp-level');
+        if (lvlSel) lvlSel.value = params.level_km;
+    }
+    if (params.normalize_rmw === 'true') {
+        var nrmCheck = document.getElementById('comp-norm-rmw');
+        if (nrmCheck) { nrmCheck.checked = true; nrmCheck.dispatchEvent(new Event('change')); }
+    }
+    if (params.max_r_rmw) {
+        var mrEl = document.getElementById('comp-max-r-rmw');
+        if (mrEl) mrEl.value = params.max_r_rmw;
+    }
+    if (params.dr_rmw) {
+        var drEl = document.getElementById('comp-dr-rmw');
+        if (drEl) drEl.value = params.dr_rmw;
+    }
+    if (params.shear_relative === 'true') {
+        var srCheck = document.getElementById('comp-shear-rel');
+        if (srCheck) srCheck.checked = true;
+    }
+
     // Open the panel
     var panel = document.getElementById('composite-panel');
     if (!panel.classList.contains('active')) panel.classList.add('active');
@@ -3532,6 +3600,8 @@ function _applyCompHashParams(params) {
         setTimeout(generateCompositeAzMean, 600);
     } else if (params.view === 'sq') {
         setTimeout(generateCompositeQuadMean, 600);
+    } else if (params.view === 'pv') {
+        setTimeout(generateCompositePlanView, 600);
     }
     return true;
 }
@@ -3614,6 +3684,27 @@ function _downloadCompCSV() {
                 lines.push(row.join(','));
             }
         });
+    } else if (_lastCompType === 'pv') {
+        // Plan-view: Y × X table
+        var xAxis = json.x_axis, yAxis = json.y_axis;
+        lines.push('# TC-RADAR Composite Plan View');
+        lines.push('# Variable: ' + varInfo.display_name + ' (' + varInfo.units + ')');
+        lines.push('# Height: ' + json.level_km + ' km');
+        lines.push('# N cases: ' + json.n_cases);
+        lines.push('# RMW-normalized: ' + (json.normalize_rmw ? 'yes' : 'no'));
+        lines.push('# Shear-relative: ' + (json.shear_relative ? 'yes' : 'no'));
+        lines.push('# Filters: ' + JSON.stringify(json.filters));
+        lines.push('#');
+        lines.push(json.x_label + ',' + xAxis.join(','));
+        var pvData = json.plan_view;
+        for (var yi = 0; yi < yAxis.length; yi++) {
+            var row = [yAxis[yi]];
+            for (var xi = 0; xi < xAxis.length; xi++) {
+                var v = pvData[yi] && pvData[yi][xi];
+                row.push(v !== null && v !== undefined ? v : '');
+            }
+            lines.push(row.join(','));
+        }
     }
 
     // Append case list
@@ -3827,11 +3918,12 @@ function generateCompositeAzMean() {
     var variable = document.getElementById('comp-var').value;
     var dataType = document.getElementById('comp-dtype').value;
     var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
-    var btnAz = document.getElementById('comp-btn-az'), btnSq = document.getElementById('comp-btn-sq');
-    btnAz.disabled = true; btnSq.disabled = true;
+    var btnAz = document.getElementById('comp-btn-az'), btnSq = document.getElementById('comp-btn-sq'), btnPv = document.getElementById('comp-btn-pv');
+    btnAz.disabled = true; btnSq.disabled = true; if (btnPv) btnPv.disabled = true;
     btnAz.textContent = '\u23F3 Computing\u2026';
     document.getElementById('comp-result-placeholder').style.display = 'none';
     document.getElementById('comp-result-sq').style.display = 'none';
+    document.getElementById('comp-result-pv').style.display = 'none';
     _showCompStatus('loading', 'Computing composite azimuthal mean \u2014 this may take 30\u201390 seconds for many cases\u2026');
 
     var overlay = (document.getElementById('comp-overlay') || {}).value || '';
@@ -3846,7 +3938,7 @@ function generateCompositeAzMean() {
         })
         .catch(function(err) { _showCompStatus('error', '\u2717 ' + err.message); })
         .finally(function() {
-            btnAz.disabled = false; btnSq.disabled = false;
+            btnAz.disabled = false; btnSq.disabled = false; if (btnPv) btnPv.disabled = false;
             btnAz.textContent = '\u27F3 Azimuthal Mean';
         });
 }
@@ -3856,11 +3948,12 @@ function generateCompositeQuadMean() {
     var variable = document.getElementById('comp-var').value;
     var dataType = document.getElementById('comp-dtype').value;
     var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
-    var btnAz = document.getElementById('comp-btn-az'), btnSq = document.getElementById('comp-btn-sq');
-    btnAz.disabled = true; btnSq.disabled = true;
+    var btnAz = document.getElementById('comp-btn-az'), btnSq = document.getElementById('comp-btn-sq'), btnPv = document.getElementById('comp-btn-pv');
+    btnAz.disabled = true; btnSq.disabled = true; if (btnPv) btnPv.disabled = true;
     btnSq.textContent = '\u23F3 Computing\u2026';
     document.getElementById('comp-result-placeholder').style.display = 'none';
     document.getElementById('comp-result-az').style.display = 'none';
+    document.getElementById('comp-result-pv').style.display = 'none';
     _showCompStatus('loading', 'Computing composite shear quadrants \u2014 this may take 30\u201390 seconds for many cases\u2026');
 
     var overlay = (document.getElementById('comp-overlay') || {}).value || '';
@@ -3875,9 +3968,209 @@ function generateCompositeQuadMean() {
         })
         .catch(function(err) { _showCompStatus('error', '\u2717 ' + err.message); })
         .finally(function() {
-            btnAz.disabled = false; btnSq.disabled = false;
+            btnAz.disabled = false; btnSq.disabled = false; if (btnPv) btnPv.disabled = false;
             btnSq.textContent = '\u25D1 Shear Quadrants';
         });
+}
+
+// ── Composite Plan-View ─────────────────────────────
+
+function _getCompositePlanViewParams() {
+    return {
+        level_km:      parseFloat((document.getElementById('comp-level') || {}).value) || 2.0,
+        normalize_rmw: !!(document.getElementById('comp-norm-rmw') || {}).checked,
+        max_r_rmw:     parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 5.0,
+        dr_rmw:        parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.1,
+        shear_relative: !!(document.getElementById('comp-shear-rel') || {}).checked,
+    };
+}
+
+function generateCompositePlanView() {
+    var filters = _getCompositeFilters();
+    var pvParams = _getCompositePlanViewParams();
+    var variable = document.getElementById('comp-var').value;
+    var dataType = document.getElementById('comp-dtype').value;
+    var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
+
+    var btnPv = document.getElementById('comp-btn-pv');
+    var btnAz = document.getElementById('comp-btn-az');
+    var btnSq = document.getElementById('comp-btn-sq');
+    btnPv.disabled = true; btnAz.disabled = true; btnSq.disabled = true;
+    btnPv.textContent = '\u23F3 Computing\u2026';
+    document.getElementById('comp-result-placeholder').style.display = 'none';
+    document.getElementById('comp-result-az').style.display = 'none';
+    document.getElementById('comp-result-sq').style.display = 'none';
+    _showCompStatus('loading', 'Computing plan-view composite at ' + pvParams.level_km + ' km \u2014 this may take 30\u201390 seconds for many cases\u2026');
+
+    var overlay = (document.getElementById('comp-overlay') || {}).value || '';
+    var qs = _compositeQueryString(filters) +
+        '&variable=' + encodeURIComponent(variable) +
+        '&data_type=' + dataType +
+        '&coverage_min=' + coverage +
+        '&level_km=' + pvParams.level_km +
+        '&normalize_rmw=' + (pvParams.normalize_rmw ? 'true' : 'false') +
+        '&max_r_rmw=' + pvParams.max_r_rmw +
+        '&dr_rmw=' + pvParams.dr_rmw +
+        '&shear_relative=' + (pvParams.shear_relative ? 'true' : 'false');
+    if (overlay) qs += '&overlay=' + encodeURIComponent(overlay);
+
+    fetch(API_BASE + '/composite/plan_view?' + qs)
+        .then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error(e.detail||'API error');}); return r.json(); })
+        .then(function(json) {
+            _showCompStatus('success', '\u2713 Plan-view composite computed: ' + json.n_cases + ' cases processed');
+            renderCompositePlanViewInto('comp-result-pv', json, filters, pvParams);
+            history.replaceState(null, '', '#' + _buildCompPermalinkHash());
+        })
+        .catch(function(err) { _showCompStatus('error', '\u2717 ' + err.message); })
+        .finally(function() {
+            btnPv.disabled = false; btnAz.disabled = false; btnSq.disabled = false;
+            btnPv.textContent = '\uD83D\uDDFA Plan View';
+        });
+}
+
+function buildCompPlanViewOverlayContours(json, xAxis, yAxis) {
+    if (!json.overlay || !json.overlay.plan_view) return [];
+    var ov = json.overlay;
+    var ovData = ov.plan_view;
+    try {
+        var interval = _compContourInterval(ovData);
+        var baseContour = {
+            z: ovData, x: xAxis, y: yAxis, type: 'contour',
+            showscale: false, hoverongaps: false,
+            contours: { coloring: 'none', showlabels: true,
+                        labelfont: { size: 9, color: 'rgba(255,255,255,0.85)' } }
+        };
+        var traces = [];
+        if (ov.vmax > interval) {
+            traces.push(Object.assign({}, baseContour, {
+                contours: Object.assign({}, baseContour.contours, { start: interval, end: ov.vmax, size: interval }),
+                line: { color: 'rgba(0,0,0,0.7)', width: 1.2, dash: 'solid' },
+                hovertemplate: '<b>' + ov.display_name + '</b>: %{z:.2f} ' + ov.units + '<extra>contour</extra>',
+                name: ov.display_name + ' (+)', showlegend: false
+            }));
+        }
+        if (ov.vmin < -interval) {
+            traces.push(Object.assign({}, baseContour, {
+                contours: Object.assign({}, baseContour.contours, { start: ov.vmin, end: -interval, size: interval }),
+                line: { color: 'rgba(0,0,0,0.7)', width: 1.2, dash: 'dash' },
+                hovertemplate: '<b>' + ov.display_name + '</b>: %{z:.2f} ' + ov.units + '<extra>contour</extra>',
+                name: ov.display_name + ' (\u2212)', showlegend: false
+            }));
+        }
+        return traces;
+    } catch (e) { console.warn('Plan-view overlay error:', e); return []; }
+}
+
+function renderCompositePlanViewInto(targetId, json, filters, pvParams) {
+    var el = document.getElementById(targetId); if (!el) return;
+    var planData = json.plan_view;
+    var xAxis = json.x_axis, yAxis = json.y_axis;
+    var varInfo = json.variable;
+    var xLabel = json.x_label, yLabel = json.y_label;
+    var levelKm = json.level_km;
+
+    var fontSize = { title:14, axis:12, tick:10, cbar:12, cbarTick:10, hover:13 };
+
+    // Store defaults and update placeholders
+    _compDefaultColorscale = varInfo.colorscale; _compDefaultVmin = varInfo.vmin; _compDefaultVmax = varInfo.vmax;
+    var vminInp = document.getElementById('comp-vmin'), vmaxInp = document.getElementById('comp-vmax');
+    if (vminInp) vminInp.placeholder = varInfo.vmin; if (vmaxInp) vmaxInp.placeholder = varInfo.vmax;
+
+    // Apply user overrides
+    var activeColorscale = _getCompColorscale(varInfo.colorscale);
+    var activeVmin = _getCompVmin(varInfo.vmin);
+    var activeVmax = _getCompVmax(varInfo.vmax);
+
+    var heatmap = {
+        z: planData, x: xAxis, y: yAxis, type: 'heatmap',
+        colorscale: activeColorscale, zmin: activeVmin, zmax: activeVmax,
+        colorbar: { title: { text: varInfo.units, font: { color:'#ccc', size:fontSize.cbar } },
+                    tickfont: { color:'#ccc', size:fontSize.cbarTick }, thickness:14, len:0.85 },
+        hovertemplate: '<b>' + varInfo.display_name + '</b>: %{z:.2f} ' + varInfo.units +
+                       '<br>' + xLabel + ': %{x:.1f}<br>' + yLabel + ': %{y:.1f}<extra></extra>',
+        hoverongaps: false
+    };
+
+    // Build title
+    var normLabel = json.normalize_rmw ? ' (RMW-norm)' : '';
+    var shearLabel = json.shear_relative ? ' [Shear \u2192 Right]' : '';
+    var dtypeLabel = (document.getElementById('comp-dtype') && document.getElementById('comp-dtype').value === 'merge') ? ' (Merge)' : '';
+    var meanVmax = _computeCompositeMeanVmax(filters);
+    var vmaxNote = meanVmax !== null ? ' | Mean V<sub>max</sub>=' + meanVmax + ' kt' : '';
+    var overlayLabel = json.overlay ? '<br><span style="font-size:0.85em;color:#9ca3af;">Contours: ' + json.overlay.display_name + ' (' + json.overlay.units + ')</span>' : '';
+    var title = _compositeFilterSummary(filters, json.n_cases) + vmaxNote +
+                '<br>Plan View @ ' + levelKm + ' km: ' + varInfo.display_name + dtypeLabel + normLabel + shearLabel + overlayLabel;
+
+    var plotBg = '#0a1628';
+    var shapes = [];
+    var annotations = [];
+
+    // If RMW-normalised, draw a circle at R/RMW = 1
+    if (json.normalize_rmw) {
+        var nPts = 100;
+        var circleX = [], circleY = [];
+        for (var i = 0; i <= nPts; i++) {
+            var angle = 2 * Math.PI * i / nPts;
+            circleX.push(Math.cos(angle));
+            circleY.push(Math.sin(angle));
+        }
+        // Add as a scatter trace (drawn after heatmap)
+    }
+
+    // Shear arrow annotation if shear-relative
+    if (json.shear_relative) {
+        var shearInset = buildShearInset(90, true);
+        if (shearInset) {
+            shapes = shapes.concat(shearInset.shapes || []);
+            annotations = annotations.concat(shearInset.annotations || []);
+        }
+    }
+
+    var layout = {
+        title: { text: title, font: { color:'#e5e7eb', size:fontSize.title }, y:0.97, x:0.5, xanchor:'center' },
+        paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+        xaxis: { title: { text:xLabel, font:{color:'#aaa',size:fontSize.axis} },
+                 tickfont:{color:'#aaa',size:fontSize.tick},
+                 gridcolor:'rgba(255,255,255,0.04)', zeroline:true,
+                 zerolinecolor:'rgba(255,255,255,0.12)' },
+        yaxis: { title: { text:yLabel, font:{color:'#aaa',size:fontSize.axis} },
+                 tickfont:{color:'#aaa',size:fontSize.tick},
+                 gridcolor:'rgba(255,255,255,0.04)', zeroline:true,
+                 zerolinecolor:'rgba(255,255,255,0.12)',
+                 scaleanchor:'x', scaleratio:1 },
+        margin: { l:60, r:24, t: json.overlay ? 130 : 116, b:50 },
+        shapes: shapes, annotations: annotations,
+        hoverlabel: { bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
+        showlegend: false
+    };
+
+    // Build overlay contours
+    var pvOverlay = buildCompPlanViewOverlayContours(json, xAxis, yAxis);
+
+    // Optional RMW circle trace
+    var extraTraces = [];
+    if (json.normalize_rmw) {
+        var nPts2 = 120;
+        var cx = [], cy = [];
+        for (var j = 0; j <= nPts2; j++) {
+            var a = 2 * Math.PI * j / nPts2;
+            cx.push(parseFloat(Math.cos(a).toFixed(4)));
+            cy.push(parseFloat(Math.sin(a).toFixed(4)));
+        }
+        extraTraces.push({
+            x: cx, y: cy, type: 'scatter', mode: 'lines',
+            line: { color: 'white', width: 1.5, dash: 'dash' },
+            showlegend: false, hoverinfo: 'skip',
+            name: 'RMW'
+        });
+    }
+
+    el.style.display = 'block';
+    _lastCompJson = json; _lastCompType = 'pv';
+    el.innerHTML = '<div id="comp-pv-chart" style="width:100%;height:620px;border-radius:8px;overflow:hidden;"></div>' + _buildCompToolbar();
+    Plotly.newPlot('comp-pv-chart', [heatmap].concat(pvOverlay).concat(extraTraces), layout,
+        { responsive:true, displayModeBar:true, displaylogo:false,
+          modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
 }
 
 // ── Composite Difference Mode ───────────────────────
