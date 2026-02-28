@@ -1229,8 +1229,8 @@ function initEnvOverlay() {
                 // ── Right: Display area ──
                 '<div class="env-ov-display" id="env-ov-display">' +
                     '<div class="env-no-case" id="env-ov-placeholder">' +
-                        '<div class="env-no-case-icon">\uD83C\uDF0A</div>' +
-                        '<div class="env-no-case-msg">Select a TC-RADAR case from the map and click <strong>Explore</strong> to load ERA5 environmental diagnostics.</div>' +
+                        '<div class="env-no-case-icon">\uD83C\uDF0D</div>' +
+                        '<div class="env-no-case-msg">Select a TC-RADAR case from the map and click <strong>Explore \u2192</strong> to load ERA5 environmental diagnostics.</div>' +
                     '</div>' +
                 '</div>' +
             '</div>' +
@@ -1308,8 +1308,8 @@ function _envOverlayShowLoading() {
     if (!display) return;
     display.innerHTML =
         '<div class="env-no-case" style="display:flex;">' +
-            '<div class="env-no-case-icon" style="animation:hurricanePulse 2s ease-in-out infinite;">\uD83C\uDF0A</div>' +
-            '<div class="env-no-case-msg">Loading ERA5 environmental data\u2026</div>' +
+            '<div class="env-loading-spinner"></div>' +
+            '<div class="env-no-case-msg" style="animation:envPulse 2s ease-in-out infinite;">Loading ERA5 environmental data\u2026</div>' +
         '</div>';
     // Update case info in the controls
     var caseInfo = document.getElementById('env-ov-case-info');

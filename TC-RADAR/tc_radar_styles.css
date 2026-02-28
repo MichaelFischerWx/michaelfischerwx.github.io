@@ -358,8 +358,10 @@ input[type="range"]::-moz-range-track { height: 4px; background: transparent; bo
     display: flex; align-items: center; gap: 8px;
 }
 .env-slider-row input[type="range"] {
+    position: static; transform: none;
     flex: 1; -webkit-appearance: none; appearance: none;
     height: 4px; background: var(--navy-mid); border-radius: 2px;
+    pointer-events: auto;
 }
 .env-slider-row input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none; width: 14px; height: 14px;
@@ -446,7 +448,7 @@ input[type="range"]::-moz-range-track { height: 4px; background: transparent; bo
 .env-scard.highlight-warn .env-scard-value { color: #fbbf24; }
 .env-scard.highlight-bad  .env-scard-value { color: #f87171; }
 
-/* ── No-case prompt ─────────────────────────────── */
+/* ── No-case prompt / loading state ─────────────── */
 .env-no-case {
     flex: 1; display: flex; flex-direction: column;
     align-items: center; justify-content: center; color: #4b5563;
@@ -454,6 +456,15 @@ input[type="range"]::-moz-range-track { height: 4px; background: transparent; bo
 }
 .env-no-case-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.4; }
 .env-no-case-msg { font-size: 13px; max-width: 360px; line-height: 1.6; }
+
+/* Loading spinner for env overlay */
+.env-loading-spinner {
+    width: 48px; height: 48px; border: 3px solid rgba(34,211,238,0.15);
+    border-top-color: var(--cyan); border-radius: 50%;
+    animation: envSpin 0.8s linear infinite; margin-bottom: 16px;
+}
+@keyframes envSpin { to { transform: rotate(360deg); } }
+@keyframes envPulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
 
 @media (max-width: 1100px) {
     .env-scalars-grid { grid-template-columns: repeat(2, 1fr); }
