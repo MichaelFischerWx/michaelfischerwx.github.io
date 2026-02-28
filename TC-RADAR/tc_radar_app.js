@@ -189,7 +189,7 @@ function openSidePanel(caseData, fromQuickSelect) {
                     '<button class="cs-btn" id="sq-btn" onclick="fetchShearQuadrants()" disabled>\u25D1 Shear Quads</button>' +
                     '<button class="cs-btn" id="vol-btn" onclick="fetch3DVolume()" disabled>\uD83D\uDDA5 3D Volume</button>' +
                     '<button class="cs-btn" id="ir-underlay-btn" onclick="toggleIRPlotlyUnderlay()" disabled>\uD83D\uDEF0 IR Off</button>' +
-                    '<button class="cs-btn" id="era5-underlay-btn" onclick="showERA5FieldMenu()" disabled>\uD83C\uDF0D Env Off</button>' +
+                    '<button class="cs-btn" id="era5-underlay-btn" onclick="toggleERA5PlotlyUnderlay()" oncontextmenu="event.preventDefault();showERA5FieldMenu();return false;" disabled>\uD83C\uDF0D Env Off</button>' +
                     '<button class="cs-btn" id="env-panel-btn" onclick="toggleEnvPanel()" disabled>\uD83C\uDF21 Env Panel</button>' +
                 '</div>' +
             '</div>' +
@@ -386,9 +386,7 @@ var _hurricanePhase = 0;
 
 // ── ERA5 state ───────────────────────────────────────────────
 var _era5Data = null;
-var _era5MapOverlay = null;
 var _era5MapField = 'shear_mag';
-var _era5MapVisible = false;
 var _era5Fetching = false;
 var _era5PlotlyVisible = false;
 var _era5EnvPanelVisible = false;
@@ -502,36 +500,6 @@ function _era5GetBounds(data) {
         [data.center_lat + latOff[0], data.center_lon + lonOff[0]],
         [data.center_lat + latOff[latOff.length - 1], data.center_lon + lonOff[lonOff.length - 1]]
     );
-}
-
-function showERA5MapOverlay() {
-    if (!_era5Data || !_era5Data.data) return;
-    var canvas = _era5RenderCanvas(_era5Data.data, _era5Data.field);
-    var bounds = _era5GetBounds(_era5Data);
-    var url = canvas.toDataURL();
-    if (_era5MapOverlay) {
-        _era5MapOverlay.setUrl(url);
-        _era5MapOverlay.setBounds(bounds);
-    } else {
-        _era5MapOverlay = L.imageOverlay(url, bounds, { opacity: 0.6, interactive: false, zIndex: 190 });
-        _era5MapOverlay.addTo(map);
-    }
-    _era5MapVisible = true;
-}
-
-function removeERA5MapOverlay() {
-    if (_era5MapOverlay) { map.removeLayer(_era5MapOverlay); _era5MapOverlay = null; }
-    _era5MapVisible = false;
-}
-
-function toggleERA5MapOverlay() {
-    if (_era5MapVisible) {
-        removeERA5MapOverlay();
-    } else if (_era5Data) {
-        showERA5MapOverlay();
-    }
-    var btn = document.getElementById('era5-map-btn');
-    if (btn) btn.textContent = _era5MapVisible ? '\uD83C\uDF0D Env On' : '\uD83C\uDF10 Env Off';
 }
 
 // ── Plotly explorer underlay ─────────────────────────────────
@@ -655,8 +623,8 @@ function showERA5FieldMenu() {
                             _era5PlotlyVisible = false;
                             toggleERA5PlotlyUnderlay();
                         }
-                        if (_era5MapVisible) showERA5MapOverlay();
                         renderEnvPanel();
+                        _updateERA5Buttons();
                     }
                 });
             }
@@ -912,7 +880,6 @@ function renderTProfile(profiles, divId) {
 
 // ── ERA5 cleanup ─────────────────────────────────────────────
 function cleanupERA5() {
-    removeERA5MapOverlay();
     _era5Data = null;
     _era5PlotlyVisible = false;
     _era5EnvPanelVisible = false;
