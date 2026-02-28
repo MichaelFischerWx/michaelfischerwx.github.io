@@ -485,14 +485,14 @@ var _era5Colormaps = {
     },
     entropy_def: {
         stops: [
-            { pos: 0.00, r: 247, g: 252, b: 245 },
-            { pos: 0.15, r: 199, g: 233, b: 192 },
-            { pos: 0.30, r: 161, g: 217, b: 155 },
-            { pos: 0.45, r: 116, g: 196, b: 118 },
-            { pos: 0.60, r: 49,  g: 163, b: 84  },
-            { pos: 0.75, r: 0,   g: 109, b: 44  },
-            { pos: 0.90, r: 0,   g: 68,  b: 27  },
-            { pos: 1.00, r: 0,   g: 40,  b: 16  },
+            { pos: 0.00, r: 255, g: 247, b: 236 },
+            { pos: 0.15, r: 254, g: 232, b: 200 },
+            { pos: 0.30, r: 253, g: 212, b: 158 },
+            { pos: 0.45, r: 253, g: 187, b: 132 },
+            { pos: 0.60, r: 227, g: 145, b: 86  },
+            { pos: 0.75, r: 189, g: 109, b: 53  },
+            { pos: 0.90, r: 140, g: 81,  b: 10  },
+            { pos: 1.00, r: 84,  g: 48,  b: 5   },
         ],
     },
 };
@@ -908,6 +908,238 @@ function renderThetaProfile(profiles, divId) {
     Plotly.newPlot(divId, traces, layout, { responsive: true, displayModeBar: false });
 }
 
+// ── Skew-T / Log-P Diagram ────────────────────────────────────
+function renderSkewT(profiles, divId) {
+    var el = document.getElementById(divId);
+    if (!el || !profiles || !profiles.t || !profiles.plev) return;
+
+    var plev = profiles.plev;
+    var tK = profiles.t;
+    var qGkg = profiles.q;  // g/kg
+
+    // Convert T from K to °C
+    var tC = tK.map(function(v) { return v != null ? v - 273.15 : null; });
+
+    // Compute dewpoint from specific humidity and pressure
+    // Td = (243.5 * ln(e/6.112)) / (17.67 - ln(e/6.112))
+    // where e = (q/1000) * p / (0.622 + q/1000 * 0.378)
+    var tdC = [];
+    for (var i = 0; i < plev.length; i++) {
+        if (qGkg && qGkg[i] != null && plev[i] != null) {
+            var qKg = qGkg[i] / 1000.0;
+            var e = qKg * plev[i] / (0.622 + 0.378 * qKg);  // hPa
+            if (e > 0) {
+                var lnE = Math.log(e / 6.112);
+                tdC.push(243.5 * lnE / (17.67 - lnE));
+            } else {
+                tdC.push(null);
+            }
+        } else {
+            tdC.push(null);
+        }
+    }
+
+    // Skew factor: rotate T axis so isotherms tilt right with decreasing pressure
+    var skewFactor = 35;  // degrees of skew per decade of pressure
+    var pRef = 1000;      // reference pressure (hPa)
+
+    function skewX(tempC, pHpa) {
+        if (tempC == null || pHpa == null) return null;
+        return tempC + skewFactor * Math.log10(pRef / pHpa);
+    }
+
+    // Compute skewed coordinates for temperature and dewpoint
+    var tSkew = [], tdSkew = [], pValid = [];
+    for (var j = 0; j < plev.length; j++) {
+        tSkew.push(skewX(tC[j], plev[j]));
+        tdSkew.push(skewX(tdC[j], plev[j]));
+    }
+
+    // ── Background reference lines ──
+
+    // Dry adiabats: θ = T * (1000/p)^0.286 → T(p) = θ * (p/1000)^0.286
+    var dryAdiabatTraces = [];
+    var thetaVals = [-30, -20, -10, 0, 10, 20, 30, 40, 50, 60, 70, 80];
+    var pRange = [];
+    for (var pp = 1050; pp >= 100; pp -= 10) pRange.push(pp);
+    thetaVals.forEach(function(theta) {
+        var xDry = [], yDry = [];
+        var thetaK = theta + 273.15;
+        pRange.forEach(function(p) {
+            var tAtP = thetaK * Math.pow(p / 1000.0, 0.286) - 273.15;
+            var sx = skewX(tAtP, p);
+            if (sx >= -50 && sx <= 80) {
+                xDry.push(sx);
+                yDry.push(p);
+            }
+        });
+        if (xDry.length > 1) {
+            dryAdiabatTraces.push({
+                x: xDry, y: yDry, type: 'scatter', mode: 'lines',
+                line: { color: 'rgba(200,120,80,0.2)', width: 0.8 },
+                showlegend: false, hoverinfo: 'skip',
+            });
+        }
+    });
+
+    // Isotherms (vertical in non-skewed, tilted in skewed)
+    var isothermTraces = [];
+    for (var tIso = -80; tIso <= 40; tIso += 10) {
+        var xIso = [], yIso = [];
+        pRange.forEach(function(p) {
+            var sx = skewX(tIso, p);
+            if (sx >= -50 && sx <= 80) {
+                xIso.push(sx);
+                yIso.push(p);
+            }
+        });
+        if (xIso.length > 1) {
+            isothermTraces.push({
+                x: xIso, y: yIso, type: 'scatter', mode: 'lines',
+                line: { color: 'rgba(100,160,220,0.15)', width: 0.7 },
+                showlegend: false, hoverinfo: 'skip',
+            });
+        }
+    }
+
+    // Moist adiabats (simplified: use Bolton 1980 pseudoadiabat)
+    var moistAdiabatTraces = [];
+    var moistThetaVals = [-10, 0, 10, 16, 20, 24, 28, 32, 36];
+    moistThetaVals.forEach(function(tBase) {
+        var xMoist = [], yMoist = [];
+        // Integrate upward from 1000 hPa using moist lapse rate
+        var tCur = tBase;
+        for (var p = 1000; p >= 100; p -= 10) {
+            var sx = skewX(tCur, p);
+            if (sx >= -50 && sx <= 80) {
+                xMoist.push(sx);
+                yMoist.push(p);
+            }
+            // Approximate moist adiabatic lapse rate
+            var tKcur = tCur + 273.15;
+            var es = 6.112 * Math.exp(17.67 * tCur / (tCur + 243.5));
+            var rs = 0.622 * es / (p - es);
+            var Lv = 2.501e6;
+            var Cp = 1005.7;
+            var Rd = 287.04;
+            var numerator = (Rd * tKcur / p) + (Lv * rs / p);
+            var denominator = Cp + (Lv * Lv * rs * 0.622 / (Rd * tKcur * tKcur));
+            var dtdp = numerator / denominator;
+            tCur -= dtdp * 10;  // dp = -10 hPa step
+        }
+        if (xMoist.length > 2) {
+            moistAdiabatTraces.push({
+                x: xMoist, y: yMoist, type: 'scatter', mode: 'lines',
+                line: { color: 'rgba(80,200,120,0.2)', width: 0.8 },
+                showlegend: false, hoverinfo: 'skip',
+            });
+        }
+    });
+
+    // ── Main data traces ──
+    var traces = [];
+
+    // Background lines first
+    traces = traces.concat(isothermTraces, dryAdiabatTraces, moistAdiabatTraces);
+
+    // 0°C isotherm (highlight)
+    var xFreeze = [], yFreeze = [];
+    pRange.forEach(function(p) {
+        var sx = skewX(0, p);
+        if (sx >= -50 && sx <= 80) { xFreeze.push(sx); yFreeze.push(p); }
+    });
+    traces.push({
+        x: xFreeze, y: yFreeze, type: 'scatter', mode: 'lines',
+        line: { color: 'rgba(100,200,255,0.35)', width: 1.2, dash: 'dot' },
+        showlegend: false, hoverinfo: 'skip',
+    });
+
+    // Dewpoint trace (green)
+    traces.push({
+        x: tdSkew, y: plev, type: 'scatter', mode: 'lines+markers',
+        name: 'Td',
+        line: { color: '#22c55e', width: 2.5 },
+        marker: { color: '#22c55e', size: 4 },
+        hovertemplate: '%{text}<extra>Dewpoint</extra>',
+        text: plev.map(function(p, idx) {
+            return p + ' hPa: Td = ' + (tdC[idx] != null ? tdC[idx].toFixed(1) : '—') + '°C';
+        }),
+    });
+
+    // Temperature trace (red)
+    traces.push({
+        x: tSkew, y: plev, type: 'scatter', mode: 'lines+markers',
+        name: 'T',
+        line: { color: '#ef4444', width: 2.5 },
+        marker: { color: '#ef4444', size: 4 },
+        hovertemplate: '%{text}<extra>Temperature</extra>',
+        text: plev.map(function(p, idx) {
+            return p + ' hPa: T = ' + (tC[idx] != null ? tC[idx].toFixed(1) : '—') + '°C';
+        }),
+    });
+
+    // CAPE shading between T and Td traces (filled region)
+    // Simple fill between T and Td for visual effect
+    var fillX = tdSkew.slice().reverse().concat(tSkew);
+    var fillY = plev.slice().reverse().concat(plev.slice());
+    // Only add if we have valid data
+    var hasValidFill = tSkew.some(function(v) { return v != null; }) && tdSkew.some(function(v) { return v != null; });
+    if (hasValidFill) {
+        traces.splice(traces.length - 2, 0, {
+            x: fillX, y: fillY, type: 'scatter', mode: 'lines',
+            fill: 'toself', fillcolor: 'rgba(100,180,100,0.08)',
+            line: { color: 'transparent' },
+            showlegend: false, hoverinfo: 'skip',
+        });
+    }
+
+    // ── Axis labels: show actual temperature at key pressure levels ──
+    // Build custom tick text for x-axis showing unskewed temperatures
+    var xTickVals = [];
+    var xTickText = [];
+    for (var tTick = -80; tTick <= 40; tTick += 10) {
+        var skewed = skewX(tTick, 1000);  // reference level for label
+        xTickVals.push(skewed);
+        xTickText.push(tTick + '°C');
+    }
+
+    var layout = {
+        xaxis: {
+            title: { text: 'Temperature (°C, skewed)', font: { size: 9, color: '#8b9ec2' } },
+            range: [-15, 65],
+            tickvals: xTickVals, ticktext: xTickText,
+            color: '#8b9ec2', tickfont: { size: 8 },
+            zeroline: false, gridcolor: 'rgba(255,255,255,0.03)',
+            showgrid: false,
+        },
+        yaxis: {
+            title: { text: 'Pressure (hPa)', font: { size: 9, color: '#8b9ec2' } },
+            autorange: 'reversed', type: 'log',
+            range: [Math.log10(1050), Math.log10(100)],
+            color: '#8b9ec2', tickfont: { size: 8 },
+            tickvals: [1000, 850, 700, 500, 400, 300, 200, 150, 100],
+            dtick: null,
+            zeroline: false, gridcolor: 'rgba(255,255,255,0.06)',
+        },
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(10,22,40,0.5)',
+        margin: { l: 45, r: 10, t: 22, b: 35 },
+        title: { text: 'Skew-T / Log-P', font: { size: 10, color: '#00d4ff' }, x: 0.5, y: 0.98 },
+        legend: { font: { color: '#ccc', size: 9 }, x: 0.85, y: 0.98, bgcolor: 'rgba(0,0,0,0.3)' },
+        showlegend: true,
+    };
+    Plotly.newPlot(divId, traces, layout, { responsive: true, displayModeBar: false });
+}
+
+// ── Skew-T sounding fetch with configurable radius ──────────
+function fetchSkewTSounding(caseIdx, radiusKm, callback) {
+    var url = API_BASE + '/era5_sounding?case_index=' + caseIdx + '&radius_km=' + radiusKm;
+    fetch(url)
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) { if (callback) callback(data); })
+        .catch(function() { if (callback) callback(null); });
+}
+
 // ══════════════════════════════════════════════════════════════
 // Environment Overlay Panel (full-screen ERA5 dashboard)
 // ══════════════════════════════════════════════════════════════
@@ -966,9 +1198,17 @@ function initEnvOverlay() {
                         '</div>' +
                     '</div>' +
                     '<button class="env-recompute-btn" id="env-ov-recompute" onclick="envOverlayRecomputeScalars()" disabled>Recompute Scalars</button>' +
+                    '<div class="env-section-title" style="margin-top:18px;">\uD83C\uDF21 Skew-T Sounding</div>' +
+                    '<div class="env-ctrl-row"><label>Averaging Radius</label>' +
+                        '<div class="env-slider-row">' +
+                            '<input type="range" id="env-ov-skewt-radius" min="50" max="800" step="50" value="200" oninput="envOverlaySkewTRadiusChange(this.value)">' +
+                            '<span class="env-slider-val" id="env-ov-skewt-radius-val">200 km</span>' +
+                        '</div>' +
+                    '</div>' +
+                    '<button class="env-recompute-btn" id="env-ov-skewt-btn" onclick="envOverlayRecomputeSkewT()" disabled>Generate Skew-T</button>' +
                     '<div class="env-domain-note" style="margin-top:12px;">' +
                         '<strong>Precomputed domains:</strong><br>' +
-                        'Profiles: 200\u2013600 km annulus<br>' +
+                        'Profiles/Skew-T: 200\u2013600 km annulus<br>' +
                         'Shear: 200\u2013800 km annulus<br>' +
                         'Thermo (RH, div, SST): 0\u2013500 km disc<br>' +
                         '\u03c7\u2098: inner 0\u2013100 km, env 100\u2013300 km<br>' +
@@ -1168,15 +1408,29 @@ function renderEnvOverlay() {
             '<div class="env-scalars-grid" id="env-ov-scalars"></div>' +
         '</div></div>';
 
-    // ── Row 3: Vertical profiles ──
+    // ── Row 3: Skew-T + RH Profile ──
     html += '<div class="env-dash-row two-col">' +
+        '<div class="env-dash-card"><div class="env-dash-card-header">\uD83C\uDF21 Skew-T / Log-P Sounding</div>' +
+            '<div class="env-dash-card-body"><div id="env-ov-skewt" style="height:400px;"></div></div></div>' +
         '<div class="env-dash-card"><div class="env-dash-card-header">Relative Humidity Profile</div>' +
-            '<div class="env-dash-card-body"><div id="env-ov-rh-prof" style="height:300px;"></div></div></div>' +
+            '<div class="env-dash-card-body"><div id="env-ov-rh-prof" style="height:400px;"></div></div></div>' +
+    '</div>';
+
+    // ── Row 4: θ/θe Profile ──
+    html += '<div class="env-dash-row two-col">' +
         '<div class="env-dash-card"><div class="env-dash-card-header">\u03b8 / \u03b8e Profile</div>' +
             '<div class="env-dash-card-body"><div id="env-ov-theta-prof" style="height:300px;"></div></div></div>' +
+        '<div class="env-dash-card" id="env-ov-skewt-info-card">' +
+            '<div class="env-dash-card-header">\uD83D\uDCCB Sounding Info</div>' +
+            '<div class="env-dash-card-body" id="env-ov-skewt-info" style="height:300px;font-size:12px;color:#9ca3af;overflow-y:auto;"></div>' +
+        '</div>' +
     '</div>';
 
     display.innerHTML = html;
+
+    // Enable Skew-T button now that we have data
+    var skewTBtn = document.getElementById('env-ov-skewt-btn');
+    if (skewTBtn) skewTBtn.disabled = false;
 
     // Render each component
     setTimeout(function() {
@@ -1186,8 +1440,10 @@ function renderEnvOverlay() {
             renderHodograph(profiles, 'env-ov-hodo');
         }
         if (profiles && profiles.plev) {
+            renderSkewT(profiles, 'env-ov-skewt');
             renderRHProfile(profiles, 'env-ov-rh-prof');
             renderThetaProfile(profiles, 'env-ov-theta-prof');
+            _renderSkewTInfo(profiles);
         }
     }, 60);
 }
@@ -1420,6 +1676,99 @@ function envOverlayRecomputeScalars() {
         .catch(function() {
             if (btn) { btn.disabled = false; btn.textContent = 'Recompute Scalars'; }
         });
+}
+
+// ── Skew-T sounding info panel ────────────────────────────────
+function _renderSkewTInfo(profiles) {
+    var el = document.getElementById('env-ov-skewt-info');
+    if (!el || !profiles || !profiles.t || !profiles.plev) return;
+
+    var plev = profiles.plev;
+    var tK = profiles.t;
+    var qGkg = profiles.q;
+    var rh = profiles.rh;
+
+    // Compute dewpoint
+    var tdC = [];
+    var tC = tK.map(function(v) { return v != null ? v - 273.15 : null; });
+    for (var i = 0; i < plev.length; i++) {
+        if (qGkg && qGkg[i] != null && plev[i] != null) {
+            var qKg = qGkg[i] / 1000.0;
+            var e = qKg * plev[i] / (0.622 + 0.378 * qKg);
+            if (e > 0) {
+                var lnE = Math.log(e / 6.112);
+                tdC.push(243.5 * lnE / (17.67 - lnE));
+            } else { tdC.push(null); }
+        } else { tdC.push(null); }
+    }
+
+    // Find key levels
+    var html = '<div style="font-family:\'JetBrains Mono\',monospace;line-height:2;">';
+    html += '<div style="color:#00d4ff;font-weight:700;margin-bottom:6px;">SOUNDING TABLE</div>';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:10px;">';
+    html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.1);color:#8b9ec2;">' +
+        '<th style="text-align:left;padding:3px 4px;">P (hPa)</th>' +
+        '<th style="text-align:right;padding:3px 4px;">T (°C)</th>' +
+        '<th style="text-align:right;padding:3px 4px;">Td (°C)</th>' +
+        '<th style="text-align:right;padding:3px 4px;">RH (%)</th>' +
+        '<th style="text-align:right;padding:3px 4px;">q (g/kg)</th></tr>';
+
+    for (var j = 0; j < plev.length; j++) {
+        var rowColor = plev[j] <= 200 ? 'rgba(100,160,255,0.6)' :
+                       plev[j] <= 500 ? 'rgba(200,200,200,0.6)' : 'rgba(255,200,150,0.6)';
+        html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);color:' + rowColor + ';">' +
+            '<td style="padding:2px 4px;">' + plev[j] + '</td>' +
+            '<td style="text-align:right;padding:2px 4px;">' + (tC[j] != null ? tC[j].toFixed(1) : '\u2014') + '</td>' +
+            '<td style="text-align:right;padding:2px 4px;">' + (tdC[j] != null ? tdC[j].toFixed(1) : '\u2014') + '</td>' +
+            '<td style="text-align:right;padding:2px 4px;">' + (rh && rh[j] != null ? rh[j].toFixed(0) : '\u2014') + '</td>' +
+            '<td style="text-align:right;padding:2px 4px;">' + (qGkg && qGkg[j] != null ? qGkg[j].toFixed(1) : '\u2014') + '</td></tr>';
+    }
+    html += '</table>';
+
+    // Compute approximate 0°C level
+    for (var k = 0; k < plev.length - 1; k++) {
+        if (tC[k] != null && tC[k+1] != null && tC[k] > 0 && tC[k+1] <= 0) {
+            var frac = tC[k] / (tC[k] - tC[k+1]);
+            var freezingP = plev[k] + frac * (plev[k+1] - plev[k]);
+            html += '<div style="margin-top:8px;color:#60a5fa;">0°C level: ~' + freezingP.toFixed(0) + ' hPa</div>';
+            break;
+        }
+    }
+
+    // Compute column-mean dewpoint depression
+    var totalDep = 0, countDep = 0;
+    for (var m = 0; m < plev.length; m++) {
+        if (tC[m] != null && tdC[m] != null) {
+            totalDep += (tC[m] - tdC[m]);
+            countDep++;
+        }
+    }
+    if (countDep > 0) {
+        html += '<div style="color:#f59e0b;">Mean T–Td: ' + (totalDep / countDep).toFixed(1) + '°C</div>';
+    }
+
+    html += '</div>';
+    el.innerHTML = html;
+}
+
+// ── Skew-T radius UI handlers ────────────────────────────────
+function envOverlaySkewTRadiusChange(val) {
+    document.getElementById('env-ov-skewt-radius-val').textContent = val + ' km';
+}
+
+function envOverlayRecomputeSkewT() {
+    if (!currentCaseIndex && currentCaseIndex !== 0) return;
+    var radiusKm = parseInt(document.getElementById('env-ov-skewt-radius').value) || 200;
+    var btn = document.getElementById('env-ov-skewt-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Loading\u2026'; }
+
+    fetchSkewTSounding(currentCaseIndex, radiusKm, function(data) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Generate Skew-T'; }
+        if (data && data.profiles) {
+            renderSkewT(data.profiles, 'env-ov-skewt');
+            _renderSkewTInfo(data.profiles);
+        }
+    });
 }
 
 // ── ERA5 cleanup ─────────────────────────────────────────────
