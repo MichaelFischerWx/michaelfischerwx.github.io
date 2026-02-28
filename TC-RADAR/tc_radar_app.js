@@ -1807,9 +1807,36 @@ function renderEnvOverlay() {
 
     display.innerHTML = html;
 
-    // Enable Skew-T button now that we have data
+    // Enable/disable Skew-T radius controls based on 3D data availability
     var skewTBtn = document.getElementById('env-ov-skewt-btn');
-    if (skewTBtn) skewTBtn.disabled = false;
+    var skewTSlider = document.getElementById('env-ov-skewt-radius');
+    var has3D = data && data.has_3d;
+    if (skewTBtn) {
+        skewTBtn.disabled = !has3D;
+        skewTBtn.textContent = has3D ? 'Generate Skew-T' : 'Radius N/A (no 3D fields)';
+        skewTBtn.title = has3D ? 'Recompute sounding at selected radius' :
+            '3D T/q fields not in Zarr store — sounding uses precomputed 200–600 km annulus mean';
+    }
+    if (skewTSlider) {
+        skewTSlider.disabled = !has3D;
+        skewTSlider.style.opacity = has3D ? '1' : '0.35';
+    }
+    // Show a note below the slider when 3D is unavailable
+    var radiusNote = document.getElementById('env-ov-skewt-radius-note');
+    if (!radiusNote) {
+        radiusNote = document.createElement('div');
+        radiusNote.id = 'env-ov-skewt-radius-note';
+        radiusNote.style.cssText = 'font-size:9px;color:#fbbf24;margin-top:2px;padding:3px 6px;' +
+            'background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.15);border-radius:3px;line-height:1.3;';
+        var sliderParent = skewTSlider ? skewTSlider.closest('.env-ctrl-row') : null;
+        if (sliderParent) sliderParent.appendChild(radiusNote);
+    }
+    if (has3D) {
+        radiusNote.style.display = 'none';
+    } else {
+        radiusNote.style.display = 'block';
+        radiusNote.innerHTML = '\u26A0 3D T/q fields not in store \u2014 sounding fixed at precomputed 200\u2013600 km annulus.';
+    }
 
     // Render each component
     setTimeout(function() {
@@ -2173,27 +2200,43 @@ function envOverlayRecomputeSkewT() {
     if (btn) { btn.disabled = true; btn.textContent = 'Loading\u2026'; }
 
     fetchSkewTSounding(currentCaseIndex, radiusKm, function(data) {
-        if (btn) { btn.disabled = false; btn.textContent = 'Generate Skew-T'; }
         if (data && data.profiles) {
             renderSkewT(data.profiles, 'env-ov-skewt');
             _renderSkewTInfo(data.profiles);
-            // Warn user if API fell back to precomputed annulus (radius ignored)
-            if (data.source === 'precomputed') {
-                var note = document.getElementById('env-ov-skewt-fallback-note');
-                if (!note) {
-                    note = document.createElement('div');
-                    note.id = 'env-ov-skewt-fallback-note';
-                    note.style.cssText = 'font-size:10px;color:#fbbf24;margin-top:4px;padding:4px 8px;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.2);border-radius:4px;';
-                    var skewDiv = document.getElementById('env-ov-skewt');
-                    if (skewDiv && skewDiv.parentNode) skewDiv.parentNode.appendChild(note);
-                }
-                note.textContent = '\u26A0 3D fields not available \u2014 showing precomputed ' +
-                    (data.precomputed_domain || '200\u2013600 km annulus') +
-                    ' mean (radius slider has no effect)';
-            } else {
-                var existing = document.getElementById('env-ov-skewt-fallback-note');
-                if (existing) existing.remove();
+
+            // Update radius slider state based on API response
+            var has3D = data.has_3d;
+            var skewTSlider = document.getElementById('env-ov-skewt-radius');
+            if (btn) {
+                btn.disabled = !has3D;
+                btn.textContent = has3D ? 'Generate Skew-T' : 'Radius N/A (no 3D fields)';
             }
+            if (skewTSlider) {
+                skewTSlider.disabled = !has3D;
+                skewTSlider.style.opacity = has3D ? '1' : '0.35';
+            }
+
+            // Show subtitle on the Skew-T card with source info
+            var skewDiv = document.getElementById('env-ov-skewt');
+            var sourceNote = document.getElementById('env-ov-skewt-source-note');
+            if (!sourceNote && skewDiv) {
+                sourceNote = document.createElement('div');
+                sourceNote.id = 'env-ov-skewt-source-note';
+                sourceNote.style.cssText = 'font-size:9px;text-align:center;padding:2px 6px;margin-top:-2px;';
+                skewDiv.parentNode.insertBefore(sourceNote, skewDiv.nextSibling);
+            }
+            if (sourceNote) {
+                if (data.source === 'recomputed') {
+                    sourceNote.style.color = '#22d3ee';
+                    sourceNote.textContent = '\u2713 Recomputed at ' + radiusKm + ' km radius';
+                } else {
+                    sourceNote.style.color = '#fbbf24';
+                    sourceNote.textContent = '\u26A0 Precomputed ' +
+                        (data.precomputed_domain || '200\u2013600 km annulus') + ' mean';
+                }
+            }
+        } else {
+            if (btn) { btn.disabled = false; btn.textContent = 'Generate Skew-T'; }
         }
     });
 }
