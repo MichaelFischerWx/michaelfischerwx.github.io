@@ -241,8 +241,6 @@ function openSidePanel(caseData, fromQuickSelect) {
                     '<button class="cs-btn" id="sq-btn" onclick="fetchShearQuadrants()" disabled>\u25D1 Shear Quads</button>' +
                     '<button class="cs-btn" id="vol-btn" onclick="fetch3DVolume()" disabled>\uD83D\uDDA5 3D Volume</button>' +
                     '<button class="cs-btn" id="ir-underlay-btn" onclick="toggleIRPlotlyUnderlay()" disabled>\uD83D\uDEF0 IR Off</button>' +
-                    '<button class="cs-btn" id="era5-underlay-btn" onclick="showERA5FieldMenu()" disabled>\uD83C\uDF0D Env Off</button>' +
-                    '<button class="cs-btn" id="env-panel-btn" onclick="toggleEnvOverlay()" disabled>\uD83C\uDF21 Environment</button>' +
                 '</div>' +
             '</div>' +
 
@@ -394,12 +392,7 @@ function openSidePanel(caseData, fromQuickSelect) {
     // Fetch ERA5 environmental data for this case
     _era5Data = null; _era5PlotlyVisible = false;
     fetchERA5Data(caseData.case_index, 'shear_mag', function(data) {
-        if (data && currentCaseIndex === caseData.case_index) {
-            var era5Btn = document.getElementById('era5-underlay-btn');
-            if (era5Btn) era5Btn.disabled = false;
-            var envBtn = document.getElementById('env-panel-btn');
-            if (envBtn) envBtn.disabled = false;
-        }
+        // ERA5 data pre-fetched for the Environment overlay (top-nav)
     });
 
     setTimeout(function() { map.invalidateSize(); }, 360);
