@@ -237,30 +237,9 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-    <!-- Plotly is lazy-loaded on first explorer use (saves ~3.5MB initial load) -->
-    <script>
-    var _plotlyLoaded = false;
-    var _plotlyLoadCallbacks = [];
-    function ensurePlotly(callback) {
-        if (_plotlyLoaded && window.Plotly) { if (callback) callback(); return; }
-        if (callback) _plotlyLoadCallbacks.push(callback);
-        if (document.getElementById('plotly-lazy-script')) return; // already loading
-        var s = document.createElement('script');
-        s.id = 'plotly-lazy-script';
-        s.src = 'https://cdn.plot.ly/plotly-2.27.0.min.js';
-        s.onload = function() {
-            _plotlyLoaded = true;
-            _plotlyLoadCallbacks.forEach(function(cb) { cb(); });
-            _plotlyLoadCallbacks = [];
-        };
-        document.head.appendChild(s);
-    }
-    // Pre-load hint: browser can start fetching early if idle
-    var plotlyLink = document.createElement('link');
-    plotlyLink.rel = 'prefetch';
-    plotlyLink.href = 'https://cdn.plot.ly/plotly-2.27.0.min.js';
-    document.head.appendChild(plotlyLink);
-    </script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <!-- ensurePlotly() kept as a no-op safety net so the JS guards don't break -->
+    <script>function ensurePlotly(cb) { if (cb) cb(); }</script>
     <script src="tc_radar_app.js"></script>
 </body>
 </html>
