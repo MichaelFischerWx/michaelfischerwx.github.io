@@ -1788,7 +1788,7 @@ function renderPlotFromJSON(json, resultDiv) {
     var plotBg = '#0a1628';
     var baseLayout = { paper_bgcolor: plotBg, plot_bgcolor: plotBg, xaxis: { title: { text: 'Eastward distance (km)', font: { color: '#aaa' } }, tickfont: { color: '#aaa' }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false, scaleanchor: 'y' }, yaxis: { title: { text: 'Northward distance (km)', font: { color: '#aaa' } }, tickfont: { color: '#aaa' }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, shapes: shapes, hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 12 } }, showlegend: false };
     var config = { responsive: true, displayModeBar: true, modeBarButtonsToRemove: ['lasso2d','select2d','toggleSpikelines'], displaylogo: false };
-    var smallLayout = Object.assign({}, baseLayout, { title: { text: title, font: { color: '#e5e7eb', size: 11 }, y: 0.98, x: 0.5, xanchor: 'center' }, margin: { l: 52, r: 16, t: json.overlay ? 66 : 50, b: 44 }, xaxis: Object.assign({}, baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }), yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }) });
+    var smallLayout = Object.assign({}, baseLayout, { title: { text: title, font: { color: '#e5e7eb', size: 11 }, y: 0.98, x: 0.5, xanchor: 'center' }, margin: { l: 52, r: 16, t: json.overlay ? 82 : 66, b: 44 }, xaxis: Object.assign({}, baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }), yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }) });
 
     var overlayTraces = buildOverlayContours(json, x, y);
 
@@ -1905,7 +1905,7 @@ function renderCrossSectionInto(targetId, json, fullsize) {
     var csOverlayLabel = json.overlay ? '<br><span style="font-size:0.85em;color:#9ca3af;">Contours: ' + json.overlay.display_name + ' (' + json.overlay.units + ')</span>' : '';
     var title = 'Cross Section: (' + ep.x0.toFixed(0) + ',' + ep.y0.toFixed(0) + ') \u2192 (' + ep.x1.toFixed(0) + ',' + ep.y1.toFixed(0) + ') km' + csOverlayLabel;
     var plotBg = '#0a1628';
-    var layout = { title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' }, paper_bgcolor: plotBg, plot_bgcolor: plotBg, xaxis: { title: { text: 'Distance along line (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, margin: fullsize ? { l:55,r:24,t:json.overlay?56:40,b:46 } : { l:45,r:12,t:json.overlay?50:36,b:38 }, hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: fontSize.hover } }, showlegend: false };
+    var layout = { title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' }, paper_bgcolor: plotBg, plot_bgcolor: plotBg, xaxis: { title: { text: 'Distance along line (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, margin: fullsize ? { l:55,r:24,t:json.overlay?70:50,b:46 } : { l:45,r:12,t:json.overlay?62:44,b:38 }, hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: fontSize.hover } }, showlegend: false };
     var csOverlayTraces = buildOverlayContours(json, null, null, true);
 
     // Max value marker + annotation for cross-section
@@ -1969,7 +1969,7 @@ function renderAzimuthalMeanInto(targetId, json, fullsize) {
     var shapes = [];
     if (meta.rmw_km && !isNaN(meta.rmw_km)) shapes.push({ type:'line',xref:'x',yref:'paper',x0:meta.rmw_km,x1:meta.rmw_km,y0:0,y1:1,line:{color:'white',width:1.5,dash:'dash'} });
     var plotBg = '#0a1628';
-    var layout = { title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' }, paper_bgcolor: plotBg, plot_bgcolor: plotBg, xaxis: { title: { text: 'Radius (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, margin: fullsize ? { l:55,r:24,t:json.overlay?66:50,b:46 } : { l:45,r:12,t:json.overlay?56:42,b:38 }, shapes: shapes, hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: fontSize.hover } }, showlegend: false };
+    var layout = { title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' }, paper_bgcolor: plotBg, plot_bgcolor: plotBg, xaxis: { title: { text: 'Radius (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, margin: fullsize ? { l:55,r:24,t:json.overlay?80:64,b:46 } : { l:45,r:12,t:json.overlay?66:52,b:38 }, shapes: shapes, hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: fontSize.hover } }, showlegend: false };
 
     // Max value marker + annotation for azimuthal mean
     var azMaxInfo = findDataMax(azData, radius_km, height_km);
@@ -2194,7 +2194,7 @@ function renderQuadrantMeansInto(targetId, json, fullsize) {
     var plotBg = '#0a1628';
     var layout = {
         paper_bgcolor: plotBg, plot_bgcolor: plotBg,
-        margin: fullsize ? { l:55, r:70, t:70, b:50 } : { l:45, r:55, t:62, b:42 },
+        margin: fullsize ? { l:55, r:70, t:84, b:50 } : { l:45, r:55, t:72, b:42 },
         showlegend: false,
         annotations: annotations,
         shapes: shapes,
@@ -2613,7 +2613,7 @@ function openPlotModal(csJson) {
     }
 
     var d = window._lastPlotlyData;
-    var fullLayout = Object.assign({}, d.baseLayout, { title: { text: d.title, font: { color: '#e5e7eb', size: 15 }, y: 0.97, x: 0.5, xanchor: 'center' }, margin: { l:65,r:30,t:d.overlayTraces&&d.overlayTraces.length?76:60,b:55 }, xaxis: Object.assign({}, d.baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }), yaxis: Object.assign({}, d.baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }) });
+    var fullLayout = Object.assign({}, d.baseLayout, { title: { text: d.title, font: { color: '#e5e7eb', size: 15 }, y: 0.97, x: 0.5, xanchor: 'center' }, margin: { l:65,r:30,t:d.overlayTraces&&d.overlayTraces.length?96:80,b:55 }, xaxis: Object.assign({}, d.baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }), yaxis: Object.assign({}, d.baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }) });
     // Scale up annotations for fullscreen
     if (fullLayout.annotations) {
         fullLayout.annotations = fullLayout.annotations.map(function(a) {
