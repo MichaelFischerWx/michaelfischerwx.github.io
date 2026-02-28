@@ -164,10 +164,17 @@
 
                     <div id="rt-cs-result"></div>
                     <div id="rt-cs-status" class="cs-status"></div>
+                    <div id="rt-az-result"></div>
                     <div class="display-actions" style="margin-top:8px;">
                         <button class="cs-btn" id="rt-cs-btn" onclick="rtToggleCrossSection()" disabled>✂ Cross Section</button>
+                        <button class="cs-btn" id="rt-az-btn" onclick="rtFetchAzimuthalMean()" disabled>↻ Azimuthal Mean</button>
                         <button class="cs-btn" id="rt-vol-btn" onclick="rtFetch3DVolume()" disabled>🖥 3D Volume</button>
                         <button class="cs-btn" id="rt-ir-underlay-btn" onclick="rtToggleIRUnderlay()" disabled style="background:rgba(96,165,250,0.12);border-color:rgba(96,165,250,0.35);color:#93c5fd;">🛰 IR Off</button>
+                        <div style="display:flex;align-items:center;gap:4px;margin-left:6px;">
+                            <label style="font-size:9px;color:var(--slate);white-space:nowrap;">Coverage:</label>
+                            <input type="range" id="rt-az-coverage" min="0" max="100" value="50" step="5" style="width:60px;accent-color:var(--cyan);">
+                            <span id="rt-az-cov-val" style="font-size:9px;color:var(--text);font-family:'JetBrains Mono',monospace;min-width:28px;">50%</span>
+                        </div>
                     </div>
                 </div>
 

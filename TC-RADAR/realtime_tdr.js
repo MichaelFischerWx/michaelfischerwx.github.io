@@ -25,6 +25,7 @@
     var _rtLastPlotlyData = null;
     var _rtCsMode = false;
     var _rtCsPointA = null;
+    var _rtCsMouseHandler = null;
     var _rtAnimPlaying = false;
     var _rtAnimTimer = null;
     var _rtDefaultColorscale = null;
@@ -197,6 +198,7 @@
         _rtLastPlotlyData = null;
         _rtCsMode = false;
         _rtCsPointA = null;
+        _rtRemoveRubberBand();
 
         // Reset IR state
         rtIRCleanup();
@@ -210,10 +212,12 @@
         document.getElementById('rt-meta-panel').innerHTML = '';
         document.getElementById('rt-cs-result').innerHTML = '';
         document.getElementById('rt-cs-status').textContent = '';
+        var azResult = document.getElementById('rt-az-result'); if (azResult) azResult.innerHTML = '';
 
-        // Enable action buttons
+        // Disable action buttons until plot renders
         var csBtn = document.getElementById('rt-cs-btn'); if (csBtn) csBtn.disabled = true;
         var volBtn = document.getElementById('rt-vol-btn'); if (volBtn) volBtn.disabled = true;
+        var azBtn = document.getElementById('rt-az-btn'); if (azBtn) azBtn.disabled = true;
 
         // Generate initial plot
         rtGeneratePlot();
@@ -266,6 +270,7 @@
         // Clear dependent results
         document.getElementById('rt-cs-result').innerHTML = '';
         document.getElementById('rt-cs-status').textContent = '';
+        var azResult = document.getElementById('rt-az-result'); if (azResult) azResult.innerHTML = '';
 
         if (!_rtAnimPlaying) {
             resultDiv.innerHTML = _rtLoadingHTML('Fetching data from API…');
@@ -294,6 +299,96 @@
             .finally(function () { clearTimeout(timeout); btn.disabled = false; btn.textContent = 'Generate Plot'; });
     };
 
+    // ── Max value helpers (mirrors archive findDataMax / buildMaxMarkerTrace / buildMaxAnnotation) ──
+    function rtFindDataMax(zData, xCoords, yCoords) {
+        var maxVal = -Infinity, maxI = 0, maxJ = 0;
+        for (var i = 0; i < zData.length; i++) {
+            if (!zData[i]) continue;
+            for (var j = 0; j < zData[i].length; j++) {
+                var v = zData[i][j];
+                if (v !== null && v !== undefined && isFinite(v) && v > maxVal) {
+                    maxVal = v; maxI = i; maxJ = j;
+                }
+            }
+        }
+        if (!isFinite(maxVal)) return null;
+        return { value: maxVal, x: xCoords[maxJ], y: yCoords[maxI] };
+    }
+
+    function rtIsWindVariable(varName) {
+        return varName && varName.toLowerCase().indexOf('wind') !== -1;
+    }
+
+    function rtBuildMaxMarkerTrace(maxInfo, units) {
+        if (!maxInfo) return null;
+        return {
+            x: [maxInfo.x], y: [maxInfo.y], type: 'scatter', mode: 'markers',
+            marker: { symbol: 'x', size: 10, color: 'white', line: { color: 'rgba(0,0,0,0.6)', width: 1.5 } },
+            hoverinfo: 'text',
+            hovertext: ['Max: ' + maxInfo.value.toFixed(2) + ' ' + units + '\n@ (' + maxInfo.x.toFixed(0) + ', ' + maxInfo.y.toFixed(0) + ')'],
+            showlegend: false
+        };
+    }
+
+    function rtBuildMaxAnnotation(maxInfo, units, xLabel, yLabel, fontSize) {
+        if (!maxInfo) return null;
+        var fs = fontSize || 9;
+        return {
+            text: '<b>Max:</b> ' + maxInfo.value.toFixed(2) + ' ' + units +
+                  '  @  ' + xLabel + '=' + maxInfo.x.toFixed(0) + ', ' + yLabel + '=' + maxInfo.y.toFixed(0),
+            xref: 'paper', yref: 'paper', x: 0.01, y: -0.01,
+            xanchor: 'left', yanchor: 'top',
+            showarrow: false,
+            font: { color: '#d1d5db', size: fs, family: 'JetBrains Mono, monospace' },
+            bgcolor: 'rgba(10,22,40,0.8)',
+            borderpad: 3,
+            bordercolor: 'rgba(255,255,255,0.15)',
+            borderwidth: 1
+        };
+    }
+
+    // ── Rubber-band line for cross-section (follows mouse from A to cursor) ──
+    function _rtStartRubberBand(plotDiv, pxA, pyA) {
+        var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.id = 'rt-cs-rubber-band';
+        svg.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:5;';
+        var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('stroke', '#ef4444'); line.setAttribute('stroke-width', '2');
+        line.setAttribute('stroke-dasharray', '6,4');
+        line.setAttribute('x1', pxA); line.setAttribute('y1', pyA);
+        svg.appendChild(line);
+        var circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('r', '4'); circle.setAttribute('fill', 'rgba(239,68,68,0.5)');
+        circle.setAttribute('stroke', 'white'); circle.setAttribute('stroke-width', '1');
+        svg.appendChild(circle);
+        plotDiv.parentElement.style.position = 'relative';
+        plotDiv.parentElement.appendChild(svg);
+        _rtCsMouseHandler = function (e) {
+            var rect = plotDiv.getBoundingClientRect();
+            line.setAttribute('x2', e.clientX - rect.left);
+            line.setAttribute('y2', e.clientY - rect.top);
+            circle.setAttribute('cx', e.clientX - rect.left);
+            circle.setAttribute('cy', e.clientY - rect.top);
+        };
+        plotDiv.addEventListener('mousemove', _rtCsMouseHandler);
+    }
+
+    function _rtRemoveRubberBand() {
+        var svg = document.getElementById('rt-cs-rubber-band');
+        if (svg) svg.remove();
+        if (_rtCsMouseHandler) {
+            var plotDiv = document.getElementById('rt-plotly-chart');
+            if (plotDiv) plotDiv.removeEventListener('mousemove', _rtCsMouseHandler);
+            _rtCsMouseHandler = null;
+        }
+    }
+
+    // ── Default colormap helper: returns 'Jet' for tangential wind / wind speed ──
+    function _rtDefaultCmapForVariable(varName) {
+        if (varName === 'TANGENTIAL_WIND' || varName === 'WIND_SPEED') return 'Jet';
+        return null; // use server default
+    }
+
     // ── Render plan-view from JSON ───────────────────────────────
     function rtRenderPlot(json, resultDiv) {
         resultDiv.innerHTML = '<div style="position:relative;"><div id="rt-plotly-chart" style="width:100%;height:400px;border-radius:6px;overflow:hidden;"></div>' +
@@ -305,9 +400,12 @@
         _rtDefaultVmin = varInfo.vmin;
         _rtDefaultVmax = varInfo.vmax;
 
+        // Determine active colorscale: user override > variable-specific default > server default
         var cmapSel = document.getElementById('rt-cmap');
         var activeColorscale = varInfo.colorscale;
+        var varDefault = _rtDefaultCmapForVariable(varInfo.key || (document.getElementById('rt-var') || {}).value || '');
         if (cmapSel && cmapSel.value) { try { activeColorscale = JSON.parse(cmapSel.value); } catch (e) { activeColorscale = cmapSel.value; } }
+        else if (varDefault) { activeColorscale = varDefault; }
 
         var activeVmin = _rtGetVmin(), activeVmax = _rtGetVmax();
         var title = (meta.storm_name || 'Real-Time TDR') + ' | ' + (meta.datetime || '') +
@@ -339,12 +437,29 @@
         var overlayTraces = rtBuildOverlayContours(json, x, y, false);
         var config = { responsive: true, displayModeBar: true, modeBarButtonsToRemove: ['lasso2d', 'select2d', 'toggleSpikelines'], displaylogo: false };
 
-        Plotly.newPlot('rt-plotly-chart', [heatmap].concat(overlayTraces), layout, config);
-        _rtLastPlotlyData = { heatmap: heatmap, overlayTraces: overlayTraces, baseLayout: baseLayout, title: title, config: config, json: json };
+        // Max value marker + annotation (mirrors archive renderPlotFromJSON)
+        var maxInfo = rtFindDataMax(zData, x, y);
+        var maxTraces = [];
+        if (maxInfo) {
+            var maxAnnot = rtBuildMaxAnnotation(maxInfo, varInfo.units, 'X', 'Y', 9);
+            if (maxAnnot) {
+                layout.annotations = (layout.annotations || []).concat([maxAnnot]);
+                baseLayout.annotations = (baseLayout.annotations || []).concat([maxAnnot]);
+            }
+            var currentVar = (document.getElementById('rt-var') || {}).value || '';
+            if (rtIsWindVariable(currentVar)) {
+                var maxMarker = rtBuildMaxMarkerTrace(maxInfo, varInfo.units);
+                if (maxMarker) maxTraces.push(maxMarker);
+            }
+        }
+
+        Plotly.newPlot('rt-plotly-chart', [heatmap].concat(overlayTraces).concat(maxTraces), layout, config);
+        _rtLastPlotlyData = { heatmap: heatmap, overlayTraces: overlayTraces, maxTraces: maxTraces, baseLayout: baseLayout, title: title, config: config, json: json };
 
         // Enable action buttons
         var csBtn = document.getElementById('rt-cs-btn'); if (csBtn) csBtn.disabled = false;
         var volBtn = document.getElementById('rt-vol-btn'); if (volBtn) volBtn.disabled = false;
+        var azBtn = document.getElementById('rt-az-btn'); if (azBtn) azBtn.disabled = false;
 
         // Click handler for cross-section
         document.getElementById('rt-plotly-chart').on('plotly_click', rtHandlePlotClick);
@@ -430,7 +545,7 @@
         var csDiv = document.getElementById('cs-full-divider'); if (csDiv) csDiv.style.display = 'none';
         var azDiv = document.getElementById('az-full-divider'); if (azDiv) azDiv.style.display = 'none';
 
-        Plotly.newPlot('plotly-fullscreen', [d.heatmap].concat(d.overlayTraces), fullLayout, d.config);
+        Plotly.newPlot('plotly-fullscreen', [d.heatmap].concat(d.overlayTraces).concat(d.maxTraces || []), fullLayout, d.config);
         document.getElementById('plotly-fullscreen').on('plotly_click', rtHandlePlotClick);
     };
 
@@ -464,7 +579,7 @@
 
     // ── Cross-section ────────────────────────────────────────────
     window.rtToggleCrossSection = function () {
-        _rtCsMode = !_rtCsMode; _rtCsPointA = null;
+        _rtCsMode = !_rtCsMode; _rtCsPointA = null; _rtRemoveRubberBand();
         var btn = document.getElementById('rt-cs-btn'), status = document.getElementById('rt-cs-status');
         if (_rtCsMode) {
             btn.classList.add('active'); btn.textContent = '✂ Click point A on plot…';
@@ -488,9 +603,12 @@
             var shapes = (plotDiv.layout.shapes || []).slice();
             shapes.push({ type: 'circle', xref: 'x', yref: 'y', x0: x - 4, y0: y - 4, x1: x + 4, y1: y + 4, fillcolor: '#ef4444', line: { color: 'white', width: 1.5 } });
             Plotly.relayout(plotDiv, { shapes: shapes });
+            // Start rubber-band line from Point A to cursor
+            var rect = plotDiv.getBoundingClientRect();
+            _rtStartRubberBand(plotDiv, eventData.event.clientX - rect.left, eventData.event.clientY - rect.top);
         } else {
             var a = _rtCsPointA, b = { x: x, y: y };
-            _rtCsMode = false; _rtCsPointA = null;
+            _rtCsMode = false; _rtCsPointA = null; _rtRemoveRubberBand();
             var btn2 = document.getElementById('rt-cs-btn'); if (btn2) { btn2.classList.remove('active'); btn2.textContent = '✂ Cross Section'; }
             if (status) status.textContent = 'A→B: (' + a.x.toFixed(0) + ',' + a.y.toFixed(0) + ') → (' + b.x.toFixed(0) + ',' + b.y.toFixed(0) + ') km';
             var shapes2 = (plotDiv.layout.shapes || []).slice();
@@ -531,7 +649,9 @@
 
         var cmapSel = document.getElementById('rt-cmap');
         var csColorscale = vi.colorscale;
+        var csVarDefault = _rtDefaultCmapForVariable(vi.key || (document.getElementById('rt-var') || {}).value || '');
         if (cmapSel && cmapSel.value) { try { csColorscale = JSON.parse(cmapSel.value); } catch (e) { csColorscale = cmapSel.value; } }
+        else if (csVarDefault) { csColorscale = csVarDefault; }
         var av = _rtGetVmin(), avx = _rtGetVmax();
 
         var heatmap = {
@@ -606,6 +726,126 @@
         }
         // Note: we don't restore saved because the modal references _last3DJson
         // while it's open. It'll be overwritten next time the archive mode uses it.
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // Azimuthal Mean Module
+    // ══════════════════════════════════════════════════════════════
+
+    var _rtLastAzJson = null;
+
+    // Coverage slider display update
+    (function () {
+        var slider = document.getElementById('rt-az-coverage');
+        var label = document.getElementById('rt-az-cov-val');
+        if (slider && label) {
+            slider.addEventListener('input', function () { label.textContent = this.value + '%'; });
+        }
+    })();
+
+    window.rtFetchAzimuthalMean = function () {
+        if (!_currentFileUrl) return;
+        var variable = document.getElementById('rt-var').value;
+        var overlay = (document.getElementById('rt-overlay') || {}).value || '';
+        var covSlider = document.getElementById('rt-az-coverage');
+        var coverage = covSlider ? (parseInt(covSlider.value) / 100) : 0.5;
+        var resultDiv = document.getElementById('rt-az-result');
+        var btn = document.getElementById('rt-az-btn');
+        resultDiv.innerHTML = _rtLoadingHTML('Computing azimuthal mean…');
+        btn.disabled = true; btn.textContent = '↻ Computing…';
+
+        var url = API_BASE + RT_PREFIX + '/azimuthal_mean?file_url=' + encodeURIComponent(_currentFileUrl) +
+            '&variable=' + variable + '&coverage_min=' + coverage;
+        if (overlay) url += '&overlay=' + overlay;
+
+        var controller = new AbortController();
+        var timeout = setTimeout(function () { controller.abort(); }, 120000);
+        fetch(url, { signal: controller.signal })
+            .then(function (r) { if (!r.ok) return r.json().then(function (e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
+            .then(function (json) { _rtLastAzJson = json; rtRenderAzimuthalMean(json); })
+            .catch(function (err) {
+                resultDiv.innerHTML = '<div class="explorer-status error">⚠️ ' + (err.name === 'AbortError' ? 'Request timed out (120s).' : err.message) + '</div>';
+            })
+            .finally(function () { clearTimeout(timeout); btn.disabled = false; btn.textContent = '↻ Azimuthal Mean'; });
+    };
+
+    function rtRenderAzimuthalMean(json) {
+        var resultDiv = document.getElementById('rt-az-result');
+        resultDiv.innerHTML = '<div style="position:relative;"><div id="rt-az-chart" style="width:100%;height:340px;border-radius:6px;overflow:hidden;margin-top:8px;"></div>' +
+            '<button onclick="rtOpenFullscreen()" title="Expand to fullscreen" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">⛶</button></div>' +
+            '<div style="font-size:11px;color:var(--slate);text-align:center;margin-top:4px;">Radius–height azimuthal mean · hover for values · ⛶ expand</div>';
+
+        var azData = json.azimuthal_mean, radius_km = json.radius_km, height_km = json.height_km;
+        var varInfo = json.variable, meta = json.case_meta || {};
+        var covPct = Math.round((json.coverage_min || 0.5) * 100);
+
+        // Determine active colorscale
+        var cmapSel = document.getElementById('rt-cmap');
+        var azColorscale = varInfo.colorscale;
+        var varDefault = _rtDefaultCmapForVariable(varInfo.key || (document.getElementById('rt-var') || {}).value || '');
+        if (cmapSel && cmapSel.value) { try { azColorscale = JSON.parse(cmapSel.value); } catch (e) { azColorscale = cmapSel.value; } }
+        else if (varDefault) { azColorscale = varDefault; }
+
+        var av = _rtGetVmin(), avx = _rtGetVmax();
+
+        var heatmap = {
+            z: azData, x: radius_km, y: height_km, type: 'heatmap',
+            colorscale: azColorscale,
+            zmin: av !== null ? av : varInfo.vmin,
+            zmax: avx !== null ? avx : varInfo.vmax,
+            colorbar: { title: { text: varInfo.units, font: { color: '#ccc', size: 10 } }, tickfont: { color: '#ccc', size: 9 }, thickness: 10, len: 0.85 },
+            hovertemplate: '<b>' + varInfo.display_name + '</b>: %{z:.2f} ' + varInfo.units + '<br>Radius: %{x:.0f} km<br>Height: %{y:.1f} km<extra></extra>',
+            hoverongaps: false
+        };
+
+        var overlayLabel = json.overlay ? '<br><span style="font-size:0.85em;color:#9ca3af;">Contours: ' + json.overlay.display_name + ' (' + json.overlay.units + ')</span>' : '';
+        var title = (meta.storm_name || 'Real-Time TDR') + ' | ' + (meta.datetime || '') +
+            '<br>Azimuthal Mean: ' + varInfo.display_name + ' (≥' + covPct + '% coverage)' + overlayLabel;
+
+        var plotBg = '#0a1628';
+        var layout = {
+            title: { text: title, font: { color: '#e5e7eb', size: 10 }, y: 0.97, x: 0.5, xanchor: 'center' },
+            paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+            xaxis: { title: { text: 'Radius (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
+            yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
+            margin: { l: 48, r: 12, t: json.overlay ? 66 : 52, b: 38 },
+            hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 12 } },
+            showlegend: false
+        };
+
+        // Overlay contours
+        var azOverlayTraces = [];
+        if (json.overlay && json.overlay.azimuthal_mean) {
+            try {
+                var ov = json.overlay, ovData = ov.azimuthal_mean;
+                var flat = ovData.flat().filter(function (v) { return v !== null && !isNaN(v); });
+                if (flat.length > 0) {
+                    var mn = Infinity, mx = -Infinity;
+                    for (var i = 0; i < flat.length; i++) { if (flat[i] < mn) mn = flat[i]; if (flat[i] > mx) mx = flat[i]; }
+                    var interval = parseFloat(((mx - mn) / 10).toPrecision(1));
+                    if (!isFinite(interval) || interval <= 0) interval = (mx - mn) / 10 || 1;
+                    var baseContour = { z: ovData, x: radius_km, y: height_km, type: 'contour', showscale: false, hoverongaps: false, contours: { coloring: 'none', showlabels: true, labelfont: { size: 9, color: 'rgba(255,255,255,0.8)' } } };
+                    if (ov.vmax > interval) azOverlayTraces.push(Object.assign({}, baseContour, { contours: Object.assign({}, baseContour.contours, { start: interval, end: ov.vmax, size: interval }), line: { color: 'rgba(0,0,0,0.7)', width: 1.2, dash: 'solid' }, showlegend: false }));
+                    if (ov.vmin < -interval) azOverlayTraces.push(Object.assign({}, baseContour, { contours: Object.assign({}, baseContour.contours, { start: ov.vmin, end: -interval, size: interval }), line: { color: 'rgba(0,0,0,0.7)', width: 1.2, dash: 'dash' }, showlegend: false }));
+                }
+            } catch (e) { /* ignore overlay errors */ }
+        }
+
+        // Max value annotation for azimuthal mean
+        var azMaxInfo = rtFindDataMax(azData, radius_km, height_km);
+        var azMaxTraces = [];
+        if (azMaxInfo) {
+            var azMaxAnnot = rtBuildMaxAnnotation(azMaxInfo, varInfo.units, 'R', 'Z', 8);
+            if (azMaxAnnot) layout.annotations = (layout.annotations || []).concat([azMaxAnnot]);
+            var currentVar = (document.getElementById('rt-var') || {}).value || '';
+            if (rtIsWindVariable(currentVar)) {
+                var azMaxMarker = rtBuildMaxMarkerTrace(azMaxInfo, varInfo.units);
+                if (azMaxMarker) azMaxTraces.push(azMaxMarker);
+            }
+        }
+
+        var config = { responsive: true, displayModeBar: false, displaylogo: false };
+        Plotly.newPlot('rt-az-chart', [heatmap].concat(azOverlayTraces).concat(azMaxTraces), layout, config);
     }
 
     // ══════════════════════════════════════════════════════════════
