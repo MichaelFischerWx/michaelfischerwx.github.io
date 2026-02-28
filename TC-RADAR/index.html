@@ -145,11 +145,29 @@
                 <!-- LEFT: Display + actions -->
                 <div class="rt-viz-display">
                     <div id="rt-display-area"></div>
+                    <!-- GOES IR Satellite Panel -->
+                    <div id="rt-ir-panel" class="rt-ir-panel" style="display:none;">
+                        <div class="rt-ir-header">
+                            <span class="rt-ir-title">🛰 GOES IR Satellite (Band 13 · 10.3µm)</span>
+                            <span id="rt-ir-sat-label" class="rt-ir-sat-badge"></span>
+                        </div>
+                        <div id="rt-ir-display" class="rt-ir-display"></div>
+                        <div class="rt-ir-controls">
+                            <button class="ir-ctrl-btn rt-ir-ctrl-disabled" id="rt-ir-step-back" onclick="rtIRAnimStep(1)" title="Earlier">◀</button>
+                            <button class="ir-ctrl-btn rt-ir-ctrl-disabled" id="rt-ir-play-btn" onclick="rtIRAnimToggle()" title="Play / Pause">▶</button>
+                            <button class="ir-ctrl-btn rt-ir-ctrl-disabled" id="rt-ir-step-fwd" onclick="rtIRAnimStep(-1)" title="Later">▶</button>
+                            <input type="range" id="rt-ir-slider" class="ir-slider" min="0" max="16" value="16" disabled
+                                   oninput="rtIRShowFrame(parseInt(this.max) - parseInt(this.value))">
+                            <span class="ir-label" id="rt-ir-label">IR loading…</span>
+                        </div>
+                    </div>
+
                     <div id="rt-cs-result"></div>
                     <div id="rt-cs-status" class="cs-status"></div>
                     <div class="display-actions" style="margin-top:8px;">
                         <button class="cs-btn" id="rt-cs-btn" onclick="rtToggleCrossSection()" disabled>✂ Cross Section</button>
                         <button class="cs-btn" id="rt-vol-btn" onclick="rtFetch3DVolume()" disabled>🖥 3D Volume</button>
+                        <button class="cs-btn" id="rt-ir-underlay-btn" onclick="rtToggleIRUnderlay()" disabled style="background:rgba(96,165,250,0.12);border-color:rgba(96,165,250,0.35);color:#93c5fd;">🛰 IR Off</button>
                     </div>
                 </div>
 

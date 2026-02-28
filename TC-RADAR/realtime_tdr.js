@@ -31,6 +31,18 @@
     var _rtDefaultVmin = null;
     var _rtDefaultVmax = null;
 
+    // IR satellite imagery (GOES) state
+    var _rtIRData = null;           // metadata from /realtime/ir
+    var _rtIRFrameURLs = [];        // array of data-URL strings (or null)
+    var _rtIRDecodedImages = [];    // pre-decoded Image objects
+    var _rtIRAnimFrame = 0;
+    var _rtIRAnimTimer = null;
+    var _rtIRAnimPlaying = false;
+    var _rtIRPlotlyVisible = false;
+    var _rtIRAllLoaded = false;
+    var _rtIRLoadedCount = 0;
+    var _rtIRFetching = false;
+
     // ── Tab visibility toggle ────────────────────────────────────
     window.toggleRealtimeTab = function () {
         var section = document.getElementById('realtime-section');
@@ -186,6 +198,9 @@
         _rtCsMode = false;
         _rtCsPointA = null;
 
+        // Reset IR state
+        rtIRCleanup();
+
         // Show the viz panel
         var panel = document.getElementById('rt-viz-panel');
         panel.style.display = 'block';
@@ -205,6 +220,9 @@
 
         // Fetch metadata display
         rtFetchMeta(fileUrl);
+
+        // Fetch GOES IR satellite imagery in parallel
+        rtFetchIR();
     };
 
     // ── Fetch and display metadata ───────────────────────────────
@@ -588,6 +606,312 @@
         }
         // Note: we don't restore saved because the modal references _last3DJson
         // while it's open. It'll be overwritten next time the archive mode uses it.
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // GOES IR Satellite Imagery Module
+    // ══════════════════════════════════════════════════════════════
+
+    // ── Cleanup ──────────────────────────────────────────────────
+    function rtIRCleanup() {
+        rtIRAnimStop();
+        _rtIRData = null;
+        _rtIRFrameURLs = [];
+        _rtIRDecodedImages = [];
+        _rtIRAnimFrame = 0;
+        _rtIRPlotlyVisible = false;
+        _rtIRAllLoaded = false;
+        _rtIRLoadedCount = 0;
+        _rtIRFetching = false;
+        var panel = document.getElementById('rt-ir-panel');
+        if (panel) panel.style.display = 'none';
+        var irBtn = document.getElementById('rt-ir-underlay-btn');
+        if (irBtn) { irBtn.disabled = true; irBtn.textContent = '🛰 IR Off'; irBtn.classList.remove('active'); }
+    }
+
+    // ── Two-phase IR fetch ───────────────────────────────────────
+    function rtFetchIR() {
+        if (!_currentFileUrl || _rtIRFetching) return;
+        _rtIRFetching = true;
+        _rtIRAllLoaded = false;
+        _rtIRLoadedCount = 0;
+
+        var url = API_BASE + RT_PREFIX + '/ir?file_url=' + encodeURIComponent(_currentFileUrl);
+
+        fetch(url)
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function (json) {
+                _rtIRData = json;
+                var n = json.n_frames || 17;
+                _rtIRFrameURLs = new Array(n);
+                _rtIRDecodedImages = new Array(n);
+                for (var i = 0; i < n; i++) { _rtIRFrameURLs[i] = null; _rtIRDecodedImages[i] = null; }
+
+                // Store t=0 frame
+                if (json.frame0) {
+                    _rtIRFrameURLs[0] = json.frame0;
+                    _rtIRLoadedCount = 1;
+                    _rtPreDecodeIRFrame(0, json.frame0);
+                }
+
+                // Show IR panel and display t=0
+                _rtShowIRPanel();
+                rtIRShowFrame(0);
+
+                // Enable the underlay button
+                var irBtn = document.getElementById('rt-ir-underlay-btn');
+                if (irBtn && json.frame0) irBtn.disabled = false;
+
+                // Update satellite badge
+                var badge = document.getElementById('rt-ir-sat-label');
+                if (badge) badge.textContent = json.satellite_label || '';
+
+                // Phase 2: fetch remaining frames in parallel
+                _rtFetchIRFramesParallel(1);
+            })
+            .catch(function (err) {
+                console.warn('RT IR fetch failed:', err);
+                _rtIRFetching = false;
+                _rtIRData = null;
+            });
+    }
+    window.rtFetchIR = rtFetchIR;
+
+    function _rtFetchIRFramesParallel(startIdx) {
+        if (!_rtIRData || !_currentFileUrl) { _rtIRFetching = false; return; }
+        if (startIdx >= _rtIRFrameURLs.length) {
+            _rtIRAllLoaded = true;
+            _rtIRFetching = false;
+            _rtUpdateIRLabel();
+            _rtEnableIRAnimControls();
+            return;
+        }
+
+        var promises = [];
+        for (var i = startIdx; i < _rtIRFrameURLs.length; i++) {
+            (function (idx) {
+                var url = API_BASE + RT_PREFIX + '/ir_frame?file_url=' +
+                    encodeURIComponent(_currentFileUrl) + '&frame_index=' + idx;
+                promises.push(
+                    fetch(url)
+                        .then(function (r) { return r.ok ? r.json() : null; })
+                        .then(function (data) {
+                            if (!data || !_rtIRData) return;
+                            if (data.frame) {
+                                _rtIRFrameURLs[data.frame_index] = data.frame;
+                                _rtPreDecodeIRFrame(data.frame_index, data.frame);
+                            }
+                            _rtIRLoadedCount = _rtCountIRLoaded();
+                            _rtUpdateIRLabel();
+                            if (_rtIRLoadedCount >= 2) _rtEnableIRAnimControls();
+                        })
+                        .catch(function () { /* skip failed frames */ })
+                );
+            })(i);
+        }
+
+        Promise.all(promises).then(function () {
+            _rtIRLoadedCount = _rtCountIRLoaded();
+            _rtIRAllLoaded = true;
+            _rtIRFetching = false;
+            _rtUpdateIRLabel();
+            _rtEnableIRAnimControls();
+        });
+    }
+
+    function _rtPreDecodeIRFrame(idx, dataUrl) {
+        var img = new Image();
+        img.src = dataUrl;
+        if (img.decode) img.decode().catch(function () {});
+        _rtIRDecodedImages[idx] = img;
+    }
+
+    function _rtCountIRLoaded() {
+        var c = 0;
+        for (var i = 0; i < _rtIRFrameURLs.length; i++) { if (_rtIRFrameURLs[i]) c++; }
+        return c;
+    }
+
+    function _rtEnableIRAnimControls() {
+        ['rt-ir-step-back', 'rt-ir-play-btn', 'rt-ir-step-fwd'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) el.classList.remove('rt-ir-ctrl-disabled');
+        });
+        var slider = document.getElementById('rt-ir-slider');
+        if (slider) slider.disabled = false;
+    }
+
+    // ── Show the IR panel ────────────────────────────────────────
+    function _rtShowIRPanel() {
+        var panel = document.getElementById('rt-ir-panel');
+        if (panel) panel.style.display = 'block';
+        // Set slider max
+        var slider = document.getElementById('rt-ir-slider');
+        if (slider && _rtIRData) {
+            slider.max = (_rtIRData.n_frames || 17) - 1;
+            slider.value = slider.max;  // slider inverted: right = t=0
+        }
+    }
+
+    // ── Display a specific IR frame ──────────────────────────────
+    window.rtIRShowFrame = function (frameIdx) {
+        if (!_rtIRData || frameIdx < 0 || frameIdx >= _rtIRFrameURLs.length) return;
+        _rtIRAnimFrame = frameIdx;
+
+        var display = document.getElementById('rt-ir-display');
+        if (display) {
+            var url = _rtIRFrameURLs[frameIdx];
+            if (url) {
+                display.style.backgroundImage = 'url(' + url + ')';
+                display.innerHTML = '';
+            } else {
+                display.style.backgroundImage = 'none';
+                display.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--slate);font-size:12px;">No data for this time step</div>';
+            }
+        }
+
+        // Update slider (inverted: slider-right = frame 0 = t=0)
+        var slider = document.getElementById('rt-ir-slider');
+        if (slider) slider.value = (_rtIRFrameURLs.length - 1) - frameIdx;
+
+        _rtUpdateIRLabel();
+
+        // If Plotly underlay is active, update it to current frame
+        if (_rtIRPlotlyVisible) _rtApplyIRUnderlay();
+    };
+
+    function _rtUpdateIRLabel() {
+        var label = document.getElementById('rt-ir-label');
+        if (!label || !_rtIRData) return;
+        var lagMin = _rtIRData.lag_minutes ? _rtIRData.lag_minutes[_rtIRAnimFrame] : 0;
+        var dtStr = _rtIRData.frame_datetimes ? _rtIRData.frame_datetimes[_rtIRAnimFrame] : '';
+        var lagStr = lagMin === 0 ? 't=0' : 't\u2212' + (lagMin >= 60 ? (lagMin / 60).toFixed(1) + 'h' : lagMin + 'min');
+        if (_rtIRAllLoaded) {
+            label.textContent = 'IR ' + lagStr + (dtStr ? ' | ' + dtStr : '');
+        } else {
+            label.textContent = 'IR ' + lagStr + ' | Loading ' + _rtIRLoadedCount + '/' + _rtIRFrameURLs.length + '…';
+        }
+    }
+
+    // ── Animation ────────────────────────────────────────────────
+    window.rtIRAnimToggle = function () {
+        if (_rtIRLoadedCount < 2) return;
+        if (_rtIRAnimPlaying) { rtIRAnimStop(); }
+        else {
+            _rtIRAnimPlaying = true;
+            var btn = document.getElementById('rt-ir-play-btn');
+            if (btn) btn.textContent = '⏸';
+            // Start from earliest frame (highest index)
+            for (var i = _rtIRFrameURLs.length - 1; i >= 0; i--) {
+                if (_rtIRFrameURLs[i]) { _rtIRAnimFrame = i; break; }
+            }
+            rtIRShowFrame(_rtIRAnimFrame);
+            _rtIRAnimTick();
+        }
+    };
+
+    function _rtIRAnimTick() {
+        if (!_rtIRAnimPlaying) return;
+        // Step towards t=0 (decreasing index), skip null frames
+        var n = _rtIRFrameURLs.length;
+        var start = _rtIRAnimFrame;
+        for (var i = 0; i < n; i++) {
+            _rtIRAnimFrame = (_rtIRAnimFrame - 1 + n) % n;
+            if (_rtIRFrameURLs[_rtIRAnimFrame]) break;
+        }
+        rtIRShowFrame(_rtIRAnimFrame);
+
+        if (_rtIRAnimFrame === 0) {
+            // Pause at t=0, then loop back to earliest
+            _rtIRAnimTimer = setTimeout(function () {
+                for (var i = _rtIRFrameURLs.length - 1; i >= 0; i--) {
+                    if (_rtIRFrameURLs[i]) { _rtIRAnimFrame = i; break; }
+                }
+                rtIRShowFrame(_rtIRAnimFrame);
+                _rtIRAnimTimer = setTimeout(_rtIRAnimTick, 500);
+            }, 1500);
+        } else {
+            _rtIRAnimTimer = setTimeout(_rtIRAnimTick, 500);
+        }
+    }
+
+    function rtIRAnimStop() {
+        _rtIRAnimPlaying = false;
+        if (_rtIRAnimTimer) { clearTimeout(_rtIRAnimTimer); _rtIRAnimTimer = null; }
+        var btn = document.getElementById('rt-ir-play-btn');
+        if (btn) btn.textContent = '▶';
+    }
+
+    window.rtIRAnimStep = function (dir) {
+        if (_rtIRLoadedCount < 2) return;
+        rtIRAnimStop();
+        var n = _rtIRFrameURLs.length;
+        for (var i = 0; i < n; i++) {
+            _rtIRAnimFrame = (_rtIRAnimFrame + dir + n) % n;
+            if (_rtIRFrameURLs[_rtIRAnimFrame]) break;
+        }
+        rtIRShowFrame(_rtIRAnimFrame);
+    };
+
+    // ── Plotly IR Underlay Toggle ────────────────────────────────
+    window.rtToggleIRUnderlay = function () {
+        _rtIRPlotlyVisible = !_rtIRPlotlyVisible;
+        var btn = document.getElementById('rt-ir-underlay-btn');
+        if (btn) {
+            btn.classList.toggle('active', _rtIRPlotlyVisible);
+            btn.textContent = _rtIRPlotlyVisible ? '🛰 IR On' : '🛰 IR Off';
+        }
+        if (_rtIRPlotlyVisible) {
+            _rtApplyIRUnderlay();
+        } else {
+            _rtRemoveIRUnderlay();
+        }
+    };
+
+    function _rtBuildIRPlotlyImage() {
+        if (!_rtIRData || !_rtIRFrameURLs.length) return null;
+        var url = _rtIRFrameURLs[_rtIRAnimFrame] || _rtIRFrameURLs[0];
+        if (!url) return null;
+
+        var bk = _rtIRData.bounds_km;
+        if (!bk) return null;
+
+        return {
+            source: url,
+            xref: 'x', yref: 'y',
+            x: bk.x_min_km,
+            y: bk.y_max_km,
+            sizex: bk.x_max_km - bk.x_min_km,
+            sizey: bk.y_max_km - bk.y_min_km,
+            sizing: 'stretch',
+            opacity: 0.35,
+            layer: 'below',
+            _rtIRUnderlay: true,
+        };
+    }
+
+    function _rtApplyIRUnderlay() {
+        var irImg = _rtBuildIRPlotlyImage();
+        if (!irImg) return;
+        ['rt-plotly-chart', 'rt-fullscreen-chart'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (!el || !el.layout) return;
+            var images = (el.layout.images || []).filter(function (img) { return !img._rtIRUnderlay; });
+            images.push(irImg);
+            Plotly.relayout(el, { images: images });
+        });
+    }
+
+    function _rtRemoveIRUnderlay() {
+        ['rt-plotly-chart', 'rt-fullscreen-chart'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (!el || !el.layout) return;
+            var images = (el.layout.images || []).filter(function (img) { return !img._rtIRUnderlay; });
+            Plotly.relayout(el, { images: images });
+        });
     }
 
 })();
