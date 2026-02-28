@@ -113,6 +113,67 @@
     font-family: 'JetBrains Mono', monospace;
 }
 
+/* ── Leaflet Map (IR + Storm Context) ────────────────────── */
+.rt-map-wrapper {
+    position: relative;
+    width: 100%;
+    height: 360px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    margin-bottom: 12px;
+    background: #0a1628;
+}
+#rt-map {
+    z-index: 1;
+}
+.rt-map-ir-controls {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    right: 8px;
+    z-index: 1000;
+    background: rgba(10, 22, 40, 0.88);
+    backdrop-filter: blur(6px);
+    border-radius: 6px;
+    border: 1px solid rgba(96, 165, 250, 0.25);
+    padding: 6px 10px;
+}
+.ir-ctrl-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.ir-ctrl-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #ccc;
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s;
+}
+.ir-ctrl-btn:hover {
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+}
+.ir-slider {
+    flex: 1;
+    min-width: 60px;
+    accent-color: var(--cyan, #00d4ff);
+    height: 4px;
+}
+.ir-label {
+    font-size: 10px;
+    color: #93c5fd;
+    font-family: 'JetBrains Mono', monospace;
+    white-space: nowrap;
+    min-width: 100px;
+    text-align: right;
+}
+
 /* ── GOES IR Satellite Panel ──────────────────────────────── */
 .rt-ir-panel {
     margin-top: 12px;

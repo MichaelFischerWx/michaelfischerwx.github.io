@@ -44,6 +44,14 @@
     var _rtIRLoadedCount = 0;
     var _rtIRFetching = false;
 
+    // Leaflet map state
+    var _rtMap = null;
+    var _rtMapMarker = null;
+    var _rtIRMapOverlay = null;
+    var _rtIRMapVisible = true;
+    var _rtIRMapBoundsSet = false;
+    var _rtMaxWind2km = null;
+
     // ── Tab visibility toggle ────────────────────────────────────
     window.toggleRealtimeTab = function () {
         var section = document.getElementById('realtime-section');
@@ -200,8 +208,9 @@
         _rtCsPointA = null;
         _rtRemoveRubberBand();
 
-        // Reset IR state
+        // Reset IR state + Leaflet map
         rtIRCleanup();
+        _rtCleanupMap();
 
         // Show the viz panel
         var panel = document.getElementById('rt-viz-panel');
@@ -250,6 +259,12 @@
                     (m.analysis_level === '1' ? 'Real-Time' : m.analysis_level === '2' ? 'Research' : m.analysis_level || '—') + '</span></div>' +
                     '</div>';
                 document.getElementById('rt-meta-panel').innerHTML = html;
+
+                // Init Leaflet map + fetch max 2-km wind for marker
+                if (m.latitude && m.longitude) {
+                    _rtInitMap(m);
+                    _rtFetchMaxWind(_currentFileUrl, m);
+                }
             })
             .catch(function () { /* metadata will show from the plot fetch anyway */ });
     }
@@ -729,6 +744,278 @@
     }
 
     // ══════════════════════════════════════════════════════════════
+    // Leaflet Map + IR Overlay Module
+    // ══════════════════════════════════════════════════════════════
+
+    // Wind-speed intensity color (m/s thresholds, mirrors archive kt thresholds)
+    function _rtWindColor(wspd_ms) {
+        if (wspd_ms == null || isNaN(wspd_ms)) return '#6b7280';
+        if (wspd_ms < 17.5) return '#60a5fa';  // TD
+        if (wspd_ms < 33.0) return '#34d399';  // TS
+        if (wspd_ms < 43.0) return '#fbbf24';  // Cat 1
+        if (wspd_ms < 49.5) return '#fb923c';  // Cat 2
+        if (wspd_ms < 58.0) return '#f87171';  // Cat 3
+        if (wspd_ms < 70.5) return '#ef4444';  // Cat 4
+        return '#dc2626';                       // Cat 5
+    }
+    function _rtWindCategory(wspd_ms) {
+        if (wspd_ms == null || isNaN(wspd_ms)) return '';
+        if (wspd_ms < 17.5) return 'TD';
+        if (wspd_ms < 33.0) return 'TS';
+        if (wspd_ms < 43.0) return 'Cat 1';
+        if (wspd_ms < 49.5) return 'Cat 2';
+        if (wspd_ms < 58.0) return 'Cat 3';
+        if (wspd_ms < 70.5) return 'Cat 4';
+        return 'Cat 5';
+    }
+
+    function _rtInitMap(meta) {
+        var wrapper = document.getElementById('rt-map-wrapper');
+        if (!wrapper) return;
+        wrapper.style.display = 'block';
+
+        if (_rtMap) {
+            // Recenter existing map
+            _rtMap.setView([meta.latitude, meta.longitude], 6, { animate: true });
+            return;
+        }
+
+        _rtMap = L.map('rt-map', {
+            center: [meta.latitude, meta.longitude],
+            zoom: 6,
+            zoomControl: true
+        });
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+            subdomains: 'abcd',
+            maxZoom: 12
+        }).addTo(_rtMap);
+    }
+
+    function _rtUpdateMapMarker(meta, maxWind) {
+        if (!_rtMap) return;
+        if (_rtMapMarker) { _rtMap.removeLayer(_rtMapMarker); _rtMapMarker = null; }
+
+        var color = _rtWindColor(maxWind);
+        var cat = _rtWindCategory(maxWind);
+        var icon = L.divIcon({
+            className: 'custom-div-icon',
+            html: '<div class="custom-marker" style="background-color:' + color +
+                ';width:16px;height:16px;box-shadow:0 0 0 4px rgba(37,99,235,0.35);border-radius:50%;"></div>',
+            iconSize: [16, 16], iconAnchor: [8, 8]
+        });
+
+        _rtMapMarker = L.marker([meta.latitude, meta.longitude], { icon: icon }).addTo(_rtMap);
+
+        var windStr = maxWind != null ? maxWind.toFixed(1) + ' m/s' : 'N/A';
+        var catStr = cat ? ' (' + cat + ')' : '';
+        var popupHtml =
+            '<div style="font-family:DM Sans,sans-serif;font-size:12px;line-height:1.5;min-width:180px;">' +
+            '<strong style="font-size:14px;color:' + color + ';">' + (meta.storm_name || 'Unknown') + '</strong><br>' +
+            '<span style="color:#aaa;">' + (meta.mission_id || '') + ' · ' + (meta.datetime || '') + '</span><br>' +
+            '<span style="margin-top:4px;display:inline-block;">Max 2-km Wind: <strong style="color:' + color + ';">' + windStr + catStr + '</strong></span><br>' +
+            '<span style="color:#aaa;font-size:10px;">' +
+            (meta.latitude ? meta.latitude.toFixed(2) + '°N, ' + Math.abs(meta.longitude).toFixed(2) + '°' + (meta.longitude < 0 ? 'W' : 'E') : '') +
+            '</span></div>';
+        _rtMapMarker.bindPopup(popupHtml, { maxWidth: 280, minWidth: 200 });
+    }
+
+    function _rtFetchMaxWind(fileUrl, meta) {
+        // Fetch WIND_SPEED at 2 km to get max wind for the marker
+        var url = API_BASE + RT_PREFIX + '/data?file_url=' + encodeURIComponent(fileUrl) +
+            '&variable=WIND_SPEED&level_km=2';
+        fetch(url)
+            .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+            .then(function (json) {
+                var maxVal = -Infinity;
+                var zData = json.data;
+                for (var i = 0; i < zData.length; i++) {
+                    if (!zData[i]) continue;
+                    for (var j = 0; j < zData[i].length; j++) {
+                        var v = zData[i][j];
+                        if (v !== null && v !== undefined && isFinite(v) && v > maxVal) maxVal = v;
+                    }
+                }
+                _rtMaxWind2km = isFinite(maxVal) ? maxVal : null;
+                _rtUpdateMapMarker(meta, _rtMaxWind2km);
+            })
+            .catch(function () {
+                _rtMaxWind2km = null;
+                _rtUpdateMapMarker(meta, null);
+            });
+    }
+
+    // ── IR overlay on Leaflet map ────────────────────────────────
+    function _rtShowIROnMap(frameIdx) {
+        if (!_rtMap || !_rtIRData || !_rtIRFrameURLs.length) return;
+        var idx = (frameIdx !== undefined) ? frameIdx : _rtIRAnimFrame;
+        idx = Math.max(0, Math.min(idx, _rtIRFrameURLs.length - 1));
+        var url = _rtIRFrameURLs[idx];
+        if (!url) return;
+
+        var bd = _rtIRData.bounds_deg;
+        if (!bd) return;
+        var bounds = L.latLngBounds(
+            [bd.lat_min, bd.lon_min],
+            [bd.lat_max, bd.lon_max]
+        );
+
+        if (_rtIRMapOverlay) {
+            // Fast path: swap image src directly
+            var imgEl = _rtIRMapOverlay.getElement ? _rtIRMapOverlay.getElement() : _rtIRMapOverlay._image;
+            if (imgEl) { imgEl.src = url; }
+            else { _rtIRMapOverlay.setUrl(url); }
+            if (!_rtIRMapBoundsSet) {
+                _rtIRMapOverlay.setBounds(bounds);
+                _rtIRMapBoundsSet = true;
+            }
+        } else {
+            _rtIRMapOverlay = L.imageOverlay(url, bounds, {
+                opacity: 0.75, interactive: false, zIndex: 200
+            });
+            if (_rtIRMapVisible) _rtIRMapOverlay.addTo(_rtMap);
+            _rtIRMapBoundsSet = true;
+        }
+    }
+
+    function _rtRemoveIRFromMap() {
+        if (_rtIRMapOverlay && _rtMap) {
+            _rtMap.removeLayer(_rtIRMapOverlay);
+            _rtIRMapOverlay = null;
+        }
+        _rtIRMapBoundsSet = false;
+        // Remove map IR controls
+        var ctrl = document.getElementById('rt-map-ir-controls');
+        if (ctrl) ctrl.remove();
+    }
+
+    window.rtToggleMapIRVisibility = function () {
+        _rtIRMapVisible = !_rtIRMapVisible;
+        if (_rtIRMapVisible && _rtIRMapOverlay) {
+            _rtIRMapOverlay.addTo(_rtMap);
+        } else if (!_rtIRMapVisible && _rtIRMapOverlay && _rtMap) {
+            _rtMap.removeLayer(_rtIRMapOverlay);
+        }
+        var btn = document.getElementById('rt-map-ir-toggle');
+        if (btn) btn.textContent = _rtIRMapVisible ? '🌍 IR On' : '🌑 IR Off';
+    };
+
+    window.rtMapIRAnimStep = function (dir) {
+        if (!_rtIRData || _rtIRLoadedCount < 2) return;
+        var n = _rtIRFrameURLs.length;
+        for (var i = 0; i < n; i++) {
+            _rtIRAnimFrame = (_rtIRAnimFrame + dir + n) % n;
+            if (_rtIRFrameURLs[_rtIRAnimFrame]) break;
+        }
+        _rtShowIROnMap(_rtIRAnimFrame);
+        rtIRShowFrame(_rtIRAnimFrame);
+        _rtUpdateMapIRSlider();
+    };
+
+    function _rtUpdateMapIRSlider() {
+        var slider = document.getElementById('rt-map-ir-slider');
+        var label = document.getElementById('rt-map-ir-label');
+        if (!_rtIRData) return;
+        var n = _rtIRData.n_frames || 17;
+        if (slider) slider.value = (n - 1) - _rtIRAnimFrame;
+        if (label && _rtIRData.frame_datetimes && _rtIRData.frame_datetimes[_rtIRAnimFrame]) {
+            var lag = _rtIRData.lag_minutes ? _rtIRData.lag_minutes[_rtIRAnimFrame] : 0;
+            var lagStr = lag === 0 ? 't=0' : 't−' + Math.floor(lag / 60) + ':' + ('0' + (lag % 60)).slice(-2);
+            label.textContent = 'IR ' + lagStr + ' | ' + _rtIRData.frame_datetimes[_rtIRAnimFrame];
+        }
+    }
+
+    function _rtInjectMapIRControls() {
+        if (document.getElementById('rt-map-ir-controls')) return;
+        var wrapper = document.getElementById('rt-map-wrapper');
+        if (!wrapper) return;
+        var n = _rtIRFrameURLs.length;
+        var disabledCls = _rtIRAllLoaded ? '' : ' rt-ir-ctrl-disabled';
+        var disabledAttr = _rtIRAllLoaded ? '' : ' disabled';
+        var ctrl = document.createElement('div');
+        ctrl.id = 'rt-map-ir-controls';
+        ctrl.className = 'rt-map-ir-controls';
+        ctrl.innerHTML =
+            '<div class="ir-ctrl-row">' +
+                '<button class="ir-ctrl-btn" id="rt-map-ir-toggle" onclick="rtToggleMapIRVisibility()">🌍 IR On</button>' +
+                '<button class="ir-ctrl-btn' + disabledCls + '" id="rt-map-ir-step-back" onclick="rtMapIRAnimStep(1)" title="Earlier">◀</button>' +
+                '<button class="ir-ctrl-btn' + disabledCls + '" id="rt-map-ir-play" onclick="rtMapIRAnimToggle()" title="Play / Pause">▶</button>' +
+                '<button class="ir-ctrl-btn' + disabledCls + '" id="rt-map-ir-step-fwd" onclick="rtMapIRAnimStep(-1)" title="Later">▶</button>' +
+                '<input type="range" id="rt-map-ir-slider" min="0" max="' + (n - 1) + '" value="' + (n - 1) + '"' +
+                    disabledAttr +
+                    ' oninput="rtMapIRSliderInput(parseInt(this.max) - parseInt(this.value))" class="ir-slider">' +
+                '<span class="ir-label" id="rt-map-ir-label">IR t=0</span>' +
+            '</div>';
+        wrapper.appendChild(ctrl);
+    }
+
+    window.rtMapIRSliderInput = function (frameIdx) {
+        _rtIRAnimFrame = frameIdx;
+        _rtShowIROnMap(frameIdx);
+        rtIRShowFrame(frameIdx);
+        _rtUpdateMapIRSlider();
+    };
+
+    // Map IR play/pause
+    var _rtMapIRAnimPlaying = false;
+    var _rtMapIRAnimTimer = null;
+
+    window.rtMapIRAnimToggle = function () {
+        if (_rtIRLoadedCount < 2) return;
+        if (_rtMapIRAnimPlaying) {
+            _rtMapIRAnimPlaying = false;
+            if (_rtMapIRAnimTimer) { clearInterval(_rtMapIRAnimTimer); _rtMapIRAnimTimer = null; }
+            var btn = document.getElementById('rt-map-ir-play');
+            if (btn) btn.textContent = '▶';
+        } else {
+            _rtMapIRAnimPlaying = true;
+            // Start from oldest loaded frame
+            for (var i = _rtIRFrameURLs.length - 1; i >= 0; i--) {
+                if (_rtIRFrameURLs[i]) { _rtIRAnimFrame = i; break; }
+            }
+            _rtShowIROnMap(_rtIRAnimFrame);
+            rtIRShowFrame(_rtIRAnimFrame);
+            _rtUpdateMapIRSlider();
+            var playBtn = document.getElementById('rt-map-ir-play');
+            if (playBtn) playBtn.textContent = '⏸';
+            _rtMapIRAnimTimer = setInterval(function () {
+                if (!_rtMapIRAnimPlaying) return;
+                var n = _rtIRFrameURLs.length;
+                var start = _rtIRAnimFrame;
+                for (var j = 0; j < n; j++) {
+                    _rtIRAnimFrame = (_rtIRAnimFrame - 1 + n) % n;
+                    if (_rtIRFrameURLs[_rtIRAnimFrame]) break;
+                }
+                _rtShowIROnMap(_rtIRAnimFrame);
+                rtIRShowFrame(_rtIRAnimFrame);
+                _rtUpdateMapIRSlider();
+            }, _rtIRAnimFrame === 0 ? 1500 : 500);
+        }
+    };
+
+    function _rtEnableMapIRControls() {
+        ['rt-map-ir-step-back', 'rt-map-ir-play', 'rt-map-ir-step-fwd'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) el.classList.remove('rt-ir-ctrl-disabled');
+        });
+        var slider = document.getElementById('rt-map-ir-slider');
+        if (slider) slider.disabled = false;
+    }
+
+    function _rtCleanupMap() {
+        _rtRemoveIRFromMap();
+        _rtIRMapVisible = true;
+        _rtIRMapBoundsSet = false;
+        _rtMaxWind2km = null;
+        if (_rtMapMarker && _rtMap) { _rtMap.removeLayer(_rtMapMarker); _rtMapMarker = null; }
+        if (_rtMapIRAnimPlaying) {
+            _rtMapIRAnimPlaying = false;
+            if (_rtMapIRAnimTimer) { clearInterval(_rtMapIRAnimTimer); _rtMapIRAnimTimer = null; }
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
     // Azimuthal Mean Module
     // ══════════════════════════════════════════════════════════════
 
@@ -855,6 +1142,11 @@
     // ── Cleanup ──────────────────────────────────────────────────
     function rtIRCleanup() {
         rtIRAnimStop();
+        _rtRemoveIRFromMap();
+        if (_rtMapIRAnimPlaying) {
+            _rtMapIRAnimPlaying = false;
+            if (_rtMapIRAnimTimer) { clearInterval(_rtMapIRAnimTimer); _rtMapIRAnimTimer = null; }
+        }
         _rtIRData = null;
         _rtIRFrameURLs = [];
         _rtIRDecodedImages = [];
@@ -863,6 +1155,7 @@
         _rtIRAllLoaded = false;
         _rtIRLoadedCount = 0;
         _rtIRFetching = false;
+        _rtIRMapBoundsSet = false;
         var panel = document.getElementById('rt-ir-panel');
         if (panel) panel.style.display = 'none';
         var irBtn = document.getElementById('rt-ir-underlay-btn');
@@ -908,6 +1201,13 @@
                 // Update satellite badge
                 var badge = document.getElementById('rt-ir-sat-label');
                 if (badge) badge.textContent = json.satellite_label || '';
+
+                // Show IR on Leaflet map + inject map controls
+                if (_rtMap && json.frame0) {
+                    _rtShowIROnMap(0);
+                    _rtInjectMapIRControls();
+                    _rtUpdateMapIRSlider();
+                }
 
                 // Phase 2: fetch remaining frames in parallel
                 _rtFetchIRFramesParallel(1);
@@ -980,6 +1280,8 @@
             var el = document.getElementById(id);
             if (el) el.classList.remove('rt-ir-ctrl-disabled');
         });
+        // Also enable map IR controls
+        _rtEnableMapIRControls();
         var slider = document.getElementById('rt-ir-slider');
         if (slider) slider.disabled = false;
     }
@@ -1021,6 +1323,10 @@
 
         // If Plotly underlay is active, update it to current frame
         if (_rtIRPlotlyVisible) _rtApplyIRUnderlay();
+
+        // Sync Leaflet map IR overlay
+        if (_rtIRMapOverlay && _rtIRMapVisible) _rtShowIROnMap(frameIdx);
+        _rtUpdateMapIRSlider();
     };
 
     function _rtUpdateIRLabel() {
