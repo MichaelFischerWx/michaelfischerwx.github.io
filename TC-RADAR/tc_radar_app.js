@@ -1350,6 +1350,11 @@ function initEnvOverlay() {
                     '<span class="env-ov-title">Environmental Context</span>' +
                     '<span class="env-ov-subtitle">ERA5 Reanalysis Diagnostics</span>' +
                 '</div>' +
+                '<div class="env-nav-bar" id="env-nav-bar">' +
+                    '<button class="env-nav-btn" id="env-nav-prev" onclick="envNavPrev()" title="Previous case">\u25C0</button>' +
+                    '<select class="env-nav-select" id="env-nav-select" onchange="envNavJump(this.value)"></select>' +
+                    '<button class="env-nav-btn" id="env-nav-next" onclick="envNavNext()" title="Next case">\u25B6</button>' +
+                '</div>' +
                 '<button class="env-ov-close" onclick="toggleEnvOverlay()">\u2715</button>' +
             '</div>' +
             '<div class="env-ov-body">' +
@@ -1481,6 +1486,7 @@ function toggleEnvOverlay() {
 }
 
 function _envOverlayShowLoading() {
+    _envNavPopulate();
     var display = document.getElementById('env-ov-display');
     if (!display) return;
     display.innerHTML =
@@ -1526,6 +1532,7 @@ function _envOverlayFetchAndRender(caseIdx, radiusKm) {
 }
 
 function renderEnvOverlay() {
+    _envNavPopulate();
     var display = document.getElementById('env-ov-display');
     var placeholder = document.getElementById('env-ov-placeholder');
     var caseInfo = document.getElementById('env-ov-case-info');
@@ -1988,6 +1995,98 @@ function envOverlayRecomputeSkewT() {
             _renderSkewTInfo(data.profiles);
         }
     });
+}
+
+// ── Environment overlay case navigation ──────────────────────
+
+// Get the sorted list of cases for the currently-selected storm
+function _envNavGetStormCases() {
+    var d = _getActiveData();
+    if (!d || !currentCaseData) return [];
+    var storm = currentCaseData.storm_name;
+    if (!storm) return [];
+    var cases = d.cases.filter(function(c) { return c.storm_name === storm; });
+    cases.sort(function(a, b) { return a.datetime.localeCompare(b.datetime); });
+    return cases;
+}
+
+// Populate the env nav dropdown with the current storm's cases
+function _envNavPopulate() {
+    var sel = document.getElementById('env-nav-select');
+    var nav = document.getElementById('env-nav-bar');
+    if (!sel || !nav) return;
+
+    var cases = _envNavGetStormCases();
+    if (cases.length === 0) {
+        nav.style.display = 'none';
+        return;
+    }
+    nav.style.display = 'flex';
+
+    sel.innerHTML = '';
+    cases.forEach(function(c) {
+        var opt = document.createElement('option');
+        opt.value = c.case_index;
+        var cat = typeof getIntensityCategory === 'function' ? getIntensityCategory(c.vmax_kt) : '';
+        var vStr = c.vmax_kt !== null ? ' [' + cat + ', ' + c.vmax_kt + ' kt]' : '';
+        opt.textContent = c.datetime + vStr;
+        if (currentCaseIndex === c.case_index) opt.selected = true;
+        sel.appendChild(opt);
+    });
+
+    // Enable/disable prev/next buttons
+    var curIdx = -1;
+    for (var i = 0; i < cases.length; i++) {
+        if (cases[i].case_index === currentCaseIndex) { curIdx = i; break; }
+    }
+    var prevBtn = document.getElementById('env-nav-prev');
+    var nextBtn = document.getElementById('env-nav-next');
+    if (prevBtn) prevBtn.disabled = (curIdx <= 0);
+    if (nextBtn) nextBtn.disabled = (curIdx < 0 || curIdx >= cases.length - 1);
+}
+
+function _envNavGoToCase(caseIdx) {
+    var d = _getActiveData();
+    if (!d) return;
+    var caseData = d.cases.find(function(c) { return c.case_index === caseIdx; });
+    if (!caseData) return;
+
+    // Update globals
+    currentCaseIndex = caseData.case_index;
+    currentCaseData = caseData;
+
+    // Also update main toolbar dropdown so it stays in sync
+    var mainCaseSel = document.getElementById('case-select');
+    if (mainCaseSel) mainCaseSel.value = caseIdx;
+
+    // Show loading and fetch new env data
+    _envOverlayShowLoading();
+    _envNavPopulate();
+    var radiusKm = parseInt(document.getElementById('env-ov-radius').value) || 500;
+    _envOverlayFetchAndRender(caseIdx, radiusKm);
+}
+
+function envNavPrev() {
+    var cases = _envNavGetStormCases();
+    var curIdx = -1;
+    for (var i = 0; i < cases.length; i++) {
+        if (cases[i].case_index === currentCaseIndex) { curIdx = i; break; }
+    }
+    if (curIdx > 0) _envNavGoToCase(cases[curIdx - 1].case_index);
+}
+
+function envNavNext() {
+    var cases = _envNavGetStormCases();
+    var curIdx = -1;
+    for (var i = 0; i < cases.length; i++) {
+        if (cases[i].case_index === currentCaseIndex) { curIdx = i; break; }
+    }
+    if (curIdx >= 0 && curIdx < cases.length - 1) _envNavGoToCase(cases[curIdx + 1].case_index);
+}
+
+function envNavJump(val) {
+    var idx = parseInt(val);
+    if (!isNaN(idx) && idx !== currentCaseIndex) _envNavGoToCase(idx);
 }
 
 // ── ERA5 cleanup ─────────────────────────────────────────────

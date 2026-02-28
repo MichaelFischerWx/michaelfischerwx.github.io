@@ -327,6 +327,32 @@ input[type="range"]::-moz-range-track { height: 4px; background: transparent; bo
     transition: all 0.15s;
 }
 .env-ov-close:hover { background: rgba(255,255,255,0.05); color: #e5e7eb; }
+
+/* ── Case navigator in env overlay header ──────── */
+.env-nav-bar {
+    display: flex; align-items: center; gap: 6px;
+    margin-left: auto; margin-right: 12px;
+}
+.env-nav-btn {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+    color: #9ca3af; font-size: 11px; width: 30px; height: 30px; border-radius: 6px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s; flex-shrink: 0;
+}
+.env-nav-btn:hover:not(:disabled) { background: rgba(34,211,238,0.12); color: var(--cyan); border-color: rgba(34,211,238,0.3); }
+.env-nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.env-nav-select {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+    color: #e5e7eb; font-size: 11px; font-family: 'JetBrains Mono', monospace;
+    padding: 5px 24px 5px 8px; border-radius: 6px; max-width: 320px;
+    -webkit-appearance: none; appearance: none; cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%239ca3af'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 8px center;
+}
+.env-nav-select:hover { border-color: rgba(34,211,238,0.3); }
+.env-nav-select:focus { outline: none; border-color: var(--cyan); }
+.env-nav-select option { background: var(--navy); color: #e5e7eb; }
+
 .env-ov-body { display: flex; min-height: 640px; }
 .env-ov-controls {
     width: 280px; min-width: 280px; padding: 20px;
