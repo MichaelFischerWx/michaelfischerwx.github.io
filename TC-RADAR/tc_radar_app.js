@@ -474,7 +474,7 @@ function _era5RenderCanvas(data2d, field) {
 function fetchERA5Data(caseIndex, field, callback) {
     if (_era5Fetching) return;
     _era5Fetching = true;
-    var url = API_BASE + '/era5?case_index=' + caseIndex + '&field=' + (field || 'shear_mag');
+    var url = API_BASE + '/era5?case_index=' + caseIndex + '&field=' + (field || 'shear_mag') + '&radius_km=300';
     fetch(url)
         .then(function(r) {
             if (!r.ok) { _era5Fetching = false; if (callback) callback(null); return null; }
@@ -2861,7 +2861,8 @@ function render3DIsosurface() {
             aspectmode: 'manual',
             aspectratio: { x: 1, y: 1, z: 1 / vertExag },
             camera: {
-                eye: { x: 1.6, y: 1.6, z: 0.9 },
+                eye: { x: 0, y: -2.2, z: 0.8 },
+                up: { x: 0, y: 0, z: 1 },
                 center: { x: 0, y: 0, z: -0.1 }
             }
         },
