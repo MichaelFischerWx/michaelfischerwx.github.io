@@ -2663,7 +2663,8 @@
                 (sm.mean_alt_m != null ? 'Mean Alt: <strong>' + (sm.mean_alt_m / 1000).toFixed(1) + ' km</strong><br>' : '') +
                 (sm.max_fl_wspd_ms != null ? 'Max FL Wind: <strong style="color:' + _flWindColor(sm.max_fl_wspd_ms) + ';">' + sm.max_fl_wspd_ms.toFixed(1) + ' m/s (' + (sm.max_fl_wspd_ms * 1.94384).toFixed(0) + ' kt)</strong><br>' : '') +
                 (sm.min_slp_hpa != null ? 'Min SLP: <strong>' + sm.min_slp_hpa.toFixed(1) + ' hPa</strong><br>' : '') +
-                '<span style="color:#aaa;font-size:10px;">' + (_rtFLData.n_obs_total || 0) + ' obs (\u00b1' + (_rtFLData.time_window_min || 45) + ' min)</span>' +
+                '<span style="color:#aaa;font-size:10px;">' + (_rtFLData.n_obs_total || 0) + ' obs (\u00b1' + (_rtFLData.time_window_min || 45) + ' min)' +
+                (_rtFLData.storm_motion_corrected ? ' \u00b7 Motion-corrected' : '') + '</span>' +
                 '</div>';
             acMarker.bindPopup(popupHtml, { maxWidth: 300, minWidth: 220 });
         }
@@ -2758,6 +2759,7 @@
                     var _toastMsg = _nTot + ' obs \u2192 1s/' + _rtFLData1s.n_obs +
                         ', 10s/' + _rtFLData10s.n_obs + ', 30s/' + _rtFLData30s.n_obs;
                     if (_maxW != null) _toastMsg += ' \u00b7 Max FL wind ' + _maxW.toFixed(1) + ' m/s';
+                    if (_rtFLData10s.storm_motion_corrected) _toastMsg += ' \u00b7 Storm-motion adjusted';
                     rtToast(_toastMsg, 'info', 6000);
 
                     _rtRenderFLOnMap();
