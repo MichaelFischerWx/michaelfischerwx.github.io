@@ -1,0 +1,235 @@
+/* ══════════════════════════════════════════════════════════════
+   Real-Time TDR Tab — Styles
+   Append these to tc_radar_styles.css (or include as a separate file)
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Nav highlight for Real-Time TDR link ─────────────────── */
+.rt-nav-highlight {
+    color: var(--cyan) !important;
+    font-weight: 600 !important;
+}
+.rt-nav-highlight.active {
+    background: rgba(0, 212, 255, 0.12);
+    border-radius: 6px;
+    padding: 4px 10px !important;
+}
+
+/* ── Section header ───────────────────────────────────────── */
+.rt-header {
+    padding: 32px 32px 16px;
+    text-align: center;
+}
+.rt-header-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 6px;
+}
+.rt-header-desc {
+    font-size: 0.95rem;
+    color: var(--slate);
+    max-width: 640px;
+    margin: 0 auto;
+}
+
+/* ── Toolbar (mission + file selection) ───────────────────── */
+.rt-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+}
+
+/* ── Viz panel layout — 30/70 side-by-side split ─────────── */
+.rt-viz-panel {
+    padding: 16px 24px;
+    min-height: calc(100vh - 200px);
+}
+.rt-viz-layout {
+    display: flex;
+    gap: 16px;
+    align-items: stretch;
+}
+
+/* LEFT: Map panel (30%) — always visible when exploring ──── */
+.rt-viz-map-panel {
+    flex: 0 0 30%;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+/* RIGHT: Content panel (70%) — uses explorer-layout inside ── */
+.rt-viz-content-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+/* The explorer-layout inside the RT content panel inherits
+   styles from tc_radar_styles.css (.explorer-layout, .explorer-display,
+   .explorer-controls). Override min-height so it fills the viewport. */
+.rt-viz-content-panel .explorer-layout {
+    flex: 1;
+    min-height: 0;
+}
+.rt-viz-content-panel .explorer-controls {
+    overflow-y: auto;
+    max-height: calc(100vh - 140px);
+}
+
+/* ── Responsive: tablet ≤1024px (35/65 split) ────────────── */
+@media (max-width: 1024px) {
+    .rt-viz-map-panel { flex: 0 0 35%; }
+}
+
+/* ── Responsive: mobile ≤768px (stacked vertically) ──────── */
+@media (max-width: 768px) {
+    .rt-viz-layout {
+        flex-direction: column;
+        gap: 12px;
+    }
+    .rt-viz-map-panel {
+        flex: 0 0 auto;
+    }
+    .rt-map-wrapper {
+        min-height: 200px !important;
+        height: 200px !important;
+    }
+    .rt-viz-content-panel {
+        flex: 1;
+    }
+    .rt-viz-content-panel .explorer-layout {
+        flex-direction: column !important;
+    }
+    .rt-viz-content-panel .explorer-controls {
+        width: 100% !important;
+        border-left: none !important;
+        padding-left: 0 !important;
+        border-top: 1px solid var(--border);
+        padding-top: 10px;
+        max-height: none;
+    }
+}
+
+/* ── Metadata panel ───────────────────────────────────────── */
+.rt-meta-panel {
+    margin-bottom: 8px;
+}
+.rt-meta-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 2px;
+}
+.rt-meta-row {
+    font-size: 0.82rem;
+    color: var(--slate);
+    margin-bottom: 10px;
+}
+.rt-meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    padding: 8px 0;
+    border-top: 1px solid var(--border);
+}
+.rt-meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+.rt-meta-label {
+    font-size: 0.7rem;
+    color: var(--slate);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.rt-meta-val {
+    font-size: 0.85rem;
+    color: var(--text);
+    font-weight: 500;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+/* ── Leaflet Map (IR + Storm Context) ────────────────────── */
+.rt-map-wrapper {
+    position: relative;
+    width: 100%;
+    flex: 1;
+    min-height: 400px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    background: #0a1628;
+}
+#rt-map {
+    z-index: 1;
+}
+.rt-map-ir-controls {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    right: 8px;
+    z-index: 1000;
+    background: rgba(10, 22, 40, 0.88);
+    backdrop-filter: blur(6px);
+    border-radius: 6px;
+    border: 1px solid rgba(96, 165, 250, 0.25);
+    padding: 6px 10px;
+}
+.ir-ctrl-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.ir-ctrl-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #ccc;
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s;
+}
+.ir-ctrl-btn:hover {
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+}
+.ir-slider {
+    flex: 1;
+    min-width: 60px;
+    accent-color: var(--cyan, #00d4ff);
+    height: 4px;
+}
+.ir-label {
+    font-size: 10px;
+    color: #93c5fd;
+    font-family: 'JetBrains Mono', monospace;
+    white-space: nowrap;
+    min-width: 100px;
+    text-align: right;
+}
+
+/* (Standalone IR panel removed — IR displayed via Leaflet map overlay only) */
+
+/* ── Attribution footer ───────────────────────────────────── */
+.rt-attribution {
+    text-align: center;
+    padding: 20px;
+    font-size: 0.8rem;
+    color: var(--slate);
+}
+.rt-attribution a {
+    color: var(--blue-light);
+    text-decoration: none;
+}
+.rt-attribution a:hover {
+    text-decoration: underline;
+}
