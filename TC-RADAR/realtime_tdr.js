@@ -1278,16 +1278,13 @@
             _rtUpdateIRLabel();
             var statusText = 'IR frames: ' + _rtIRLoadedCount + '/' + n;
             if (completedCount >= totalToFetch && _rtIRLoadedCount < n) {
-                // All requests finished but some frames had no data
                 statusText = 'IR: ' + _rtIRLoadedCount + ' of ' + n + ' available';
             }
             _rtUpdateIRLoadingText(statusText);
             if (_rtIRLoadedCount >= 2) _rtEnableIRAnimControls();
-            // Auto-start animation when we have 2 frames
             if (_rtIRLoadedCount === 2 && !_rtMapIRAnimPlaying) {
                 rtMapIRAnimToggle();
             }
-            // All requests completed (whether successful or not)
             if (completedCount >= totalToFetch) {
                 _rtIRAllLoaded = true;
                 _rtIRFetching = false;
@@ -1295,57 +1292,29 @@
             }
         }
 
-        // Stagger requests: fetch max 3 at a time to avoid overwhelming the server
-        var queue = [];
-        for (var qi = startIdx; qi < n; qi++) queue.push(qi);
-        var inFlight = 0;
-        var maxConcurrent = 3;
-        var irFrameTimeout = 45000; // 45 seconds per frame
-
-        function _launchNext() {
-            while (inFlight < maxConcurrent && queue.length > 0) {
-                var idx = queue.shift();
-                inFlight++;
-                (function (frameIdx) {
-                    var url = API_BASE + RT_PREFIX + '/ir_frame?file_url=' +
-                        encodeURIComponent(_currentFileUrl) + '&frame_index=' + frameIdx;
-
-                    // Add a timeout using AbortController (if available) or a racing promise
-                    var fetchOpts = {};
-                    var timer = null;
-                    if (typeof AbortController !== 'undefined') {
-                        var ctrl = new AbortController();
-                        fetchOpts.signal = ctrl.signal;
-                        timer = setTimeout(function () { ctrl.abort(); }, irFrameTimeout);
-                    }
-
-                    fetch(url, fetchOpts)
-                        .then(function (r) {
-                            if (!r.ok) { console.warn('IR frame ' + frameIdx + ' HTTP ' + r.status); return null; }
-                            return r.json();
-                        })
-                        .then(function (data) {
-                            if (!_rtIRData) return;
-                            if (data && data.frame) {
-                                _rtIRFrameURLs[data.frame_index] = data.frame;
-                                _rtPreDecodeIRFrame(data.frame_index, data.frame);
-                            }
-                            _checkAllDone();
-                        })
-                        .catch(function (err) {
-                            var msg = err.name === 'AbortError' ? 'timeout' : (err.message || err);
-                            console.warn('IR frame ' + frameIdx + ' error: ' + msg);
-                            _checkAllDone();
-                        })
-                        .finally(function () {
-                            if (timer) clearTimeout(timer);
-                            inFlight--;
-                            _launchNext();
-                        });
-                })(idx);
-            }
+        // Fire ALL requests in parallel (original working approach)
+        for (var i = startIdx; i < n; i++) {
+            (function (frameIdx) {
+                var url = API_BASE + RT_PREFIX + '/ir_frame?file_url=' +
+                    encodeURIComponent(_currentFileUrl) + '&frame_index=' + frameIdx;
+                fetch(url)
+                    .then(function (r) {
+                        if (!r.ok) { console.warn('IR frame ' + frameIdx + ' HTTP ' + r.status); return null; }
+                        return r.json();
+                    })
+                    .then(function (data) {
+                        if (data && data.frame) {
+                            _rtIRFrameURLs[data.frame_index] = data.frame;
+                            _rtPreDecodeIRFrame(data.frame_index, data.frame);
+                        }
+                        _checkAllDone();
+                    })
+                    .catch(function (err) {
+                        console.warn('IR frame ' + frameIdx + ' error:', err);
+                        _checkAllDone();
+                    });
+            })(i);
         }
-        _launchNext();
     }
 
     function _rtPreDecodeIRFrame(idx, dataUrl) {
