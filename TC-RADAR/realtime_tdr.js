@@ -2445,8 +2445,7 @@
     // Colour variable options for flight-level track
     var _FL_COLOR_VARS = {
         'fl_wspd_ms':   { label: 'FL Wind Speed',   units: 'm/s',  cmin: 0,   cmax: 80  },
-        'sfmr_wspd_ms': { label: 'SFMR Sfc Wind',   units: 'm/s',  cmin: 0,   cmax: 80  },
-        'slp_hpa':      { label: 'Sea-Level Pres',   units: 'hPa',  cmin: 920, cmax: 1015 },
+        'slp_hpa':      { label: 'Sea-Level Pres',   units: 'hPa',  cmin: 880, cmax: 1015 },
         'temp_c':       { label: 'Temperature',      units: '\u00b0C',   cmin: 10,  cmax: 30  },
         'gps_alt_m':    { label: 'GPS Altitude',     units: 'm',    cmin: 0,   cmax: 5000 },
         'static_pres_hpa': { label: 'Static Pres',   units: 'hPa',  cmin: 500, cmax: 1020 },
@@ -2491,7 +2490,7 @@
 
     function _flObsColor(obs) {
         var val = obs[_rtFLColorVar];
-        if (_rtFLColorVar === 'fl_wspd_ms' || _rtFLColorVar === 'sfmr_wspd_ms') {
+        if (_rtFLColorVar === 'fl_wspd_ms') {
             return _flWindColor(val);
         }
         var info = _FL_COLOR_VARS[_rtFLColorVar] || { cmin: 0, cmax: 100 };
@@ -2567,8 +2566,7 @@
                 '<strong style="font-size:13px;color:#60a5fa;">\u2708 Flight-Level Data</strong><br>' +
                 '<span style="color:#aaa;">' + (_rtFLData.mission_id || '') + '</span><br>' +
                 (sm.mean_alt_m != null ? 'Mean Alt: <strong>' + (sm.mean_alt_m / 1000).toFixed(1) + ' km</strong><br>' : '') +
-                (sm.max_fl_wspd_ms != null ? 'Max FL Wind: <strong style="color:' + _flWindColor(sm.max_fl_wspd_ms) + ';">' + sm.max_fl_wspd_ms.toFixed(1) + ' m/s</strong><br>' : '') +
-                (sm.max_sfmr_wspd_ms != null ? 'Max SFMR Sfc: <strong style="color:' + _flWindColor(sm.max_sfmr_wspd_ms) + ';">' + sm.max_sfmr_wspd_ms.toFixed(1) + ' m/s</strong><br>' : '') +
+                (sm.max_fl_wspd_ms != null ? 'Max FL Wind: <strong style="color:' + _flWindColor(sm.max_fl_wspd_ms) + ';">' + sm.max_fl_wspd_ms.toFixed(1) + ' m/s (' + (sm.max_fl_wspd_ms * 1.94384).toFixed(0) + ' kt)</strong><br>' : '') +
                 (sm.min_slp_hpa != null ? 'Min SLP: <strong>' + sm.min_slp_hpa.toFixed(1) + ' hPa</strong><br>' : '') +
                 '<span style="color:#aaa;font-size:10px;">' + (_rtFLData.n_obs_total || 0) + ' obs (\u00b1' + (_rtFLData.time_window_min || 45) + ' min)</span>' +
                 '</div>';
@@ -2708,7 +2706,6 @@
     // Variable config for time series traces
     var _FL_TS_CONFIG = {
         'fl_wspd_ms':      { label: 'FL Wind Speed',   units: 'm/s',  color: '#60a5fa', yaxis: 'y'  },
-        'sfmr_wspd_ms':    { label: 'SFMR Sfc Wind',   units: 'm/s',  color: '#34d399', yaxis: 'y'  },
         'slp_hpa':         { label: 'Sea-Level Pres',   units: 'hPa',  color: '#fbbf24', yaxis: 'y2' },
         'static_pres_hpa': { label: 'Static Pressure',  units: 'hPa',  color: '#fb923c', yaxis: 'y2' },
         'temp_c':          { label: 'Temperature',      units: '\u00b0C',   color: '#f87171', yaxis: 'y3' },
@@ -2774,7 +2771,7 @@
                 });
 
                 // Build customdata: [utc_time_str, knots_str]
-                var isWind = (varName === 'fl_wspd_ms' || varName === 'sfmr_wspd_ms');
+                var isWind = (varName === 'fl_wspd_ms');
                 var customdata = obs.map(function (o) {
                     // Extract HH:MM:SS from ISO timestamp (e.g. "2025-10-28T13:49:08Z")
                     var utc = '';
@@ -2898,7 +2895,6 @@
         var insetLines = [];
         var windVars = [
             { key: 'fl_wspd_ms',   label: 'FL Wind',   summaryKey: 'max_fl_wspd_ms' },
-            { key: 'sfmr_wspd_ms', label: 'SFMR Sfc',  summaryKey: 'max_sfmr_wspd_ms' },
         ];
         windVars.forEach(function (wv) {
             // Only show if the variable is selected in the multi-select
@@ -3010,9 +3006,9 @@
             // Build popup with all 3 resolutions at this time
             var popTxt = '<div style="font-family:DM Sans,sans-serif;font-size:11px;line-height:1.5;">' +
                 '<strong style="color:#60a5fa;">T' + (o.time_offset_s >= 0 ? '+' : '') + (o.time_offset_s / 60).toFixed(1) + ' min</strong><br>';
-            if (o.fl_wspd_ms != null) popTxt += 'FL Wind (10s): <strong>' + o.fl_wspd_ms.toFixed(1) + ' m/s</strong><br>';
+            if (o.fl_wspd_ms != null) popTxt += 'FL Wind (10s): <strong>' + o.fl_wspd_ms.toFixed(1) + ' m/s (' + (o.fl_wspd_ms * 1.94384).toFixed(0) + ' kt)</strong><br>';
             if (o.fl_wdir_deg != null) popTxt += 'FL Dir: ' + o.fl_wdir_deg.toFixed(0) + '\u00b0<br>';
-            if (o.sfmr_wspd_ms != null) popTxt += 'SFMR (10s): <strong>' + o.sfmr_wspd_ms.toFixed(1) + ' m/s</strong><br>';
+            if (o.slp_hpa != null) popTxt += 'SLP: <strong>' + o.slp_hpa.toFixed(1) + ' hPa</strong><br>';
             if (o.static_pres_hpa != null) popTxt += 'Static P: ' + o.static_pres_hpa.toFixed(1) + ' hPa<br>';
             if (o.temp_c != null) popTxt += 'Temp: ' + o.temp_c.toFixed(1) + '\u00b0C<br>';
             if (o.gps_alt_m != null) popTxt += 'Alt: ' + o.gps_alt_m.toFixed(0) + ' m';
