@@ -2773,9 +2773,36 @@
                     return (v != null && isFinite(v)) ? Math.round(v * 10) / 10 : null;
                 });
 
+                // Build customdata: [utc_time_str, knots_str]
+                var isWind = (varName === 'fl_wspd_ms' || varName === 'sfmr_wspd_ms');
+                var customdata = obs.map(function (o) {
+                    // Extract HH:MM:SS from ISO timestamp (e.g. "2025-10-28T13:49:08Z")
+                    var utc = '';
+                    if (o.time) {
+                        var tIdx = o.time.indexOf('T');
+                        utc = tIdx >= 0 ? o.time.substring(tIdx + 1).replace('Z', '') : o.time;
+                    }
+                    var kt = '';
+                    if (isWind) {
+                        var v = o[varName];
+                        if (v != null && isFinite(v)) kt = (v * 1.94384).toFixed(1);
+                    }
+                    return [utc, kt];
+                });
+
+                var hoverTpl;
+                if (isWind) {
+                    hoverTpl = cfg.label + style.suffix + ': %{y} ' + cfg.units +
+                        ' (%{customdata[1]} kt)<br>%{customdata[0]} UTC · T%{x:+} min<extra></extra>';
+                } else {
+                    hoverTpl = cfg.label + style.suffix + ': %{y} ' + cfg.units +
+                        '<br>%{customdata[0]} UTC · T%{x:+} min<extra></extra>';
+                }
+
                 traces.push({
                     x: times,
                     y: vals,
+                    customdata: customdata,
                     name: cfg.label + style.suffix,
                     legendgroup: varName,
                     showlegend: resKey === '10s',  // only show one legend entry per variable
@@ -2784,8 +2811,7 @@
                     line: { color: cfg.color, width: style.width, dash: style.dash },
                     opacity: style.opacity,
                     yaxis: cfg.yaxis,
-                    hovertemplate: cfg.label + style.suffix + ': %{y} ' + cfg.units +
-                        '<br>T%{x:+} min<extra></extra>',
+                    hovertemplate: hoverTpl,
                     connectgaps: false,
                 });
             });
