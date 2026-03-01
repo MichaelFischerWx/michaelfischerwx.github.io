@@ -861,8 +861,10 @@
         );
 
         if (_rtIRMapOverlay) {
-            // Use Leaflet's setUrl for reliable image swaps (works for data-URLs)
-            _rtIRMapOverlay.setUrl(url);
+            // Fast path: swap image src directly (most reliable for data-URLs)
+            var imgEl = _rtIRMapOverlay.getElement ? _rtIRMapOverlay.getElement() : _rtIRMapOverlay._image;
+            if (imgEl) { imgEl.src = url; }
+            else { _rtIRMapOverlay.setUrl(url); }
             if (!_rtIRMapBoundsSet) {
                 _rtIRMapOverlay.setBounds(bounds);
                 _rtIRMapBoundsSet = true;
@@ -1162,6 +1164,30 @@
         if (irBtn) { irBtn.disabled = true; irBtn.textContent = '🛰 IR Off'; irBtn.classList.remove('active'); }
     }
 
+    // ── Helper: show IR on map, with retry if map not ready yet ──
+    function _rtShowIROnMapWhenReady(irJson, attempt) {
+        attempt = attempt || 0;
+        // Bail if IR state was cleaned up (user navigated away)
+        if (!_rtIRData || !irJson.frame0) return;
+        if (_rtMap) {
+            _rtShowIROnMap(0);
+            _rtInjectMapIRControls();
+            _rtUpdateMapIRSlider();
+            // Auto-fit map to IR bounds so the imagery is fully visible
+            if (irJson.bounds_deg) {
+                var bd = irJson.bounds_deg;
+                _rtMap.fitBounds([
+                    [bd.lat_min, bd.lon_min],
+                    [bd.lat_max, bd.lon_max]
+                ], { padding: [20, 20], maxZoom: 8 });
+            }
+            rtIRShowFrame(0);
+        } else if (attempt < 20) {
+            // Map not ready yet — retry in 500ms (up to 10 seconds)
+            setTimeout(function () { _rtShowIROnMapWhenReady(irJson, attempt + 1); }, 500);
+        }
+    }
+
     // ── Two-phase IR fetch ───────────────────────────────────────
     function rtFetchIR() {
         if (!_currentFileUrl || _rtIRFetching) return;
@@ -1191,20 +1217,9 @@
                 }
 
                 // Show IR on Leaflet map + inject map controls (primary IR display)
-                if (_rtMap && json.frame0) {
-                    _rtShowIROnMap(0);
-                    _rtInjectMapIRControls();
-                    _rtUpdateMapIRSlider();
-                    // Auto-fit map to IR bounds so the imagery is fully visible
-                    if (json.bounds_deg) {
-                        var bd = json.bounds_deg;
-                        _rtMap.fitBounds([
-                            [bd.lat_min, bd.lon_min],
-                            [bd.lat_max, bd.lon_max]
-                        ], { padding: [20, 20], maxZoom: 8 });
-                    }
-                }
-                rtIRShowFrame(0);
+                // Handle race condition: map may not exist yet if metadata fetch
+                // hasn't completed. Retry a few times with short delays.
+                _rtShowIROnMapWhenReady(json);
 
                 // Enable the Plotly underlay button
                 var irBtn = document.getElementById('rt-ir-underlay-btn');
