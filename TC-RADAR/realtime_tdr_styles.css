@@ -413,3 +413,60 @@
     color: #6b7280;
     font-family: 'JetBrains Mono', monospace;
 }
+
+/* ── Flight-Level Along-Track Time Series Panel ─────── */
+#rt-fl-timeseries-panel {
+    border: 1px solid rgba(96, 165, 250, 0.2);
+    border-radius: 8px;
+    margin-top: 8px;
+    background: rgba(10, 15, 25, 0.6);
+    overflow: hidden;
+}
+.fl-ts-header {
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    background: rgba(96, 165, 250, 0.08);
+    border-bottom: 1px solid rgba(96, 165, 250, 0.15);
+}
+.fl-ts-title {
+    color: #93c5fd;
+    font-size: 13px;
+    font-weight: 600;
+    flex: 1;
+}
+.fl-ts-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.fl-ts-var-select {
+    background: #1a1a2e;
+    color: #93c5fd;
+    border: 1px solid rgba(96, 165, 250, 0.35);
+    border-radius: 4px;
+    padding: 2px 4px;
+    font-size: 11px;
+    cursor: pointer;
+    max-width: 220px;
+    min-height: 60px;
+    font-family: 'DM Sans', sans-serif;
+}
+.fl-ts-var-select option {
+    padding: 2px 4px;
+}
+.fl-ts-var-select option:checked {
+    background: rgba(96, 165, 250, 0.3);
+}
+.fl-ts-close {
+    background: none;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    padding: 0 4px;
+}
+.fl-ts-close:hover {
+    color: #fff;
+}

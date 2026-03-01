@@ -2625,7 +2625,7 @@
             var btn = document.getElementById('rt-fl-btn');
             if (btn) btn.textContent = '\u2708 Loading\u2026';
 
-            fetch(API_BASE + RT_PREFIX + '/flightlevel?file_url=' + encodeURIComponent(_currentFileUrl))
+            fetch(API_BASE + RT_PREFIX + '/flightlevel?file_url=' + encodeURIComponent(_currentFileUrl) + '&avg_interval_s=10')
                 .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
                 .then(function (json) {
                     _rtFLData = json;
@@ -2640,10 +2640,15 @@
 
                     _rtFLVisible = true;
                     _rtFLMode = 'on';
-                    if (btn) { btn.textContent = '\u2708 FL On (' + json.n_obs + ')'; btn.classList.add('active'); }
-                    rtToast(json.n_obs_total + ' flight-level obs loaded (' + json.n_obs + ' displayed)', 'info', 5000);
+                    if (btn) { btn.textContent = '\u2708 FL On'; btn.classList.add('active'); }
+                    var _nDisp = json.n_obs, _nTot = json.n_obs_total;
+                    var _maxW = json.summary && json.summary.max_fl_wspd_ms;
+                    var _toastMsg = _nTot + ' obs loaded (' + _nDisp + ' at 10-s avg)';
+                    if (_maxW != null) _toastMsg += ' \u00b7 Max FL wind ' + _maxW.toFixed(1) + ' m/s';
+                    rtToast(_toastMsg, 'info', 6000);
 
                     _rtRenderFLOnMap();
+                    _rtRenderFLTimeSeries();
                 })
                 .catch(function (err) {
                     _rtFLFetching = false;
@@ -2658,17 +2663,226 @@
             _rtFLMode = 'off';
             _rtFLVisible = false;
             _rtRemoveFLFromMap();
+            window.rtFLCloseTimeSeries();
             var offBtn = document.getElementById('rt-fl-btn');
             if (offBtn) { offBtn.textContent = '\u2708 FL Off'; offBtn.classList.remove('active'); }
         } else {
             _rtFLMode = 'on';
             _rtFLVisible = true;
             _rtRenderFLOnMap();
+            _rtRenderFLTimeSeries();
             var onBtn = document.getElementById('rt-fl-btn');
             if (onBtn) {
-                onBtn.textContent = '\u2708 FL On (' + (_rtFLData ? _rtFLData.n_obs : 0) + ')';
+                onBtn.textContent = '\u2708 FL On';
                 onBtn.classList.add('active');
             }
+        }
+    };
+
+    // ═══════════════════════════════════════════════════════════
+    // Along-Track Time Series (Phase 3)
+    // ═══════════════════════════════════════════════════════════
+
+    var _rtFLTSHighlight = null;  // Leaflet marker for click-highlight on map
+
+    // Variable config for time series traces
+    var _FL_TS_CONFIG = {
+        'fl_wspd_ms':      { label: 'FL Wind Speed',   units: 'm/s',  color: '#60a5fa', yaxis: 'y',  dash: 'solid' },
+        'sfmr_wspd_ms':    { label: 'SFMR Sfc Wind',   units: 'm/s',  color: '#34d399', yaxis: 'y',  dash: 'solid' },
+        'slp_hpa':         { label: 'Sea-Level Pres',   units: 'hPa',  color: '#fbbf24', yaxis: 'y2', dash: 'solid' },
+        'static_pres_hpa': { label: 'Static Pressure',  units: 'hPa',  color: '#fb923c', yaxis: 'y2', dash: 'dot'   },
+        'temp_c':          { label: 'Temperature',      units: '\u00b0C',   color: '#f87171', yaxis: 'y3', dash: 'solid' },
+        'dewpoint_c':      { label: 'Dewpoint',         units: '\u00b0C',   color: '#a78bfa', yaxis: 'y3', dash: 'dash'  },
+        'gps_alt_m':       { label: 'GPS Altitude',     units: 'm',    color: '#6b7280', yaxis: 'y4', dash: 'solid' },
+    };
+
+    // Show/update the time series panel when FL data is available
+    function _rtRenderFLTimeSeries() {
+        var panel = document.getElementById('rt-fl-timeseries-panel');
+        if (!panel || !_rtFLData || !_rtFLData.observations || _rtFLData.observations.length === 0) return;
+
+        panel.style.display = 'block';
+
+        var obs = _rtFLData.observations;
+
+        // Get selected variables
+        var selectEl = document.getElementById('rt-fl-ts-vars');
+        var selectedVars = [];
+        if (selectEl) {
+            for (var i = 0; i < selectEl.options.length; i++) {
+                if (selectEl.options[i].selected) selectedVars.push(selectEl.options[i].value);
+            }
+        }
+        if (selectedVars.length === 0) selectedVars = ['fl_wspd_ms'];
+
+        // Build time axis (minutes from analysis time)
+        var times = obs.map(function (o) { return o.time_offset_s / 60.0; });
+
+        // Determine which y-axes are needed
+        var usedAxes = {};
+        var traces = [];
+
+        selectedVars.forEach(function (varName) {
+            var cfg = _FL_TS_CONFIG[varName];
+            if (!cfg) return;
+            usedAxes[cfg.yaxis] = true;
+
+            var vals = obs.map(function (o) { return o[varName]; });
+            traces.push({
+                x: times,
+                y: vals,
+                name: cfg.label + ' (' + cfg.units + ')',
+                type: 'scatter',
+                mode: 'lines',
+                line: { color: cfg.color, width: 1.5, dash: cfg.dash },
+                yaxis: cfg.yaxis,
+                hovertemplate: cfg.label + ': %{y:.1f} ' + cfg.units + '<br>T%{x:+.1f} min<extra></extra>',
+                connectgaps: false,
+            });
+        });
+
+        // Layout with up to 4 y-axes
+        var axisColor = 'rgba(148,163,184,0.4)';
+        var gridColor = 'rgba(148,163,184,0.08)';
+        var layout = {
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: 'rgba(10,15,25,0.5)',
+            margin: { l: 55, r: 55, t: 10, b: 40 },
+            font: { family: 'DM Sans, sans-serif', size: 11, color: '#94a3b8' },
+            legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: 1.08, font: { size: 10 } },
+            hovermode: 'x unified',
+            xaxis: {
+                title: { text: 'Minutes from Analysis Time', font: { size: 11 } },
+                color: '#94a3b8',
+                gridcolor: gridColor,
+                zeroline: true,
+                zerolinecolor: 'rgba(96,165,250,0.5)',
+                zerolinewidth: 2,
+            },
+            // Wind speed axis (left)
+            yaxis: {
+                title: usedAxes['y'] ? { text: 'Wind Speed (m/s)', font: { size: 10, color: '#60a5fa' } } : undefined,
+                color: '#60a5fa',
+                gridcolor: gridColor,
+                side: 'left',
+                visible: !!usedAxes['y'],
+            },
+            // Pressure axis (right)
+            yaxis2: {
+                title: usedAxes['y2'] ? { text: 'Pressure (hPa)', font: { size: 10, color: '#fbbf24' } } : undefined,
+                color: '#fbbf24',
+                overlaying: 'y',
+                side: 'right',
+                gridcolor: 'transparent',
+                visible: !!usedAxes['y2'],
+                autorange: 'reversed',  // lower pressure = more intense = higher on plot
+            },
+            // Temperature axis (far left)
+            yaxis3: {
+                title: usedAxes['y3'] ? { text: 'Temp (\u00b0C)', font: { size: 10, color: '#f87171' } } : undefined,
+                color: '#f87171',
+                overlaying: 'y',
+                side: 'left',
+                position: 0.0,
+                anchor: 'free',
+                gridcolor: 'transparent',
+                visible: !!usedAxes['y3'],
+            },
+            // Altitude axis (far right)
+            yaxis4: {
+                title: usedAxes['y4'] ? { text: 'Altitude (m)', font: { size: 10, color: '#6b7280' } } : undefined,
+                color: '#6b7280',
+                overlaying: 'y',
+                side: 'right',
+                anchor: 'free',
+                position: 1.0,
+                gridcolor: 'transparent',
+                visible: !!usedAxes['y4'],
+            },
+            // Vertical reference line at analysis time (t=0)
+            shapes: [{
+                type: 'line',
+                x0: 0, x1: 0,
+                y0: 0, y1: 1,
+                yref: 'paper',
+                line: { color: 'rgba(96,165,250,0.6)', width: 2, dash: 'dash' },
+            }],
+            annotations: [{
+                x: 0.5, y: 0,
+                yref: 'paper',
+                xref: 'x',
+                text: 'TDR Analysis',
+                showarrow: false,
+                font: { size: 9, color: 'rgba(96,165,250,0.7)' },
+                yanchor: 'top',
+                yshift: 8,
+            }],
+        };
+
+        var config = {
+            responsive: true,
+            displayModeBar: false,
+            scrollZoom: false,
+        };
+
+        var plotDiv = document.getElementById('rt-fl-ts-plot');
+        if (!plotDiv) return;
+
+        Plotly.newPlot(plotDiv, traces, layout, config);
+
+        // Click-to-highlight: clicking on the time series highlights position on map
+        plotDiv.on('plotly_click', function (eventData) {
+            if (!eventData || !eventData.points || !eventData.points.length) return;
+            var pt = eventData.points[0];
+            var idx = pt.pointIndex;
+            if (idx < 0 || idx >= obs.length) return;
+            var o = obs[idx];
+            if (o.lat == null || o.lon == null) return;
+
+            // Remove previous highlight marker
+            if (_rtFLTSHighlight && _rtMap) {
+                _rtMap.removeLayer(_rtFLTSHighlight);
+            }
+
+            // Add pulsing highlight marker on Leaflet map
+            var hlIcon = L.divIcon({
+                className: '',
+                html: '<div style="width:14px;height:14px;background:rgba(96,165,250,0.9);border-radius:50%;border:2px solid #fff;box-shadow:0 0 10px rgba(96,165,250,0.8);"></div>',
+                iconSize: [14, 14],
+                iconAnchor: [7, 7],
+            });
+            _rtFLTSHighlight = L.marker([o.lat, o.lon], { icon: hlIcon, zIndexOffset: 1000 }).addTo(_rtMap);
+
+            // Build popup
+            var popTxt = '<div style="font-family:DM Sans,sans-serif;font-size:11px;line-height:1.5;">' +
+                '<strong style="color:#60a5fa;">T' + (o.time_offset_s >= 0 ? '+' : '') + (o.time_offset_s / 60).toFixed(1) + ' min</strong><br>';
+            if (o.fl_wspd_ms != null) popTxt += 'FL Wind: <strong>' + o.fl_wspd_ms.toFixed(1) + ' m/s</strong><br>';
+            if (o.fl_wdir_deg != null) popTxt += 'FL Dir: ' + o.fl_wdir_deg.toFixed(0) + '\u00b0<br>';
+            if (o.sfmr_wspd_ms != null) popTxt += 'SFMR: <strong>' + o.sfmr_wspd_ms.toFixed(1) + ' m/s</strong><br>';
+            if (o.static_pres_hpa != null) popTxt += 'Static P: ' + o.static_pres_hpa.toFixed(1) + ' hPa<br>';
+            if (o.temp_c != null) popTxt += 'Temp: ' + o.temp_c.toFixed(1) + '\u00b0C<br>';
+            if (o.gps_alt_m != null) popTxt += 'Alt: ' + o.gps_alt_m.toFixed(0) + ' m';
+            popTxt += '</div>';
+
+            _rtFLTSHighlight.bindPopup(popTxt, { maxWidth: 250, minWidth: 180 }).openPopup();
+
+            // Pan map to highlighted point
+            _rtMap.panTo([o.lat, o.lon], { animate: true, duration: 0.3 });
+        });
+    }
+
+    window.rtFLUpdateTimeSeries = function () {
+        _rtRenderFLTimeSeries();
+    };
+
+    window.rtFLCloseTimeSeries = function () {
+        var panel = document.getElementById('rt-fl-timeseries-panel');
+        if (panel) panel.style.display = 'none';
+        var plotDiv = document.getElementById('rt-fl-ts-plot');
+        if (plotDiv) Plotly.purge(plotDiv);
+        if (_rtFLTSHighlight && _rtMap) {
+            _rtMap.removeLayer(_rtFLTSHighlight);
+            _rtFLTSHighlight = null;
         }
     };
 
@@ -2676,6 +2890,7 @@
     var _origRtExploreFile2 = window.rtExploreFile;
     window.rtExploreFile = function () {
         _rtFLCleanup();
+        window.rtFLCloseTimeSeries();
         _origRtExploreFile2();
     };
 
@@ -2683,6 +2898,10 @@
     var _origCleanupMap2 = _rtCleanupMap;
     _rtCleanupMap = function () {
         _rtRemoveFLFromMap();
+        if (_rtFLTSHighlight) {
+            _rtMap.removeLayer(_rtFLTSHighlight);
+            _rtFLTSHighlight = null;
+        }
         _origCleanupMap2();
     };
 
