@@ -2766,24 +2766,27 @@
                 var obs = data.observations;
                 var style = _FL_RES_STYLE[resKey];
 
-                var times = obs.map(function (o) { return o.time_offset_s / 60.0; });
-                var vals  = obs.map(function (o) { return o[varName]; });
+                // Pre-round time to 1 decimal to avoid floating-point noise in hover
+                var times = obs.map(function (o) { return Math.round(o.time_offset_s / 6.0) / 10.0; });
+                var vals  = obs.map(function (o) {
+                    var v = o[varName];
+                    return (v != null && isFinite(v)) ? Math.round(v * 10) / 10 : null;
+                });
 
                 traces.push({
                     x: times,
                     y: vals,
                     name: cfg.label + style.suffix,
                     legendgroup: varName,
-                    type: 'scattergl',
+                    showlegend: resKey === '10s',  // only show one legend entry per variable
+                    type: 'scatter',
                     mode: 'lines',
                     line: { color: cfg.color, width: style.width, dash: style.dash },
                     opacity: style.opacity,
                     yaxis: cfg.yaxis,
-                    hovertemplate: cfg.label + style.suffix + ': %{y:.1f} ' + cfg.units +
-                        '<br>T%{x:+.1f} min<extra></extra>',
+                    hovertemplate: cfg.label + style.suffix + ': %{y} ' + cfg.units +
+                        '<br>T%{x:+} min<extra></extra>',
                     connectgaps: false,
-                    // Store resolution + data ref for click-to-highlight
-                    _resKey: resKey,
                 });
             });
         });
@@ -2793,10 +2796,14 @@
         var layout = {
             paper_bgcolor: 'rgba(0,0,0,0)',
             plot_bgcolor: 'rgba(10,15,25,0.5)',
-            margin: { l: 55, r: 55, t: 10, b: 40 },
+            margin: { l: 55, r: 55, t: 8, b: 40 },
             font: { family: 'DM Sans, sans-serif', size: 11, color: '#94a3b8' },
-            legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: 1.08, font: { size: 10 },
-                      traceorder: 'grouped', tracegroupgap: 12 },
+            legend: {
+                orientation: 'v', x: 1.0, xanchor: 'right', y: 1.0, yanchor: 'top',
+                font: { size: 9 }, bgcolor: 'rgba(10,15,25,0.7)',
+                bordercolor: 'rgba(148,163,184,0.15)', borderwidth: 1,
+                traceorder: 'grouped', tracegroupgap: 4,
+            },
             hovermode: 'x unified',
             xaxis: {
                 title: { text: 'Minutes from Analysis Time', font: { size: 11 } },
@@ -2860,6 +2867,79 @@
                 yshift: 8,
             }],
         };
+
+        // ── Build max-wind inset annotation ──────────────────────
+        var insetLines = [];
+        var windVars = [
+            { key: 'fl_wspd_ms',   label: 'FL Wind',   summaryKey: 'max_fl_wspd_ms' },
+            { key: 'sfmr_wspd_ms', label: 'SFMR Sfc',  summaryKey: 'max_sfmr_wspd_ms' },
+        ];
+        windVars.forEach(function (wv) {
+            // Only show if the variable is selected in the multi-select
+            if (selectedVars.indexOf(wv.key) === -1) return;
+            var row = [];
+            resKeys.forEach(function (resKey) {
+                if (!_rtFLResVisible[resKey]) return;
+                var data = _flDataForRes(resKey);
+                if (!data || !data.observations || data.observations.length === 0) return;
+                // Compute max from observations
+                var maxVal = null;
+                data.observations.forEach(function (o) {
+                    var v = o[wv.key];
+                    if (v != null && (maxVal === null || v > maxVal)) maxVal = v;
+                });
+                if (maxVal != null) {
+                    row.push(resKey + ': <b>' + maxVal.toFixed(1) + '</b>');
+                }
+            });
+            if (row.length > 0) {
+                insetLines.push(wv.label + ' max — ' + row.join('  '));
+            }
+        });
+        // Also show min pressure if pressure is selected
+        var presVars = [
+            { key: 'static_pres_hpa', label: 'Static P min' },
+            { key: 'slp_hpa',         label: 'SLP min' },
+        ];
+        presVars.forEach(function (pv) {
+            if (selectedVars.indexOf(pv.key) === -1) return;
+            var row = [];
+            resKeys.forEach(function (resKey) {
+                if (!_rtFLResVisible[resKey]) return;
+                var data = _flDataForRes(resKey);
+                if (!data || !data.observations || data.observations.length === 0) return;
+                var minVal = null;
+                data.observations.forEach(function (o) {
+                    var v = o[pv.key];
+                    if (v != null && (minVal === null || v < minVal)) minVal = v;
+                });
+                if (minVal != null) {
+                    row.push(resKey + ': <b>' + minVal.toFixed(1) + '</b>');
+                }
+            });
+            if (row.length > 0) {
+                insetLines.push(pv.label + ' — ' + row.join('  '));
+            }
+        });
+
+        if (insetLines.length > 0) {
+            layout.annotations.push({
+                x: 0.01,
+                y: 0.98,
+                xref: 'paper',
+                yref: 'paper',
+                text: insetLines.join('<br>'),
+                showarrow: false,
+                font: { family: 'JetBrains Mono, monospace', size: 10, color: '#cbd5e1' },
+                align: 'left',
+                xanchor: 'left',
+                yanchor: 'top',
+                bgcolor: 'rgba(10,15,25,0.75)',
+                bordercolor: 'rgba(96,165,250,0.3)',
+                borderwidth: 1,
+                borderpad: 6,
+            });
+        }
 
         var config = {
             responsive: true,
