@@ -2737,12 +2737,13 @@
 
         panel.style.display = 'block';
 
-        // Get selected variables
-        var selectEl = document.getElementById('rt-fl-ts-vars');
+        // Get selected variables from toggle buttons
+        var varContainer = document.getElementById('rt-fl-ts-vars');
         var selectedVars = [];
-        if (selectEl) {
-            for (var i = 0; i < selectEl.options.length; i++) {
-                if (selectEl.options[i].selected) selectedVars.push(selectEl.options[i].value);
+        if (varContainer) {
+            var btns = varContainer.querySelectorAll('.fl-ts-var-btn.active');
+            for (var i = 0; i < btns.length; i++) {
+                selectedVars.push(btns[i].getAttribute('data-var'));
             }
         }
         if (selectedVars.length === 0) selectedVars = ['fl_wspd_ms'];
@@ -3037,6 +3038,11 @@
                 btn.classList.remove('active');
             }
         }
+        _rtRenderFLTimeSeries();
+    };
+
+    window.rtFLToggleVar = function (btnEl) {
+        btnEl.classList.toggle('active');
         _rtRenderFLTimeSeries();
     };
 

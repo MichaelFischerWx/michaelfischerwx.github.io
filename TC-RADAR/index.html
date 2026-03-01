@@ -201,20 +201,21 @@
                                             <button id="rt-fl-res-10s" class="fl-ts-res-btn active" onclick="rtFLToggleRes('10s')" title="10-second average">10 s</button>
                                             <button id="rt-fl-res-30s" class="fl-ts-res-btn active" onclick="rtFLToggleRes('30s')" title="30-second average">30 s</button>
                                         </div>
-                                        <select id="rt-fl-ts-vars" multiple class="fl-ts-var-select" onchange="rtFLUpdateTimeSeries()">
-                                            <option value="fl_wspd_ms" selected>FL Wind Speed (m/s)</option>
-                                            <option value="tdr_wspd_0p5km" selected>TDR Wind 0.5 km (m/s)</option>
-                                            <option value="tdr_wspd_2km">TDR Wind 2.0 km (m/s)</option>
-                                            <option value="slp_hpa" selected>Sea-Level Pressure (hPa)</option>
-                                            <option value="static_pres_hpa">Static Pressure (hPa)</option>
-                                            <option value="temp_c">Temperature (°C)</option>
-                                            <option value="dewpoint_c">Dewpoint (°C)</option>
-                                            <option value="gps_alt_m">GPS Altitude (m)</option>
-                                        </select>
+                                        <div id="rt-fl-ts-vars" class="fl-ts-var-group">
+                                            <button class="fl-ts-var-btn active" data-var="fl_wspd_ms" onclick="rtFLToggleVar(this)" style="--var-color:#60a5fa">FL Wind</button>
+                                            <button class="fl-ts-var-btn active" data-var="tdr_wspd_0p5km" onclick="rtFLToggleVar(this)" style="--var-color:#34d399">TDR 0.5km</button>
+                                            <button class="fl-ts-var-btn" data-var="tdr_wspd_2km" onclick="rtFLToggleVar(this)" style="--var-color:#c084fc">TDR 2km</button>
+                                            <button class="fl-ts-var-btn active" data-var="slp_hpa" onclick="rtFLToggleVar(this)" style="--var-color:#fbbf24">SLP</button>
+                                            <button class="fl-ts-var-btn" data-var="static_pres_hpa" onclick="rtFLToggleVar(this)" style="--var-color:#fb923c">Static P</button>
+                                            <button class="fl-ts-var-btn" data-var="temp_c" onclick="rtFLToggleVar(this)" style="--var-color:#f87171">Temp</button>
+                                            <button class="fl-ts-var-btn" data-var="dewpoint_c" onclick="rtFLToggleVar(this)" style="--var-color:#a78bfa">Dewpt</button>
+                                            <button class="fl-ts-var-btn" data-var="gps_alt_m" onclick="rtFLToggleVar(this)" style="--var-color:#6b7280">Alt</button>
+                                        </div>
                                         <button onclick="rtFLCloseTimeSeries()" class="fl-ts-close" title="Close time series">&times;</button>
                                     </div>
                                 </div>
                                 <div id="rt-fl-ts-plot" style="width:100%; height:380px;"></div>
+                                <div style="text-align:center; padding:2px 0 6px; color:#64748b; font-size:10px;">Click and drag to zoom · Double-click to reset</div>
                             </div>
                         </div>
 

@@ -440,23 +440,32 @@
     align-items: center;
     gap: 8px;
 }
-.fl-ts-var-select {
-    background: #1a1a2e;
-    color: #93c5fd;
-    border: 1px solid rgba(96, 165, 250, 0.35);
+.fl-ts-var-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3px;
+}
+.fl-ts-var-btn {
+    background: rgba(30, 40, 60, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.2);
     border-radius: 4px;
-    padding: 2px 4px;
-    font-size: 11px;
-    cursor: pointer;
-    max-width: 220px;
-    min-height: 60px;
+    color: #64748b;
+    font-size: 10px;
     font-family: 'DM Sans', sans-serif;
+    padding: 2px 7px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
 }
-.fl-ts-var-select option {
-    padding: 2px 4px;
+.fl-ts-var-btn.active {
+    background: rgba(var(--var-color-rgb, 96,165,250), 0.15);
+    border-color: var(--var-color, rgba(96, 165, 250, 0.6));
+    color: var(--var-color, #93c5fd);
 }
-.fl-ts-var-select option:checked {
-    background: rgba(96, 165, 250, 0.3);
+.fl-ts-var-btn:hover {
+    border-color: var(--var-color, rgba(96, 165, 250, 0.5));
+    color: var(--var-color, #93c5fd);
 }
 .fl-ts-close {
     background: none;
