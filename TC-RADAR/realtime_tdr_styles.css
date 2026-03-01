@@ -513,3 +513,22 @@
     border-color: rgba(96, 165, 250, 0.5);
     color: #93c5fd;
 }
+
+/* ── PNG save button ────────────────────────── */
+.rt-save-png-btn {
+    background: rgba(255,255,255,0.08);
+    border: none;
+    color: #aab;
+    width: 30px;
+    height: 30px;
+    border-radius: 5px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, color 0.2s;
+}
+.rt-save-png-btn:hover {
+    background: rgba(255,255,255,0.2);
+    color: #fff;
+}

@@ -52,6 +52,40 @@
     var _rtIRMapBoundsSet = false;
     var _rtMaxWind2km = null;
 
+    // ── PNG Save helper ──────────────────────────────────────────
+    // Downloads a Plotly chart div as a high-res PNG.
+    window.rtSavePlotPNG = function (chartDivId, defaultName) {
+        var gd = document.getElementById(chartDivId);
+        if (!gd || !gd.data) { if (typeof rtToast === 'function') rtToast('No plot to save', 'warn'); return; }
+        var fname = defaultName || chartDivId;
+        // Build a timestamp suffix: YYYYMMDD_HHmmss
+        var now = new Date();
+        var ts = now.getFullYear() +
+            String(now.getMonth() + 1).padStart(2, '0') +
+            String(now.getDate()).padStart(2, '0') + '_' +
+            String(now.getHours()).padStart(2, '0') +
+            String(now.getMinutes()).padStart(2, '0') +
+            String(now.getSeconds()).padStart(2, '0');
+        Plotly.downloadImage(gd, {
+            format: 'png',
+            width: gd.offsetWidth * 2,
+            height: gd.offsetHeight * 2,
+            scale: 2,
+            filename: fname + '_' + ts,
+        });
+    };
+
+    // Returns an HTML string for a small camera save button.
+    // posStyle: optional CSS for positioning (default: top-right absolute).
+    function _rtSaveBtnHTML(chartDivId, defaultName, posStyle) {
+        var pos = posStyle || 'position:absolute;top:6px;right:40px;z-index:10;';
+        return '<button onclick="rtSavePlotPNG(\'' + chartDivId + '\',\'' + (defaultName || chartDivId) + '\')" ' +
+            'title="Save as PNG" class="rt-save-png-btn" style="' + pos + '">' +
+            '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+            '<path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>' +
+            '<circle cx="12" cy="13" r="4"/></svg></button>';
+    }
+
     // ── Tab visibility toggle ────────────────────────────────────
     window.toggleRealtimeTab = function () {
         var section = document.getElementById('realtime-section');
@@ -408,6 +442,7 @@
     // ── Render plan-view from JSON ───────────────────────────────
     function rtRenderPlot(json, resultDiv) {
         resultDiv.innerHTML = '<div style="position:relative;"><div id="rt-plotly-chart" style="width:100%;height:400px;border-radius:6px;overflow:hidden;"></div>' +
+            _rtSaveBtnHTML('rt-plotly-chart', 'TDR_PlanView') +
             '<button onclick="rtOpenFullscreen()" title="Expand to fullscreen" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">⛶</button></div>' +
             '<div style="font-size:11px;color:var(--slate);text-align:center;margin-top:4px;">Hover for values · scroll to zoom · drag to pan · ⛶ expand</div>';
 
@@ -659,7 +694,8 @@
     function rtRenderCrossSection(json) {
         // Render inline below the plan view
         var csResult = document.getElementById('rt-cs-result');
-        csResult.innerHTML = '<div id="rt-cs-chart" style="width:100%;height:300px;border-radius:6px;overflow:hidden;margin-top:8px;"></div>';
+        csResult.innerHTML = '<div style="position:relative;"><div id="rt-cs-chart" style="width:100%;height:300px;border-radius:6px;overflow:hidden;margin-top:8px;"></div>' +
+            _rtSaveBtnHTML('rt-cs-chart', 'TDR_CrossSection', 'position:absolute;top:14px;right:6px;z-index:10;') + '</div>';
 
         var csData = json.cross_section, dist = json.distance_km, hgt = json.height_km, vi = json.variable, ep = json.endpoints;
 
@@ -1064,6 +1100,7 @@
     function rtRenderAzimuthalMean(json) {
         var resultDiv = document.getElementById('rt-az-result');
         resultDiv.innerHTML = '<div style="position:relative;"><div id="rt-az-chart" style="width:100%;height:340px;border-radius:6px;overflow:hidden;margin-top:8px;"></div>' +
+            _rtSaveBtnHTML('rt-az-chart', 'TDR_AzMean') +
             '<button onclick="rtOpenFullscreen()" title="Expand to fullscreen" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">⛶</button></div>' +
             '<div style="font-size:11px;color:var(--slate);text-align:center;margin-top:4px;">Radius–height azimuthal mean · hover for values · ⛶ expand</div>';
 
