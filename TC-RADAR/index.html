@@ -195,6 +195,12 @@
                                 <div class="fl-ts-header">
                                     <span class="fl-ts-title">✈ Along-Track Time Series</span>
                                     <div class="fl-ts-controls">
+                                        <div class="fl-ts-res-group">
+                                            <span class="fl-ts-res-label">Avg:</span>
+                                            <button id="rt-fl-res-1s" class="fl-ts-res-btn active" onclick="rtFLToggleRes('1s')" title="1-second (raw)">1 s</button>
+                                            <button id="rt-fl-res-10s" class="fl-ts-res-btn active" onclick="rtFLToggleRes('10s')" title="10-second average">10 s</button>
+                                            <button id="rt-fl-res-30s" class="fl-ts-res-btn active" onclick="rtFLToggleRes('30s')" title="30-second average">30 s</button>
+                                        </div>
                                         <select id="rt-fl-ts-vars" multiple class="fl-ts-var-select" onchange="rtFLUpdateTimeSeries()">
                                             <option value="fl_wspd_ms" selected>FL Wind Speed (m/s)</option>
                                             <option value="sfmr_wspd_ms" selected>SFMR Sfc Wind (m/s)</option>

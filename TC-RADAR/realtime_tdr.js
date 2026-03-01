@@ -2430,12 +2430,17 @@
     // Flight-Level (In Situ) Observations — IWG1/MELISSA
     // ═══════════════════════════════════════════════════════════
 
-    var _rtFLData = null;               // cached API response
+    var _rtFLData = null;               // cached API response (10-s avg, used for map)
+    var _rtFLData1s = null;             // 1-second resolution data
+    var _rtFLData10s = null;            // 10-second average data
+    var _rtFLData30s = null;            // 30-second average data
     var _rtFLVisible = false;           // toggle state
     var _rtFLMode = 'off';             // 'off' | 'on'
     var _rtFLMapLayers = [];            // Leaflet layers for map view
     var _rtFLFetching = false;          // prevent duplicate fetches
     var _rtFLColorVar = 'fl_wspd_ms';  // which variable colours the track
+    // Which resolutions are visible on the time series
+    var _rtFLResVisible = { '1s': true, '10s': true, '30s': true };
 
     // Colour variable options for flight-level track
     var _FL_COLOR_VARS = {
@@ -2500,6 +2505,9 @@
     // ── Cleanup on file switch ────────────────────────────────
     function _rtFLCleanup() {
         _rtFLData = null;
+        _rtFLData1s = null;
+        _rtFLData10s = null;
+        _rtFLData30s = null;
         _rtFLVisible = false;
         _rtFLMode = 'off';
         _rtFLFetching = false;
@@ -2620,20 +2628,31 @@
         if (_rtFLFetching) return;
 
         if (!_rtFLData && _rtFLMode === 'off') {
-            // First activation: fetch data
+            // First activation: fetch all 3 resolutions in parallel
             _rtFLFetching = true;
             var btn = document.getElementById('rt-fl-btn');
             if (btn) btn.textContent = '\u2708 Loading\u2026';
 
-            fetch(API_BASE + RT_PREFIX + '/flightlevel?file_url=' + encodeURIComponent(_currentFileUrl) + '&avg_interval_s=10')
-                .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-                .then(function (json) {
-                    _rtFLData = json;
+            var baseUrl = API_BASE + RT_PREFIX + '/flightlevel?file_url=' + encodeURIComponent(_currentFileUrl);
+            var fetchJson = function (url) {
+                return fetch(url).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+            };
+
+            Promise.all([
+                fetchJson(baseUrl + '&avg_interval_s=1'),
+                fetchJson(baseUrl + '&avg_interval_s=10'),
+                fetchJson(baseUrl + '&avg_interval_s=30'),
+            ])
+                .then(function (results) {
+                    _rtFLData1s  = results[0];
+                    _rtFLData10s = results[1];
+                    _rtFLData30s = results[2];
+                    _rtFLData = _rtFLData10s;  // map uses 10-s avg
                     _rtFLFetching = false;
 
-                    if (json.n_obs === 0) {
+                    if (_rtFLData10s.n_obs === 0) {
                         rtToast('No flight-level data found within \u00b145 min' +
-                            (json.message ? ' (' + json.message + ')' : ''), 'warn', 6000);
+                            (_rtFLData10s.message ? ' (' + _rtFLData10s.message + ')' : ''), 'warn', 6000);
                         if (btn) btn.textContent = '\u2708 No FL Data';
                         return;
                     }
@@ -2641,9 +2660,10 @@
                     _rtFLVisible = true;
                     _rtFLMode = 'on';
                     if (btn) { btn.textContent = '\u2708 FL On'; btn.classList.add('active'); }
-                    var _nDisp = json.n_obs, _nTot = json.n_obs_total;
-                    var _maxW = json.summary && json.summary.max_fl_wspd_ms;
-                    var _toastMsg = _nTot + ' obs loaded (' + _nDisp + ' at 10-s avg)';
+                    var _nTot = _rtFLData10s.n_obs_total;
+                    var _maxW = _rtFLData10s.summary && _rtFLData10s.summary.max_fl_wspd_ms;
+                    var _toastMsg = _nTot + ' obs \u2192 1s/' + _rtFLData1s.n_obs +
+                        ', 10s/' + _rtFLData10s.n_obs + ', 30s/' + _rtFLData30s.n_obs;
                     if (_maxW != null) _toastMsg += ' \u00b7 Max FL wind ' + _maxW.toFixed(1) + ' m/s';
                     rtToast(_toastMsg, 'info', 6000);
 
@@ -2687,23 +2707,36 @@
 
     // Variable config for time series traces
     var _FL_TS_CONFIG = {
-        'fl_wspd_ms':      { label: 'FL Wind Speed',   units: 'm/s',  color: '#60a5fa', yaxis: 'y',  dash: 'solid' },
-        'sfmr_wspd_ms':    { label: 'SFMR Sfc Wind',   units: 'm/s',  color: '#34d399', yaxis: 'y',  dash: 'solid' },
-        'slp_hpa':         { label: 'Sea-Level Pres',   units: 'hPa',  color: '#fbbf24', yaxis: 'y2', dash: 'solid' },
-        'static_pres_hpa': { label: 'Static Pressure',  units: 'hPa',  color: '#fb923c', yaxis: 'y2', dash: 'dot'   },
-        'temp_c':          { label: 'Temperature',      units: '\u00b0C',   color: '#f87171', yaxis: 'y3', dash: 'solid' },
-        'dewpoint_c':      { label: 'Dewpoint',         units: '\u00b0C',   color: '#a78bfa', yaxis: 'y3', dash: 'dash'  },
-        'gps_alt_m':       { label: 'GPS Altitude',     units: 'm',    color: '#6b7280', yaxis: 'y4', dash: 'solid' },
+        'fl_wspd_ms':      { label: 'FL Wind Speed',   units: 'm/s',  color: '#60a5fa', yaxis: 'y'  },
+        'sfmr_wspd_ms':    { label: 'SFMR Sfc Wind',   units: 'm/s',  color: '#34d399', yaxis: 'y'  },
+        'slp_hpa':         { label: 'Sea-Level Pres',   units: 'hPa',  color: '#fbbf24', yaxis: 'y2' },
+        'static_pres_hpa': { label: 'Static Pressure',  units: 'hPa',  color: '#fb923c', yaxis: 'y2' },
+        'temp_c':          { label: 'Temperature',      units: '\u00b0C',   color: '#f87171', yaxis: 'y3' },
+        'dewpoint_c':      { label: 'Dewpoint',         units: '\u00b0C',   color: '#a78bfa', yaxis: 'y3' },
+        'gps_alt_m':       { label: 'GPS Altitude',     units: 'm',    color: '#6b7280', yaxis: 'y4' },
     };
+
+    // Resolution style config: line weight + opacity for each averaging window
+    var _FL_RES_STYLE = {
+        '1s':  { width: 0.7, opacity: 0.35, dash: 'solid', suffix: ' (1 s)'  },
+        '10s': { width: 1.8, opacity: 0.85, dash: 'solid', suffix: ' (10 s)' },
+        '30s': { width: 3.0, opacity: 1.0,  dash: 'solid', suffix: ' (30 s)' },
+    };
+
+    // Helper: get data for a resolution key
+    function _flDataForRes(resKey) {
+        if (resKey === '1s')  return _rtFLData1s;
+        if (resKey === '10s') return _rtFLData10s;
+        if (resKey === '30s') return _rtFLData30s;
+        return null;
+    }
 
     // Show/update the time series panel when FL data is available
     function _rtRenderFLTimeSeries() {
         var panel = document.getElementById('rt-fl-timeseries-panel');
-        if (!panel || !_rtFLData || !_rtFLData.observations || _rtFLData.observations.length === 0) return;
+        if (!panel || !_rtFLData10s || !_rtFLData10s.observations || _rtFLData10s.observations.length === 0) return;
 
         panel.style.display = 'block';
-
-        var obs = _rtFLData.observations;
 
         // Get selected variables
         var selectEl = document.getElementById('rt-fl-ts-vars');
@@ -2715,41 +2748,55 @@
         }
         if (selectedVars.length === 0) selectedVars = ['fl_wspd_ms'];
 
-        // Build time axis (minutes from analysis time)
-        var times = obs.map(function (o) { return o.time_offset_s / 60.0; });
-
-        // Determine which y-axes are needed
+        // Determine which y-axes are needed and build traces
         var usedAxes = {};
         var traces = [];
+        var resKeys = ['1s', '10s', '30s'];  // render order: 1s behind, 30s on top
 
         selectedVars.forEach(function (varName) {
             var cfg = _FL_TS_CONFIG[varName];
             if (!cfg) return;
-            usedAxes[cfg.yaxis] = true;
 
-            var vals = obs.map(function (o) { return o[varName]; });
-            traces.push({
-                x: times,
-                y: vals,
-                name: cfg.label + ' (' + cfg.units + ')',
-                type: 'scatter',
-                mode: 'lines',
-                line: { color: cfg.color, width: 1.5, dash: cfg.dash },
-                yaxis: cfg.yaxis,
-                hovertemplate: cfg.label + ': %{y:.1f} ' + cfg.units + '<br>T%{x:+.1f} min<extra></extra>',
-                connectgaps: false,
+            resKeys.forEach(function (resKey) {
+                if (!_rtFLResVisible[resKey]) return;
+                var data = _flDataForRes(resKey);
+                if (!data || !data.observations || data.observations.length === 0) return;
+
+                usedAxes[cfg.yaxis] = true;
+                var obs = data.observations;
+                var style = _FL_RES_STYLE[resKey];
+
+                var times = obs.map(function (o) { return o.time_offset_s / 60.0; });
+                var vals  = obs.map(function (o) { return o[varName]; });
+
+                traces.push({
+                    x: times,
+                    y: vals,
+                    name: cfg.label + style.suffix,
+                    legendgroup: varName,
+                    type: 'scattergl',
+                    mode: 'lines',
+                    line: { color: cfg.color, width: style.width, dash: style.dash },
+                    opacity: style.opacity,
+                    yaxis: cfg.yaxis,
+                    hovertemplate: cfg.label + style.suffix + ': %{y:.1f} ' + cfg.units +
+                        '<br>T%{x:+.1f} min<extra></extra>',
+                    connectgaps: false,
+                    // Store resolution + data ref for click-to-highlight
+                    _resKey: resKey,
+                });
             });
         });
 
         // Layout with up to 4 y-axes
-        var axisColor = 'rgba(148,163,184,0.4)';
         var gridColor = 'rgba(148,163,184,0.08)';
         var layout = {
             paper_bgcolor: 'rgba(0,0,0,0)',
             plot_bgcolor: 'rgba(10,15,25,0.5)',
             margin: { l: 55, r: 55, t: 10, b: 40 },
             font: { family: 'DM Sans, sans-serif', size: 11, color: '#94a3b8' },
-            legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: 1.08, font: { size: 10 } },
+            legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: 1.08, font: { size: 10 },
+                      traceorder: 'grouped', tracegroupgap: 12 },
             hovermode: 'x unified',
             xaxis: {
                 title: { text: 'Minutes from Analysis Time', font: { size: 11 } },
@@ -2759,7 +2806,6 @@
                 zerolinecolor: 'rgba(96,165,250,0.5)',
                 zerolinewidth: 2,
             },
-            // Wind speed axis (left)
             yaxis: {
                 title: usedAxes['y'] ? { text: 'Wind Speed (m/s)', font: { size: 10, color: '#60a5fa' } } : undefined,
                 color: '#60a5fa',
@@ -2767,7 +2813,6 @@
                 side: 'left',
                 visible: !!usedAxes['y'],
             },
-            // Pressure axis (right)
             yaxis2: {
                 title: usedAxes['y2'] ? { text: 'Pressure (hPa)', font: { size: 10, color: '#fbbf24' } } : undefined,
                 color: '#fbbf24',
@@ -2775,9 +2820,8 @@
                 side: 'right',
                 gridcolor: 'transparent',
                 visible: !!usedAxes['y2'],
-                autorange: 'reversed',  // lower pressure = more intense = higher on plot
+                autorange: 'reversed',
             },
-            // Temperature axis (far left)
             yaxis3: {
                 title: usedAxes['y3'] ? { text: 'Temp (\u00b0C)', font: { size: 10, color: '#f87171' } } : undefined,
                 color: '#f87171',
@@ -2788,7 +2832,6 @@
                 gridcolor: 'transparent',
                 visible: !!usedAxes['y3'],
             },
-            // Altitude axis (far right)
             yaxis4: {
                 title: usedAxes['y4'] ? { text: 'Altitude (m)', font: { size: 10, color: '#6b7280' } } : undefined,
                 color: '#6b7280',
@@ -2799,7 +2842,6 @@
                 gridcolor: 'transparent',
                 visible: !!usedAxes['y4'],
             },
-            // Vertical reference line at analysis time (t=0)
             shapes: [{
                 type: 'line',
                 x0: 0, x1: 0,
@@ -2830,13 +2872,20 @@
 
         Plotly.newPlot(plotDiv, traces, layout, config);
 
-        // Click-to-highlight: clicking on the time series highlights position on map
+        // Click-to-highlight: find nearest point in 10-s data for map marker
         plotDiv.on('plotly_click', function (eventData) {
             if (!eventData || !eventData.points || !eventData.points.length) return;
             var pt = eventData.points[0];
-            var idx = pt.pointIndex;
-            if (idx < 0 || idx >= obs.length) return;
-            var o = obs[idx];
+            var clickTimeMin = pt.x;  // minutes from analysis
+
+            // Find closest 10-s observation to the clicked time
+            var obs10 = _rtFLData10s.observations;
+            var bestIdx = 0, bestDelta = Infinity;
+            for (var k = 0; k < obs10.length; k++) {
+                var d = Math.abs(obs10[k].time_offset_s / 60.0 - clickTimeMin);
+                if (d < bestDelta) { bestDelta = d; bestIdx = k; }
+            }
+            var o = obs10[bestIdx];
             if (o.lat == null || o.lon == null) return;
 
             // Remove previous highlight marker
@@ -2844,7 +2893,6 @@
                 _rtMap.removeLayer(_rtFLTSHighlight);
             }
 
-            // Add pulsing highlight marker on Leaflet map
             var hlIcon = L.divIcon({
                 className: '',
                 html: '<div style="width:14px;height:14px;background:rgba(96,165,250,0.9);border-radius:50%;border:2px solid #fff;box-shadow:0 0 10px rgba(96,165,250,0.8);"></div>',
@@ -2853,23 +2901,36 @@
             });
             _rtFLTSHighlight = L.marker([o.lat, o.lon], { icon: hlIcon, zIndexOffset: 1000 }).addTo(_rtMap);
 
-            // Build popup
+            // Build popup with all 3 resolutions at this time
             var popTxt = '<div style="font-family:DM Sans,sans-serif;font-size:11px;line-height:1.5;">' +
                 '<strong style="color:#60a5fa;">T' + (o.time_offset_s >= 0 ? '+' : '') + (o.time_offset_s / 60).toFixed(1) + ' min</strong><br>';
-            if (o.fl_wspd_ms != null) popTxt += 'FL Wind: <strong>' + o.fl_wspd_ms.toFixed(1) + ' m/s</strong><br>';
+            if (o.fl_wspd_ms != null) popTxt += 'FL Wind (10s): <strong>' + o.fl_wspd_ms.toFixed(1) + ' m/s</strong><br>';
             if (o.fl_wdir_deg != null) popTxt += 'FL Dir: ' + o.fl_wdir_deg.toFixed(0) + '\u00b0<br>';
-            if (o.sfmr_wspd_ms != null) popTxt += 'SFMR: <strong>' + o.sfmr_wspd_ms.toFixed(1) + ' m/s</strong><br>';
+            if (o.sfmr_wspd_ms != null) popTxt += 'SFMR (10s): <strong>' + o.sfmr_wspd_ms.toFixed(1) + ' m/s</strong><br>';
             if (o.static_pres_hpa != null) popTxt += 'Static P: ' + o.static_pres_hpa.toFixed(1) + ' hPa<br>';
             if (o.temp_c != null) popTxt += 'Temp: ' + o.temp_c.toFixed(1) + '\u00b0C<br>';
             if (o.gps_alt_m != null) popTxt += 'Alt: ' + o.gps_alt_m.toFixed(0) + ' m';
             popTxt += '</div>';
 
             _rtFLTSHighlight.bindPopup(popTxt, { maxWidth: 250, minWidth: 180 }).openPopup();
-
-            // Pan map to highlighted point
             _rtMap.panTo([o.lat, o.lon], { animate: true, duration: 0.3 });
         });
     }
+
+    // Resolution toggle handler
+    window.rtFLToggleRes = function (resKey) {
+        _rtFLResVisible[resKey] = !_rtFLResVisible[resKey];
+        // Update button visual
+        var btn = document.getElementById('rt-fl-res-' + resKey);
+        if (btn) {
+            if (_rtFLResVisible[resKey]) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        }
+        _rtRenderFLTimeSeries();
+    };
 
     window.rtFLUpdateTimeSeries = function () {
         _rtRenderFLTimeSeries();
