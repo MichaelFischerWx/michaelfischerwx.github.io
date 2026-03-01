@@ -772,7 +772,6 @@
     function _rtInitMap(meta) {
         var wrapper = document.getElementById('rt-map-wrapper');
         if (!wrapper) return;
-        wrapper.style.display = 'block';
 
         if (_rtMap) {
             // Recenter existing map
@@ -1156,8 +1155,6 @@
         _rtIRLoadedCount = 0;
         _rtIRFetching = false;
         _rtIRMapBoundsSet = false;
-        var panel = document.getElementById('rt-ir-panel');
-        if (panel) panel.style.display = 'none';
         var irBtn = document.getElementById('rt-ir-underlay-btn');
         if (irBtn) { irBtn.disabled = true; irBtn.textContent = '🛰 IR Off'; irBtn.classList.remove('active'); }
     }
@@ -1190,24 +1187,17 @@
                     _rtPreDecodeIRFrame(0, json.frame0);
                 }
 
-                // Show IR panel and display t=0
-                _rtShowIRPanel();
-                rtIRShowFrame(0);
-
-                // Enable the underlay button
-                var irBtn = document.getElementById('rt-ir-underlay-btn');
-                if (irBtn && json.frame0) irBtn.disabled = false;
-
-                // Update satellite badge
-                var badge = document.getElementById('rt-ir-sat-label');
-                if (badge) badge.textContent = json.satellite_label || '';
-
-                // Show IR on Leaflet map + inject map controls
+                // Show IR on Leaflet map + inject map controls (primary IR display)
                 if (_rtMap && json.frame0) {
                     _rtShowIROnMap(0);
                     _rtInjectMapIRControls();
                     _rtUpdateMapIRSlider();
                 }
+                rtIRShowFrame(0);
+
+                // Enable the Plotly underlay button
+                var irBtn = document.getElementById('rt-ir-underlay-btn');
+                if (irBtn && json.frame0) irBtn.disabled = false;
 
                 // Phase 2: fetch remaining frames in parallel
                 _rtFetchIRFramesParallel(1);
@@ -1276,61 +1266,28 @@
     }
 
     function _rtEnableIRAnimControls() {
-        ['rt-ir-step-back', 'rt-ir-play-btn', 'rt-ir-step-fwd'].forEach(function (id) {
-            var el = document.getElementById(id);
-            if (el) el.classList.remove('rt-ir-ctrl-disabled');
-        });
-        // Also enable map IR controls
+        // Enable map IR overlay controls (primary IR display)
         _rtEnableMapIRControls();
-        var slider = document.getElementById('rt-ir-slider');
-        if (slider) slider.disabled = false;
     }
 
-    // ── Show the IR panel ────────────────────────────────────────
-    function _rtShowIRPanel() {
-        var panel = document.getElementById('rt-ir-panel');
-        if (panel) panel.style.display = 'block';
-        // Set slider max
-        var slider = document.getElementById('rt-ir-slider');
-        if (slider && _rtIRData) {
-            slider.max = (_rtIRData.n_frames || 17) - 1;
-            slider.value = slider.max;  // slider inverted: right = t=0
-        }
-    }
+    // (Standalone IR panel removed — IR is shown via Leaflet map overlay only)
 
     // ── Display a specific IR frame ──────────────────────────────
     window.rtIRShowFrame = function (frameIdx) {
         if (!_rtIRData || frameIdx < 0 || frameIdx >= _rtIRFrameURLs.length) return;
         _rtIRAnimFrame = frameIdx;
 
-        var display = document.getElementById('rt-ir-display');
-        if (display) {
-            var url = _rtIRFrameURLs[frameIdx];
-            if (url) {
-                display.style.backgroundImage = 'url(' + url + ')';
-                display.innerHTML = '';
-            } else {
-                display.style.backgroundImage = 'none';
-                display.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--slate);font-size:12px;">No data for this time step</div>';
-            }
-        }
-
-        // Update slider (inverted: slider-right = frame 0 = t=0)
-        var slider = document.getElementById('rt-ir-slider');
-        if (slider) slider.value = (_rtIRFrameURLs.length - 1) - frameIdx;
-
-        _rtUpdateIRLabel();
+        // Update Leaflet map IR overlay (primary display)
+        if (_rtMap && _rtIRMapVisible) _rtShowIROnMap(frameIdx);
+        _rtUpdateMapIRSlider();
 
         // If Plotly underlay is active, update it to current frame
         if (_rtIRPlotlyVisible) _rtApplyIRUnderlay();
-
-        // Sync Leaflet map IR overlay
-        if (_rtIRMapOverlay && _rtIRMapVisible) _rtShowIROnMap(frameIdx);
-        _rtUpdateMapIRSlider();
     };
 
     function _rtUpdateIRLabel() {
-        var label = document.getElementById('rt-ir-label');
+        // Update the map overlay IR label (only label now — standalone panel removed)
+        var label = document.getElementById('rt-map-ir-label');
         if (!label || !_rtIRData) return;
         var lagMin = _rtIRData.lag_minutes ? _rtIRData.lag_minutes[_rtIRAnimFrame] : 0;
         var dtStr = _rtIRData.frame_datetimes ? _rtIRData.frame_datetimes[_rtIRAnimFrame] : '';
@@ -1348,8 +1305,9 @@
         if (_rtIRAnimPlaying) { rtIRAnimStop(); }
         else {
             _rtIRAnimPlaying = true;
-            var btn = document.getElementById('rt-ir-play-btn');
-            if (btn) btn.textContent = '⏸';
+            // Update map play button
+            var mapBtn = document.getElementById('rt-map-ir-play');
+            if (mapBtn) mapBtn.textContent = '⏸';
             // Start from earliest frame (highest index)
             for (var i = _rtIRFrameURLs.length - 1; i >= 0; i--) {
                 if (_rtIRFrameURLs[i]) { _rtIRAnimFrame = i; break; }
@@ -1387,8 +1345,8 @@
     function rtIRAnimStop() {
         _rtIRAnimPlaying = false;
         if (_rtIRAnimTimer) { clearTimeout(_rtIRAnimTimer); _rtIRAnimTimer = null; }
-        var btn = document.getElementById('rt-ir-play-btn');
-        if (btn) btn.textContent = '▶';
+        var mapBtn = document.getElementById('rt-map-ir-play');
+        if (mapBtn) mapBtn.textContent = '▶';
     }
 
     window.rtIRAnimStep = function (dir) {
