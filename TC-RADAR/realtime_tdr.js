@@ -1269,6 +1269,31 @@
     function _rtFetchIRFramesParallel(startIdx) {
         if (!_rtIRData || !_currentFileUrl) { _rtIRFetching = false; return; }
         var n = _rtIRFrameURLs.length;
+        var totalToFetch = n - startIdx;
+        var completedCount = 0;  // tracks ALL completed requests (success, empty, or error)
+
+        function _checkAllDone() {
+            completedCount++;
+            _rtIRLoadedCount = _rtCountIRLoaded();
+            _rtUpdateIRLabel();
+            var statusText = 'IR frames: ' + _rtIRLoadedCount + '/' + n;
+            if (completedCount >= totalToFetch && _rtIRLoadedCount < n) {
+                // All requests finished but some frames had no data
+                statusText = 'IR: ' + _rtIRLoadedCount + ' of ' + n + ' available';
+            }
+            _rtUpdateIRLoadingText(statusText);
+            if (_rtIRLoadedCount >= 2) _rtEnableIRAnimControls();
+            // Auto-start animation when we have 2 frames
+            if (_rtIRLoadedCount === 2 && !_rtMapIRAnimPlaying) {
+                rtMapIRAnimToggle();
+            }
+            // All requests completed (whether successful or not)
+            if (completedCount >= totalToFetch) {
+                _rtIRAllLoaded = true;
+                _rtIRFetching = false;
+                _rtRemoveIRLoadingIndicator();
+            }
+        }
 
         for (var i = startIdx; i < n; i++) {
             (function (idx) {
@@ -1280,28 +1305,16 @@
                         return r.json();
                     })
                     .then(function (data) {
-                        if (!data || !_rtIRData) return;
-                        if (data.frame) {
+                        if (!_rtIRData) return;
+                        if (data && data.frame) {
                             _rtIRFrameURLs[data.frame_index] = data.frame;
                             _rtPreDecodeIRFrame(data.frame_index, data.frame);
                         }
-                        _rtIRLoadedCount = _rtCountIRLoaded();
-                        _rtUpdateIRLabel();
-                        _rtUpdateIRLoadingText('IR frames: ' + _rtIRLoadedCount + '/' + n);
-                        if (_rtIRLoadedCount >= 2) _rtEnableIRAnimControls();
-                        // Auto-start animation when we have 2 frames
-                        if (_rtIRLoadedCount === 2 && !_rtMapIRAnimPlaying) {
-                            rtMapIRAnimToggle();
-                        }
-                        // All done
-                        if (_rtIRLoadedCount >= n) {
-                            _rtIRAllLoaded = true;
-                            _rtIRFetching = false;
-                            _rtRemoveIRLoadingIndicator();
-                        }
+                        _checkAllDone();
                     })
                     .catch(function (err) {
                         console.warn('IR frame ' + idx + ' error:', err.message || err);
+                        _checkAllDone();
                     });
             })(i);
         }
