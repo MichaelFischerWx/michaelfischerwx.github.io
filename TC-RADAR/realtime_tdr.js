@@ -1257,6 +1257,10 @@
             _rtIRFetching = false;
             _rtUpdateIRLabel();
             _rtEnableIRAnimControls();
+            // Auto-start IR animation on map once all frames loaded
+            if (_rtIRLoadedCount >= 2 && !_rtMapIRAnimPlaying) {
+                rtMapIRAnimToggle();
+            }
         });
     }
 
