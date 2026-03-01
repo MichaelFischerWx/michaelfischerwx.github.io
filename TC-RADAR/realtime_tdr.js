@@ -1789,11 +1789,11 @@
                 if (p.x_km[i] != null && p.y_km[i] != null) {
                     trajX.push(p.x_km[i]);
                     trajY.push(p.y_km[i]);
-                    var hParts = [sondeLabel];
+                    var hParts = ['<b>' + sondeLabel + '</b>'];
                     if (p.alt_km[i] != null) hParts.push('Alt: ' + p.alt_km[i].toFixed(1) + ' km');
                     if (p.wspd[i] != null) hParts.push('Wind: ' + p.wspd[i].toFixed(1) + ' m/s');
                     if (p.temp[i] != null) hParts.push('T: ' + p.temp[i].toFixed(1) + '\u00b0C');
-                    trajHover.push(hParts.join('  |  '));
+                    trajHover.push(hParts.join('<br>'));
                 }
             }
             traces.push({
@@ -1814,12 +1814,12 @@
                 type: 'scatter', mode: 'markers',
                 marker: { symbol: 'circle-open', size: isBold ? 10 : 7, color: color, line: { width: isBold ? 2.5 : 1.5, color: color } },
                 hoverinfo: 'text',
-                hovertext: ['\uD83E\uDE82 ' + sondeLabel + ' \u2014 LAUNCH' +
-                    '\nAlt: ' + launchAlt +
-                    '\nTime: ' + sonde.launch_time + (tOffStr ? ' (' + tOffStr + ')' : '') +
-                    '\nMax Wind: ' + maxWspdStr + ' m/s  |  Drift: ' + driftKm + ' km' +
-                    (sonde.platform ? '\n' + sonde.platform + ' / ' + sonde.flight : '') +
-                    (sonde.comments ? '\n' + sonde.comments : '')],
+                hovertext: ['<b>\uD83E\uDE82 ' + sondeLabel + ' \u2014 LAUNCH</b>' +
+                    '<br>Alt: ' + launchAlt +
+                    '<br>Time: ' + sonde.launch_time + (tOffStr ? ' (' + tOffStr + ')' : '') +
+                    '<br>Max Wind: ' + maxWspdStr + ' m/s  |  Drift: ' + driftKm + ' km' +
+                    (sonde.platform ? '<br>' + sonde.platform + ' / ' + sonde.flight : '') +
+                    (sonde.comments ? '<br>' + sonde.comments : '')],
                 showlegend: false,
                 _rtSonde: true
             });
@@ -1838,13 +1838,13 @@
                 type: 'scatter', mode: 'markers',
                 marker: { symbol: 'diamond', size: isBold ? 11 : 8, color: color },
                 hoverinfo: 'text',
-                hovertext: ['\uD83E\uDE82 ' + sondeLabel + ' \u2014 SURFACE' +
-                    '\nAlt: ' + sfcAlt +
-                    (sfcWspd != null ? '\nSfc Wind: ' + sfcWspd.toFixed(1) + ' m/s' : '') +
-                    (sfcTemp != null ? '\nSfc Temp: ' + sfcTemp.toFixed(1) + ' \u00b0C' : '') +
-                    '\nMax Wind: ' + maxWspdStr + ' m/s  |  Drift: ' + driftKm + ' km' +
-                    (sonde.hit_surface ? '\nHit Surface' : '') +
-                    (sonde.comments ? '\n' + sonde.comments : '')],
+                hovertext: ['<b>\uD83E\uDE82 ' + sondeLabel + ' \u2014 SURFACE</b>' +
+                    '<br>Alt: ' + sfcAlt +
+                    (sfcWspd != null ? '<br>Sfc Wind: ' + sfcWspd.toFixed(1) + ' m/s' : '') +
+                    (sfcTemp != null ? '<br>Sfc Temp: ' + sfcTemp.toFixed(1) + ' \u00b0C' : '') +
+                    '<br>Max Wind: ' + maxWspdStr + ' m/s  |  Drift: ' + driftKm + ' km' +
+                    (sonde.hit_surface ? '<br>Hit Surface' : '') +
+                    (sonde.comments ? '<br>' + sonde.comments : '')],
                 showlegend: false,
                 _rtSonde: true
             });
@@ -1863,13 +1863,13 @@
                         line: { color: '#fff', width: isBold ? 3 : 2 }
                     },
                     hoverinfo: 'text',
-                    hovertext: ['\uD83E\uDE82 ' + sondeLabel + ' @ ' + currentLevel.toFixed(1) + ' km' +
-                        (wspdText ? '\nWind: ' + wspdText : '') +
-                        (interpPt.temp != null ? '\nTemp: ' + interpPt.temp.toFixed(1) + ' \u00b0C' : '') +
-                        '\nMax Wind: ' + maxWspdStr + ' m/s' +
-                        (tOffStr ? '\nOffset: ' + tOffStr : '') +
-                        (sonde.comments ? '\n' + sonde.comments : '') +
-                        '\n\u25B6 Click for Skew-T'],
+                    hovertext: ['<b>\uD83E\uDE82 ' + sondeLabel + ' @ ' + currentLevel.toFixed(1) + ' km</b>' +
+                        (wspdText ? '<br>Wind: ' + wspdText : '') +
+                        (interpPt.temp != null ? '<br>Temp: ' + interpPt.temp.toFixed(1) + ' \u00b0C' : '') +
+                        '<br>Max Wind: ' + maxWspdStr + ' m/s' +
+                        (tOffStr ? '<br>Offset: ' + tOffStr : '') +
+                        (sonde.comments ? '<br>' + sonde.comments : '') +
+                        '<br><i>\u25B6 Click for Skew-T</i>'],
                     showlegend: false,
                     _rtSonde: true,
                     _rtSondeIdx: idx,
@@ -2097,7 +2097,7 @@
                 '<td style="padding:1px 2px;">' + (plev[ri] != null ? plev[ri].toFixed(0) : '') + '</td>' +
                 '<td style="text-align:right;padding:1px 2px;color:#ef4444;">' + (tC[ri] != null ? tC[ri].toFixed(1) : '') + '</td>' +
                 '<td style="text-align:right;padding:1px 2px;color:#22c55e;">' + (tdC[ri] != null ? tdC[ri].toFixed(1) : '') + '</td>' +
-                '<td style="text-align:right;padding:1px 2px;">' + (wspd != null ? wspd.toFixed(0) : '') + '</td></tr>';
+                '<td style="text-align:right;padding:1px 2px;">' + (wspd != null ? wspd.toFixed(1) : '') + '</td></tr>';
         }
         html += '</table>';
         html += '</div>';
@@ -2165,10 +2165,10 @@
                     var wspd = p.wspd[i];
                     colors.push(wspd != null ? wspd : 0);
                     texts.push(
-                        '\uD83E\uDE82 ' + sonde.sonde_id +
-                        '\nAlt: ' + p.alt_km[i].toFixed(2) + ' km' +
-                        (wspd != null ? '\nWind: ' + wspd.toFixed(1) + ' m/s' : '') +
-                        (p.temp[i] != null ? '\nTemp: ' + p.temp[i].toFixed(1) + ' \u00b0C' : '')
+                        '<b>\uD83E\uDE82 ' + sonde.sonde_id + '</b>' +
+                        '<br>Alt: ' + p.alt_km[i].toFixed(2) + ' km' +
+                        (wspd != null ? '<br>Wind: ' + wspd.toFixed(1) + ' m/s' : '') +
+                        (p.temp[i] != null ? '<br>Temp: ' + p.temp[i].toFixed(1) + ' \u00b0C' : '')
                     );
                 }
             }
