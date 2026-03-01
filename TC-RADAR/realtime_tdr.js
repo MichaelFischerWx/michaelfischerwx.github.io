@@ -1205,14 +1205,6 @@
             _rtShowIROnMap(0);
             _rtInjectMapIRControls();
             _rtUpdateMapIRSlider();
-            // Auto-fit map to IR bounds so the imagery is fully visible
-            if (irJson.bounds_deg) {
-                var bd = irJson.bounds_deg;
-                _rtMap.fitBounds([
-                    [bd.lat_min, bd.lon_min],
-                    [bd.lat_max, bd.lon_max]
-                ], { padding: [20, 20], maxZoom: 8 });
-            }
             rtIRShowFrame(0);
             // Replace loading spinner with frame progress
             _rtUpdateIRLoadingText('IR t=0 loaded \u2014 fetching frames\u2026');
@@ -1274,70 +1266,45 @@
     }
     window.rtFetchIR = rtFetchIR;
 
-    // Batch size for IR frame fetching — avoids overwhelming the server
-    var _RT_IR_BATCH_SIZE = 3;
-
     function _rtFetchIRFramesParallel(startIdx) {
         if (!_rtIRData || !_currentFileUrl) { _rtIRFetching = false; return; }
-        if (startIdx >= _rtIRFrameURLs.length) {
-            _rtIRAllLoaded = true;
-            _rtIRFetching = false;
-            _rtUpdateIRLabel();
-            _rtEnableIRAnimControls();
-            _rtRemoveIRLoadingIndicator();
-            // Auto-start IR animation once done loading
-            if (_rtIRLoadedCount >= 2 && !_rtMapIRAnimPlaying) {
-                rtMapIRAnimToggle();
-            }
-            return;
-        }
+        var n = _rtIRFrameURLs.length;
 
-        // Fetch a small batch at a time, then recurse for the next batch
-        var batchEnd = Math.min(startIdx + _RT_IR_BATCH_SIZE, _rtIRFrameURLs.length);
-        var promises = [];
-        for (var i = startIdx; i < batchEnd; i++) {
+        for (var i = startIdx; i < n; i++) {
             (function (idx) {
                 var url = API_BASE + RT_PREFIX + '/ir_frame?file_url=' +
                     encodeURIComponent(_currentFileUrl) + '&frame_index=' + idx;
-                promises.push(
-                    fetch(url)
-                        .then(function (r) {
-                            if (!r.ok) {
-                                console.warn('IR frame ' + idx + ' fetch failed: HTTP ' + r.status);
-                                return null;
-                            }
-                            return r.json();
-                        })
-                        .then(function (data) {
-                            if (!data || !_rtIRData) return;
-                            if (data.frame) {
-                                _rtIRFrameURLs[data.frame_index] = data.frame;
-                                _rtPreDecodeIRFrame(data.frame_index, data.frame);
-                            } else {
-                                console.warn('IR frame ' + idx + ': no frame data returned');
-                            }
-                            _rtIRLoadedCount = _rtCountIRLoaded();
-                            _rtUpdateIRLabel();
-                            _rtUpdateIRLoadingText('IR frames: ' + _rtIRLoadedCount + '/' + _rtIRFrameURLs.length);
-                            if (_rtIRLoadedCount >= 2) _rtEnableIRAnimControls();
-                            // Auto-start animation as soon as we have 2+ frames
-                            if (_rtIRLoadedCount === 2 && !_rtMapIRAnimPlaying) {
-                                rtMapIRAnimToggle();
-                            }
-                        })
-                        .catch(function (err) {
-                            console.warn('IR frame ' + idx + ' error:', err.message || err);
-                        })
-                );
+                fetch(url)
+                    .then(function (r) {
+                        if (!r.ok) { console.warn('IR frame ' + idx + ' HTTP ' + r.status); return null; }
+                        return r.json();
+                    })
+                    .then(function (data) {
+                        if (!data || !_rtIRData) return;
+                        if (data.frame) {
+                            _rtIRFrameURLs[data.frame_index] = data.frame;
+                            _rtPreDecodeIRFrame(data.frame_index, data.frame);
+                        }
+                        _rtIRLoadedCount = _rtCountIRLoaded();
+                        _rtUpdateIRLabel();
+                        _rtUpdateIRLoadingText('IR frames: ' + _rtIRLoadedCount + '/' + n);
+                        if (_rtIRLoadedCount >= 2) _rtEnableIRAnimControls();
+                        // Auto-start animation when we have 2 frames
+                        if (_rtIRLoadedCount === 2 && !_rtMapIRAnimPlaying) {
+                            rtMapIRAnimToggle();
+                        }
+                        // All done
+                        if (_rtIRLoadedCount >= n) {
+                            _rtIRAllLoaded = true;
+                            _rtIRFetching = false;
+                            _rtRemoveIRLoadingIndicator();
+                        }
+                    })
+                    .catch(function (err) {
+                        console.warn('IR frame ' + idx + ' error:', err.message || err);
+                    });
             })(i);
         }
-
-        Promise.all(promises).then(function () {
-            _rtIRLoadedCount = _rtCountIRLoaded();
-            _rtUpdateIRLabel();
-            // Continue with next batch
-            _rtFetchIRFramesParallel(batchEnd);
-        });
     }
 
     function _rtPreDecodeIRFrame(idx, dataUrl) {
