@@ -1192,6 +1192,14 @@
                     _rtShowIROnMap(0);
                     _rtInjectMapIRControls();
                     _rtUpdateMapIRSlider();
+                    // Auto-fit map to IR bounds so the imagery is fully visible
+                    if (json.bounds_deg) {
+                        var bd = json.bounds_deg;
+                        _rtMap.fitBounds([
+                            [bd.lat_min, bd.lon_min],
+                            [bd.lat_max, bd.lon_max]
+                        ], { padding: [20, 20], maxZoom: 8 });
+                    }
                 }
                 rtIRShowFrame(0);
 
