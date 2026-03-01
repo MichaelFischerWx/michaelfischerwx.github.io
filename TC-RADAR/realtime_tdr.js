@@ -1521,12 +1521,17 @@
     }
 
     // ── Cleanup on file switch ───────────────────────────────────
+    var _rt3DSondeTraceStart = -1; // starting trace index in 3D chart for sonde traces
+
     function _rtSondeCleanup() {
         _rtSondeData = null;
         _rtSondeVisible = false;
         _rtSondeFetching = false;
         _rtSondeTraceCount = 0;
+        _rt3DSondeTraceStart = -1;
         _rtRemoveSondesFromMap();
+        // Close Skew-T panel if open
+        if (typeof rtCloseSkewT === 'function') rtCloseSkewT();
         var btn = document.getElementById('rt-sonde-btn');
         if (btn) {
             btn.disabled = true;
@@ -1762,9 +1767,12 @@
                     hovertext: ['\uD83E\uDE82 ' + sonde.sonde_id +
                         '\n@ ' + currentLevel.toFixed(1) + ' km' +
                         (wspdText ? '\nWind: ' + wspdText : '') +
-                        (interpPt.temp != null ? '\nTemp: ' + interpPt.temp.toFixed(1) + ' \u00b0C' : '')],
+                        (interpPt.temp != null ? '\nTemp: ' + interpPt.temp.toFixed(1) + ' \u00b0C' : '') +
+                        '\n(click for Skew-T)'],
                     showlegend: false,
-                    _rtSonde: true
+                    _rtSonde: true,
+                    _rtSondeIdx: idx,
+                    _rtSondeClickable: true
                 });
             }
         });
@@ -1772,6 +1780,18 @@
         if (traces.length > 0) {
             Plotly.addTraces(plotDiv, traces);
             _rtSondeTraceCount = traces.length;
+
+            // Attach click handler for sonde markers (only once)
+            if (!plotDiv._rtSondeClickBound) {
+                plotDiv.on('plotly_click', function (eventData) {
+                    if (!eventData || !eventData.points || !eventData.points.length) return;
+                    var pt = eventData.points[0];
+                    if (pt.data && pt.data._rtSondeClickable && pt.data._rtSondeIdx != null) {
+                        _rtShowSondeSkewT(pt.data._rtSondeIdx);
+                    }
+                });
+                plotDiv._rtSondeClickBound = true;
+            }
         }
     }
 
@@ -1824,6 +1844,202 @@
         if (!_rtSondeVisible || !_rtSondeData) return;
         _rtRenderSondesOnPlot();
     }
+
+    // ── Skew-T from dropsonde click ──────────────────────────────
+    function _rtShowSondeSkewT(sondeIdx) {
+        if (!_rtSondeData || sondeIdx < 0 || sondeIdx >= _rtSondeData.dropsondes.length) return;
+        var sonde = _rtSondeData.dropsondes[sondeIdx];
+        var p = sonde.profile;
+
+        if (!p.pres || !p.temp || p.pres.length < 5) {
+            rtToast('Insufficient data for Skew-T', 'warn');
+            return;
+        }
+
+        // Build profiles object expected by renderSkewT():
+        //   { plev: hPa[], t: Kelvin[], q: kg/kg[], u: m/s[], v: m/s[] }
+        // Dropsonde has: pres (hPa), temp (°C), dewpoint (°C) or rh (%), uwnd, vwnd
+        var plev = [], tK = [], qArr = [], uArr = [], vArr = [];
+        var eps = 0.622;
+
+        for (var i = 0; i < p.pres.length; i++) {
+            // Need at least pressure and temperature
+            if (p.pres[i] == null || p.temp[i] == null) continue;
+            var pHpa = p.pres[i];
+            var tCel = p.temp[i];
+            if (pHpa < 50 || pHpa > 1100) continue;
+
+            plev.push(pHpa);
+            tK.push(tCel + 273.15);
+
+            // Compute specific humidity q from dewpoint or RH
+            var q = null;
+            if (p.dewpoint && p.dewpoint[i] != null) {
+                // From dewpoint: e = 6.112 * exp(17.67 * Td / (Td + 243.5))
+                var td = p.dewpoint[i];
+                var e = 6.112 * Math.exp(17.67 * td / (td + 243.5));
+                if (e < pHpa) q = eps * e / (pHpa - e);
+            } else if (p.rh && p.rh[i] != null) {
+                // From RH: es = 6.112 * exp(17.67 * T / (T + 243.5)), e = RH/100 * es
+                var es = 6.112 * Math.exp(17.67 * tCel / (tCel + 243.5));
+                var e2 = (p.rh[i] / 100.0) * es;
+                if (e2 < pHpa) q = eps * e2 / (pHpa - e2);
+            }
+            qArr.push(q);
+
+            uArr.push(p.uwnd ? p.uwnd[i] : null);
+            vArr.push(p.vwnd ? p.vwnd[i] : null);
+        }
+
+        if (plev.length < 5) {
+            rtToast('Insufficient valid data for Skew-T (' + plev.length + ' levels)', 'warn');
+            return;
+        }
+
+        var profiles = { plev: plev, t: tK, q: qArr, u: uArr, v: vArr };
+
+        // Set title
+        var titleEl = document.getElementById('rt-skewt-title');
+        if (titleEl) {
+            var tOff = sonde.time_offset_min != null ?
+                (sonde.time_offset_min >= 0 ? '+' : '') + sonde.time_offset_min.toFixed(0) + ' min' : '';
+            titleEl.textContent = '\uD83E\uDE82 Sonde ' + (sonde.sonde_id || '#' + (sondeIdx + 1)) +
+                ' \u2014 ' + sonde.launch_time +
+                (tOff ? ' (' + tOff + ')' : '') +
+                (sonde.comments ? ' \u2014 ' + sonde.comments : '');
+        }
+
+        // Show panel
+        var panel = document.getElementById('rt-sonde-skewt-panel');
+        if (panel) panel.style.display = 'block';
+
+        // Render Skew-T using the existing global renderSkewT function
+        if (typeof renderSkewT === 'function') {
+            renderSkewT(profiles, 'rt-sonde-skewt');
+        }
+
+        // Render info panel (custom for RT since _renderSkewTInfo targets a hardcoded div)
+        _rtRenderSondeSkewTInfo(profiles, sonde);
+
+        // Scroll into view
+        if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // ── Render dropsonde Skew-T info panel ───────────────────────
+    function _rtRenderSondeSkewTInfo(profiles, sonde) {
+        var el = document.getElementById('rt-sonde-skewt-info');
+        if (!el) return;
+
+        var derived = profiles._derived || {};
+        var tC = profiles._tC || [];
+        var tdC = profiles._tdC || [];
+        var plev = profiles.plev;
+
+        var html = '<div style="font-family:DM Sans,monospace;">';
+
+        // Sonde metadata
+        html += '<div style="color:#c4b5fd;font-weight:700;margin-bottom:6px;">' +
+            '\uD83E\uDE82 ' + (sonde.sonde_id || 'Unknown') + '</div>';
+        html += '<div style="margin-bottom:8px;font-size:10px;color:#8899aa;">' +
+            (sonde.platform || '') + ' / ' + (sonde.flight || '') + '<br>' +
+            sonde.launch_time + '<br>' +
+            (sonde.comments ? '<span style="color:#fbbf24;">' + sonde.comments + '</span>' : '') +
+            '</div>';
+
+        // Derived thermodynamic parameters
+        html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 8px;margin-bottom:10px;font-size:10px;">';
+
+        function _val(v, unit, dp) {
+            return v != null && isFinite(v) ? v.toFixed(dp || 0) + ' ' + (unit || '') : '\u2014';
+        }
+
+        html += '<div>CAPE</div><div style="color:#ef4444;font-weight:700;">' + _val(derived.cape, 'J/kg') + '</div>';
+        html += '<div>CIN</div><div style="color:#60a5fa;">' + _val(derived.cin, 'J/kg') + '</div>';
+        html += '<div>PWAT</div><div style="color:#06b6d4;">' + _val(derived.pwat, 'mm', 1) + '</div>';
+        html += '<div>LCL</div><div>' + _val(derived.lcl_p, 'hPa') + '</div>';
+        html += '<div>LFC</div><div>' + _val(derived.lfc_p, 'hPa') + '</div>';
+        html += '<div>EL</div><div>' + _val(derived.el_p, 'hPa') + '</div>';
+        html += '<div>0\u00b0C</div><div>' + _val(derived.freezing_p, 'hPa') + '</div>';
+
+        // Surface conditions
+        if (plev.length > 0) {
+            // Find surface (highest pressure)
+            var sfcIdx = 0;
+            for (var si = 1; si < plev.length; si++) {
+                if (plev[si] > plev[sfcIdx]) sfcIdx = si;
+            }
+            html += '<div>Sfc P</div><div>' + _val(plev[sfcIdx], 'hPa') + '</div>';
+            if (tC[sfcIdx] != null) html += '<div>Sfc T</div><div>' + _val(tC[sfcIdx], '\u00b0C', 1) + '</div>';
+            if (tdC[sfcIdx] != null) html += '<div>Sfc Td</div><div>' + _val(tdC[sfcIdx], '\u00b0C', 1) + '</div>';
+        }
+        html += '</div>';
+
+        // Mini vertical profile table
+        html += '<div style="font-size:9px;color:#667;margin-top:4px;">PROFILE (' + plev.length + ' levels)</div>';
+        html += '<table style="width:100%;font-size:9px;border-collapse:collapse;margin-top:2px;">';
+        html += '<tr style="color:#667;border-bottom:1px solid rgba(255,255,255,0.06);">' +
+            '<th style="text-align:left;padding:1px 2px;">P</th>' +
+            '<th style="text-align:right;padding:1px 2px;">T</th>' +
+            '<th style="text-align:right;padding:1px 2px;">Td</th>' +
+            '<th style="text-align:right;padding:1px 2px;">Ws</th></tr>';
+
+        // Show every ~25 hPa for a compact table
+        var lastP = 9999;
+        for (var ri = 0; ri < plev.length; ri++) {
+            if (Math.abs(plev[ri] - lastP) < 25 && ri > 0 && ri < plev.length - 1) continue;
+            lastP = plev[ri];
+            var wspd = null;
+            if (profiles.u && profiles.v && profiles.u[ri] != null && profiles.v[ri] != null) {
+                wspd = Math.sqrt(profiles.u[ri] * profiles.u[ri] + profiles.v[ri] * profiles.v[ri]);
+            }
+            html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.03);">' +
+                '<td style="padding:1px 2px;">' + (plev[ri] != null ? plev[ri].toFixed(0) : '') + '</td>' +
+                '<td style="text-align:right;padding:1px 2px;color:#ef4444;">' + (tC[ri] != null ? tC[ri].toFixed(1) : '') + '</td>' +
+                '<td style="text-align:right;padding:1px 2px;color:#22c55e;">' + (tdC[ri] != null ? tdC[ri].toFixed(1) : '') + '</td>' +
+                '<td style="text-align:right;padding:1px 2px;">' + (wspd != null ? wspd.toFixed(0) : '') + '</td></tr>';
+        }
+        html += '</table>';
+        html += '</div>';
+        el.innerHTML = html;
+    }
+
+    // ── Close Skew-T panel ───────────────────────────────────────
+    window.rtCloseSkewT = function () {
+        var panel = document.getElementById('rt-sonde-skewt-panel');
+        if (panel) panel.style.display = 'none';
+        try { Plotly.purge('rt-sonde-skewt'); } catch (e) { /* ok */ }
+    };
+
+    // ── 3D Volume: Toggle TDR isosurfaces ────────────────────────
+    window.rtToggle3DTDR = function () {
+        var btn = document.getElementById('vol-tdr-toggle');
+        var chartDiv = document.getElementById('vol-3d-chart');
+        if (!btn || !chartDiv || !chartDiv.data || chartDiv.data.length < 1) return;
+
+        btn.classList.toggle('active');
+        var vis = btn.classList.contains('active');
+        Plotly.restyle(chartDiv, { visible: vis }, [0]);
+    };
+
+    // ── 3D Volume: Toggle dropsonde traces ───────────────────────
+    window.rtToggle3DSondes = function () {
+        var btn = document.getElementById('vol-sonde-toggle');
+        var chartDiv = document.getElementById('vol-3d-chart');
+        if (!btn || !chartDiv || !chartDiv.data) return;
+        if (_rt3DSondeTraceStart < 0) return;
+
+        btn.classList.toggle('active');
+        var vis = btn.classList.contains('active');
+
+        // Sonde traces are indices _rt3DSondeTraceStart to end
+        var indices = [];
+        for (var i = _rt3DSondeTraceStart; i < chartDiv.data.length; i++) {
+            indices.push(i);
+        }
+        if (indices.length > 0) {
+            Plotly.restyle(chartDiv, { visible: vis }, indices);
+        }
+    };
 
     // ── 3D Volume: Add sonde trajectories ────────────────────────
     function _rtAddSondesTo3D() {
@@ -1896,8 +2112,15 @@
         });
 
         if (sondeTraces.length > 0) {
+            _rt3DSondeTraceStart = chartDiv.data.length; // before addTraces
             Plotly.addTraces(chartDiv, sondeTraces);
+            // Enable and activate the Sondes toggle button
+            var sondeBtn3D = document.getElementById('vol-sonde-toggle');
+            if (sondeBtn3D) { sondeBtn3D.disabled = false; sondeBtn3D.classList.add('active'); }
         }
+        // Reset TDR toggle to active state
+        var tdrBtn3D = document.getElementById('vol-tdr-toggle');
+        if (tdrBtn3D) tdrBtn3D.classList.add('active');
     }
 
     // ── Hook: patch rtExploreFile to reset sonde state ───────────
@@ -1942,9 +2165,14 @@
     var _origRtOpen3DModal = rtOpen3DModal;
     rtOpen3DModal = function () {
         _origRtOpen3DModal();
-        if (_rtSondeVisible && _rtSondeData) {
+        _rt3DSondeTraceStart = -1; // reset for fresh 3D scene
+        var sondeBtn3D = document.getElementById('vol-sonde-toggle');
+        if (_rtSondeVisible && _rtSondeData && _rtSondeData.dropsondes.length > 0) {
             // Delay to ensure 3D scene is rendered
             setTimeout(function () { _rtAddSondesTo3D(); }, 500);
+        } else {
+            // No sondes — disable the toggle
+            if (sondeBtn3D) { sondeBtn3D.disabled = true; sondeBtn3D.classList.remove('active'); }
         }
     };
 

@@ -289,3 +289,19 @@
     font-style: italic;
     margin-top: 3px;
 }
+
+/* ── Dropsonde Skew-T Panel ─────────────────── */
+#rt-sonde-skewt-panel {
+    border: 1px solid rgba(168, 85, 247, 0.2);
+    border-radius: 8px;
+    margin-top: 8px;
+    background: rgba(10, 15, 25, 0.6);
+    overflow: hidden;
+}
+
+/* ── 3D Volume Sonde toggle active state ────── */
+#vol-sonde-toggle.active {
+    background: rgba(168, 85, 247, 0.25);
+    border-color: rgba(168, 85, 247, 0.6) !important;
+    color: #e9d5ff !important;
+}
