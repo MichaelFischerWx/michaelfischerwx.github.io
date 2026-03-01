@@ -80,6 +80,26 @@
 .rt-viz-content-panel .explorer-controls {
     overflow-y: auto;
     max-height: calc(100vh - 140px);
+    /* Show scrollbar on macOS so users know the panel scrolls */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(96,165,250,0.3) transparent;
+}
+.rt-viz-content-panel .explorer-controls::-webkit-scrollbar {
+    width: 6px;
+}
+.rt-viz-content-panel .explorer-controls::-webkit-scrollbar-thumb {
+    background: rgba(96,165,250,0.3);
+    border-radius: 3px;
+}
+
+/* Sticky Generate button — always visible at bottom of controls panel */
+.rt-viz-content-panel .generate-btn {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin-top: 8px;
+    /* Solid background so it doesn't overlap content transparently */
+    box-shadow: 0 -8px 12px rgba(10, 22, 40, 0.95);
 }
 
 /* ── Responsive: tablet ≤1024px (35/65 split) ────────────── */
