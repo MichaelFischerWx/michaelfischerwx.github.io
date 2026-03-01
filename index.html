@@ -3,382 +3,887 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="TC-RADAR: A comprehensive database of post-processed airborne Doppler radar analyses of tropical cyclones (1997–2024). Explore 3D vortex structure, IR satellite imagery, ERA5 environmental diagnostics, and more.">
-    <meta name="keywords" content="tropical cyclone, hurricane, radar, TC-RADAR, airborne Doppler, vortex structure, NOAA, HRD, wind analysis">
-    <meta name="author" content="Dr. Michael Fischer, University of Miami / NOAA HRD">
+    <title>Michael Fischer - Atmospheric Scientist</title>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-    <!-- Open Graph / Social Sharing -->
-    <meta property="og:type" content="website">
-    <meta property="og:title" content="TC-RADAR — Tropical Cyclone Radar Database">
-    <meta property="og:description" content="Explore 1,500+ airborne Doppler radar analyses of tropical cyclones. Interactive 3D wind fields, IR satellite overlays, ERA5 environmental diagnostics, and compositing tools.">
-    <meta property="og:url" content="https://michaelfischerwx.github.io/TC-RADAR/">
-    <meta property="og:image" content="https://michaelfischerwx.github.io/TC-RADAR/images/og-preview.png">
-    <meta property="og:site_name" content="TC-RADAR">
+        :root {
+            --primary-blue: #3b82f6;
+            --dark-blue: #1e3a8a;
+            --light-blue: #93c5fd;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-600: #4b5563;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+        }
 
-    <!-- Twitter Card -->
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="TC-RADAR — Tropical Cyclone Radar Database">
-    <meta name="twitter:description" content="Explore 1,500+ airborne Doppler radar analyses of tropical cyclones with interactive 3D visualization.">
-    <meta name="twitter:image" content="https://michaelfischerwx.github.io/TC-RADAR/images/og-preview.png">
+        html {
+            scroll-behavior: smooth;
+        }
 
-    <title>TC-RADAR — Tropical Cyclone Radar Database</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="tc_radar_styles.css">
-    <link rel="stylesheet" href="realtime_tdr_styles.css">
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: var(--gray-800);
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+            z-index: 1000;
+            padding: 1rem 0;
+        }
+
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 2rem;
+        }
+
+        .nav-logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary-blue);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+            align-items: center;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: var(--gray-800);
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: var(--primary-blue);
+        }
+
+        .nav-btn {
+            background: var(--primary-blue);
+            color: white !important;
+            padding: 0.5rem 1.5rem;
+            border-radius: 6px;
+            transition: all 0.3s;
+        }
+
+        .nav-btn:hover {
+            background: var(--dark-blue);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        }
+
+        /* Mobile menu toggle */
+        .mobile-menu-toggle {
+            display: none;
+            flex-direction: column;
+            cursor: pointer;
+        }
+
+        .mobile-menu-toggle span {
+            width: 25px;
+            height: 3px;
+            background: var(--gray-800);
+            margin: 3px 0;
+            transition: 0.3s;
+        }
+
+        /* Sections */
+        section {
+            padding: 5rem 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        section:first-of-type {
+            padding-top: 8rem;
+        }
+
+        h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            color: var(--gray-900);
+            margin-bottom: 1rem;
+        }
+
+        h2 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--gray-900);
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        h3 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--gray-900);
+            margin-bottom: 1rem;
+        }
+
+        /* Hero Section */
+        #home {
+            min-height: 90vh;
+            display: flex;
+            align-items: center;
+            background: linear-gradient(135deg, var(--gray-50) 0%, #e0f2fe 100%);
+        }
+
+        .hero-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4rem;
+            align-items: center;
+        }
+
+        .hero-text h1 {
+            font-size: 3.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .hero-subtitle {
+            font-size: 1.5rem;
+            color: var(--primary-blue);
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+
+        .hero-description {
+            font-size: 1.1rem;
+            color: var(--gray-600);
+            margin-bottom: 2rem;
+            line-height: 1.8;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .btn {
+            padding: 0.75rem 2rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: var(--primary-blue);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--dark-blue);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        }
+
+        .btn-secondary {
+            background: white;
+            color: var(--primary-blue);
+            border: 2px solid var(--primary-blue);
+        }
+
+        .btn-secondary:hover {
+            background: var(--primary-blue);
+            color: white;
+        }
+
+        .hero-image {
+            text-align: center;
+        }
+
+        .profile-image {
+            width: 300px;
+            height: 300px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 5px solid white;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+
+        /* About Section */
+        #about {
+            background: white;
+        }
+
+        .about-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+        }
+
+        .about-text {
+            font-size: 1.1rem;
+            line-height: 1.8;
+            color: var(--gray-600);
+        }
+
+        .about-text p {
+            margin-bottom: 1rem;
+        }
+
+        .about-highlights {
+            background: var(--gray-50);
+            padding: 2rem;
+            border-radius: 12px;
+        }
+
+        .highlight-item {
+            margin-bottom: 1.5rem;
+        }
+
+        .highlight-item h4 {
+            color: var(--primary-blue);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.5rem;
+        }
+
+        .highlight-item p {
+            color: var(--gray-800);
+            font-weight: 600;
+        }
+
+        /* Research Section */
+        #research {
+            background: var(--gray-50);
+        }
+
+        .research-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .research-card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .research-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        }
+
+        .research-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .research-card h3 {
+            color: var(--gray-900);
+            margin-bottom: 1rem;
+        }
+
+        .research-card p {
+            color: var(--gray-600);
+            line-height: 1.6;
+        }
+
+        /* TC-RADAR Featured Section */
+        .featured-project {
+            background: linear-gradient(135deg, var(--primary-blue), var(--dark-blue));
+            border-radius: 16px;
+            padding: 3rem;
+            margin-top: 3rem;
+            color: white;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+            align-items: center;
+        }
+
+        .featured-content h3 {
+            color: white;
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        .featured-content p {
+            line-height: 1.8;
+            margin-bottom: 1.5rem;
+            opacity: 0.9;
+        }
+
+        .featured-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .featured-image {
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+
+        .featured-image img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        /* Publications Section */
+        #publications {
+            background: white;
+        }
+
+        .publication-list {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .publication-item {
+            background: var(--gray-50);
+            padding: 1.5rem;
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+            border-left: 4px solid var(--primary-blue);
+        }
+
+        .publication-title {
+            font-weight: 600;
+            color: var(--gray-900);
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+        }
+
+        .publication-authors {
+            color: var(--gray-600);
+            margin-bottom: 0.5rem;
+        }
+
+        .publication-journal {
+            color: var(--primary-blue);
+            font-style: italic;
+            margin-bottom: 0.5rem;
+        }
+
+        .publication-links {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .publication-link {
+            font-size: 0.9rem;
+            color: var(--primary-blue);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .publication-link:hover {
+            text-decoration: underline;
+        }
+
+        /* Contact Section */
+        #contact {
+            background: var(--gray-50);
+            text-align: center;
+        }
+
+        .contact-content {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .contact-info {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .contact-item {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            font-size: 1.1rem;
+        }
+
+        .contact-item span {
+            font-size: 1.5rem;
+        }
+
+        .social-links {
+            display: flex;
+            gap: 1.5rem;
+            justify-content: center;
+            margin-top: 2rem;
+        }
+
+        .social-link {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: var(--primary-blue);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            font-size: 1.5rem;
+            transition: all 0.3s;
+        }
+
+        .social-link:hover {
+            background: var(--dark-blue);
+            transform: translateY(-3px);
+        }
+
+        /* Footer */
+        footer {
+            background: var(--gray-900);
+            color: white;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        footer p {
+            opacity: 0.7;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+
+            .mobile-menu-toggle {
+                display: flex;
+            }
+
+            .hero-content,
+            .about-content,
+            .featured-project {
+                grid-template-columns: 1fr;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            .hero-text h1 {
+                font-size: 2.5rem;
+            }
+
+            h2 {
+                font-size: 2rem;
+            }
+
+            .research-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .featured-stats {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 </head>
 <body>
-    <a href="#map-section" class="skip-link" aria-label="Skip to main content">Skip to main content</a>
-    <header class="topbar" role="banner">
-        <div class="topbar-inner">
-            <div class="topbar-brand">
-                <div class="topbar-logo" role="heading" aria-level="1">TC-RADAR</div>
-                <div class="topbar-divider"></div>
-                <div class="topbar-subtitle">Tropical Cyclone Radar Archive</div>
-            </div>
-            <div class="topbar-stats">
-                <div class="topbar-stat"><span class="topbar-stat-val" id="total-cases">&mdash;</span><span class="topbar-stat-label">Analyses</span></div>
-                <div class="topbar-stat"><span class="topbar-stat-val" id="unique-storms">&mdash;</span><span class="topbar-stat-label">Storms</span></div>
-                <div class="topbar-stat"><span class="topbar-stat-val" id="year-range">&mdash;</span><span class="topbar-stat-label">Coverage</span></div>
-                <span class="topbar-version">v3m</span>
-            </div>
-            <nav aria-label="Main navigation">
-            <ul class="topbar-nav">
-                <li><a href="javascript:void(0)" onclick="showArchiveTab()" role="button" id="archive-nav-link">Archive</a></li>
-                <li><a href="javascript:void(0)" onclick="toggleRealtimeTab()" role="button" id="rt-nav-link" class="rt-nav-highlight">Real-Time TDR</a></li>
-                <li><a href="javascript:void(0)" onclick="toggleCompositePanel()" role="button">Composites</a></li>
-                <li><a href="javascript:void(0)" onclick="toggleEnvOverlay()" role="button">Environment</a></li>
+    <!-- Navigation -->
+    <nav>
+        <div class="nav-container">
+            <div class="nav-logo">Michael Fischer</div>
+            <ul class="nav-links">
+                <li><a href="#home">Home</a></li>
                 <li><a href="#about">About</a></li>
-                <li><a href="#download">Download</a></li>
+                <li><a href="#research">Research</a></li>
+                <li><a href="#publications">Publications</a></li>
                 <li><a href="#contact">Contact</a></li>
+                <li><a href="TC-RADAR/index.html" class="nav-btn">TC-RADAR</a></li>
             </ul>
-            </nav>
+            <div class="mobile-menu-toggle">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
         </div>
-    </header>
+    </nav>
 
-    <section id="map-section" role="main" aria-label="TC-RADAR Map Explorer">
-        <div class="map-toolbar" role="toolbar" aria-label="Case selection and filters">
-            <div class="toolbar-group">
-                <label class="toolbar-label" for="storm-select">Storm</label>
-                <select id="storm-select" class="toolbar-select" style="min-width:160px;" aria-label="Select storm"><option value="">All Storms</option></select>
-            </div>
-            <div class="toolbar-group">
-                <label class="toolbar-label" for="case-select">Case</label>
-                <select id="case-select" class="toolbar-select" style="min-width:260px;" disabled aria-label="Select case"><option value="">← Select a storm first</option></select>
-            </div>
-            <button class="toolbar-explore-btn" id="explore-btn" onclick="exploreCaseGo()" disabled aria-label="Explore selected case">Explore →</button>
-            <div class="toolbar-sep" aria-hidden="true"></div>
-            <button class="filter-toggle-btn" id="filter-toggle" onclick="toggleFilterDrawer()" aria-expanded="false" aria-controls="filter-drawer"><span style="font-size:13px;" aria-hidden="true">&#9881;</span> Filters</button>
-            <button class="toolbar-reset" onclick="resetFilters()" aria-label="Reset all filters">Reset</button>
-            <span class="toolbar-count" aria-live="polite"><span id="filtered-count">0</span> / <span id="total-count">0</span> cases</span>
-        </div>
-        <div class="filter-drawer" id="filter-drawer" role="region" aria-label="Filter controls">
-            <div class="filter-grid">
-                <div class="filter-group">
-                    <label>Intensity Range (kt)</label>
-                    <div class="slider-values"><span id="min-intensity-value">0</span><span id="max-intensity-value">200</span></div>
-                    <div class="slider-wrapper"><div class="slider-track"></div><div class="slider-range" id="intensity-range-fill"></div><input type="range" id="min-intensity" min="0" max="200" value="0" step="5"><input type="range" id="max-intensity" min="0" max="200" value="200" step="5"></div>
-                </div>
-                <div class="filter-group">
-                    <label>24-h Intensity Change (kt)</label>
-                    <div class="slider-values"><span id="min-vmax-change-value">-100</span><span id="max-vmax-change-value">85</span></div>
-                    <div class="slider-wrapper"><div class="slider-track"></div><div class="slider-range" id="vmax-change-range-fill"></div><input type="range" id="min-vmax-change" min="-100" max="85" value="-100" step="5"><input type="range" id="max-vmax-change" min="-100" max="85" value="85" step="5"></div>
-                </div>
-                <div class="filter-group">
-                    <label>Tilt Magnitude (km)</label>
-                    <div class="slider-values"><span id="min-tilt-value">0</span><span id="max-tilt-value">200</span></div>
-                    <div class="slider-wrapper"><div class="slider-track"></div><div class="slider-range" id="tilt-range-fill"></div><input type="range" id="min-tilt" min="0" max="200" value="0" step="5"><input type="range" id="max-tilt" min="0" max="200" value="200" step="5"></div>
-                </div>
-                <div class="filter-group">
-                    <label>Year Range</label>
-                    <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
-                        <input type="number" id="min-year" min="1997" max="2024" value="1997">
-                        <span style="color:var(--slate);font-size:0.8rem;">to</span>
-                        <input type="number" id="max-year" min="1997" max="2024" value="2024">
-                    </div>
+    <!-- Hero Section -->
+    <section id="home">
+        <div class="hero-content">
+            <div class="hero-text">
+                <h1>Michael Fischer</h1>
+                <div class="hero-subtitle">Assistant Professor</div>
+                <p class="hero-description">
+                    Assistant Professor at the University of Miami's Rosenstiel School of Marine, 
+                    Atmospheric, and Earth Science and a Frost Institute for Data Science and Computing (IDSC) 
+                    Core Faculty Member. My research examines hurricane structure and intensity change,
+                    with a focus on better understanding and predicting rapid intensification.
+                </p>
+                <div class="hero-buttons">
+                    <a href="#research" class="btn btn-primary">View Research</a>
+                    <a href="assets/cv.pdf" class="btn btn-secondary" target="_blank">Download CV</a>
                 </div>
             </div>
-        </div>
-        <div id="map-wrapper">
-            <div id="map-container">
-                <div id="loading"><div class="spinner"></div><div>Loading TC-RADAR data&hellip;</div></div>
-                <div id="map" role="application" aria-label="Interactive map showing TC-RADAR case locations"></div>
-                <div class="scroll-prompt"><span>Scroll for details</span><div class="arrow"></div></div>
+            <div class="hero-image">
+                <img src="assets/profile.jpg" alt="Michael Fischer" class="profile-image">
             </div>
-            <div id="side-panel"><div id="side-panel-inner"><button id="side-panel-close" onclick="closeSidePanel()">&times;</button></div></div>
         </div>
     </section>
 
-    <!-- ══════════════════════════════════════════════════════════ -->
-    <!-- Real-Time TDR Section (hidden by default)                 -->
-    <!-- ══════════════════════════════════════════════════════════ -->
-    <section id="realtime-section" style="display:none;" role="main" aria-label="Real-Time TDR Visualization">
-        <div class="rt-header">
-            <h2 class="rt-header-title">Real-Time TDR Analysis</h2>
-            <p class="rt-header-desc">Browse and visualize real-time Tail Doppler Radar analyses from NOAA P-3 reconnaissance missions.</p>
-        </div>
-
-        <!-- Mission / File selection toolbar -->
-        <div class="rt-toolbar">
-            <div class="toolbar-group">
-                <label class="toolbar-label" for="rt-mission-select">Mission</label>
-                <select id="rt-mission-select" class="toolbar-select" style="min-width:200px;">
-                    <option value="">Select a mission…</option>
-                </select>
-            </div>
-            <div class="toolbar-group">
-                <label class="toolbar-label" for="rt-file-select">Analysis</label>
-                <select id="rt-file-select" class="toolbar-select" style="min-width:320px;" disabled>
-                    <option value="">← Select a mission first</option>
-                </select>
-            </div>
-            <button class="toolbar-explore-btn" id="rt-go-btn" onclick="rtExploreFile()" disabled>Explore →</button>
-        </div>
-
-        <!-- Visualization panel (shown after file selected) -->
-        <div id="rt-viz-panel" class="rt-viz-panel" style="display:none;">
-            <div class="rt-viz-layout">
-                <!-- LEFT (30%): Leaflet map with IR overlay + storm marker -->
-                <div class="rt-viz-map-panel">
-                    <div id="rt-map-wrapper" class="rt-map-wrapper">
-                        <div id="rt-map" style="width:100%;height:100%;"></div>
-                        <!-- IR animation controls injected here by JS -->
-                    </div>
-                </div>
-
-                <!-- RIGHT (70%): Explorer layout (plot left, controls right) -->
-                <div class="rt-viz-content-panel">
-                    <div class="explorer-layout">
-                        <!-- LEFT: Plot display + action buttons -->
-                        <div class="explorer-display">
-                            <div id="rt-display-area"></div>
-                            <div class="display-actions" style="margin-top:8px;">
-                                <button class="cs-btn" id="rt-cs-btn" onclick="rtToggleCrossSection()" disabled>✂ Cross Section</button>
-                                <button class="cs-btn" id="rt-az-btn" onclick="rtFetchAzimuthalMean()" disabled>↻ Azimuthal Mean</button>
-                                <button class="cs-btn" id="rt-vol-btn" onclick="rtFetch3DVolume()" disabled>🖥 3D Volume</button>
-                                <button class="cs-btn" id="rt-ir-underlay-btn" onclick="rtToggleIRUnderlay()" disabled style="background:rgba(96,165,250,0.12);border-color:rgba(96,165,250,0.35);color:#93c5fd;">🛰 IR Off</button>
-                            </div>
-                            <div id="rt-cs-result"></div>
-                            <div id="rt-cs-status" class="cs-status"></div>
-                            <div id="rt-az-result"></div>
-                        </div>
-
-                        <!-- RIGHT: Controls panel (280px sidebar) -->
-                        <div class="explorer-controls">
-                            <div id="rt-meta-panel" class="rt-meta-panel"></div>
-
-                            <div class="explorer-title" style="margin-top:12px;">🔬 Explore Data</div>
-                            <div class="explorer-row"><label>Variable</label>
-                                <select class="explorer-select" id="rt-var">
-                                    <option value="TANGENTIAL_WIND">Tangential Wind</option>
-                                    <option value="RADIAL_WIND">Radial Wind</option>
-                                    <option value="W">Vertical Velocity</option>
-                                    <option value="REFLECTIVITY">Reflectivity</option>
-                                    <option value="WIND_SPEED">Wind Speed</option>
-                                    <option value="VORT">Relative Vorticity</option>
-                                    <option value="U">Eastward Wind (U)</option>
-                                    <option value="V">Northward Wind (V)</option>
-                                    <option value="EARTH_REL_WSPD">Earth-Rel. Wind Speed</option>
-                                </select>
-                            </div>
-                            <div class="explorer-row"><label>Contour Overlay</label>
-                                <select class="explorer-select" id="rt-overlay" style="font-size:11px;">
-                                    <option value="">None</option>
-                                    <option value="TANGENTIAL_WIND">Tangential Wind</option>
-                                    <option value="RADIAL_WIND">Radial Wind</option>
-                                    <option value="W">Vertical Velocity</option>
-                                    <option value="REFLECTIVITY">Reflectivity</option>
-                                    <option value="WIND_SPEED">Wind Speed</option>
-                                    <option value="VORT">Relative Vorticity</option>
-                                </select>
-                                <div style="display:flex;align-items:center;gap:5px;margin-top:2px;">
-                                    <label style="font-size:9px;white-space:nowrap;margin:0;">Int:</label>
-                                    <input type="number" id="rt-contour-int" value="" placeholder="auto" style="width:55px;padding:2px 4px;font-size:10px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);color:var(--text);">
-                                </div>
-                            </div>
-                            <div class="explorer-row"><label>Colormap</label>
-                                <select class="explorer-select" id="rt-cmap" style="font-size:11px;" onchange="rtApplyCmap()">
-                                    <option value="">Default (from variable)</option>
-                                    <optgroup label="Sequential"><option value="Viridis">Viridis</option><option value="Inferno">Inferno</option><option value="Magma">Magma</option><option value="Plasma">Plasma</option><option value="Hot">Hot</option><option value="YlOrRd">YlOrRd</option><option value="Blues">Blues</option></optgroup>
-                                    <optgroup label="Diverging"><option value="RdBu">RdBu</option><option value='[[ 0,"rgb(5,10,172)"],[0.5,"rgb(255,255,255)"],[1,"rgb(178,10,28)"]]'>BuWtRd</option></optgroup>
-                                    <optgroup label="Other"><option value="Jet">Jet</option><option value="Rainbow">Rainbow</option><option value="Electric">Electric</option></optgroup>
-                                </select>
-                            </div>
-                            <div class="explorer-row"><label>Color Range</label>
-                                <div style="display:flex;align-items:center;gap:4px;">
-                                    <input type="number" id="rt-vmin" placeholder="min" step="any" style="width:60px;padding:2px 4px;font-size:10px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);color:var(--text);" onchange="rtApplyColorRange()">
-                                    <span style="font-size:10px;color:var(--slate);">to</span>
-                                    <input type="number" id="rt-vmax" placeholder="max" step="any" style="width:60px;padding:2px 4px;font-size:10px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);color:var(--text);" onchange="rtApplyColorRange()">
-                                    <button onclick="rtResetColorRange()" title="Reset" style="padding:2px 5px;font-size:9px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);cursor:pointer;color:var(--slate);">↺</button>
-                                </div>
-                            </div>
-                            <div class="explorer-row"><label>Height Level</label>
-                                <div class="explorer-level-row">
-                                    <input type="range" id="rt-level" min="0" max="18" step="0.5" value="2" oninput="document.getElementById('rt-level-val').textContent = parseFloat(this.value).toFixed(1)+' km'">
-                                    <span class="explorer-level-value" id="rt-level-val">2.0 km</span>
-                                </div>
-                                <div class="anim-controls">
-                                    <button class="anim-btn" onclick="rtAnimStep(-1)" title="Previous level">◀◀</button>
-                                    <button class="anim-btn" id="rt-anim-play" onclick="rtAnimToggle()" title="Play/Pause">▶</button>
-                                    <button class="anim-btn" onclick="rtAnimStep(1)" title="Next level">▶▶</button>
-                                </div>
-                            </div>
-
-                            <div class="explorer-row" style="margin-top:4px;"><label>Min. Coverage Threshold</label>
-                                <div class="explorer-level-row">
-                                    <input type="range" id="rt-az-coverage" min="0" max="100" value="50" step="5" style="flex:1;">
-                                    <span class="explorer-level-value" id="rt-az-cov-val">50%</span>
-                                </div>
-                            </div>
-
-                            <button class="generate-btn" id="rt-gen-btn" onclick="rtGeneratePlot()">Generate Plot</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Data source attribution -->
-        <div class="rt-attribution">
-            Data source: <a href="https://seb.omao.noaa.gov/pub/flight/radar/" target="_blank" rel="noopener">NOAA Aircraft Operations Center — SEB Radar Archive</a>
-        </div>
-    </section>
-
+    <!-- About Section -->
     <section id="about">
-        <div class="content-section">
-            <h2 class="section-title">About <span class="accent">TC-RADAR</span></h2>
-            <p class="section-desc">TC-RADAR provides a homogeneous platform of post-processed airborne Doppler radar analyses of tropical cyclones. Developed by Dr. Michael Fischer (University of Miami) in collaboration with NOAA's Hurricane Research Division, this database enables researchers to conduct storm-to-storm comparisons and climatological analyses of TC vortex and convective characteristics across all stages of the tropical cyclone lifecycle.</p>
-            <div class="feature-grid">
-                <div class="feature-card"><div class="feature-icon">&#127744;</div><h3>Storm-Centered Grids</h3><p>All analyses use a weighted circulation maximization (WCM) method for precise TC center identification, enabling accurate vortex-relative analyses.</p></div>
-                <div class="feature-card"><div class="feature-icon">&#128202;</div><h3>Rich Metadata</h3><p>Includes best-track information and environmental diagnostics from the operational SHIPS model for comprehensive storm context.</p></div>
-                <div class="feature-card"><div class="feature-icon">&#127919;</div><h3>High Resolution</h3><p>2.0 km horizontal grid spacing, 0.5 km vertical grid spacing, spanning 0-18 km in height for detailed 3D structure analysis.</p></div>
+        <h2>About Me</h2>
+        <div class="about-content">
+            <div class="about-text">
+                <p>
+                    I am an Assistant Professor in the Department of Atmospheric Sciences at the 
+                    University of Miami Rosenstiel School of Marine, Atmospheric, and Earth Science. 
+                    My research uses data science methods to better understand tropical cyclones, 
+                    with the overarching goal of providing tools that can be used to improve their prediction.
+                </p>
+                <p>
+                    My work typically uses a combination of observations, numerical modeling simulations
+                    and machine learning methods to investigate the complex relationships 
+                    between convective processes, vortex structure, and storm intensification. I am particularly
+                    interested in better understanding the processes that lead to rapid intensification.
+                </p>
+                <p>
+                    I am passionate about bridging the gap between research and operations, with a focus 
+                    on improving tropical cyclone intensity forecasts through better understanding of 
+                    internal storm dynamics.
+                </p>
             </div>
-        </div>
-    </section>
-
-    <section id="features" class="section-bg">
-        <div class="content-section">
-            <h2 class="section-title">Database <span class="accent">Features</span></h2>
-            <div style="max-width:800px;margin:0 auto;">
-                <h3 style="color:var(--blue-light);margin-bottom:0.5rem;font-size:1.1rem;">Available Variables</h3>
-                <ul class="variables-list">
-                    <li>Eastward &amp; Northward Velocity</li><li>Vertical Velocity</li>
-                    <li>Radar Reflectivity</li><li>Wind Speed</li>
-                    <li>Tangential &amp; Radial Velocity</li><li>Relative Vorticity</li>
-                    <li>Divergence</li><li>Vortex Tilt Profiles</li><li>Radius of Maximum Wind</li>
-                </ul>
-                <h3 style="color:var(--blue-light);margin-top:2.5rem;margin-bottom:0.75rem;font-size:1.1rem;">Reference Frameworks</h3>
-                <div class="ref-grid">
-                    <div class="ref-card"><h4>Real-time Center Fix</h4><p>Based on operational center position during the mission</p></div>
-                    <div class="ref-card"><h4>2-km Recentered</h4><p>Using WCM method at 2 km reference height</p></div>
-                    <div class="ref-card"><h4>Vortex Tilt-Relative</h4><p>Recentered at every vertical level for tilt analysis</p></div>
+            <div class="about-highlights">
+                <div class="highlight-item">
+                    <h4>Current Position</h4>
+                    <p>Assistant Professor</p>
+                    <p>Rosenstiel School for Marine, Atmospheric, and Earth Science;</p>
+                    <p>Frost Institute for Data Science and Computing (IDSC) Core Faculty Member</p>
+                    <p>University of Miami</p>
+                </div>
+                <div class="highlight-item">
+                    <h4>Education</h4>
+                    <p>Ph.D. Atmospheric Science</p>
+                    <p>University at Albany (SUNY)</p>
+                </div>
+                <div class="highlight-item">
+                    <h4>Research Interests</h4>
+                    <p>Tropical Cyclone Intensity Change</p>
+                    <p>Tropical Cyclone Structure</p>
+                    <p>Machine Learning</p>
+                    <p>Convective Processes</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <section id="download">
-        <div class="content-section">
-            <h2 class="section-title">Download <span class="accent">Database Files</span></h2>
-            <p class="section-desc">TC-RADAR consists of four netCDF files, grouped by data type and time period. Each file is approximately 10 GB.</p>
-            <div class="data-files">
-                <div class="file-card"><h3>Swath Data</h3><p class="file-period">1997&ndash;2019</p><div class="file-size">~10 GB</div><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/tc_radar_v3m_1997_2019_xy_rel_swath_ships.nc" class="download-btn" target="_blank">Download</a></div>
-                <div class="file-card"><h3>Swath Data</h3><p class="file-period">2020&ndash;2024</p><div class="file-size">~10 GB</div><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/tc_radar_v3m_2020_2024_xy_rel_swath_ships.nc" class="download-btn" target="_blank">Download</a></div>
-                <div class="file-card"><h3>Merged Data</h3><p class="file-period">1997&ndash;2019</p><div class="file-size">~10 GB</div><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/tc_radar_v3m_1997_2019_xy_rel_merge_ships.nc" class="download-btn" target="_blank">Download</a></div>
-                <div class="file-card"><h3>Merged Data</h3><p class="file-period">2020&ndash;2024</p><div class="file-size">~10 GB</div><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/tc_radar_v3m_2020_2024_xy_rel_merge_ships.nc" class="download-btn" target="_blank">Download</a></div>
+    <!-- Research Section -->
+    <section id="research">
+        <h2>Research Areas</h2>
+        <div class="research-grid">
+            <div class="research-card">
+                <div class="research-icon">🌀</div>
+                <h3>Tropical Cyclone Structure</h3>
+                <p>
+                    Investigating the three-dimensional structure of tropical cyclones using airborne 
+                    Doppler radar observations and machine learning methods, with emphasis on precipitation structure, 
+                    vortex tilt, and storm size.
+                </p>
             </div>
-            <div class="usage-policy">
-                <h3>&#128203; Usage Policy</h3>
-                <p>Users are free to download TC-RADAR. However, we request that you notify <strong>Dr. Michael Fischer</strong> (<a href="mailto:mike.fischer@miami.edu">mike.fischer@miami.edu</a>) and NOAA's Hurricane Research Division radar team lead, <strong>Dr. Paul Reasor</strong> (<a href="mailto:paul.reasor@noaa.gov">paul.reasor@noaa.gov</a>), of the nature of your research project to ensure proper usage. Users should carefully examine data and apply additional QC consistent with their objectives.</p>
+            <div class="research-card">
+                <div class="research-icon">📊</div>
+                <h3>Intensity Change Mechanisms</h3>
+                <p>
+                    Analyzing the physical processes leading to tropical cyclone rapid intensification, 
+                    including the role of convective bursts and environmental interactions.
+                </p>
             </div>
-            <div class="citation-box">
-                <h3>&#128218; Citation</h3>
-                <p>Fischer, M. S., P. D. Reasor, R. F. Rogers, and J. F. Gamache, 2022: An updated tropical cyclone radar database. Mon. Wea. Rev., 150, 2255-2278, https://doi.org/10.1175/MWR-D-21-0223.1.</p>
-                <p style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid var(--border);">
-                <strong style="color:var(--blue-light);">For vortex tilt analyses, also cite:</strong><br>Fischer, M. S., P. D. Reasor, J. P. Dunion, and R. F. Rogers, 2024: An Observational Analysis of the Relationship between Tropical Cyclone Vortex Tilt, Precipitation Structure, and Intensity Change. Mon. Wea. Rev., 152, 203-225, https://doi.org/10.1175/MWR-D-23-0089.1.</p>
+            <div class="research-card">
+                <div class="research-icon">🛩️</div>
+                <h3>Airborne Observations</h3>
+                <p>
+                    Utilizing tail Doppler radar observations from NOAA reconnaissance 
+                    aircraft to create comprehensive datasets of tropical cyclone inner-core structure.
+                    See the TC-RADAR database below for more.
+                </p>
+            </div>
+        </div>
+
+        <!-- Featured Project: TC-RADAR -->
+        <div class="featured-project">
+            <div class="featured-content">
+                <h3>Featured: TC-RADAR Database</h3>
+                <p>
+                    A comprehensive database of tropical cyclone reconnaissance airborne Doppler radar 
+                    observations spanning 1997-2024. This dataset provides unprecedented access to the 
+                    three-dimensional structure of over 1,500 tropical cyclone cases.
+                </p>
+                <div class="featured-stats">
+                    <div class="stat-item">
+                        <div class="stat-number">1,510</div>
+                        <div class="stat-label">Cases</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number">28</div>
+                        <div class="stat-label">Years</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number">100+</div>
+                        <div class="stat-label">Storms</div>
+                    </div>
+                </div>
+                <a href="TC-RADAR/index.html" class="btn btn-secondary">Explore TC-RADAR →</a>
+            </div>
+            <div class="featured-image">
+                <img src="assets/tc-radar-preview.png" alt="TC-RADAR Preview">
             </div>
         </div>
     </section>
 
-    <section class="contact-section" id="contact">
-        <h2 class="section-title" style="color:white;">Get in Touch</h2>
-        <p style="font-size:1.1rem;margin-bottom:2rem;opacity:0.9;">Questions about TC-RADAR? Contact the developer.</p>
-        <div class="contact-info">
-            <p style="font-size:1.15rem;margin-bottom:0.75rem;"><strong>Dr. Michael Fischer</strong></p>
-            <p style="opacity:0.85;">TC-RADAR Developer</p>
-            <p style="margin-top:1rem;"><a href="mailto:mike.fischer@miami.edu" style="font-size:1rem;">mike.fischer@miami.edu</a></p>
-            <p style="margin-top:1.5rem;font-size:0.85rem;opacity:0.75;">Please include details about your research project and intended use of TC-RADAR data.</p>
+    <!-- Publications Section -->
+    <section id="publications">
+        <h2>Recent Publications</h2>
+
+        <div class="publication-list">
+
+            <!-- Refereed Publications -->
+            <h3 style="margin-bottom:1rem;">Refereed Journal Articles</h3>
+
+            <div class="publication-item">
+                <div class="publication-title">
+                    Reconsideration of the mass and condensate sources for the tropical cyclone outflow
+                </div>
+                <div class="publication-authors">
+                    Nolan, D. S., <strong>Fischer, M. S.</strong>, and M. E O’Neill
+                </div>
+                <div class="publication-journal">
+                    Bulletin of the American Meteorological Society, 106, E1342–E1359 (2025)
+                </div>
+            </div>
+
+            <div class="publication-item">
+                <div class="publication-title">
+                    Are rapidly intensifying tropical cyclones associated with unique vortex and convective characteristics?
+                </div>
+                <div class="publication-authors">
+                    <strong>Fischer, M. S.</strong>, P. D. Reasor, J. P. Dunion, and R. F. Rogers
+                </div>
+                <div class="publication-journal">
+                    Monthly Weather Review, 153, 183–203 (2025)
+                </div>
+            </div>
+
+            <div class="publication-item">
+                <div class="publication-title">
+                    A review of the effects of vertical wind shear on tropical cyclone structure and intensity
+                </div>
+                <div class="publication-authors">
+                    Rios-Berrios, R., P. M. Finocchio, J. J. Alland, X. Chen, <strong>Fischer, M. S.</strong>, et al.
+                </div>
+                <div class="publication-journal">
+                    Journal of the Atmospheric Sciences, 81, 713–741 (2024)
+                </div>
+            </div>
+
+            <div class="publication-item">
+                <div class="publication-title">
+                    An observational analysis of the relationship between tropical cyclone vortex tilt, precipitation structure, and intensity change
+                </div>
+                <div class="publication-authors">
+                    <strong>Fischer, M. S.</strong>, R. F. Rogers, P. D. Reasor, and J. P. Dunion
+                </div>
+                <div class="publication-journal">
+                    Monthly Weather Review, 152, 203–225 (2024)
+                </div>
+            </div>
+
+            <div class="publication-item">
+                <div class="publication-title">
+                    On the distribution of convective and stratiform precipitation in tropical cyclones and its relationship to intensity change
+                </div>
+                <div class="publication-authors">
+                    Wadler, J. B., J. J. Cione, R. F. Rogers, and <strong>Fischer, M. S.</strong>
+                </div>
+                <div class="publication-journal">
+                    Monthly Weather Review, 151, 3209–3233 (2023)
+                </div>
+            </div>
+
+            <div class="publication-item">
+                <div class="publication-title">
+                    A tale of two vortex evolutions: Assessing ventilation impacts on tropical cyclone rapid intensification
+                </div>
+                <div class="publication-authors">
+                    <strong>Fischer, M. S.</strong>, P. D. Reasor, B. H. Tang, et al.
+                </div>
+                <div class="publication-journal">
+                    Monthly Weather Review, 151, 297–320 (2023)
+                </div>
+            </div>
+
+            <!-- Publications in Review / Preparation -->
+            <h3 style="margin:2.5rem 0 1rem;">In Review / In Preparation</h3>
+
+            <div class="publication-item">
+                <div class="publication-title">
+                    To align or not to align? That is the question
+                </div>
+                <div class="publication-authors">
+                    <strong>Fischer, M. S.</strong>, G. R. Alvey III, D. Jariwala, and P. D. Reasor
+                </div>
+                <div class="publication-journal">
+                    Journal of Geophysical Research: Atmospheres, in review (2026)
+                </div>
+            </div>
+
+            <div class="publication-item">
+                <div class="publication-title">
+                    Estimating tropical cyclone vortex tilt from geostationary satellite imagery using a random forest
+                </div>
+                <div class="publication-authors">
+                    <strong>Fischer, M. S.</strong>, W. Bouza, D. Jariwala, and M. Reardon
+                </div>
+                <div class="publication-journal">
+                    Weather and Forecasting, in preparation (2026)
+                </div>
+            </div>
+
+            <!-- Book Chapters -->
+            <h3 style="margin:2.5rem 0 1rem;">Book & Encyclopedia Chapters</h3>
+
+            <div class="publication-item">
+                <div class="publication-title">
+                    Tropical cyclone intensity predictability
+                </div>
+                <div class="publication-authors">
+                    Sippel, J. A., and <strong>Fischer, M. S.</strong>
+                </div>
+                <div class="publication-journal">
+                    Encyclopedia of Atmospheric Sciences (3rd Ed.), Vol. 1, 446–459 (2026)
+                </div>
+                <div class="publication-links">
+                    <a href="https://doi.org/10.1016/B978-0-323-96026-7.00140-5" class="publication-link" target="_blank">
+                        📄 DOI
+                    </a>
+                </div>
+            </div>
+
         </div>
     </section>
 
+
+    <!-- Contact Section -->
+    <section id="contact">
+        <h2>Get In Touch</h2>
+        <div class="contact-content">
+            <p class="hero-description">
+                Interested in collaboration or have questions about my research? 
+                Feel free to reach out!
+            </p>
+            <div class="contact-info">
+                <div class="contact-item">
+                    <span>📧</span>
+                    <a href="mailto:mike.fischer@miami.edu" style="color: var(--primary-blue); text-decoration: none;">
+                        mike.fischer@miami.edu
+                    </a>
+                </div>
+                <div class="contact-item">
+                    <span>🏢</span>
+                    <span>University of Miami</span>
+                </div>
+                <div class="contact-item">
+                    <span>📍</span>
+                    <span>Miami, Florida</span>
+                </div>
+            </div>
+            <div class="social-links">
+                <a href="https://scholar.google.com/citations?user=6o1mfJYAAAAJ&hl=en&oi=sra" class="social-link" title="Google Scholar">🎓</a>
+                <a href="https://github.com/MichaelFischerWx" class="social-link" title="GitHub">💻</a>
+                <a href="https://x.com/MikeFischerWx" class="social-link" title="Twitter">🐦</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
     <footer>
-        <div>Created by Michael S. Fischer &middot; University of Miami</div>
-        <div style="margin-top:6px;"><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/TC_RADAR_README.pdf" target="_blank">Full Documentation (README)</a></div>
+        <p>&copy; 2026 Michael Fischer. All rights reserved.</p>
     </footer>
 
-    <div id="imageModal" class="image-modal" onclick="closeImageModal()">
-        <div class="image-modal-content" onclick="event.stopPropagation()">
-            <span class="modal-close" onclick="closeImageModal()">&times;</span>
-            <img id="modalImage" class="modal-image" alt="Full size radar analysis">
-            <div id="modalCaption" class="modal-caption"></div>
-        </div>
-    </div>
-    <div id="plotModal" class="plot-modal-overlay" onclick="closePlotModal()">
-        <div class="plot-modal-box" id="plotModalBox" onclick="event.stopPropagation()">
-            <button class="plot-modal-close" onclick="closePlotModal()" title="Close (Esc)">&times;</button>
-            <div id="plotly-fullscreen"></div>
-            <div class="cs-full-divider" id="cs-full-divider" style="display:none;"></div>
-            <div id="cs-fullscreen" style="display:none;"></div>
-            <div class="cs-full-divider" id="az-full-divider" style="display:none;"></div>
-            <div id="az-fullscreen" style="display:none;"></div>
-        </div>
-    </div>
+    <script>
+        // Smooth scrolling
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
 
-    <!-- ── 3D Volume Isosurface Modal ────────────────────────── -->
-    <div id="vol3DModal" class="plot-modal-overlay" onclick="close3DModal()">
-        <div class="vol3d-modal-box" onclick="event.stopPropagation()">
-            <button class="plot-modal-close" onclick="close3DModal()" title="Close (Esc)">&times;</button>
-            <div class="vol3d-controls">
-                <label>Iso Min <span id="vol-iso-min-val"></span></label>
-                <input type="number" id="vol-iso-min" step="any" style="width:65px;" onchange="render3DIsosurface()">
-                <label>Iso Max <span id="vol-iso-max-val"></span></label>
-                <input type="number" id="vol-iso-max" step="any" style="width:65px;" onchange="render3DIsosurface()">
-                <span id="vol-units" style="font-size:10px;color:#8899aa;"></span>
-                <label>Surfaces</label>
-                <select id="vol-surfaces" onchange="render3DIsosurface()" style="width:50px;">
-                    <option value="2">2</option>
-                    <option value="3">3</option>
-                    <option value="4" selected>4</option>
-                    <option value="5">5</option>
-                    <option value="6">6</option>
-                    <option value="8">8</option>
-                </select>
-                <label>Opacity</label>
-                <select id="vol-opacity" onchange="render3DIsosurface()" style="width:55px;">
-                    <option value="0.15">0.15</option>
-                    <option value="0.2">0.20</option>
-                    <option value="0.3" selected>0.30</option>
-                    <option value="0.4">0.40</option>
-                    <option value="0.5">0.50</option>
-                    <option value="0.7">0.70</option>
-                    <option value="1.0">1.00</option>
-                </select>
-                <button id="vol-caps" class="vol3d-toggle-btn" onclick="toggle3DCaps()" title="Toggle end caps">Caps</button>
-            </div>
-            <div id="vol-3d-chart"></div>
-        </div>
-    </div>
+        // Active nav link on scroll
+        window.addEventListener('scroll', () => {
+            let current = '';
+            const sections = document.querySelectorAll('section');
+            
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                const sectionHeight = section.clientHeight;
+                if (scrollY >= (sectionTop - 100)) {
+                    current = section.getAttribute('id');
+                }
+            });
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-    <!-- ensurePlotly() kept as a no-op safety net so the JS guards don't break -->
-    <script>function ensurePlotly(cb) { if (cb) cb(); }</script>
-    <script src="tc_radar_app.js"></script>
-    <script src="realtime_tdr.js"></script>
+            document.querySelectorAll('.nav-links a').forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href').slice(1) === current) {
+                    link.style.color = 'var(--primary-blue)';
+                } else {
+                    link.style.color = 'var(--gray-800)';
+                }
+            });
+        });
+    </script>
 </body>
 </html>
