@@ -2706,6 +2706,8 @@
     // Variable config for time series traces
     var _FL_TS_CONFIG = {
         'fl_wspd_ms':      { label: 'FL Wind Speed',   units: 'm/s',  color: '#60a5fa', yaxis: 'y'  },
+        'tdr_wspd_0p5km':  { label: 'TDR Wind 0.5 km', units: 'm/s',  color: '#34d399', yaxis: 'y'  },
+        'tdr_wspd_2km':    { label: 'TDR Wind 2.0 km', units: 'm/s',  color: '#c084fc', yaxis: 'y'  },
         'slp_hpa':         { label: 'Sea-Level Pres',   units: 'hPa',  color: '#fbbf24', yaxis: 'y2' },
         'static_pres_hpa': { label: 'Static Pressure',  units: 'hPa',  color: '#fb923c', yaxis: 'y2' },
         'temp_c':          { label: 'Temperature',      units: '\u00b0C',   color: '#f87171', yaxis: 'y3' },
@@ -2771,7 +2773,7 @@
                 });
 
                 // Build customdata: [utc_time_str, knots_str]
-                var isWind = (varName === 'fl_wspd_ms');
+                var isWind = (varName === 'fl_wspd_ms' || varName === 'tdr_wspd_0p5km' || varName === 'tdr_wspd_2km');
                 var customdata = obs.map(function (o) {
                     // Extract HH:MM:SS from ISO timestamp (e.g. "2025-10-28T13:49:08Z")
                     var utc = '';
@@ -2894,7 +2896,9 @@
         // ── Build max-wind inset annotation ──────────────────────
         var insetLines = [];
         var windVars = [
-            { key: 'fl_wspd_ms',   label: 'FL Wind',   summaryKey: 'max_fl_wspd_ms' },
+            { key: 'fl_wspd_ms',      label: 'FL Wind'      },
+            { key: 'tdr_wspd_0p5km',  label: 'TDR 0.5 km'   },
+            { key: 'tdr_wspd_2km',    label: 'TDR 2.0 km'   },
         ];
         windVars.forEach(function (wv) {
             // Only show if the variable is selected in the multi-select
@@ -3008,6 +3012,8 @@
                 '<strong style="color:#60a5fa;">T' + (o.time_offset_s >= 0 ? '+' : '') + (o.time_offset_s / 60).toFixed(1) + ' min</strong><br>';
             if (o.fl_wspd_ms != null) popTxt += 'FL Wind (10s): <strong>' + o.fl_wspd_ms.toFixed(1) + ' m/s (' + (o.fl_wspd_ms * 1.94384).toFixed(0) + ' kt)</strong><br>';
             if (o.fl_wdir_deg != null) popTxt += 'FL Dir: ' + o.fl_wdir_deg.toFixed(0) + '\u00b0<br>';
+            if (o.tdr_wspd_0p5km != null) popTxt += 'TDR 0.5 km: ' + o.tdr_wspd_0p5km.toFixed(1) + ' m/s (' + (o.tdr_wspd_0p5km * 1.94384).toFixed(0) + ' kt)<br>';
+            if (o.tdr_wspd_2km != null) popTxt += 'TDR 2.0 km: ' + o.tdr_wspd_2km.toFixed(1) + ' m/s (' + (o.tdr_wspd_2km * 1.94384).toFixed(0) + ' kt)<br>';
             if (o.slp_hpa != null) popTxt += 'SLP: <strong>' + o.slp_hpa.toFixed(1) + ' hPa</strong><br>';
             if (o.static_pres_hpa != null) popTxt += 'Static P: ' + o.static_pres_hpa.toFixed(1) + ' hPa<br>';
             if (o.temp_c != null) popTxt += 'Temp: ' + o.temp_c.toFixed(1) + '\u00b0C<br>';
