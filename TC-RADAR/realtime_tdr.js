@@ -2155,6 +2155,44 @@
             if (tC[sfcIdx] != null) html += '<div>Sfc T</div><div>' + _val(tC[sfcIdx], '\u00b0C', 1) + '</div>';
             if (tdC[sfcIdx] != null) html += '<div>Sfc Td</div><div>' + _val(tdC[sfcIdx], '\u00b0C', 1) + '</div>';
         }
+
+        // WL150 and WL500: mean wind speed over the lowest 150 m and 500 m AGL
+        var sp = sonde.profile;
+        if (sp && sp.alt_km && sp.wspd && sp.alt_km.length > 3) {
+            // Find surface altitude (lowest valid altitude)
+            var sfcAltKm = null;
+            for (var ai = sp.alt_km.length - 1; ai >= 0; ai--) {
+                if (sp.alt_km[ai] != null) { sfcAltKm = sp.alt_km[ai]; break; }
+            }
+            if (sfcAltKm != null) {
+                var layers = [
+                    { name: 'WL150', top: 0.15, val: null },
+                    { name: 'WL500', top: 0.50, val: null },
+                ];
+                for (var li = 0; li < layers.length; li++) {
+                    var topKm = sfcAltKm + layers[li].top;
+                    var sum = 0, cnt = 0;
+                    for (var wi = 0; wi < sp.alt_km.length; wi++) {
+                        if (sp.alt_km[wi] == null || sp.wspd[wi] == null) continue;
+                        if (sp.alt_km[wi] >= sfcAltKm && sp.alt_km[wi] <= topKm) {
+                            sum += sp.wspd[wi];
+                            cnt++;
+                        }
+                    }
+                    if (cnt >= 2) layers[li].val = sum / cnt;
+                }
+                for (var li2 = 0; li2 < layers.length; li2++) {
+                    var wl = layers[li2];
+                    var ktStr = '';
+                    if (wl.val != null) {
+                        ktStr = ' (' + (wl.val * 1.94384).toFixed(0) + ' kt)';
+                    }
+                    html += '<div>' + wl.name + '</div><div style="color:#34d399;font-weight:700;">' +
+                        (wl.val != null ? wl.val.toFixed(1) + ' m/s' + ktStr : '\u2014') + '</div>';
+                }
+            }
+        }
+
         html += '</div>';
 
         // Mini vertical profile table
