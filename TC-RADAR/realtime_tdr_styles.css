@@ -305,6 +305,23 @@
     overflow: hidden;
 }
 
+/* ── Dropsonde selector dropdown ──────────────── */
+#rt-sonde-select,
+#rt-skewt-sonde-select {
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+    transition: border-color 0.15s;
+}
+#rt-sonde-select:hover,
+#rt-skewt-sonde-select:hover {
+    border-color: rgba(168, 85, 247, 0.6);
+}
+#rt-sonde-select:focus,
+#rt-skewt-sonde-select:focus {
+    border-color: rgba(168, 85, 247, 0.8);
+    box-shadow: 0 0 4px rgba(168, 85, 247, 0.25);
+}
+
 /* ── 3D Volume Sonde toggle active state ────── */
 #vol-sonde-toggle.active {
     background: rgba(168, 85, 247, 0.25);

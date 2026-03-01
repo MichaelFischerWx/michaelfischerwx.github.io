@@ -1533,6 +1533,9 @@
         _rtRemoveSondesFromMap();
         // Close Skew-T panel if open
         if (typeof rtCloseSkewT === 'function') rtCloseSkewT();
+        // Hide and reset sonde dropdown
+        var sel = document.getElementById('rt-sonde-select');
+        if (sel) { sel.style.display = 'none'; sel.disabled = true; sel.innerHTML = '<option value="">\uD83E\uDE82 Select Sonde\u2026</option>'; }
         var btn = document.getElementById('rt-sonde-btn');
         if (btn) {
             btn.disabled = true;
@@ -1600,6 +1603,7 @@
                     _rtUpdateSondeBtn();
                     rtToast(json.n_sondes + ' dropsonde' + (json.n_sondes > 1 ? 's' : '') + ' loaded \u2014 click again for Sondes Only', 'info', 5000);
 
+                    _rtPopulateSondeDropdowns();
                     _rtRenderSondesOnMap();
                     _rtRenderSondesOnPlot();
                 })
@@ -2022,6 +2026,12 @@
         // Render info panel (custom for RT since _renderSkewTInfo targets a hardcoded div)
         _rtRenderSondeSkewTInfo(profiles, sonde);
 
+        // Sync dropdown selections
+        var sel = document.getElementById('rt-sonde-select');
+        if (sel) sel.value = String(sondeIdx);
+        var sel2 = document.getElementById('rt-skewt-sonde-select');
+        if (sel2) sel2.value = String(sondeIdx);
+
         // Scroll into view
         if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
@@ -2109,6 +2119,68 @@
         var panel = document.getElementById('rt-sonde-skewt-panel');
         if (panel) panel.style.display = 'none';
         try { Plotly.purge('rt-sonde-skewt'); } catch (e) { /* ok */ }
+        // Clear dropdown selection
+        var sel = document.getElementById('rt-sonde-select');
+        if (sel) sel.value = '';
+        var sel2 = document.getElementById('rt-skewt-sonde-select');
+        if (sel2) sel2.value = '';
+    };
+
+    // ── Populate dropsonde selector dropdowns ────────────────────
+    function _rtPopulateSondeDropdowns() {
+        if (!_rtSondeData || !_rtSondeData.dropsondes) return;
+        var sondes = _rtSondeData.dropsondes;
+
+        var optionsHtml = '<option value="">\uD83E\uDE82 Select Sonde\u2026</option>';
+        for (var i = 0; i < sondes.length; i++) {
+            var s = sondes[i];
+            var tOff = s.time_offset_min != null ?
+                (s.time_offset_min >= 0 ? '+' : '') + s.time_offset_min.toFixed(0) + 'm' : '';
+            var label = (s.sonde_id || '#' + (i + 1));
+            if (tOff) label += ' (' + tOff + ')';
+            if (s.comments) label += ' \u2014 ' + s.comments;
+            optionsHtml += '<option value="' + i + '">' + label + '</option>';
+        }
+
+        // Main dropdown (below action buttons)
+        var sel = document.getElementById('rt-sonde-select');
+        if (sel) {
+            sel.innerHTML = optionsHtml;
+            sel.disabled = false;
+            sel.style.display = '';
+        }
+
+        // Skew-T panel dropdown (for quick switching)
+        var sel2 = document.getElementById('rt-skewt-sonde-select');
+        if (sel2) {
+            sel2.innerHTML = optionsHtml;
+        }
+    }
+
+    // ── Select sonde from dropdown ───────────────────────────────
+    window.rtSelectSonde = function (val) {
+        if (val === '' || val == null) return;
+        var idx = parseInt(val, 10);
+        if (isNaN(idx)) return;
+
+        // Ensure sondes are visible
+        if (_rtSondeMode === 'off' && _rtSondeData) {
+            _rtSondeMode = 'on';
+            _rtSondeVisible = true;
+            _rtSetTDRVisible(true);
+            _rtRenderSondesOnMap();
+            _rtRenderSondesOnPlot();
+            _rtUpdateSondeBtn();
+        }
+
+        // Show the Skew-T
+        _rtShowSondeSkewT(idx);
+
+        // Sync both dropdowns
+        var sel = document.getElementById('rt-sonde-select');
+        if (sel) sel.value = val;
+        var sel2 = document.getElementById('rt-skewt-sonde-select');
+        if (sel2) sel2.value = val;
     };
 
     // ── 3D Volume: Toggle TDR isosurfaces ────────────────────────
