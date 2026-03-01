@@ -253,3 +253,39 @@
 .rt-attribution a:hover {
     text-decoration: underline;
 }
+
+/* ── Dropsonde toggle button ─────────────────────────────── */
+#rt-sonde-btn.active {
+    background: rgba(168, 85, 247, 0.25) !important;
+    border-color: rgba(168, 85, 247, 0.6) !important;
+    color: #e9d5ff !important;
+}
+
+/* Dropsonde Leaflet popup styling */
+.sonde-popup {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    line-height: 1.5;
+    min-width: 200px;
+}
+.sonde-popup .sonde-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #c4b5fd;
+    margin-bottom: 2px;
+}
+.sonde-popup .sonde-meta {
+    font-size: 11px;
+    color: #aaa;
+    margin-bottom: 4px;
+}
+.sonde-popup .sonde-stats {
+    font-size: 11px;
+    color: #e5e7eb;
+}
+.sonde-popup .sonde-comment {
+    font-size: 10px;
+    color: #a5b4fc;
+    font-style: italic;
+    margin-top: 3px;
+}
