@@ -1295,29 +1295,57 @@
             }
         }
 
-        for (var i = startIdx; i < n; i++) {
-            (function (idx) {
-                var url = API_BASE + RT_PREFIX + '/ir_frame?file_url=' +
-                    encodeURIComponent(_currentFileUrl) + '&frame_index=' + idx;
-                fetch(url)
-                    .then(function (r) {
-                        if (!r.ok) { console.warn('IR frame ' + idx + ' HTTP ' + r.status); return null; }
-                        return r.json();
-                    })
-                    .then(function (data) {
-                        if (!_rtIRData) return;
-                        if (data && data.frame) {
-                            _rtIRFrameURLs[data.frame_index] = data.frame;
-                            _rtPreDecodeIRFrame(data.frame_index, data.frame);
-                        }
-                        _checkAllDone();
-                    })
-                    .catch(function (err) {
-                        console.warn('IR frame ' + idx + ' error:', err.message || err);
-                        _checkAllDone();
-                    });
-            })(i);
+        // Stagger requests: fetch max 3 at a time to avoid overwhelming the server
+        var queue = [];
+        for (var qi = startIdx; qi < n; qi++) queue.push(qi);
+        var inFlight = 0;
+        var maxConcurrent = 3;
+        var irFrameTimeout = 45000; // 45 seconds per frame
+
+        function _launchNext() {
+            while (inFlight < maxConcurrent && queue.length > 0) {
+                var idx = queue.shift();
+                inFlight++;
+                (function (frameIdx) {
+                    var url = API_BASE + RT_PREFIX + '/ir_frame?file_url=' +
+                        encodeURIComponent(_currentFileUrl) + '&frame_index=' + frameIdx;
+
+                    // Add a timeout using AbortController (if available) or a racing promise
+                    var fetchOpts = {};
+                    var timer = null;
+                    if (typeof AbortController !== 'undefined') {
+                        var ctrl = new AbortController();
+                        fetchOpts.signal = ctrl.signal;
+                        timer = setTimeout(function () { ctrl.abort(); }, irFrameTimeout);
+                    }
+
+                    fetch(url, fetchOpts)
+                        .then(function (r) {
+                            if (!r.ok) { console.warn('IR frame ' + frameIdx + ' HTTP ' + r.status); return null; }
+                            return r.json();
+                        })
+                        .then(function (data) {
+                            if (!_rtIRData) return;
+                            if (data && data.frame) {
+                                _rtIRFrameURLs[data.frame_index] = data.frame;
+                                _rtPreDecodeIRFrame(data.frame_index, data.frame);
+                            }
+                            _checkAllDone();
+                        })
+                        .catch(function (err) {
+                            var msg = err.name === 'AbortError' ? 'timeout' : (err.message || err);
+                            console.warn('IR frame ' + frameIdx + ' error: ' + msg);
+                            _checkAllDone();
+                        })
+                        .finally(function () {
+                            if (timer) clearTimeout(timer);
+                            inFlight--;
+                            _launchNext();
+                        });
+                })(idx);
+            }
         }
+        _launchNext();
     }
 
     function _rtPreDecodeIRFrame(idx, dataUrl) {
@@ -1492,6 +1520,7 @@
 
     var _rtSondeData = null;           // cached API response
     var _rtSondeVisible = false;       // toggle state
+    var _rtSondeMode = 'off';         // 'off' | 'on' | 'only' (three-state cycle)
     var _rtSondeMapLayers = [];        // Leaflet layers for map view
     var _rtSondeTraceCount = 0;        // number of Plotly traces added to plan-view
     var _rtSondeFetching = false;      // prevent duplicate fetches
@@ -1524,8 +1553,11 @@
     var _rt3DSondeTraceStart = -1; // starting trace index in 3D chart for sonde traces
 
     function _rtSondeCleanup() {
+        // Restore TDR visibility if it was hidden
+        if (_rtSondeMode === 'only') _rtSetTDRVisible(true);
         _rtSondeData = null;
         _rtSondeVisible = false;
+        _rtSondeMode = 'off';
         _rtSondeFetching = false;
         _rtSondeTraceCount = 0;
         _rt3DSondeTraceStart = -1;
@@ -1536,15 +1568,46 @@
         if (btn) {
             btn.disabled = true;
             btn.classList.remove('active');
+            btn.classList.remove('sonde-only');
             btn.textContent = '\uD83E\uDE82 Sondes Off';
         }
     }
 
-    // ── Toggle button handler ────────────────────────────────────
+    // ── Show/hide TDR heatmap + contour traces on plan-view ─────
+    function _rtSetTDRVisible(vis) {
+        var plotDiv = document.getElementById('rt-plotly-chart');
+        if (!plotDiv || !plotDiv.data) return;
+        // Trace 0 is the heatmap; any non-sonde traces after that are contours/max markers
+        var tdrIndices = [];
+        for (var i = 0; i < plotDiv.data.length; i++) {
+            if (!plotDiv.data[i]._rtSonde) tdrIndices.push(i);
+        }
+        if (tdrIndices.length > 0) {
+            Plotly.restyle(plotDiv, { visible: vis }, tdrIndices);
+        }
+    }
+
+    // ── Toggle button handler (3-state cycle: Off → On → Only → Off) ──
+    function _rtUpdateSondeBtn() {
+        var btn = document.getElementById('rt-sonde-btn');
+        if (!btn) return;
+        var nStr = _rtSondeData ? ' (' + _rtSondeData.n_sondes + ')' : '';
+        btn.classList.remove('active', 'sonde-only');
+        if (_rtSondeMode === 'on') {
+            btn.classList.add('active');
+            btn.textContent = '\uD83E\uDE82 Sondes On' + nStr;
+        } else if (_rtSondeMode === 'only') {
+            btn.classList.add('active', 'sonde-only');
+            btn.textContent = '\uD83E\uDE82 Sondes Only' + nStr;
+        } else {
+            btn.textContent = '\uD83E\uDE82 Sondes Off';
+        }
+    }
+
     window.rtToggleDropsondes = function () {
         if (_rtSondeFetching) return;
 
-        if (!_rtSondeData && !_rtSondeVisible) {
+        if (!_rtSondeData && _rtSondeMode === 'off') {
             // First activation: fetch data
             _rtSondeFetching = true;
             var btn = document.getElementById('rt-sonde-btn');
@@ -1564,8 +1627,9 @@
                     }
 
                     _rtSondeVisible = true;
-                    if (btn) { btn.classList.add('active'); btn.textContent = '\uD83E\uDE82 Sondes On (' + json.n_sondes + ')'; }
-                    rtToast(json.n_sondes + ' dropsonde' + (json.n_sondes > 1 ? 's' : '') + ' loaded', 'info', 4000);
+                    _rtSondeMode = 'on';
+                    _rtUpdateSondeBtn();
+                    rtToast(json.n_sondes + ' dropsonde' + (json.n_sondes > 1 ? 's' : '') + ' loaded \u2014 click again for Sondes Only', 'info', 5000);
 
                     _rtRenderSondesOnMap();
                     _rtRenderSondesOnPlot();
@@ -1578,18 +1642,33 @@
             return;
         }
 
-        // Toggle visibility
-        _rtSondeVisible = !_rtSondeVisible;
-        var btn2 = document.getElementById('rt-sonde-btn');
-        if (_rtSondeVisible) {
-            if (btn2) { btn2.classList.add('active'); btn2.textContent = '\uD83E\uDE82 Sondes On (' + (_rtSondeData ? _rtSondeData.n_sondes : 0) + ')'; }
+        // Three-state cycle: off → on → only → off
+        if (_rtSondeMode === 'off') {
+            // Off → On (overlay)
+            _rtSondeMode = 'on';
+            _rtSondeVisible = true;
+            _rtSetTDRVisible(true);
             _rtRenderSondesOnMap();
             _rtRenderSondesOnPlot();
+        } else if (_rtSondeMode === 'on') {
+            // On → Only (hide TDR, boost sondes)
+            _rtSondeMode = 'only';
+            _rtSondeVisible = true;
+            _rtSetTDRVisible(false);
+            // Re-render sondes with bolder styling
+            _rtRemoveSondesFromPlot();
+            _rtRenderSondesOnPlot();
         } else {
-            if (btn2) { btn2.classList.remove('active'); btn2.textContent = '\uD83E\uDE82 Sondes Off'; }
+            // Only → Off
+            _rtSondeMode = 'off';
+            _rtSondeVisible = false;
+            _rtSetTDRVisible(true);
             _rtRemoveSondesFromMap();
             _rtRemoveSondesFromPlot();
+            // Close Skew-T panel
+            if (typeof rtCloseSkewT === 'function') rtCloseSkewT();
         }
+        _rtUpdateSondeBtn();
     };
 
     // ── Leaflet Map: Render dropsonde trajectories ───────────────
@@ -1703,6 +1782,7 @@
 
         var currentLevel = parseFloat((document.getElementById('rt-level') || {}).value || '2');
         var traces = [];
+        var isBold = (_rtSondeMode === 'only');  // bolder styling when TDR is hidden
 
         _rtSondeData.dropsondes.forEach(function (sonde, idx) {
             var p = sonde.profile;
@@ -1710,42 +1790,92 @@
 
             var color = _sondeColor(idx);
 
-            // Full trajectory line (faded)
-            var trajX = [], trajY = [];
+            // Pre-compute column-max wind, min SLP, and launch alt for all hover labels
+            var colMaxWspd = -Infinity, colMinPres = Infinity;
+            for (var w = 0; w < p.wspd.length; w++) {
+                if (p.wspd[w] != null && p.wspd[w] > colMaxWspd) colMaxWspd = p.wspd[w];
+            }
+            for (var pr = 0; pr < p.pres.length; pr++) {
+                if (p.pres[pr] != null && p.pres[pr] < colMinPres) colMinPres = p.pres[pr];
+            }
+            var maxWspdStr = isFinite(colMaxWspd) ? colMaxWspd.toFixed(1) : '?';
+            var maxWindColor = isFinite(colMaxWspd) ? _sondeWindColor(colMaxWspd) : '#aaa';
+
+            // Time offset string
+            var tOffStr = sonde.time_offset_min != null ?
+                (sonde.time_offset_min >= 0 ? '+' : '') + sonde.time_offset_min.toFixed(0) + ' min' : '';
+
+            // Horizontal drift
+            var driftKm = Math.sqrt(
+                Math.pow(sonde.surface.x_km - sonde.launch.x_km, 2) +
+                Math.pow(sonde.surface.y_km - sonde.launch.y_km, 2)
+            ).toFixed(1);
+
+            // Shared sonde label for all markers
+            var sondeLabel = sonde.sonde_id || '#' + (idx + 1);
+
+            // Full trajectory line (faded) — show basic info on hover too
+            var trajX = [], trajY = [], trajHover = [];
             for (var i = 0; i < p.x_km.length; i++) {
                 if (p.x_km[i] != null && p.y_km[i] != null) {
                     trajX.push(p.x_km[i]);
                     trajY.push(p.y_km[i]);
+                    var hParts = [sondeLabel];
+                    if (p.alt_km[i] != null) hParts.push('Alt: ' + p.alt_km[i].toFixed(1) + ' km');
+                    if (p.wspd[i] != null) hParts.push('Wind: ' + p.wspd[i].toFixed(1) + ' m/s');
+                    if (p.temp[i] != null) hParts.push('T: ' + p.temp[i].toFixed(1) + '\u00b0C');
+                    trajHover.push(hParts.join('  |  '));
                 }
             }
             traces.push({
-                x: trajX, y: trajY, type: 'scatter', mode: 'lines',
-                line: { color: color, width: 1.5, dash: 'dot' },
-                opacity: 0.4,
-                hoverinfo: 'skip',
+                x: trajX, y: trajY, type: 'scatter', mode: isBold ? 'lines+markers' : 'lines',
+                line: { color: color, width: isBold ? 3 : 1.5, dash: isBold ? 'solid' : 'dot' },
+                marker: isBold ? { size: 3, color: color, opacity: 0.6 } : undefined,
+                opacity: isBold ? 0.85 : 0.4,
+                hoverinfo: 'text',
+                hovertext: trajHover,
                 showlegend: false,
                 _rtSonde: true
             });
 
             // Launch marker (top)
+            var launchAlt = sonde.launch.alt_m != null ? (sonde.launch.alt_m / 1000).toFixed(1) + ' km' : '?';
             traces.push({
                 x: [sonde.launch.x_km], y: [sonde.launch.y_km],
                 type: 'scatter', mode: 'markers',
-                marker: { symbol: 'circle-open', size: 7, color: color, line: { width: 1.5, color: color } },
+                marker: { symbol: 'circle-open', size: isBold ? 10 : 7, color: color, line: { width: isBold ? 2.5 : 1.5, color: color } },
                 hoverinfo: 'text',
-                hovertext: ['\uD83E\uDE82 Launch: ' + (sonde.launch.alt_m / 1000).toFixed(1) + ' km\n' + sonde.sonde_id],
+                hovertext: ['\uD83E\uDE82 ' + sondeLabel + ' \u2014 LAUNCH' +
+                    '\nAlt: ' + launchAlt +
+                    '\nTime: ' + sonde.launch_time + (tOffStr ? ' (' + tOffStr + ')' : '') +
+                    '\nMax Wind: ' + maxWspdStr + ' m/s  |  Drift: ' + driftKm + ' km' +
+                    (sonde.platform ? '\n' + sonde.platform + ' / ' + sonde.flight : '') +
+                    (sonde.comments ? '\n' + sonde.comments : '')],
                 showlegend: false,
                 _rtSonde: true
             });
 
             // Surface marker (bottom)
+            var sfcAlt = sonde.surface.alt_m != null ? (sonde.surface.alt_m / 1000).toFixed(1) + ' km' : 'sfc';
+            // Get surface wind and temp (last valid values)
+            var sfcWspd = null, sfcTemp = null;
+            for (var si = p.wspd.length - 1; si >= 0; si--) {
+                if (sfcWspd == null && p.wspd[si] != null) sfcWspd = p.wspd[si];
+                if (sfcTemp == null && p.temp[si] != null) sfcTemp = p.temp[si];
+                if (sfcWspd != null && sfcTemp != null) break;
+            }
             traces.push({
                 x: [sonde.surface.x_km], y: [sonde.surface.y_km],
                 type: 'scatter', mode: 'markers',
-                marker: { symbol: 'diamond', size: 8, color: color },
+                marker: { symbol: 'diamond', size: isBold ? 11 : 8, color: color },
                 hoverinfo: 'text',
-                hovertext: ['\uD83E\uDE82 Surface: ' + (sonde.surface.alt_m != null ? (sonde.surface.alt_m / 1000).toFixed(1) + ' km' : 'sfc') +
-                    '\n' + sonde.sonde_id + (sonde.comments ? '\n' + sonde.comments : '')],
+                hovertext: ['\uD83E\uDE82 ' + sondeLabel + ' \u2014 SURFACE' +
+                    '\nAlt: ' + sfcAlt +
+                    (sfcWspd != null ? '\nSfc Wind: ' + sfcWspd.toFixed(1) + ' m/s' : '') +
+                    (sfcTemp != null ? '\nSfc Temp: ' + sfcTemp.toFixed(1) + ' \u00b0C' : '') +
+                    '\nMax Wind: ' + maxWspdStr + ' m/s  |  Drift: ' + driftKm + ' km' +
+                    (sonde.hit_surface ? '\nHit Surface' : '') +
+                    (sonde.comments ? '\n' + sonde.comments : '')],
                 showlegend: false,
                 _rtSonde: true
             });
@@ -1760,15 +1890,17 @@
                     x: [interpPt.x], y: [interpPt.y],
                     type: 'scatter', mode: 'markers',
                     marker: {
-                        symbol: 'circle', size: 11, color: wspdColor,
-                        line: { color: '#fff', width: 2 }
+                        symbol: 'circle', size: isBold ? 14 : 11, color: wspdColor,
+                        line: { color: '#fff', width: isBold ? 3 : 2 }
                     },
                     hoverinfo: 'text',
-                    hovertext: ['\uD83E\uDE82 ' + sonde.sonde_id +
-                        '\n@ ' + currentLevel.toFixed(1) + ' km' +
+                    hovertext: ['\uD83E\uDE82 ' + sondeLabel + ' @ ' + currentLevel.toFixed(1) + ' km' +
                         (wspdText ? '\nWind: ' + wspdText : '') +
                         (interpPt.temp != null ? '\nTemp: ' + interpPt.temp.toFixed(1) + ' \u00b0C' : '') +
-                        '\n(click for Skew-T)'],
+                        '\nMax Wind: ' + maxWspdStr + ' m/s' +
+                        (tOffStr ? '\nOffset: ' + tOffStr : '') +
+                        (sonde.comments ? '\n' + sonde.comments : '') +
+                        '\n\u25B6 Click for Skew-T'],
                     showlegend: false,
                     _rtSonde: true,
                     _rtSondeIdx: idx,
@@ -2140,7 +2272,11 @@
         // Re-render sondes if they were visible
         if (_rtSondeVisible && _rtSondeData) {
             // Slight delay to ensure plot is fully rendered
-            setTimeout(function () { _rtRenderSondesOnPlot(); }, 100);
+            setTimeout(function () {
+                _rtRenderSondesOnPlot();
+                // Re-hide TDR if in "only" mode (since newPlot recreated all traces)
+                if (_rtSondeMode === 'only') _rtSetTDRVisible(false);
+            }, 100);
         }
     };
 

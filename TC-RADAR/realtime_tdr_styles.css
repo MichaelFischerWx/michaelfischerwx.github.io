@@ -260,6 +260,12 @@
     border-color: rgba(168, 85, 247, 0.6) !important;
     color: #e9d5ff !important;
 }
+#rt-sonde-btn.sonde-only {
+    background: rgba(168, 85, 247, 0.45) !important;
+    border-color: rgba(168, 85, 247, 0.8) !important;
+    color: #fff !important;
+    box-shadow: 0 0 8px rgba(168, 85, 247, 0.3);
+}
 
 /* Dropsonde Leaflet popup styling */
 .sonde-popup {
