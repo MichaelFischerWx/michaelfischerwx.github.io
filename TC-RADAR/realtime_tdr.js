@@ -861,10 +861,8 @@
         );
 
         if (_rtIRMapOverlay) {
-            // Fast path: swap image src directly
-            var imgEl = _rtIRMapOverlay.getElement ? _rtIRMapOverlay.getElement() : _rtIRMapOverlay._image;
-            if (imgEl) { imgEl.src = url; }
-            else { _rtIRMapOverlay.setUrl(url); }
+            // Use Leaflet's setUrl for reliable image swaps (works for data-URLs)
+            _rtIRMapOverlay.setUrl(url);
             if (!_rtIRMapBoundsSet) {
                 _rtIRMapOverlay.setBounds(bounds);
                 _rtIRMapBoundsSet = true;
@@ -964,7 +962,7 @@
         if (_rtIRLoadedCount < 2) return;
         if (_rtMapIRAnimPlaying) {
             _rtMapIRAnimPlaying = false;
-            if (_rtMapIRAnimTimer) { clearInterval(_rtMapIRAnimTimer); _rtMapIRAnimTimer = null; }
+            if (_rtMapIRAnimTimer) { clearTimeout(_rtMapIRAnimTimer); _rtMapIRAnimTimer = null; }
             var btn = document.getElementById('rt-map-ir-play');
             if (btn) btn.textContent = '▶';
         } else {
@@ -978,20 +976,25 @@
             _rtUpdateMapIRSlider();
             var playBtn = document.getElementById('rt-map-ir-play');
             if (playBtn) playBtn.textContent = '⏸';
-            _rtMapIRAnimTimer = setInterval(function () {
-                if (!_rtMapIRAnimPlaying) return;
-                var n = _rtIRFrameURLs.length;
-                var start = _rtIRAnimFrame;
-                for (var j = 0; j < n; j++) {
-                    _rtIRAnimFrame = (_rtIRAnimFrame - 1 + n) % n;
-                    if (_rtIRFrameURLs[_rtIRAnimFrame]) break;
-                }
-                _rtShowIROnMap(_rtIRAnimFrame);
-                rtIRShowFrame(_rtIRAnimFrame);
-                _rtUpdateMapIRSlider();
-            }, _rtIRAnimFrame === 0 ? 1500 : 500);
+            _rtMapIRAnimTick();
         }
     };
+
+    function _rtMapIRAnimTick() {
+        if (!_rtMapIRAnimPlaying) return;
+        var n = _rtIRFrameURLs.length;
+        // Advance to next loaded frame (going backward = older in time)
+        for (var j = 0; j < n; j++) {
+            _rtIRAnimFrame = (_rtIRAnimFrame - 1 + n) % n;
+            if (_rtIRFrameURLs[_rtIRAnimFrame]) break;
+        }
+        _rtShowIROnMap(_rtIRAnimFrame);
+        rtIRShowFrame(_rtIRAnimFrame);
+        _rtUpdateMapIRSlider();
+        // Dwell longer on the most recent (t=0) frame
+        var delay = (_rtIRAnimFrame === 0) ? 1500 : 500;
+        _rtMapIRAnimTimer = setTimeout(_rtMapIRAnimTick, delay);
+    }
 
     function _rtEnableMapIRControls() {
         ['rt-map-ir-step-back', 'rt-map-ir-play', 'rt-map-ir-step-fwd'].forEach(function (id) {
@@ -1010,7 +1013,7 @@
         if (_rtMapMarker && _rtMap) { _rtMap.removeLayer(_rtMapMarker); _rtMapMarker = null; }
         if (_rtMapIRAnimPlaying) {
             _rtMapIRAnimPlaying = false;
-            if (_rtMapIRAnimTimer) { clearInterval(_rtMapIRAnimTimer); _rtMapIRAnimTimer = null; }
+            if (_rtMapIRAnimTimer) { clearTimeout(_rtMapIRAnimTimer); _rtMapIRAnimTimer = null; }
         }
     }
 
@@ -1144,7 +1147,7 @@
         _rtRemoveIRFromMap();
         if (_rtMapIRAnimPlaying) {
             _rtMapIRAnimPlaying = false;
-            if (_rtMapIRAnimTimer) { clearInterval(_rtMapIRAnimTimer); _rtMapIRAnimTimer = null; }
+            if (_rtMapIRAnimTimer) { clearTimeout(_rtMapIRAnimTimer); _rtMapIRAnimTimer = null; }
         }
         _rtIRData = null;
         _rtIRFrameURLs = [];
@@ -1218,6 +1221,9 @@
     }
     window.rtFetchIR = rtFetchIR;
 
+    // Batch size for IR frame fetching — avoids overwhelming the server
+    var _RT_IR_BATCH_SIZE = 3;
+
     function _rtFetchIRFramesParallel(startIdx) {
         if (!_rtIRData || !_currentFileUrl) { _rtIRFetching = false; return; }
         if (startIdx >= _rtIRFrameURLs.length) {
@@ -1225,42 +1231,57 @@
             _rtIRFetching = false;
             _rtUpdateIRLabel();
             _rtEnableIRAnimControls();
+            // Auto-start IR animation once done loading
+            if (_rtIRLoadedCount >= 2 && !_rtMapIRAnimPlaying) {
+                rtMapIRAnimToggle();
+            }
             return;
         }
 
+        // Fetch a small batch at a time, then recurse for the next batch
+        var batchEnd = Math.min(startIdx + _RT_IR_BATCH_SIZE, _rtIRFrameURLs.length);
         var promises = [];
-        for (var i = startIdx; i < _rtIRFrameURLs.length; i++) {
+        for (var i = startIdx; i < batchEnd; i++) {
             (function (idx) {
                 var url = API_BASE + RT_PREFIX + '/ir_frame?file_url=' +
                     encodeURIComponent(_currentFileUrl) + '&frame_index=' + idx;
                 promises.push(
                     fetch(url)
-                        .then(function (r) { return r.ok ? r.json() : null; })
+                        .then(function (r) {
+                            if (!r.ok) {
+                                console.warn('IR frame ' + idx + ' fetch failed: HTTP ' + r.status);
+                                return null;
+                            }
+                            return r.json();
+                        })
                         .then(function (data) {
                             if (!data || !_rtIRData) return;
                             if (data.frame) {
                                 _rtIRFrameURLs[data.frame_index] = data.frame;
                                 _rtPreDecodeIRFrame(data.frame_index, data.frame);
+                            } else {
+                                console.warn('IR frame ' + idx + ': no frame data returned');
                             }
                             _rtIRLoadedCount = _rtCountIRLoaded();
                             _rtUpdateIRLabel();
                             if (_rtIRLoadedCount >= 2) _rtEnableIRAnimControls();
+                            // Auto-start animation as soon as we have 2+ frames
+                            if (_rtIRLoadedCount === 2 && !_rtMapIRAnimPlaying) {
+                                rtMapIRAnimToggle();
+                            }
                         })
-                        .catch(function () { /* skip failed frames */ })
+                        .catch(function (err) {
+                            console.warn('IR frame ' + idx + ' error:', err.message || err);
+                        })
                 );
             })(i);
         }
 
         Promise.all(promises).then(function () {
             _rtIRLoadedCount = _rtCountIRLoaded();
-            _rtIRAllLoaded = true;
-            _rtIRFetching = false;
             _rtUpdateIRLabel();
-            _rtEnableIRAnimControls();
-            // Auto-start IR animation on map once all frames loaded
-            if (_rtIRLoadedCount >= 2 && !_rtMapIRAnimPlaying) {
-                rtMapIRAnimToggle();
-            }
+            // Continue with next batch
+            _rtFetchIRFramesParallel(batchEnd);
         });
     }
 
