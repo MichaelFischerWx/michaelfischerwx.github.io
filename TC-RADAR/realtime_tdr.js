@@ -235,6 +235,7 @@
         rtFetchMeta(fileUrl);
 
         // Fetch GOES IR satellite imagery in parallel
+        _rtShowIRLoadingIndicator();
         rtFetchIR();
     };
 
@@ -1144,9 +1145,37 @@
     // ══════════════════════════════════════════════════════════════
 
     // ── Cleanup ──────────────────────────────────────────────────
+    // ── IR loading indicator on map (matches archive focus mode) ──
+    function _rtShowIRLoadingIndicator() {
+        if (document.getElementById('rt-ir-loading-indicator')) return;
+        var wrapper = document.getElementById('rt-map-wrapper');
+        if (!wrapper) return;
+        var div = document.createElement('div');
+        div.id = 'rt-ir-loading-indicator';
+        div.style.cssText = 'position:absolute;top:14px;left:14px;z-index:999;' +
+            'background:rgba(10,22,40,0.88);backdrop-filter:blur(6px);' +
+            'border:1px solid rgba(96,165,250,0.25);border-radius:8px;' +
+            'padding:8px 16px;display:flex;align-items:center;gap:8px;';
+        div.innerHTML =
+            '<div style="width:14px;height:14px;border:2px solid rgba(255,255,255,0.15);' +
+            'border-top:2px solid #60a5fa;border-radius:50%;animation:spin 1s linear infinite;"></div>' +
+            '<span id="rt-ir-loading-text" style="font-size:11px;color:#93c5fd;font-family:\'JetBrains Mono\',monospace;">' +
+            'Loading IR satellite\u2026</span>';
+        wrapper.appendChild(div);
+    }
+    function _rtRemoveIRLoadingIndicator() {
+        var el = document.getElementById('rt-ir-loading-indicator');
+        if (el) el.remove();
+    }
+    function _rtUpdateIRLoadingText(msg) {
+        var el = document.getElementById('rt-ir-loading-text');
+        if (el) el.textContent = msg;
+    }
+
     function rtIRCleanup() {
         rtIRAnimStop();
         _rtRemoveIRFromMap();
+        _rtRemoveIRLoadingIndicator();
         if (_rtMapIRAnimPlaying) {
             _rtMapIRAnimPlaying = false;
             if (_rtMapIRAnimTimer) { clearTimeout(_rtMapIRAnimTimer); _rtMapIRAnimTimer = null; }
@@ -1168,7 +1197,10 @@
     function _rtShowIROnMapWhenReady(irJson, attempt) {
         attempt = attempt || 0;
         // Bail if IR state was cleaned up (user navigated away)
-        if (!_rtIRData || !irJson.frame0) return;
+        if (!_rtIRData || !irJson.frame0) {
+            _rtRemoveIRLoadingIndicator();
+            return;
+        }
         if (_rtMap) {
             _rtShowIROnMap(0);
             _rtInjectMapIRControls();
@@ -1182,9 +1214,14 @@
                 ], { padding: [20, 20], maxZoom: 8 });
             }
             rtIRShowFrame(0);
+            // Replace loading spinner with frame progress
+            _rtUpdateIRLoadingText('IR t=0 loaded \u2014 fetching frames\u2026');
         } else if (attempt < 20) {
             // Map not ready yet — retry in 500ms (up to 10 seconds)
+            _rtUpdateIRLoadingText('Waiting for map\u2026');
             setTimeout(function () { _rtShowIROnMapWhenReady(irJson, attempt + 1); }, 500);
+        } else {
+            _rtRemoveIRLoadingIndicator();
         }
     }
 
@@ -1232,6 +1269,7 @@
                 console.warn('RT IR fetch failed:', err);
                 _rtIRFetching = false;
                 _rtIRData = null;
+                _rtRemoveIRLoadingIndicator();
             });
     }
     window.rtFetchIR = rtFetchIR;
@@ -1246,6 +1284,7 @@
             _rtIRFetching = false;
             _rtUpdateIRLabel();
             _rtEnableIRAnimControls();
+            _rtRemoveIRLoadingIndicator();
             // Auto-start IR animation once done loading
             if (_rtIRLoadedCount >= 2 && !_rtMapIRAnimPlaying) {
                 rtMapIRAnimToggle();
@@ -1279,6 +1318,7 @@
                             }
                             _rtIRLoadedCount = _rtCountIRLoaded();
                             _rtUpdateIRLabel();
+                            _rtUpdateIRLoadingText('IR frames: ' + _rtIRLoadedCount + '/' + _rtIRFrameURLs.length);
                             if (_rtIRLoadedCount >= 2) _rtEnableIRAnimControls();
                             // Auto-start animation as soon as we have 2+ frames
                             if (_rtIRLoadedCount === 2 && !_rtMapIRAnimPlaying) {
