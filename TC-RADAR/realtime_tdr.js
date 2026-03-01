@@ -1823,9 +1823,12 @@
                     '<br>Time: ' + sonde.launch_time + (tOffStr ? ' (' + tOffStr + ')' : '') +
                     '<br>Max Wind: ' + maxWspdStr + ' m/s  |  Drift: ' + driftKm + ' km' +
                     (sonde.platform ? '<br>' + sonde.platform + ' / ' + sonde.flight : '') +
-                    (sonde.comments ? '<br>' + sonde.comments : '')],
+                    (sonde.comments ? '<br>' + sonde.comments : '') +
+                    '<br><i>\u25B6 Click for Skew-T</i>'],
                 showlegend: false,
-                _rtSonde: true
+                _rtSonde: true,
+                _rtSondeIdx: idx,
+                _rtSondeClickable: true
             });
 
             // Surface marker (bottom)
@@ -1848,9 +1851,12 @@
                     (sfcTemp != null ? '<br>Sfc Temp: ' + sfcTemp.toFixed(1) + ' \u00b0C' : '') +
                     '<br>Max Wind: ' + maxWspdStr + ' m/s  |  Drift: ' + driftKm + ' km' +
                     (sonde.hit_surface ? '<br>Hit Surface' : '') +
-                    (sonde.comments ? '<br>' + sonde.comments : '')],
+                    (sonde.comments ? '<br>' + sonde.comments : '') +
+                    '<br><i>\u25B6 Click for Skew-T</i>'],
                 showlegend: false,
-                _rtSonde: true
+                _rtSonde: true,
+                _rtSondeIdx: idx,
+                _rtSondeClickable: true
             });
 
             // Interpolated position at current height level
@@ -1859,21 +1865,35 @@
                 // Get wind speed for color
                 var wspdColor = interpPt.wspd != null ? _sondeWindColor(interpPt.wspd) : color;
                 var wspdText = interpPt.wspd != null ? interpPt.wspd.toFixed(1) + ' m/s' : '';
+                var hoverContent = '<b>\uD83E\uDE82 ' + sondeLabel + ' @ ' + currentLevel.toFixed(1) + ' km</b>' +
+                    (wspdText ? '<br>Wind: ' + wspdText : '') +
+                    (interpPt.temp != null ? '<br>Temp: ' + interpPt.temp.toFixed(1) + ' \u00b0C' : '') +
+                    '<br>Max Wind: ' + maxWspdStr + ' m/s' +
+                    (tOffStr ? '<br>Offset: ' + tOffStr : '') +
+                    (sonde.comments ? '<br>' + sonde.comments : '') +
+                    '<br><i>\u25B6 Click for Skew-T</i>';
+                // Invisible larger hit-target underneath for easier clicking
+                traces.push({
+                    x: [interpPt.x], y: [interpPt.y],
+                    type: 'scatter', mode: 'markers',
+                    marker: { symbol: 'circle', size: isBold ? 30 : 24, color: 'rgba(0,0,0,0)', line: { width: 0 } },
+                    hoverinfo: 'text',
+                    hovertext: [hoverContent],
+                    showlegend: false,
+                    _rtSonde: true,
+                    _rtSondeIdx: idx,
+                    _rtSondeClickable: true
+                });
+                // Visible marker on top
                 traces.push({
                     x: [interpPt.x], y: [interpPt.y],
                     type: 'scatter', mode: 'markers',
                     marker: {
-                        symbol: 'circle', size: isBold ? 14 : 11, color: wspdColor,
+                        symbol: 'circle', size: isBold ? 16 : 13, color: wspdColor,
                         line: { color: '#fff', width: isBold ? 3 : 2 }
                     },
                     hoverinfo: 'text',
-                    hovertext: ['<b>\uD83E\uDE82 ' + sondeLabel + ' @ ' + currentLevel.toFixed(1) + ' km</b>' +
-                        (wspdText ? '<br>Wind: ' + wspdText : '') +
-                        (interpPt.temp != null ? '<br>Temp: ' + interpPt.temp.toFixed(1) + ' \u00b0C' : '') +
-                        '<br>Max Wind: ' + maxWspdStr + ' m/s' +
-                        (tOffStr ? '<br>Offset: ' + tOffStr : '') +
-                        (sonde.comments ? '<br>' + sonde.comments : '') +
-                        '<br><i>\u25B6 Click for Skew-T</i>'],
+                    hovertext: [hoverContent],
                     showlegend: false,
                     _rtSonde: true,
                     _rtSondeIdx: idx,
@@ -1894,6 +1914,17 @@
                     if (pt.data && pt.data._rtSondeClickable && pt.data._rtSondeIdx != null) {
                         _rtShowSondeSkewT(pt.data._rtSondeIdx);
                     }
+                });
+                // Change cursor to pointer when hovering over clickable sonde markers
+                plotDiv.on('plotly_hover', function (eventData) {
+                    if (!eventData || !eventData.points || !eventData.points.length) return;
+                    var pt = eventData.points[0];
+                    if (pt.data && pt.data._rtSondeClickable) {
+                        plotDiv.style.cursor = 'pointer';
+                    }
+                });
+                plotDiv.on('plotly_unhover', function () {
+                    plotDiv.style.cursor = '';
                 });
                 plotDiv._rtSondeClickBound = true;
             }
@@ -2023,6 +2054,9 @@
             renderSkewT(profiles, 'rt-sonde-skewt');
         }
 
+        // Dynamic vertical scaling: adjust y-axis to fit the sonde's data range
+        _rtAdjustSkewTYAxis(plev);
+
         // Render info panel (custom for RT since _renderSkewTInfo targets a hardcoded div)
         _rtRenderSondeSkewTInfo(profiles, sonde);
 
@@ -2112,6 +2146,43 @@
         html += '</table>';
         html += '</div>';
         el.innerHTML = html;
+    }
+
+    // ── Dynamic Skew-T vertical scaling ────────────────────────
+    function _rtAdjustSkewTYAxis(plev) {
+        var skDiv = document.getElementById('rt-sonde-skewt');
+        if (!skDiv || !skDiv.layout) return;
+
+        // Find min pressure (highest altitude) in the sonde data
+        var minP = Infinity;
+        for (var i = 0; i < plev.length; i++) {
+            if (plev[i] != null && plev[i] < minP) minP = plev[i];
+        }
+
+        // Add 15% headroom above the highest data point
+        var topP = Math.max(minP * 0.85, 80);
+
+        // Choose sensible top boundary and tick values based on sonde depth
+        var yTop, tickVals;
+        if (topP >= 550) {
+            // Shallow sonde (P-3, ~700+ hPa range): zoom in
+            yTop = 550;
+            tickVals = [1000, 950, 900, 850, 800, 750, 700, 650, 600];
+        } else if (topP >= 350) {
+            // Mid-depth sonde (~400-550 hPa top)
+            yTop = topP < 400 ? 350 : Math.round(topP / 50) * 50;
+            tickVals = [1000, 900, 850, 800, 700, 600, 500, 400];
+            if (yTop <= 350) tickVals.push(350);
+        } else {
+            // Deep sonde (G-IV or full troposphere): keep full range
+            yTop = 100;
+            tickVals = [1000, 850, 700, 500, 400, 300, 200, 150, 100];
+        }
+
+        Plotly.relayout(skDiv, {
+            'yaxis.range': [Math.log10(1050), Math.log10(yTop)],
+            'yaxis.tickvals': tickVals
+        });
     }
 
     // ── Close Skew-T panel ───────────────────────────────────────
