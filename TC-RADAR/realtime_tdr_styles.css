@@ -62,22 +62,24 @@
     min-width: 0;
 }
 
-/* RIGHT: Content panel (70%) — chart + results + controls ── */
+/* RIGHT: Content panel (70%) — uses explorer-layout inside ── */
 .rt-viz-content-panel {
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 12px;
     min-width: 0;
 }
 
-/* Controls panel (inside content panel) ──────────────────── */
-.rt-viz-controls {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 16px;
-    flex-shrink: 0;
+/* The explorer-layout inside the RT content panel inherits
+   styles from tc_radar_styles.css (.explorer-layout, .explorer-display,
+   .explorer-controls). Override min-height so it fills the viewport. */
+.rt-viz-content-panel .explorer-layout {
+    flex: 1;
+    min-height: 0;
+}
+.rt-viz-content-panel .explorer-controls {
+    overflow-y: auto;
+    max-height: calc(100vh - 140px);
 }
 
 /* ── Responsive: tablet ≤1024px (35/65 split) ────────────── */
@@ -100,6 +102,17 @@
     }
     .rt-viz-content-panel {
         flex: 1;
+    }
+    .rt-viz-content-panel .explorer-layout {
+        flex-direction: column !important;
+    }
+    .rt-viz-content-panel .explorer-controls {
+        width: 100% !important;
+        border-left: none !important;
+        padding-left: 0 !important;
+        border-top: 1px solid var(--border);
+        padding-top: 10px;
+        max-height: none;
     }
 }
 
