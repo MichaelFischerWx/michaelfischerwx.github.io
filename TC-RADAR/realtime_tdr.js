@@ -2055,7 +2055,8 @@
         }
 
         // Dynamic vertical scaling: adjust y-axis to fit the sonde's data range
-        _rtAdjustSkewTYAxis(plev);
+        // Also rebuild wind barbs with correct aspect ratio for the new y-range
+        _rtAdjustSkewTYAxis(plev, profiles);
 
         // Render info panel (custom for RT since _renderSkewTInfo targets a hardcoded div)
         _rtRenderSondeSkewTInfo(profiles, sonde);
@@ -2149,7 +2150,7 @@
     }
 
     // ── Dynamic Skew-T vertical scaling ────────────────────────
-    function _rtAdjustSkewTYAxis(plev) {
+    function _rtAdjustSkewTYAxis(plev, profiles) {
         var skDiv = document.getElementById('rt-sonde-skewt');
         if (!skDiv || !skDiv.layout) return;
 
@@ -2179,9 +2180,28 @@
             tickVals = [1000, 850, 700, 500, 400, 300, 200, 150, 100];
         }
 
+        // Rebuild wind barb shapes with correct aspect ratio for the adjusted y-range
+        var hasWind = profiles && profiles.u && profiles.v && profiles.u.length > 0;
+        var xRangeMax = hasWind ? 80 : 70;
+        var newAxRanges = {
+            xMin: -40, xMax: xRangeMax,
+            logPMin: Math.log10(1050), logPMax: Math.log10(yTop),
+        };
+        var newShapes = [];
+        if (hasWind && typeof _buildWindBarbShapes === 'function') {
+            var barbXPos = 68;
+            newShapes = _buildWindBarbShapes(profiles.u, profiles.v, plev, barbXPos, 5.5, newAxRanges);
+            newShapes.push({
+                type: 'line', xref: 'x', yref: 'y',
+                x0: barbXPos - 2, y0: 1050, x1: barbXPos - 2, y1: yTop,
+                line: { color: 'rgba(255,255,255,0.08)', width: 0.5 },
+            });
+        }
+
         Plotly.relayout(skDiv, {
             'yaxis.range': [Math.log10(1050), Math.log10(yTop)],
-            'yaxis.tickvals': tickVals
+            'yaxis.tickvals': tickVals,
+            'shapes': newShapes,
         });
     }
 
