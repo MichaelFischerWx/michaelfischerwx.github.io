@@ -2378,9 +2378,11 @@
     var _origRtRenderPlot = rtRenderPlot;
     rtRenderPlot = function (json, resultDiv) {
         _origRtRenderPlot(json, resultDiv);
-        // Enable sonde button after plot loads
+        // Enable sonde + FL buttons after plot loads
         var sondeBtn = document.getElementById('rt-sonde-btn');
         if (sondeBtn) sondeBtn.disabled = false;
+        var flBtn = document.getElementById('rt-fl-btn');
+        if (flBtn) flBtn.disabled = false;
         // Re-render sondes if they were visible
         if (_rtSondeVisible && _rtSondeData) {
             // Slight delay to ensure plot is fully rendered
@@ -2422,6 +2424,266 @@
             // No sondes — disable the toggle
             if (sondeBtn3D) { sondeBtn3D.disabled = true; sondeBtn3D.classList.remove('active'); }
         }
+    };
+
+    // ═══════════════════════════════════════════════════════════
+    // Flight-Level (In Situ) Observations — IWG1/MELISSA
+    // ═══════════════════════════════════════════════════════════
+
+    var _rtFLData = null;               // cached API response
+    var _rtFLVisible = false;           // toggle state
+    var _rtFLMode = 'off';             // 'off' | 'on'
+    var _rtFLMapLayers = [];            // Leaflet layers for map view
+    var _rtFLFetching = false;          // prevent duplicate fetches
+    var _rtFLColorVar = 'fl_wspd_ms';  // which variable colours the track
+
+    // Colour variable options for flight-level track
+    var _FL_COLOR_VARS = {
+        'fl_wspd_ms':   { label: 'FL Wind Speed',   units: 'm/s',  cmin: 0,   cmax: 80  },
+        'sfmr_wspd_ms': { label: 'SFMR Sfc Wind',   units: 'm/s',  cmin: 0,   cmax: 80  },
+        'slp_hpa':      { label: 'Sea-Level Pres',   units: 'hPa',  cmin: 920, cmax: 1015 },
+        'temp_c':       { label: 'Temperature',      units: '\u00b0C',   cmin: 10,  cmax: 30  },
+        'gps_alt_m':    { label: 'GPS Altitude',     units: 'm',    cmin: 0,   cmax: 5000 },
+        'static_pres_hpa': { label: 'Static Pres',   units: 'hPa',  cmin: 500, cmax: 1020 },
+    };
+
+    // ── Wind speed → colour for flight-level (matches TDR Saffir-Simpson) ──
+    function _flWindColor(wspd) {
+        if (wspd == null || isNaN(wspd)) return '#6b7280';
+        if (wspd < 17.5) return '#60a5fa';    // TD
+        if (wspd < 33.0) return '#34d399';    // TS
+        if (wspd < 43.0) return '#fbbf24';    // Cat 1
+        if (wspd < 49.5) return '#fb923c';    // Cat 2
+        if (wspd < 58.0) return '#f87171';    // Cat 3
+        if (wspd < 70.5) return '#ef4444';    // Cat 4
+        return '#dc2626';                      // Cat 5
+    }
+
+    // ── Generic colour interpolation for non-wind variables ──
+    function _flColorInterpolate(val, cmin, cmax) {
+        if (val == null || isNaN(val)) return '#6b7280';
+        var frac = Math.max(0, Math.min(1, (val - cmin) / (cmax - cmin || 1)));
+        // Blue → cyan → green → yellow → red gradient
+        var stops = [
+            [0.0,  96, 165, 250],   // blue
+            [0.25,  6, 182, 212],   // cyan
+            [0.5,  52, 211, 153],   // green
+            [0.75,251, 191,  36],   // yellow
+            [1.0, 239,  68,  68],   // red
+        ];
+        var lo = stops[0], hi = stops[stops.length - 1];
+        for (var s = 0; s < stops.length - 1; s++) {
+            if (frac >= stops[s][0] && frac <= stops[s + 1][0]) {
+                lo = stops[s]; hi = stops[s + 1]; break;
+            }
+        }
+        var t = (hi[0] === lo[0]) ? 0 : (frac - lo[0]) / (hi[0] - lo[0]);
+        var r = Math.round(lo[1] + t * (hi[1] - lo[1]));
+        var g = Math.round(lo[2] + t * (hi[2] - lo[2]));
+        var b = Math.round(lo[3] + t * (hi[3] - lo[3]));
+        return 'rgb(' + r + ',' + g + ',' + b + ')';
+    }
+
+    function _flObsColor(obs) {
+        var val = obs[_rtFLColorVar];
+        if (_rtFLColorVar === 'fl_wspd_ms' || _rtFLColorVar === 'sfmr_wspd_ms') {
+            return _flWindColor(val);
+        }
+        var info = _FL_COLOR_VARS[_rtFLColorVar] || { cmin: 0, cmax: 100 };
+        // Reverse for pressure (lower = more intense = red)
+        if (_rtFLColorVar === 'slp_hpa' || _rtFLColorVar === 'static_pres_hpa') {
+            return _flColorInterpolate(val, info.cmax, info.cmin);
+        }
+        return _flColorInterpolate(val, info.cmin, info.cmax);
+    }
+
+    // ── Cleanup on file switch ────────────────────────────────
+    function _rtFLCleanup() {
+        _rtFLData = null;
+        _rtFLVisible = false;
+        _rtFLMode = 'off';
+        _rtFLFetching = false;
+        _rtRemoveFLFromMap();
+        var btn = document.getElementById('rt-fl-btn');
+        if (btn) { btn.textContent = '\u2708 FL Off'; btn.classList.remove('active'); }
+    }
+
+    // ── Leaflet Map: Render flight track ──────────────────────
+    function _rtRenderFLOnMap() {
+        _rtRemoveFLFromMap();
+        if (!_rtMap || !_rtFLData || !_rtFLData.observations.length) return;
+
+        var obs = _rtFLData.observations;
+
+        // Draw coloured segments (each segment coloured by the chosen variable)
+        for (var i = 0; i < obs.length - 1; i++) {
+            var o1 = obs[i], o2 = obs[i + 1];
+            if (o1.lat == null || o2.lat == null) continue;
+
+            // Skip if gap is too large (> 120s between thinned points = likely data gap)
+            if (Math.abs(o2.time_offset_s - o1.time_offset_s) > 120) continue;
+
+            var color = _flObsColor(o1);
+            var seg = L.polyline(
+                [[o1.lat, o1.lon], [o2.lat, o2.lon]],
+                { color: color, weight: 3.5, opacity: 0.9 }
+            ).addTo(_rtMap);
+            _rtFLMapLayers.push(seg);
+        }
+
+        // Add aircraft position marker at the analysis time (closest point to t=0)
+        var closest = null;
+        var closestDelta = Infinity;
+        for (var j = 0; j < obs.length; j++) {
+            var delta = Math.abs(obs[j].time_offset_s);
+            if (delta < closestDelta) {
+                closestDelta = delta;
+                closest = obs[j];
+            }
+        }
+
+        if (closest) {
+            var acIcon = L.divIcon({
+                className: 'fl-aircraft-icon',
+                html: '<div style="font-size:16px;text-shadow:0 0 6px rgba(0,0,0,0.8);">\u2708</div>',
+                iconSize: [20, 20],
+                iconAnchor: [10, 10]
+            });
+            var acMarker = L.marker([closest.lat, closest.lon], { icon: acIcon }).addTo(_rtMap);
+            _rtFLMapLayers.push(acMarker);
+
+            // Summary popup on the aircraft marker
+            var sm = _rtFLData.summary || {};
+            var popupHtml =
+                '<div style="font-family:DM Sans,sans-serif;font-size:12px;line-height:1.6;min-width:200px;">' +
+                '<strong style="font-size:13px;color:#60a5fa;">\u2708 Flight-Level Data</strong><br>' +
+                '<span style="color:#aaa;">' + (_rtFLData.mission_id || '') + '</span><br>' +
+                (sm.mean_alt_m != null ? 'Mean Alt: <strong>' + (sm.mean_alt_m / 1000).toFixed(1) + ' km</strong><br>' : '') +
+                (sm.max_fl_wspd_ms != null ? 'Max FL Wind: <strong style="color:' + _flWindColor(sm.max_fl_wspd_ms) + ';">' + sm.max_fl_wspd_ms.toFixed(1) + ' m/s</strong><br>' : '') +
+                (sm.max_sfmr_wspd_ms != null ? 'Max SFMR Sfc: <strong style="color:' + _flWindColor(sm.max_sfmr_wspd_ms) + ';">' + sm.max_sfmr_wspd_ms.toFixed(1) + ' m/s</strong><br>' : '') +
+                (sm.min_slp_hpa != null ? 'Min SLP: <strong>' + sm.min_slp_hpa.toFixed(1) + ' hPa</strong><br>' : '') +
+                '<span style="color:#aaa;font-size:10px;">' + (_rtFLData.n_obs_total || 0) + ' obs (\u00b1' + (_rtFLData.time_window_min || 45) + ' min)</span>' +
+                '</div>';
+            acMarker.bindPopup(popupHtml, { maxWidth: 300, minWidth: 220 });
+        }
+
+        // Inject colour-variable legend into map controls area
+        _rtInjectFLLegend();
+    }
+
+    function _rtRemoveFLFromMap() {
+        _rtFLMapLayers.forEach(function (layer) {
+            if (_rtMap) _rtMap.removeLayer(layer);
+        });
+        _rtFLMapLayers = [];
+        var legend = document.getElementById('rt-fl-legend');
+        if (legend) legend.remove();
+    }
+
+    // ── Legend / colour variable selector (injected into map wrapper) ──
+    function _rtInjectFLLegend() {
+        var existing = document.getElementById('rt-fl-legend');
+        if (existing) existing.remove();
+
+        var wrapper = document.getElementById('rt-map-wrapper');
+        if (!wrapper) return;
+
+        var info = _FL_COLOR_VARS[_rtFLColorVar] || { label: 'Wind', units: 'm/s' };
+
+        var legend = document.createElement('div');
+        legend.id = 'rt-fl-legend';
+        legend.className = 'rt-fl-legend';
+        legend.innerHTML =
+            '<div class="fl-legend-row">' +
+            '<span class="fl-legend-label">\u2708 ' + info.label + ' (' + info.units + ')</span>' +
+            '<select id="rt-fl-color-var" class="fl-legend-select" onchange="rtFLChangeColor(this.value)">' +
+            Object.keys(_FL_COLOR_VARS).map(function (k) {
+                var v = _FL_COLOR_VARS[k];
+                return '<option value="' + k + '"' + (k === _rtFLColorVar ? ' selected' : '') + '>' + v.label + '</option>';
+            }).join('') +
+            '</select>' +
+            '</div>' +
+            '<div class="fl-legend-bar"></div>' +
+            '<div class="fl-legend-range"><span>' + info.cmin + '</span><span>' + info.cmax + '</span></div>';
+        wrapper.appendChild(legend);
+    }
+
+    window.rtFLChangeColor = function (varName) {
+        if (_FL_COLOR_VARS[varName]) {
+            _rtFLColorVar = varName;
+            _rtRenderFLOnMap();
+        }
+    };
+
+    // ── Toggle button handler ─────────────────────────────────
+    window.rtToggleFlightLevel = function () {
+        if (_rtFLFetching) return;
+
+        if (!_rtFLData && _rtFLMode === 'off') {
+            // First activation: fetch data
+            _rtFLFetching = true;
+            var btn = document.getElementById('rt-fl-btn');
+            if (btn) btn.textContent = '\u2708 Loading\u2026';
+
+            fetch(API_BASE + RT_PREFIX + '/flightlevel?file_url=' + encodeURIComponent(_currentFileUrl))
+                .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                .then(function (json) {
+                    _rtFLData = json;
+                    _rtFLFetching = false;
+
+                    if (json.n_obs === 0) {
+                        rtToast('No flight-level data found within \u00b145 min' +
+                            (json.message ? ' (' + json.message + ')' : ''), 'warn', 6000);
+                        if (btn) btn.textContent = '\u2708 No FL Data';
+                        return;
+                    }
+
+                    _rtFLVisible = true;
+                    _rtFLMode = 'on';
+                    if (btn) { btn.textContent = '\u2708 FL On (' + json.n_obs + ')'; btn.classList.add('active'); }
+                    rtToast(json.n_obs_total + ' flight-level obs loaded (' + json.n_obs + ' displayed)', 'info', 5000);
+
+                    _rtRenderFLOnMap();
+                })
+                .catch(function (err) {
+                    _rtFLFetching = false;
+                    if (btn) btn.textContent = '\u2708 FL Off';
+                    rtToast('Flight-level fetch failed: ' + err.message, 'error');
+                });
+            return;
+        }
+
+        // Simple toggle: on → off → on
+        if (_rtFLMode === 'on') {
+            _rtFLMode = 'off';
+            _rtFLVisible = false;
+            _rtRemoveFLFromMap();
+            var offBtn = document.getElementById('rt-fl-btn');
+            if (offBtn) { offBtn.textContent = '\u2708 FL Off'; offBtn.classList.remove('active'); }
+        } else {
+            _rtFLMode = 'on';
+            _rtFLVisible = true;
+            _rtRenderFLOnMap();
+            var onBtn = document.getElementById('rt-fl-btn');
+            if (onBtn) {
+                onBtn.textContent = '\u2708 FL On (' + (_rtFLData ? _rtFLData.n_obs : 0) + ')';
+                onBtn.classList.add('active');
+            }
+        }
+    };
+
+    // ── Patch rtExploreFile to clean up flight-level state ──────
+    var _origRtExploreFile2 = window.rtExploreFile;
+    window.rtExploreFile = function () {
+        _rtFLCleanup();
+        _origRtExploreFile2();
+    };
+
+    // ── Patch _rtCleanupMap to also remove FL layers ──────────
+    var _origCleanupMap2 = _rtCleanupMap;
+    _rtCleanupMap = function () {
+        _rtRemoveFLFromMap();
+        _origCleanupMap2();
     };
 
 })();

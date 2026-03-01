@@ -328,3 +328,88 @@
     border-color: rgba(168, 85, 247, 0.6) !important;
     color: #e9d5ff !important;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   Flight-Level (In Situ) Observations — Styles
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── FL toggle button ─────────────────────────── */
+#rt-fl-btn.active {
+    background: rgba(96, 165, 250, 0.25) !important;
+    border-color: rgba(96, 165, 250, 0.6) !important;
+    color: #bfdbfe !important;
+}
+
+/* ── FL aircraft icon on map ──────────────────── */
+.fl-aircraft-icon {
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+.fl-aircraft-icon div {
+    color: #fff;
+    filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.8));
+}
+
+/* ── FL Legend (inside map wrapper, top-right) ─── */
+.rt-fl-legend {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 1000;
+    background: rgba(10, 22, 40, 0.88);
+    backdrop-filter: blur(6px);
+    border-radius: 6px;
+    border: 1px solid rgba(96, 165, 250, 0.25);
+    padding: 6px 10px;
+    min-width: 140px;
+}
+.fl-legend-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+.fl-legend-label {
+    font-size: 10px;
+    color: #93c5fd;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.fl-legend-select {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #ccc;
+    font-size: 10px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+    max-width: 120px;
+}
+.fl-legend-select:hover {
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+}
+.fl-legend-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: linear-gradient(
+        to right,
+        rgb(96, 165, 250),
+        rgb(6, 182, 212),
+        rgb(52, 211, 153),
+        rgb(251, 191, 36),
+        rgb(239, 68, 68)
+    );
+    margin: 2px 0;
+}
+.fl-legend-range {
+    display: flex;
+    justify-content: space-between;
+    font-size: 9px;
+    color: #6b7280;
+    font-family: 'JetBrains Mono', monospace;
+}
