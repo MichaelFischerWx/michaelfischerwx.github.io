@@ -7523,7 +7523,7 @@ var _ARCH_FL_RES_STYLE = {
     '10s': { width: 1.8, opacity: 0.85, dash: 'solid', suffix: ' (10 s)' },
     '30s': { width: 3.0, opacity: 1.0,  dash: 'solid', suffix: ' (30 s)' },
 };
-var _archFLResVisible = { '1s': false, '10s': true, '30s': true };
+var _archFLResVisible = { '1s': true, '10s': true, '30s': true };
 
 var _archFLTSXAxis = 'time'; // 'time' or 'radius'
 
