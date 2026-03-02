@@ -133,14 +133,14 @@ input[type="range"]::-moz-range-track { height: 4px; background: transparent; bo
 .explorer-display { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(96,165,250,0.3) transparent; }
 .explorer-display::-webkit-scrollbar { width: 6px; }
 .explorer-display::-webkit-scrollbar-thumb { background: rgba(96,165,250,0.3); border-radius: 3px; }
-.explorer-controls { width: 280px; flex-shrink: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; border-left: 1px solid var(--border); padding-left: 16px; scrollbar-width: thin; scrollbar-color: rgba(96,165,250,0.3) transparent; }
+.explorer-controls { width: 280px; flex-shrink: 0; max-height: calc(100vh - 140px); overflow-y: auto; display: flex; flex-direction: column; gap: 1px; border-left: 1px solid var(--border); padding-left: 16px; scrollbar-width: thin; scrollbar-color: rgba(96,165,250,0.3) transparent; }
 .explorer-controls::-webkit-scrollbar { width: 6px; }
 .explorer-controls::-webkit-scrollbar-thumb { background: rgba(96,165,250,0.3); border-radius: 3px; }
 /* Fallback: narrow panel (non-focus) stacks vertically */
 #side-panel:not(.focus-panel) .explorer-layout { flex-direction: column; }
 #side-panel:not(.focus-panel) .explorer-controls { width: 100%; border-left: none; padding-left: 0; border-top: 1px solid var(--border); padding-top: 10px; }
 
-#display-area { margin-bottom: 6px; flex: 1 1 auto; min-height: 350px; display: flex; flex-direction: column; }
+#display-area { margin-bottom: 6px; flex: 1 1 auto; min-height: 300px; display: flex; flex-direction: column; }
 .panel-image-wrap { width: 100%; max-height: 50vh; border-radius: var(--radius); overflow: hidden; background: var(--navy); cursor: pointer; border: 1px solid var(--border); }
 .panel-image-wrap img { width: 100%; height: auto; display: block; transition: opacity 0.2s; }
 .panel-image-wrap img:hover { opacity: 0.9; }
@@ -1076,7 +1076,7 @@ footer a:hover { text-decoration: underline; }
     #map-wrapper.focus-mode #map-container { flex: 0 0 150px; max-width: 100%; min-height: 150px; }
     #map-wrapper.focus-mode #side-panel.open { width: 100%; max-height: calc(100vh - 200px); overflow-y: auto; }
     .explorer-layout { flex-direction: column !important; }
-    .explorer-controls { width: 100% !important; border-left: none !important; padding-left: 0 !important; border-top: 1px solid var(--border); padding-top: 10px; }
+    .explorer-controls { width: 100% !important; max-height: none !important; border-left: none !important; padding-left: 0 !important; border-top: 1px solid var(--border); padding-top: 10px; }
     .content-section { padding: 3rem 16px; }
     .section-title { font-size: 1.4rem; }
     .plot-modal-box { width: 98vw; height: 96vh; border-radius: 6px; }

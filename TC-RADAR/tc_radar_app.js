@@ -256,6 +256,25 @@ function openSidePanel(caseData, fromQuickSelect) {
                 '<div class="display-actions" style="margin-top:4px;">' +
                     '<button class="cs-btn env-case-btn" id="env-case-btn" onclick="toggleEnvOverlay()" style="background:rgba(0,180,100,0.12);border-color:rgba(0,180,100,0.35);color:#6ee7b7;flex:1;">\uD83C\uDF0D Environment Diagnostics</button>' +
                 '</div>' +
+                // ── Pre-rendered FL time-series panel (hidden by default) ──
+                '<div id="fl-archive-ts" class="fl-archive-ts" style="display:none;">' +
+                    '<div class="fl-ts-header">' +
+                        '<span class="fl-ts-title">\u2708 Along-Track Time Series</span>' +
+                        '<div class="fl-ts-controls">' +
+                            '<div class="fl-ts-res-group" id="arch-fl-res-group"></div>' +
+                            '<div id="arch-fl-ts-vars" class="fl-ts-var-group"></div>' +
+                            '<button onclick="archFLCloseTimeSeries()" class="fl-ts-close" title="Close">&times;</button>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="fl-ts-info" id="fl-ts-info"></div>' +
+                    '<div id="fl-ts-chart" style="width:100%;height:340px;"></div>' +
+                    '<div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:2px 0 6px;">' +
+                        '<span style="color:#64748b;font-size:10px;">X-Axis:</span>' +
+                        '<button class="fl-ts-xbtn' + (_archFLTSXAxis === 'time' ? ' active' : '') + '" onclick="_archFLSetXAxis(\'time\')" id="fl-ts-xbtn-time">Time</button>' +
+                        '<button class="fl-ts-xbtn' + (_archFLTSXAxis === 'radius' ? ' active' : '') + '" onclick="_archFLSetXAxis(\'radius\')" id="fl-ts-xbtn-radius">Radius</button>' +
+                        '<span style="color:#64748b;font-size:10px;margin-left:8px;">Click and drag to zoom \u00b7 Double-click to reset</span>' +
+                    '</div>' +
+                '</div>' +
             '</div>' +
 
             // ── RIGHT: Controls panel ──
@@ -7684,25 +7703,42 @@ function _archiveRenderFLTimeSeries(flData) {
     var primaryObs = flData.obs_10s || flData.observations;
     if (!primaryObs || primaryObs.length === 0) return;
 
-    // Create or show the time series container
+    // Get pre-rendered container from the openSidePanel() template
     var container = document.getElementById('fl-archive-ts');
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'fl-archive-ts';
-        container.className = 'fl-archive-ts';
-        // Insert INSIDE .explorer-display (as last child), matching real-time pattern
-        // where the FL panel lives inside the display column after the action buttons.
-        var display = document.querySelector('.explorer-display');
-        if (display) {
-            display.appendChild(container);
-        } else {
-            return;
-        }
-    }
+    if (!container) return;
     container.style.display = 'block';
 
-    // Build variable toggle buttons matching real-time style
-    var varBtnsHtml = '';
+    // Populate the dynamic sections
+    _archivePopulateFLResButtons(flData);
+    _archivePopulateFLVarButtons(flData);
+    _archivePopulateFLInfo(flData);
+    _archFLTSRender(flData);
+}
+
+// ── FL Panel Helper: Populate resolution toggle buttons ──
+function _archivePopulateFLResButtons(flData) {
+    var el = document.getElementById('arch-fl-res-group');
+    if (!el) return;
+    var html = '<span style="color:#64748b;font-size:10px;margin-right:2px;">Avg:</span>';
+    var resLabels = { '1s': '1 s', '10s': '10 s', '30s': '30 s' };
+    var resOrder = ['1s', '10s', '30s'];
+    for (var ri = 0; ri < resOrder.length; ri++) {
+        var rk = resOrder[ri];
+        var hasResData = (rk === '1s' && flData.obs_1s && flData.obs_1s.length > 0) ||
+                         (rk === '10s' && (flData.obs_10s || flData.observations) && (flData.obs_10s || flData.observations).length > 0) ||
+                         (rk === '30s' && flData.obs_30s && flData.obs_30s.length > 0);
+        if (!hasResData) continue;
+        html += '<button class="fl-ts-res-btn' + (_archFLResVisible[rk] ? ' active' : '') +
+            '" id="arch-fl-res-' + rk + '" onclick="archFLToggleRes(\'' + rk + '\')">' + resLabels[rk] + '</button>';
+    }
+    el.innerHTML = html;
+}
+
+// ── FL Panel Helper: Populate variable toggle buttons ──
+function _archivePopulateFLVarButtons(flData) {
+    var el = document.getElementById('arch-fl-ts-vars');
+    if (!el) return;
+    var html = '';
     var defaultActive = ['fl_wspd_ms', 'tdr_wspd_fl_alt', 'tdr_wspd_0p5km', 'tdr_wspd_2km'];
     var varKeys = Object.keys(_ARCH_FL_TS_CONFIG);
     for (var vi = 0; vi < varKeys.length; vi++) {
@@ -7720,52 +7756,24 @@ function _archiveRenderFLTimeSeries(flData) {
             }
         }
         if (!hasData) continue;
-        varBtnsHtml += '<button class="fl-ts-var-btn' + (isActive ? ' active' : '') +
+        html += '<button class="fl-ts-var-btn' + (isActive ? ' active' : '') +
             '" data-var="' + vk + '" onclick="archFLToggleVar(this)" style="--var-color:' + vcfg.color + '">' +
             vcfg.label + '</button>';
     }
+    el.innerHTML = html;
+}
 
-    // Build resolution toggle buttons
-    var resBtnsHtml = '<span style="color:#64748b;font-size:10px;margin-right:2px;">Avg:</span>';
-    var resLabels = { '1s': '1 s', '10s': '10 s', '30s': '30 s' };
-    var resOrder = ['1s', '10s', '30s'];
-    for (var ri = 0; ri < resOrder.length; ri++) {
-        var rk = resOrder[ri];
-        var hasResData = (rk === '1s' && flData.obs_1s && flData.obs_1s.length > 0) ||
-                         (rk === '10s' && (flData.obs_10s || flData.observations) && (flData.obs_10s || flData.observations).length > 0) ||
-                         (rk === '30s' && flData.obs_30s && flData.obs_30s.length > 0);
-        if (!hasResData) continue;
-        resBtnsHtml += '<button class="fl-ts-res-btn' + (_archFLResVisible[rk] ? ' active' : '') +
-            '" id="arch-fl-res-' + rk + '" onclick="archFLToggleRes(\'' + rk + '\')">' + resLabels[rk] + '</button>';
-    }
-
-    // Count obs for info bar
+// ── FL Panel Helper: Populate info bar ──
+function _archivePopulateFLInfo(flData) {
+    var el = document.getElementById('fl-ts-info');
+    if (!el) return;
+    var primaryObs = flData.obs_10s || flData.observations;
     var n1s = flData.obs_1s ? flData.obs_1s.length : 0;
-    var n10s = primaryObs.length;
+    var n10s = primaryObs ? primaryObs.length : 0;
     var n30s = flData.obs_30s ? flData.obs_30s.length : 0;
-
-    container.innerHTML =
-        '<div class="fl-ts-header">' +
-            '<span class="fl-ts-title">\u2708 Along-Track Time Series</span>' +
-            '<div class="fl-ts-controls">' +
-                '<div class="fl-ts-res-group">' + resBtnsHtml + '</div>' +
-                '<div id="arch-fl-ts-vars" class="fl-ts-var-group">' + varBtnsHtml + '</div>' +
-                '<button onclick="archFLCloseTimeSeries()" class="fl-ts-close" title="Close time series">&times;</button>' +
-            '</div>' +
-        '</div>' +
-        '<div class="fl-ts-info">' +
-            flData.mission_id + ' \u00b7 1s/' + n1s + ', 10s/' + n10s + ', 30s/' + n30s + ' (' + flData.n_obs_raw + ' raw) \u00b7 \u00b1' + flData.time_window_min + ' min \u00b7 ' +
-            '<a href="' + (flData.source_url || '#') + '" target="_blank" style="color:#60a5fa;font-size:10px;">HRD Archive</a>' +
-        '</div>' +
-        '<div id="fl-ts-chart" style="width:100%;height:340px;"></div>' +
-        '<div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:2px 0 6px;">' +
-            '<span style="color:#64748b;font-size:10px;">X-Axis:</span>' +
-            '<button class="fl-ts-xbtn' + (_archFLTSXAxis === 'time' ? ' active' : '') + '" onclick="_archFLSetXAxis(\'time\')" id="fl-ts-xbtn-time">Time</button>' +
-            '<button class="fl-ts-xbtn' + (_archFLTSXAxis === 'radius' ? ' active' : '') + '" onclick="_archFLSetXAxis(\'radius\')" id="fl-ts-xbtn-radius">Radius</button>' +
-            '<span style="color:#64748b;font-size:10px;margin-left:8px;">Click and drag to zoom \u00b7 Double-click to reset</span>' +
-        '</div>';
-
-    _archFLTSRender(flData);
+    el.innerHTML = flData.mission_id + ' \u00b7 1s/' + n1s + ', 10s/' + n10s + ', 30s/' + n30s +
+        ' (' + flData.n_obs_raw + ' raw) \u00b7 \u00b1' + flData.time_window_min + ' min \u00b7 ' +
+        '<a href="' + (flData.source_url || '#') + '" target="_blank" style="color:#60a5fa;font-size:10px;">HRD Archive</a>';
 }
 
 function _archFLSetXAxis(mode) {
