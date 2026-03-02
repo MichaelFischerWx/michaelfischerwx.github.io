@@ -7476,6 +7476,21 @@ var _archiveFLActive = false;
 var _archiveFLData = null;
 var _archiveFLTraceIndices = [];  // Plotly trace indices to remove
 
+// Variable config for archive time series (matches real-time _FL_TS_CONFIG)
+var _ARCH_FL_TS_CONFIG = {
+    'fl_wspd_ms':      { label: 'FL Wind Speed',   units: 'm/s',  color: '#60a5fa', yaxis: 'y'  },
+    'tdr_wspd_0p5km':  { label: 'TDR Wind 0.5 km', units: 'm/s',  color: '#34d399', yaxis: 'y'  },
+    'tdr_wspd_2km':    { label: 'TDR Wind 2.0 km', units: 'm/s',  color: '#c084fc', yaxis: 'y'  },
+    'static_pres_hpa': { label: 'Static Pressure',  units: 'hPa',  color: '#fb923c', yaxis: 'y2' },
+    'sfcpr_hpa':       { label: 'Sfc Pressure',     units: 'hPa',  color: '#fbbf24', yaxis: 'y2' },
+    'temp_c':          { label: 'Temperature',      units: '\u00b0C',   color: '#f87171', yaxis: 'y3' },
+    'dewpoint_c':      { label: 'Dewpoint',         units: '\u00b0C',   color: '#a78bfa', yaxis: 'y3' },
+    'theta_e':         { label: '\u03b8e',           units: 'K',    color: '#e879f9', yaxis: 'y3' },
+    'gps_alt_m':       { label: 'GPS Altitude',     units: 'm',    color: '#6b7280', yaxis: 'y4' },
+};
+
+var _archFLTSXAxis = 'time'; // 'time' or 'radius'
+
 function archiveToggleFlightLevel() {
     var btn = document.getElementById('btn-archive-fl');
     if (_archiveFLActive) {
@@ -7493,7 +7508,6 @@ function archiveToggleFlightLevel() {
     if (btn) { btn.textContent = '\u2708 Loading\u2026'; btn.classList.add('fl-active'); btn.disabled = true; }
 
     if (_archiveFLData && _archiveFLData._caseIndex === currentCaseIndex) {
-        // Already have data for this case
         _archiveRenderFLOverlay(_archiveFLData);
         _archiveRenderFLTimeSeries(_archiveFLData);
         if (btn) { btn.textContent = '\u2708 FL On'; btn.disabled = false; }
@@ -7504,7 +7518,7 @@ function archiveToggleFlightLevel() {
     fetch(url)
         .then(function(r) { return r.json(); })
         .then(function(json) {
-            if (!_archiveFLActive) return;  // user toggled off during fetch
+            if (!_archiveFLActive) return;
             json._caseIndex = currentCaseIndex;
             _archiveFLData = json;
 
@@ -7512,7 +7526,6 @@ function archiveToggleFlightLevel() {
                 var msg = json.message || 'No flight-level data available for this case.';
                 if (btn) { btn.textContent = '\u2708 FL N/A'; btn.disabled = false; btn.classList.remove('fl-active'); }
                 _archiveFLActive = false;
-                // Show brief message
                 var flStatus = document.getElementById('fl-archive-status');
                 if (flStatus) {
                     flStatus.textContent = '\u2708 ' + msg;
@@ -7537,9 +7550,7 @@ function _archiveRemoveFLOverlay() {
     var plotDiv = document.getElementById('plotly-chart');
     if (!plotDiv || !plotDiv.data) return;
 
-    // Remove FL traces (they're the last N traces we added)
     if (_archiveFLTraceIndices.length > 0) {
-        // Delete in reverse order to maintain indices
         var indicesToRemove = _archiveFLTraceIndices.slice().sort(function(a,b){return b-a;});
         for (var i = 0; i < indicesToRemove.length; i++) {
             if (indicesToRemove[i] < plotDiv.data.length) {
@@ -7557,8 +7568,6 @@ function _archiveRenderFLOverlay(flData) {
     _archiveRemoveFLOverlay();
 
     var obs = flData.observations;
-
-    // Build FL track scatter trace (colored by wind speed)
     var x = [], y = [], colors = [], texts = [], sizes = [];
     for (var i = 0; i < obs.length; i++) {
         var o = obs[i];
@@ -7573,13 +7582,28 @@ function _archiveRenderFLOverlay(flData) {
         if (o.tdr_wspd_2km != null) tdrStr += 'TDR 2km: ' + o.tdr_wspd_2km.toFixed(1) + ' m/s';
         if (o.tdr_wspd_0p5km != null) tdrStr += (tdrStr ? '<br>' : '') + 'TDR 0.5km: ' + o.tdr_wspd_0p5km.toFixed(1) + ' m/s';
 
+        // Build time offset string, handling null/undefined
+        var tOffsetMin = (o.time_offset_s != null && isFinite(o.time_offset_s)) ? (o.time_offset_s / 60) : null;
+        var timeStr = (o.time || '') + ' UTC';
+        if (tOffsetMin != null) {
+            timeStr += ' (T' + (tOffsetMin >= 0 ? '+' : '') + tOffsetMin.toFixed(1) + ' min)';
+        }
+
+        // Flight altitude string
+        var altStr = '';
+        if (o.gps_alt_m != null && isFinite(o.gps_alt_m)) {
+            var altFt = Math.round(o.gps_alt_m * 3.28084);
+            altStr = 'Alt: ' + o.gps_alt_m.toFixed(0) + ' m (' + altFt + ' ft)<br>';
+        }
+
         texts.push(
             '<b>\u2708 Flight Level</b><br>' +
             'Wind: ' + (ws != null ? ws.toFixed(1) + ' m/s (' + (ws * 1.94384).toFixed(0) + ' kt)' : 'N/A') + '<br>' +
             'Dir: ' + (o.fl_wdir_deg != null ? o.fl_wdir_deg.toFixed(0) + '\u00b0' : 'N/A') + '<br>' +
+            altStr +
             (tdrStr ? tdrStr + '<br>' : '') +
             'R: ' + (o.r_km != null ? o.r_km.toFixed(1) + ' km' : '') + '<br>' +
-            'Time: ' + (o.time || '') + ' UTC (T' + (o.time_offset_s > 0 ? '+' : '') + (o.time_offset_s / 60).toFixed(1) + ' min)'
+            'Time: ' + timeStr
         );
     }
 
@@ -7601,14 +7625,7 @@ function _archiveRenderFLOverlay(flData) {
             cmax: 80,
             size: sizes,
             line: { width: 1, color: 'rgba(255,255,255,0.6)' },
-            colorbar: {
-                title: { text: 'FL Wind (m/s)', font: { color: '#ccc', size: 9 } },
-                tickfont: { color: '#ccc', size: 8 },
-                thickness: 8,
-                len: 0.4,
-                x: 1.06,
-                y: 0.2,
-            }
+            showscale: false,  // No separate colorbar — use legend in time series
         },
         text: texts,
         hovertemplate: '%{text}<extra></extra>',
@@ -7616,7 +7633,7 @@ function _archiveRenderFLOverlay(flData) {
         showlegend: true,
     };
 
-    // Also add a track line connecting points
+    // Track line connecting points
     var flLineTrace = {
         x: x,
         y: y,
@@ -7636,6 +7653,9 @@ function _archiveRenderFLOverlay(flData) {
 function _archiveHideFLTimeSeries() {
     var container = document.getElementById('fl-archive-ts');
     if (container) container.style.display = 'none';
+    // Purge plot to free memory
+    var plotDiv = document.getElementById('fl-ts-chart');
+    if (plotDiv) try { Plotly.purge(plotDiv); } catch(e) {}
 }
 
 function _archiveRenderFLTimeSeries(flData) {
@@ -7644,111 +7664,275 @@ function _archiveRenderFLTimeSeries(flData) {
     // Create or show the time series container
     var container = document.getElementById('fl-archive-ts');
     if (!container) {
-        // Create container after the plot result area
-        var epResult = document.getElementById('ep-result');
-        if (!epResult) return;
         container = document.createElement('div');
         container.id = 'fl-archive-ts';
         container.className = 'fl-archive-ts';
-        epResult.parentNode.insertBefore(container, epResult.nextSibling);
+        // Insert after the Environment Diagnostics button row (last .display-actions)
+        var actionRows = document.querySelectorAll('.display-actions');
+        var lastRow = actionRows.length > 0 ? actionRows[actionRows.length - 1] : null;
+        if (lastRow) {
+            lastRow.parentNode.insertBefore(container, lastRow.nextSibling);
+        } else {
+            // Fallback: after the status message area
+            var statusEl = document.getElementById('fl-archive-status');
+            var anchor = statusEl || document.getElementById('ep-result');
+            if (!anchor) return;
+            anchor.parentNode.insertBefore(container, anchor.nextSibling);
+        }
     }
     container.style.display = 'block';
+
+    // Build variable toggle buttons matching real-time style
+    var varBtnsHtml = '';
+    var defaultActive = ['fl_wspd_ms', 'tdr_wspd_0p5km', 'tdr_wspd_2km'];
+    var varKeys = Object.keys(_ARCH_FL_TS_CONFIG);
+    for (var vi = 0; vi < varKeys.length; vi++) {
+        var vk = varKeys[vi];
+        var vcfg = _ARCH_FL_TS_CONFIG[vk];
+        var isActive = defaultActive.indexOf(vk) >= 0;
+        // Skip variables that have no data in this case
+        var hasData = false;
+        for (var di = 0; di < flData.observations.length; di++) {
+            if (flData.observations[di][vk] != null) { hasData = true; break; }
+        }
+        if (!hasData) continue;
+        varBtnsHtml += '<button class="fl-ts-var-btn' + (isActive ? ' active' : '') +
+            '" data-var="' + vk + '" onclick="archFLToggleVar(this)" style="--var-color:' + vcfg.color + '">' +
+            vcfg.label + '</button>';
+    }
+
     container.innerHTML =
-        '<div class="fl-ts-header">\u2708 Flight-Level vs TDR Wind Comparison</div>' +
+        '<div class="fl-ts-header">' +
+            '<span class="fl-ts-title">\u2708 Along-Track Time Series</span>' +
+            '<div class="fl-ts-controls">' +
+                '<div id="arch-fl-ts-vars" class="fl-ts-var-group">' + varBtnsHtml + '</div>' +
+                '<button onclick="archFLCloseTimeSeries()" class="fl-ts-close" title="Close time series">&times;</button>' +
+            '</div>' +
+        '</div>' +
         '<div class="fl-ts-info">' +
             flData.mission_id + ' \u00b7 ' + flData.n_obs + ' points (' + flData.n_obs_raw + ' raw) \u00b7 \u00b1' + flData.time_window_min + ' min \u00b7 ' +
             '<a href="' + (flData.source_url || '#') + '" target="_blank" style="color:#60a5fa;font-size:10px;">Source file</a>' +
         '</div>' +
-        '<div id="fl-ts-chart" style="width:100%;height:240px;"></div>' +
-        '<div class="fl-ts-xaxis-btns">' +
-            '<button class="fl-ts-xbtn active" onclick="_flTSSetXAxis(\'time\')" id="fl-ts-xbtn-time">Time</button>' +
-            '<button class="fl-ts-xbtn" onclick="_flTSSetXAxis(\'radius\')" id="fl-ts-xbtn-radius">Radius</button>' +
+        '<div id="fl-ts-chart" style="width:100%;height:340px;"></div>' +
+        '<div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:2px 0 6px;">' +
+            '<span style="color:#64748b;font-size:10px;">X-Axis:</span>' +
+            '<button class="fl-ts-xbtn' + (_archFLTSXAxis === 'time' ? ' active' : '') + '" onclick="_archFLSetXAxis(\'time\')" id="fl-ts-xbtn-time">Time</button>' +
+            '<button class="fl-ts-xbtn' + (_archFLTSXAxis === 'radius' ? ' active' : '') + '" onclick="_archFLSetXAxis(\'radius\')" id="fl-ts-xbtn-radius">Radius</button>' +
+            '<span style="color:#64748b;font-size:10px;margin-left:8px;">Click and drag to zoom \u00b7 Double-click to reset</span>' +
         '</div>';
 
-    _flTSXAxis = 'time';
-    _flTSRender(flData);
+    _archFLTSRender(flData);
 }
 
-var _flTSXAxis = 'time';
-
-function _flTSSetXAxis(mode) {
-    _flTSXAxis = mode;
+function _archFLSetXAxis(mode) {
+    _archFLTSXAxis = mode;
     var tBtn = document.getElementById('fl-ts-xbtn-time');
     var rBtn = document.getElementById('fl-ts-xbtn-radius');
     if (tBtn) tBtn.classList.toggle('active', mode === 'time');
     if (rBtn) rBtn.classList.toggle('active', mode === 'radius');
-    if (_archiveFLData && _archiveFLData.success) _flTSRender(_archiveFLData);
+    if (_archiveFLData && _archiveFLData.success) _archFLTSRender(_archiveFLData);
 }
 
-function _flTSRender(flData) {
+function archFLToggleVar(btnEl) {
+    btnEl.classList.toggle('active');
+    if (_archiveFLData && _archiveFLData.success) _archFLTSRender(_archiveFLData);
+}
+
+function archFLCloseTimeSeries() {
+    _archiveHideFLTimeSeries();
+}
+
+function _archFLTSRender(flData) {
     var obs = flData.observations;
     if (!obs || obs.length === 0) return;
 
-    var xVals = [], flWs = [], tdr05 = [], tdr20 = [], customdata = [];
+    // Get selected variables from toggle buttons
+    var varContainer = document.getElementById('arch-fl-ts-vars');
+    var selectedVars = [];
+    if (varContainer) {
+        var btns = varContainer.querySelectorAll('.fl-ts-var-btn.active');
+        for (var bi = 0; bi < btns.length; bi++) {
+            selectedVars.push(btns[bi].getAttribute('data-var'));
+        }
+    }
+    if (selectedVars.length === 0) selectedVars = ['fl_wspd_ms'];
 
-    for (var i = 0; i < obs.length; i++) {
-        var o = obs[i];
-        var xVal = _flTSXAxis === 'radius' ? o.r_km : (o.time_offset_s / 60);
-        xVals.push(xVal);
-        flWs.push(o.fl_wspd_ms);
-        tdr05.push(o.tdr_wspd_0p5km);
-        tdr20.push(o.tdr_wspd_2km);
-        customdata.push([
-            o.time || '',
-            o.fl_wspd_ms != null ? (o.fl_wspd_ms * 1.94384).toFixed(0) : '',
-            o.r_km != null ? o.r_km.toFixed(1) : ''
-        ]);
+    // Build traces with multi-axis support
+    var usedAxes = {};
+    var traces = [];
+
+    for (var si = 0; si < selectedVars.length; si++) {
+        var varName = selectedVars[si];
+        var cfg = _ARCH_FL_TS_CONFIG[varName];
+        if (!cfg) continue;
+
+        usedAxes[cfg.yaxis] = true;
+        var isWind = (varName === 'fl_wspd_ms' || varName === 'tdr_wspd_0p5km' || varName === 'tdr_wspd_2km');
+
+        var xVals = [], yVals = [], customdata = [];
+        for (var oi = 0; oi < obs.length; oi++) {
+            var o = obs[oi];
+            var tOffMin = (o.time_offset_s != null && isFinite(o.time_offset_s)) ? Math.round(o.time_offset_s / 6.0) / 10.0 : null;
+            var xVal = _archFLTSXAxis === 'radius' ? o.r_km : tOffMin;
+            if (xVal == null) continue;
+            xVals.push(xVal);
+            var v = o[varName];
+            yVals.push((v != null && isFinite(v)) ? Math.round(v * 10) / 10 : null);
+
+            var utc = o.time || '';
+            var kt = '';
+            if (isWind && v != null && isFinite(v)) kt = (v * 1.94384).toFixed(1);
+            customdata.push([utc, kt]);
+        }
+
+        var hoverTpl;
+        if (isWind) {
+            hoverTpl = cfg.label + ': %{y} ' + cfg.units + ' (%{customdata[1]} kt)<br>%{customdata[0]} UTC<extra></extra>';
+        } else {
+            hoverTpl = cfg.label + ': %{y} ' + cfg.units + '<br>%{customdata[0]} UTC<extra></extra>';
+        }
+
+        traces.push({
+            x: xVals,
+            y: yVals,
+            customdata: customdata,
+            name: cfg.label,
+            legendgroup: varName,
+            showlegend: true,
+            type: 'scatter',
+            mode: 'lines',
+            line: { color: cfg.color, width: 2 },
+            yaxis: cfg.yaxis,
+            hovertemplate: hoverTpl,
+            connectgaps: false,
+        });
     }
 
-    var xTitle = _flTSXAxis === 'radius' ? 'Distance from Center (km)' : 'Minutes from TDR Scan';
-
-    var traces = [
-        {
-            x: xVals, y: flWs, customdata: customdata,
-            name: 'FL Wind', type: 'scatter', mode: 'lines+markers',
-            line: { color: '#60a5fa', width: 2 },
-            marker: { size: 4, color: '#60a5fa' },
-            hovertemplate: '<b>FL Wind</b>: %{y:.1f} m/s (%{customdata[1]} kt)<br>%{customdata[0]} UTC \u00b7 R=%{customdata[2]} km<extra></extra>',
-        },
-        {
-            x: xVals, y: tdr20, customdata: customdata,
-            name: 'TDR 2 km', type: 'scatter', mode: 'lines',
-            line: { color: '#f472b6', width: 2, dash: 'dash' },
-            hovertemplate: '<b>TDR 2 km</b>: %{y:.1f} m/s<br>%{customdata[0]} UTC<extra></extra>',
-        },
-        {
-            x: xVals, y: tdr05, customdata: customdata,
-            name: 'TDR 0.5 km', type: 'scatter', mode: 'lines',
-            line: { color: '#a78bfa', width: 1.5, dash: 'dot' },
-            hovertemplate: '<b>TDR 0.5 km</b>: %{y:.1f} m/s<br>%{customdata[0]} UTC<extra></extra>',
-        }
-    ];
-
+    // Layout with multi-axis support
+    var gridColor = 'rgba(148,163,184,0.08)';
     var layout = {
         paper_bgcolor: 'rgba(0,0,0,0)',
-        plot_bgcolor: 'rgba(10,22,40,0.6)',
-        margin: { l: 50, r: 12, t: 10, b: 38 },
-        font: { family: 'DM Sans, sans-serif', size: 10, color: '#94a3b8' },
-        xaxis: {
-            title: { text: xTitle, font: { size: 10, color: '#94a3b8' } },
-            gridcolor: 'rgba(255,255,255,0.06)',
-            zeroline: _flTSXAxis === 'time',
-            zerolinecolor: 'rgba(96,165,250,0.4)',
-            zerolinewidth: 1,
-        },
-        yaxis: {
-            title: { text: 'Wind Speed (m/s)', font: { size: 10, color: '#60a5fa' } },
-            gridcolor: 'rgba(255,255,255,0.06)',
-        },
+        plot_bgcolor: 'rgba(10,15,25,0.5)',
+        margin: { l: 55, r: 55, t: 8, b: 40 },
+        font: { family: 'DM Sans, sans-serif', size: 11, color: '#94a3b8' },
         legend: {
-            orientation: 'h', x: 0.5, xanchor: 'center', y: 1.12,
+            orientation: 'v', x: 1.0, xanchor: 'right', y: 1.0, yanchor: 'top',
             font: { size: 9 }, bgcolor: 'rgba(10,15,25,0.7)',
+            bordercolor: 'rgba(148,163,184,0.15)', borderwidth: 1,
+            traceorder: 'grouped', tracegroupgap: 4,
         },
         hovermode: 'x unified',
-        showlegend: true,
+        xaxis: {
+            title: { text: _archFLTSXAxis === 'radius' ? 'Distance from Center (km)' : 'Minutes from TDR Scan', font: { size: 11 } },
+            color: '#94a3b8',
+            gridcolor: gridColor,
+            zeroline: _archFLTSXAxis === 'time',
+            zerolinecolor: 'rgba(96,165,250,0.5)',
+            zerolinewidth: 2,
+        },
+        yaxis: {
+            title: usedAxes['y'] ? { text: 'Wind Speed (m/s)', font: { size: 10, color: '#60a5fa' } } : undefined,
+            color: '#60a5fa',
+            gridcolor: gridColor,
+            side: 'left',
+            visible: !!usedAxes['y'],
+        },
+        yaxis2: {
+            title: usedAxes['y2'] ? { text: 'Pressure (hPa)', font: { size: 10, color: '#fbbf24' } } : undefined,
+            color: '#fbbf24',
+            overlaying: 'y',
+            side: 'right',
+            gridcolor: 'transparent',
+            visible: !!usedAxes['y2'],
+            autorange: 'reversed',
+        },
+        yaxis3: {
+            title: usedAxes['y3'] ? { text: 'Temp (\u00b0C) / \u03b8e (K)', font: { size: 10, color: '#f87171' } } : undefined,
+            color: '#f87171',
+            overlaying: 'y',
+            side: 'left',
+            position: 0.0,
+            anchor: 'free',
+            gridcolor: 'transparent',
+            visible: !!usedAxes['y3'],
+        },
+        yaxis4: {
+            title: usedAxes['y4'] ? { text: 'Altitude (m)', font: { size: 10, color: '#6b7280' } } : undefined,
+            color: '#6b7280',
+            overlaying: 'y',
+            side: 'right',
+            anchor: 'free',
+            position: 1.0,
+            gridcolor: 'transparent',
+            visible: !!usedAxes['y4'],
+        },
     };
 
-    Plotly.newPlot('fl-ts-chart', traces, layout, { responsive: true, displayModeBar: false });
+    // Add TDR scan time marker when in time mode
+    if (_archFLTSXAxis === 'time') {
+        layout.shapes = [{
+            type: 'line',
+            x0: 0, x1: 0, y0: 0, y1: 1, yref: 'paper',
+            line: { color: 'rgba(96,165,250,0.6)', width: 2, dash: 'dash' },
+        }];
+        layout.annotations = [{
+            x: 0.5, y: 0, yref: 'paper', xref: 'x',
+            text: 'TDR Analysis', showarrow: false,
+            font: { size: 9, color: 'rgba(96,165,250,0.7)' },
+            yanchor: 'top', yshift: 8,
+        }];
+    }
+
+    // Build max-wind / min-pressure inset annotation
+    var insetLines = [];
+    var windVars = [
+        { key: 'fl_wspd_ms',     label: 'FL Wind' },
+        { key: 'tdr_wspd_0p5km', label: 'TDR 0.5 km' },
+        { key: 'tdr_wspd_2km',   label: 'TDR 2.0 km' },
+    ];
+    for (var wi = 0; wi < windVars.length; wi++) {
+        var wv = windVars[wi];
+        if (selectedVars.indexOf(wv.key) === -1) continue;
+        var maxVal = null;
+        for (var mi = 0; mi < obs.length; mi++) {
+            var wval = obs[mi][wv.key];
+            if (wval != null && (maxVal === null || wval > maxVal)) maxVal = wval;
+        }
+        if (maxVal != null) {
+            insetLines.push(wv.label + ' max: <b>' + maxVal.toFixed(1) + '</b> m/s (<b>' + (maxVal * 1.94384).toFixed(0) + '</b> kt)');
+        }
+    }
+    var presVars = [
+        { key: 'static_pres_hpa', label: 'Static P min' },
+        { key: 'sfcpr_hpa',       label: 'Sfc P min' },
+    ];
+    for (var pi = 0; pi < presVars.length; pi++) {
+        var pv = presVars[pi];
+        if (selectedVars.indexOf(pv.key) === -1) continue;
+        var minVal = null;
+        for (var pj = 0; pj < obs.length; pj++) {
+            var pval = obs[pj][pv.key];
+            if (pval != null && (minVal === null || pval < minVal)) minVal = pval;
+        }
+        if (minVal != null) {
+            insetLines.push(pv.label + ': <b>' + minVal.toFixed(1) + '</b> hPa');
+        }
+    }
+    if (insetLines.length > 0) {
+        if (!layout.annotations) layout.annotations = [];
+        layout.annotations.push({
+            x: 0.01, y: 0.98, xref: 'paper', yref: 'paper',
+            text: insetLines.join('<br>'),
+            showarrow: false,
+            font: { family: 'JetBrains Mono, monospace', size: 10, color: '#cbd5e1' },
+            align: 'left', xanchor: 'left', yanchor: 'top',
+            bgcolor: 'rgba(10,15,25,0.75)',
+            bordercolor: 'rgba(96,165,250,0.3)',
+            borderwidth: 1, borderpad: 6,
+        });
+    }
+
+    Plotly.newPlot('fl-ts-chart', traces, layout, { responsive: true, displayModeBar: false, scrollZoom: false });
 }
 
 // Clear FL state when case changes

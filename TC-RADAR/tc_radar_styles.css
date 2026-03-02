@@ -1104,29 +1104,77 @@ footer a:hover { text-decoration: underline; }
     line-height: 1.4;
 }
 .fl-archive-ts {
-    margin-top: 8px;
-    background: rgba(10,22,40,0.5);
-    border: 1px solid rgba(255,255,255,0.06);
+    margin-top: 10px;
+    background: rgba(10, 22, 40, 0.6);
+    border: 1px solid rgba(96, 165, 250, 0.12);
     border-radius: 8px;
-    padding: 10px 8px 6px;
+    overflow: hidden;
 }
-.fl-ts-header {
-    font-size: 12px;
+.fl-archive-ts .fl-ts-header {
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    background: rgba(96, 165, 250, 0.08);
+    border-bottom: 1px solid rgba(96, 165, 250, 0.15);
+}
+.fl-archive-ts .fl-ts-title {
+    color: #93c5fd;
+    font-size: 13px;
     font-weight: 600;
-    color: #60a5fa;
-    margin-bottom: 4px;
+    flex-shrink: 0;
+    margin-right: 12px;
 }
-.fl-ts-info {
+.fl-archive-ts .fl-ts-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+}
+.fl-archive-ts .fl-ts-var-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3px;
+    flex: 1;
+}
+.fl-archive-ts .fl-ts-var-btn {
+    background: rgba(30, 40, 60, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 4px;
+    color: #94a3b8;
+    font-size: 10px;
+    padding: 2px 8px;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+.fl-archive-ts .fl-ts-var-btn.active {
+    background: rgba(96,165,250, 0.15);
+    border-color: var(--var-color, rgba(96, 165, 250, 0.6));
+    color: var(--var-color, #93c5fd);
+}
+.fl-archive-ts .fl-ts-var-btn:hover {
+    border-color: var(--var-color, rgba(96, 165, 250, 0.5));
+    color: var(--var-color, #93c5fd);
+}
+.fl-archive-ts .fl-ts-close {
+    background: none;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    padding: 0 4px;
+    flex-shrink: 0;
+}
+.fl-archive-ts .fl-ts-close:hover { color: #fff; }
+.fl-archive-ts .fl-ts-info {
     font-size: 10px;
     color: #94a3b8;
-    margin-bottom: 6px;
+    padding: 4px 12px;
     line-height: 1.4;
-}
-.fl-ts-xaxis-btns {
-    display: flex;
-    gap: 4px;
-    justify-content: center;
-    margin-top: 4px;
 }
 .fl-ts-xbtn {
     font-size: 10px;
