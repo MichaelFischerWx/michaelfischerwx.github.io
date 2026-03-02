@@ -4542,15 +4542,15 @@ function initCompositePanel() {
 
                     '<div class="wizard-section-title">TDR Radar Outputs</div>' +
                     '<div class="wizard-output-grid">' +
-                        '<div class="wizard-output-item checked" id="wiz-out-az" onclick="_wizardToggleOutput(this)">' +
+                        '<div class="wizard-output-item checked" id="wiz-out-az" onclick="_wizardToggleOutput(this, event)">' +
                             '<input type="checkbox" id="wiz-chk-az" checked>' +
                             '<label for="wiz-chk-az">\u27F3 Azimuthal Mean<small>Radius\u2013height cross-section</small></label>' +
                         '</div>' +
-                        '<div class="wizard-output-item" id="wiz-out-sq" onclick="_wizardToggleOutput(this)">' +
+                        '<div class="wizard-output-item" id="wiz-out-sq" onclick="_wizardToggleOutput(this, event)">' +
                             '<input type="checkbox" id="wiz-chk-sq">' +
                             '<label for="wiz-chk-sq">\u25D1 Shear Quadrants<small>4-panel shear-relative</small></label>' +
                         '</div>' +
-                        '<div class="wizard-output-item" id="wiz-out-pv" onclick="_wizardToggleOutput(this)">' +
+                        '<div class="wizard-output-item" id="wiz-out-pv" onclick="_wizardToggleOutput(this, event)">' +
                             '<input type="checkbox" id="wiz-chk-pv">' +
                             '<label for="wiz-chk-pv">\uD83D\uDDFA Plan View<small>Horizontal map at height</small></label>' +
                         '</div>' +
@@ -4558,15 +4558,15 @@ function initCompositePanel() {
 
                     '<div class="wizard-section-title env">Environment Outputs</div>' +
                     '<div class="wizard-output-grid">' +
-                        '<div class="wizard-output-item env-item" id="wiz-out-env-pv" onclick="_wizardToggleOutput(this)">' +
+                        '<div class="wizard-output-item env-item" id="wiz-out-env-pv" onclick="_wizardToggleOutput(this, event)">' +
                             '<input type="checkbox" id="wiz-chk-env-pv">' +
                             '<label for="wiz-chk-env-pv">\uD83C\uDF0D ERA5 Plan View<small>Spatial environmental field</small></label>' +
                         '</div>' +
-                        '<div class="wizard-output-item env-item" id="wiz-out-env-sc" onclick="_wizardToggleOutput(this)">' +
+                        '<div class="wizard-output-item env-item" id="wiz-out-env-sc" onclick="_wizardToggleOutput(this, event)">' +
                             '<input type="checkbox" id="wiz-chk-env-sc">' +
                             '<label for="wiz-chk-env-sc">\uD83D\uDCCA Scalar Diagnostics<small>SHIPS-style parameters</small></label>' +
                         '</div>' +
-                        '<div class="wizard-output-item env-item" id="wiz-out-env-th" onclick="_wizardToggleOutput(this)">' +
+                        '<div class="wizard-output-item env-item" id="wiz-out-env-th" onclick="_wizardToggleOutput(this, event)">' +
                             '<input type="checkbox" id="wiz-chk-env-th">' +
                             '<label for="wiz-chk-env-th">\uD83C\uDF21 Thermo Profiles<small>Skew-T & Hodograph</small></label>' +
                         '</div>' +
@@ -4888,9 +4888,15 @@ function _wizardSetMode(mode) {
     _wizardUpdateSummary();
 }
 
-function _wizardToggleOutput(el) {
+function _wizardToggleOutput(el, ev) {
     var cb = el.querySelector('input[type="checkbox"]');
-    if (cb) { cb.checked = !cb.checked; }
+    // If click originated from the checkbox or its label, the browser already
+    // toggled the checked state — don't toggle it again.
+    if (ev && (ev.target.tagName === 'INPUT' || ev.target.tagName === 'LABEL' || ev.target.tagName === 'SMALL')) {
+        // Browser handled the toggle; just sync the visual state.
+    } else {
+        if (cb) { cb.checked = !cb.checked; }
+    }
     el.classList.toggle('checked', cb && cb.checked);
     _wizardUpdateConfigVisibility();
     _wizardUpdateSummary();
@@ -4904,9 +4910,10 @@ function _wizardUpdateConfigVisibility() {
     var anyTDR = document.getElementById('wiz-chk-az').checked ||
                  document.getElementById('wiz-chk-sq').checked ||
                  document.getElementById('wiz-chk-pv').checked;
-    var anyEnv = document.getElementById('wiz-chk-env-pv').checked ||
-                 document.getElementById('wiz-chk-env-sc').checked ||
-                 document.getElementById('wiz-chk-env-th').checked;
+    var envPV  = document.getElementById('wiz-chk-env-pv').checked;
+    var envSC  = document.getElementById('wiz-chk-env-sc').checked;
+    var envTH  = document.getElementById('wiz-chk-env-th').checked;
+    var anyEnv = envPV || envSC || envTH;
     var tdrCfg = document.getElementById('wiz-cfg-tdr');
     var envCfg = document.getElementById('wiz-cfg-env');
     if (tdrCfg) tdrCfg.style.display = anyTDR ? '' : 'none';
@@ -4915,6 +4922,35 @@ function _wizardUpdateConfigVisibility() {
     if (!anyTDR && !anyEnv) {
         if (tdrCfg) tdrCfg.style.display = '';
         if (envCfg) envCfg.style.display = '';
+    }
+
+    // When Thermo Profiles is selected, auto-select Scalar Diagnostics too,
+    // since shear/mid-level RH/SST etc. are needed for vertical profile context.
+    if (envTH) {
+        var scCb = document.getElementById('wiz-chk-env-sc');
+        var scItem = document.getElementById('wiz-out-env-sc');
+        if (scCb && !scCb.checked) {
+            scCb.checked = true;
+            if (scItem) scItem.classList.add('checked');
+        }
+    }
+
+    // Hide ERA5 Plan View config options (field, vectors, rotation, crop radius)
+    // when only Thermo Profiles / Scalar Diagnostics are selected (no ERA5 Plan View).
+    if (envCfg) {
+        var envBodyRows = envCfg.querySelectorAll('.wizard-config-body .wizard-config-row');
+        var showPlanViewOpts = envPV;
+        envBodyRows.forEach(function(row) {
+            // The ERA5 Field, Shear Vectors, Shear-Relative, and Crop Radius rows
+            // are only relevant to the ERA5 Plan View output.
+            var hasField = row.querySelector('#comp-env-field');
+            var hasVectors = row.querySelector('#comp-env-vectors');
+            var hasShearRel = row.querySelector('#comp-env-shear-rel');
+            var hasRadius = row.querySelector('#comp-env-radius');
+            if (hasField || hasVectors || hasShearRel || hasRadius) {
+                row.style.display = showPlanViewOpts ? '' : 'none';
+            }
+        });
     }
 }
 
