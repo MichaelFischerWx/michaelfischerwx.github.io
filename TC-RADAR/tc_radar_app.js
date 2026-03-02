@@ -260,12 +260,10 @@ function openSidePanel(caseData, fromQuickSelect) {
                 '<div id="fl-archive-ts" class="fl-archive-ts" style="display:none;">' +
                     '<div class="fl-ts-header">' +
                         '<span class="fl-ts-title">\u2708 Along-Track Time Series</span>' +
-                        '<div class="fl-ts-controls">' +
-                            '<div class="fl-ts-res-group" id="arch-fl-res-group"></div>' +
-                            '<div id="arch-fl-ts-vars" class="fl-ts-var-group"></div>' +
-                            '<button onclick="archFLCloseTimeSeries()" class="fl-ts-close" title="Close">&times;</button>' +
-                        '</div>' +
+                        '<div class="fl-ts-res-group" id="arch-fl-res-group"></div>' +
+                        '<button onclick="archFLCloseTimeSeries()" class="fl-ts-close" title="Close">&times;</button>' +
                     '</div>' +
+                    '<div class="fl-ts-var-bar" id="arch-fl-ts-vars"></div>' +
                     '<div class="fl-ts-info" id="fl-ts-info"></div>' +
                     '<div id="fl-ts-chart" style="width:100%;height:340px;"></div>' +
                     '<div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:2px 0 6px;">' +

@@ -1125,21 +1125,16 @@ footer a:hover { text-decoration: underline; }
     font-size: 13px;
     font-weight: 600;
     white-space: nowrap;
-    margin-right: 8px;
-}
-.fl-archive-ts .fl-ts-controls {
-    display: flex;
-    align-items: center;
-    gap: 8px;
     flex: 1;
-    min-width: 0;
 }
-.fl-archive-ts .fl-ts-var-group {
+.fl-archive-ts .fl-ts-var-bar {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 3px;
-    flex: 1;
+    gap: 4px;
+    padding: 5px 12px;
+    background: rgba(96, 165, 250, 0.04);
+    border-bottom: 1px solid rgba(96, 165, 250, 0.08);
 }
 .fl-archive-ts .fl-ts-var-btn {
     background: rgba(30, 40, 60, 0.8);
@@ -1178,9 +1173,7 @@ footer a:hover { text-decoration: underline; }
     align-items: center;
     gap: 3px;
     flex-shrink: 0;
-    margin-right: 6px;
-    padding-right: 6px;
-    border-right: 1px solid rgba(148, 163, 184, 0.15);
+    margin-right: 4px;
 }
 .fl-archive-ts .fl-ts-res-btn {
     background: rgba(30, 40, 60, 0.8);
