@@ -801,6 +801,16 @@ footer a:hover { text-decoration: underline; }
 .wizard-group-col.group-a .wizard-case-count .wcc-num { color: var(--blue-light); }
 .wizard-group-col.group-b .wizard-case-count { border-color: rgba(245,158,11,0.2); }
 .wizard-group-col.group-b .wizard-case-count .wcc-num { color: #fbbf24; }
+.wcc-cap-note {
+    font-size: 9px; color: #6b7280; line-height: 1.3; margin-top: 6px;
+    padding: 4px 8px; border-radius: 4px;
+    background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04);
+    transition: color 0.2s, background 0.2s, border-color 0.2s;
+}
+.wcc-cap-note.capped {
+    color: #fbbf24; background: rgba(251,191,36,0.06);
+    border-color: rgba(251,191,36,0.15);
+}
 
 /* ── Step 3: Configure ──────────────────────────── */
 .wizard-config-cols { display: flex; gap: 20px; }

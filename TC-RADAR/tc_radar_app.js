@@ -4588,6 +4588,7 @@ function initCompositePanel() {
                             '<div class="wizard-case-count">' +
                                 '<div class="wcc-label">Matching cases</div>' +
                                 '<div class="wcc-num" id="comp-count-num">\u2014</div>' +
+                                '<div class="wcc-cap-note" id="comp-cap-note">Composites are limited to 1,000 cases per group. If your filters match more, only the first 1,000 will be used.</div>' +
                             '</div>' +
                         '</div>' +
                         // Group B (hidden unless diff mode)
@@ -4597,6 +4598,7 @@ function initCompositePanel() {
                             '<div class="wizard-case-count">' +
                                 '<div class="wcc-label">Group B cases</div>' +
                                 '<div class="wcc-num" id="compb-count-num">\u2014</div>' +
+                                '<div class="wcc-cap-note" id="compb-cap-note">Composites are limited to 1,000 cases per group. If your filters match more, only the first 1,000 will be used.</div>' +
                             '</div>' +
                         '</div>' +
                     '</div>' +
@@ -5147,13 +5149,16 @@ function updateCompositeCount() {
         .then(function(r) { return r.json(); })
         .then(function(json) {
             el.textContent = json.count;
+            var capNote = document.getElementById('comp-cap-note');
             if (json.capped) {
                 el.textContent = json.count + ' (max ' + json.max_cases + ')';
                 el.style.color = '#fbbf24';
-                el.title = 'Only the first ' + json.max_cases + ' cases will be used to prevent server memory issues.';
+                el.title = 'Only the first ' + json.max_cases + ' cases will be composited.';
+                if (capNote) { capNote.classList.add('capped'); capNote.textContent = 'Cap exceeded \u2014 only the first ' + json.max_cases + ' matching cases will be composited.'; }
             } else {
                 el.style.color = '';
                 el.title = '';
+                if (capNote) { capNote.classList.remove('capped'); capNote.textContent = 'Composites are limited to ' + json.max_cases + ' cases per group.'; }
             }
         })
         .catch(function() { el.textContent = '?'; });
@@ -6069,13 +6074,16 @@ function _updateGroupBCount() {
         .then(function(r) { return r.json(); })
         .then(function(json) {
             el.textContent = json.count;
+            var capNote = document.getElementById('compb-cap-note');
             if (json.capped) {
                 el.textContent = json.count + ' (max ' + json.max_cases + ')';
                 el.style.color = '#fbbf24';
-                el.title = 'Only the first ' + json.max_cases + ' cases will be used to prevent server memory issues.';
+                el.title = 'Only the first ' + json.max_cases + ' cases will be composited.';
+                if (capNote) { capNote.classList.add('capped'); capNote.textContent = 'Cap exceeded \u2014 only the first ' + json.max_cases + ' matching cases will be composited.'; }
             } else {
                 el.style.color = '';
                 el.title = '';
+                if (capNote) { capNote.classList.remove('capped'); capNote.textContent = 'Composites are limited to ' + json.max_cases + ' cases per group.'; }
             }
         })
         .catch(function() { el.textContent = '?'; });
