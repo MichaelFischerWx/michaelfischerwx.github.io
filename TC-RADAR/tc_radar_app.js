@@ -7682,18 +7682,13 @@ function _archiveRenderFLTimeSeries(flData) {
         container = document.createElement('div');
         container.id = 'fl-archive-ts';
         container.className = 'fl-archive-ts';
-        // Insert after Environment Diagnostics row: find the env-case-btn and go up to its wrapper
-        var envBtn = document.getElementById('env-case-btn');
-        if (envBtn && envBtn.parentNode) {
-            envBtn.parentNode.parentNode.insertBefore(container, envBtn.parentNode.nextSibling);
+        // Insert INSIDE .explorer-display (as last child), matching real-time pattern
+        // where the FL panel lives inside the display column after the action buttons.
+        var display = document.querySelector('.explorer-display');
+        if (display) {
+            display.appendChild(container);
         } else {
-            // Fallback: use explorer-display as parent, append at end
-            var display = document.querySelector('.explorer-display');
-            if (display) {
-                display.appendChild(container);
-            } else {
-                return;
-            }
+            return;
         }
     }
     container.style.display = 'block';
