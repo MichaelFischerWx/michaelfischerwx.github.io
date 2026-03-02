@@ -6726,21 +6726,28 @@ function generateEnvComposite() {
         if (el) el.style.display = 'none';
     });
 
-    // Launch 3 parallel requests
+    // Serialize requests: run the heavy plan view first, then profiles + scalars.
+    // This avoids queuing multiple heavy requests on the single-worker backend.
     var planViewUrl = API_BASE + '/composite/era5_plan_view?' + qs +
         '&field=' + field + '&radius_km=' + radiusKm + '&include_vectors=' + includeVec +
         '&shear_relative=' + envShearRel;
     var profilesUrl = API_BASE + '/composite/era5_profiles?' + qs;
     var scalarsUrl = API_BASE + '/composite/era5_scalars?' + qs;
 
-    Promise.all([
-        _fetchWithTimeout(planViewUrl).then(function(r) { return r.ok ? r.json() : null; }),
-        _fetchWithTimeout(profilesUrl).then(function(r) { return r.ok ? r.json() : null; }),
-        _fetchWithTimeout(scalarsUrl).then(function(r) { return r.ok ? r.json() : null; })
-    ]).then(function(results) {
-        var pvData = results[0];
-        var profData = results[1];
-        var scalarData = results[2];
+    var pvData, profData, scalarData;
+
+    _fetchWithTimeout(planViewUrl).then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(pv) {
+        pvData = pv;
+        _showEnvCompStatus('loading', '\u23F3 Plan view done. Computing profiles & scalars\u2026');
+        // Profiles and scalars are lightweight — safe to run in parallel
+        return Promise.all([
+            _fetchWithTimeout(profilesUrl).then(function(r) { return r.ok ? r.json() : null; }),
+            _fetchWithTimeout(scalarsUrl).then(function(r) { return r.ok ? r.json() : null; })
+        ]);
+    }).then(function(results) {
+        profData = results[0];
+        scalarData = results[1];
         var nCases = (pvData && pvData.n_cases) || (profData && profData.n_cases) || (scalarData && scalarData.n_cases) || 0;
 
         if (!pvData && !profData && !scalarData) {
@@ -7208,23 +7215,34 @@ function generateEnvCompDiff() {
     var qsB = _compositeQueryString(filtersB) + '&data_type=' + dataType;
     var pvSuffix = '&field=' + field + '&radius_km=' + radiusKm + '&include_vectors=' + includeVec + '&shear_relative=' + envShearRel;
 
-    // 6 parallel requests: plan-view, profiles, scalars for each group
+    // Serialize: fetch Group A first, then Group B, to avoid overwhelming
+    // the single-worker backend with 6 concurrent heavy requests.
+    var pvA, pvB, profA, profB, scA, scB;
+
+    _showEnvCompStatus('loading', '\u23F3 Computing Group A environmental composites\u2026');
+
     Promise.all([
         _fetchWithTimeout(API_BASE + '/composite/era5_plan_view?' + qsA + pvSuffix).then(function(r) { return r.ok ? r.json() : null; }),
-        _fetchWithTimeout(API_BASE + '/composite/era5_plan_view?' + qsB + pvSuffix).then(function(r) { return r.ok ? r.json() : null; }),
         _fetchWithTimeout(API_BASE + '/composite/era5_profiles?' + qsA).then(function(r) { return r.ok ? r.json() : null; }),
-        _fetchWithTimeout(API_BASE + '/composite/era5_profiles?' + qsB).then(function(r) { return r.ok ? r.json() : null; }),
-        _fetchWithTimeout(API_BASE + '/composite/era5_scalars?' + qsA).then(function(r) { return r.ok ? r.json() : null; }),
-        _fetchWithTimeout(API_BASE + '/composite/era5_scalars?' + qsB).then(function(r) { return r.ok ? r.json() : null; })
-    ]).then(function(results) {
-        var pvA = results[0], pvB = results[1];
-        var profA = results[2], profB = results[3];
-        var scA = results[4], scB = results[5];
+        _fetchWithTimeout(API_BASE + '/composite/era5_scalars?' + qsA).then(function(r) { return r.ok ? r.json() : null; })
+    ]).then(function(resultsA) {
+        pvA = resultsA[0]; profA = resultsA[1]; scA = resultsA[2];
 
         if (!pvA && !profA && !scA) {
             _showEnvCompStatus('error', '\u2717 No data for Group A.');
-            return;
+            return Promise.reject('no_data_a');
         }
+
+        _showEnvCompStatus('loading', '\u23F3 Group A done. Computing Group B environmental composites\u2026');
+
+        return Promise.all([
+            _fetchWithTimeout(API_BASE + '/composite/era5_plan_view?' + qsB + pvSuffix).then(function(r) { return r.ok ? r.json() : null; }),
+            _fetchWithTimeout(API_BASE + '/composite/era5_profiles?' + qsB).then(function(r) { return r.ok ? r.json() : null; }),
+            _fetchWithTimeout(API_BASE + '/composite/era5_scalars?' + qsB).then(function(r) { return r.ok ? r.json() : null; })
+        ]);
+    }).then(function(resultsB) {
+        pvB = resultsB[0]; profB = resultsB[1]; scB = resultsB[2];
+
         if (!pvB && !profB && !scB) {
             _showEnvCompStatus('error', '\u2717 No data for Group B.');
             return;
@@ -7242,6 +7260,7 @@ function generateEnvCompDiff() {
         // Overlay Skew-Ts
         if (profA && profB) renderEnvDiffThermo(profA, profB);
     }).catch(function(err) {
+        if (err === 'no_data_a') return; // Already handled above
         _showEnvCompStatus('error', '\u2717 \u0394 Error: ' + err.message);
     });
 }
