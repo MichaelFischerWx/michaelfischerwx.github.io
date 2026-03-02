@@ -1090,6 +1090,61 @@ footer a:hover { text-decoration: underline; }
     .env-comp-scalars-grid { grid-template-columns: repeat(2, 1fr); }
     .vol3d-controls label { font-size: 9px; }
 }
+/* ── Flight-Level Archive Overlay ──────────────────────────── */
+#btn-archive-fl.fl-active {
+    background: rgba(96,165,250,0.25) !important;
+    border-color: rgba(96,165,250,0.6) !important;
+    color: #60a5fa !important;
+    box-shadow: 0 0 8px rgba(96,165,250,0.3);
+}
+.fl-archive-status {
+    font-size: 10px;
+    color: #fbbf24;
+    padding: 2px 8px;
+    line-height: 1.4;
+}
+.fl-archive-ts {
+    margin-top: 8px;
+    background: rgba(10,22,40,0.5);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px;
+    padding: 10px 8px 6px;
+}
+.fl-ts-header {
+    font-size: 12px;
+    font-weight: 600;
+    color: #60a5fa;
+    margin-bottom: 4px;
+}
+.fl-ts-info {
+    font-size: 10px;
+    color: #94a3b8;
+    margin-bottom: 6px;
+    line-height: 1.4;
+}
+.fl-ts-xaxis-btns {
+    display: flex;
+    gap: 4px;
+    justify-content: center;
+    margin-top: 4px;
+}
+.fl-ts-xbtn {
+    font-size: 10px;
+    padding: 2px 10px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.04);
+    color: #94a3b8;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.fl-ts-xbtn:hover { background: rgba(255,255,255,0.08); }
+.fl-ts-xbtn.active {
+    background: rgba(96,165,250,0.2);
+    border-color: rgba(96,165,250,0.4);
+    color: #60a5fa;
+}
+
 @media (max-width: 480px) {
     .topbar-nav { gap: 2px; }
     .topbar-nav a { padding: 4px 6px; font-size: 0.65rem; }
