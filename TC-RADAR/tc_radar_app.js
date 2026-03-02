@@ -1,5 +1,13 @@
 const API_BASE = 'https://tc-radar-api.onrender.com';
 
+// ── Prevent browser from restoring previous scroll position on reload ──
+if ('scrollRestoration' in history) {
+    history.scrollRestoration = 'manual';
+}
+window.addEventListener('DOMContentLoaded', function() {
+    window.scrollTo(0, 0);
+});
+
 // ── Toast notification system ────────────────────────────────
 function showToast(message, type, duration) {
     type = type || 'info';
