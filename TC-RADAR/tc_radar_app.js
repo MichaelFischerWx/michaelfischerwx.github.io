@@ -7968,7 +7968,8 @@ function _archFLTSRender(flData) {
         }];
     }
 
-    // Build max-wind / min-pressure inset annotation (use primary 10s obs)
+    // Build max-wind / min-pressure inset annotation with per-resolution values
+    // (matches real-time format: "FL Wind max — 1s: 98.7  10s: 83.7  30s: 78.7")
     var insetLines = [];
     var windVars = [
         { key: 'fl_wspd_ms',      label: 'FL Wind' },
@@ -7979,13 +7980,23 @@ function _archFLTSRender(flData) {
     for (var wi = 0; wi < windVars.length; wi++) {
         var wv = windVars[wi];
         if (selectedVars.indexOf(wv.key) === -1) continue;
-        var maxVal = null;
-        for (var mi = 0; mi < primaryObs.length; mi++) {
-            var wval = primaryObs[mi][wv.key];
-            if (wval != null && (maxVal === null || wval > maxVal)) maxVal = wval;
+        var row = [];
+        for (var wr = 0; wr < resKeys.length; wr++) {
+            var wResKey = resKeys[wr];
+            if (!_archFLResVisible[wResKey]) continue;
+            var wObs = _archFLDataForRes(flData, wResKey);
+            if (!wObs || wObs.length === 0) continue;
+            var maxVal = null;
+            for (var mi = 0; mi < wObs.length; mi++) {
+                var wval = wObs[mi][wv.key];
+                if (wval != null && (maxVal === null || wval > maxVal)) maxVal = wval;
+            }
+            if (maxVal != null) {
+                row.push(wResKey + ': <b>' + maxVal.toFixed(1) + '</b>');
+            }
         }
-        if (maxVal != null) {
-            insetLines.push(wv.label + ' max: <b>' + maxVal.toFixed(1) + '</b> m/s (<b>' + (maxVal * 1.94384).toFixed(0) + '</b> kt)');
+        if (row.length > 0) {
+            insetLines.push(wv.label + ' max \u2014 ' + row.join('  '));
         }
     }
     var presVars = [
@@ -7995,13 +8006,23 @@ function _archFLTSRender(flData) {
     for (var pi = 0; pi < presVars.length; pi++) {
         var pv = presVars[pi];
         if (selectedVars.indexOf(pv.key) === -1) continue;
-        var minVal = null;
-        for (var pj = 0; pj < primaryObs.length; pj++) {
-            var pval = primaryObs[pj][pv.key];
-            if (pval != null && (minVal === null || pval < minVal)) minVal = pval;
+        var prow = [];
+        for (var pr = 0; pr < resKeys.length; pr++) {
+            var pResKey = resKeys[pr];
+            if (!_archFLResVisible[pResKey]) continue;
+            var pObs = _archFLDataForRes(flData, pResKey);
+            if (!pObs || pObs.length === 0) continue;
+            var minVal = null;
+            for (var pj = 0; pj < pObs.length; pj++) {
+                var pval = pObs[pj][pv.key];
+                if (pval != null && (minVal === null || pval < minVal)) minVal = pval;
+            }
+            if (minVal != null) {
+                prow.push(pResKey + ': <b>' + minVal.toFixed(1) + '</b>');
+            }
         }
-        if (minVal != null) {
-            insetLines.push(pv.label + ': <b>' + minVal.toFixed(1) + '</b> hPa');
+        if (prow.length > 0) {
+            insetLines.push(pv.label + ' \u2014 ' + prow.join('  '));
         }
     }
     if (insetLines.length > 0) {
