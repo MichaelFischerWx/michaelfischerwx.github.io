@@ -1124,8 +1124,8 @@ footer a:hover { text-decoration: underline; }
     color: #93c5fd;
     font-size: 13px;
     font-weight: 600;
-    flex-shrink: 0;
-    margin-right: 12px;
+    white-space: nowrap;
+    margin-right: 8px;
 }
 .fl-archive-ts .fl-ts-controls {
     display: flex;

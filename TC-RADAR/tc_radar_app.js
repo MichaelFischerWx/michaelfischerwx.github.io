@@ -7505,16 +7505,16 @@ var _archiveFLTraceIndices = [];  // Plotly trace indices to remove
 
 // Variable config for archive time series (matches real-time _FL_TS_CONFIG)
 var _ARCH_FL_TS_CONFIG = {
-    'fl_wspd_ms':       { label: 'FL Wind Speed',    units: 'm/s',  color: '#60a5fa', yaxis: 'y'  },
-    'tdr_wspd_fl_alt':  { label: 'TDR at FL Alt',    units: 'm/s',  color: '#22d3ee', yaxis: 'y'  },
-    'tdr_wspd_0p5km':   { label: 'TDR Wind 0.5 km',  units: 'm/s',  color: '#34d399', yaxis: 'y'  },
-    'tdr_wspd_2km':     { label: 'TDR Wind 2.0 km',  units: 'm/s',  color: '#c084fc', yaxis: 'y'  },
-    'static_pres_hpa':  { label: 'Static Pressure',   units: 'hPa',  color: '#fb923c', yaxis: 'y2' },
-    'sfcpr_hpa':        { label: 'Sfc Pressure',      units: 'hPa',  color: '#fbbf24', yaxis: 'y2' },
-    'temp_c':           { label: 'Temperature',       units: '\u00b0C',   color: '#f87171', yaxis: 'y3' },
-    'dewpoint_c':       { label: 'Dewpoint',          units: '\u00b0C',   color: '#a78bfa', yaxis: 'y3' },
-    'theta_e':          { label: '\u03b8e',            units: 'K',    color: '#e879f9', yaxis: 'y3' },
-    'gps_alt_m':        { label: 'GPS Altitude',      units: 'm',    color: '#6b7280', yaxis: 'y4' },
+    'fl_wspd_ms':       { label: 'FL Wind Speed',    btn: 'FL Wind',   units: 'm/s',  color: '#60a5fa', yaxis: 'y'  },
+    'tdr_wspd_fl_alt':  { label: 'TDR at FL Alt',    btn: 'TDR@FL',    units: 'm/s',  color: '#22d3ee', yaxis: 'y'  },
+    'tdr_wspd_0p5km':   { label: 'TDR Wind 0.5 km',  btn: 'TDR 0.5km', units: 'm/s',  color: '#34d399', yaxis: 'y'  },
+    'tdr_wspd_2km':     { label: 'TDR Wind 2.0 km',  btn: 'TDR 2km',   units: 'm/s',  color: '#c084fc', yaxis: 'y'  },
+    'static_pres_hpa':  { label: 'Static Pressure',   btn: 'Static P',  units: 'hPa',  color: '#fb923c', yaxis: 'y2' },
+    'sfcpr_hpa':        { label: 'Sfc Pressure',      btn: 'Sfc P',     units: 'hPa',  color: '#fbbf24', yaxis: 'y2' },
+    'temp_c':           { label: 'Temperature',       btn: 'Temp',      units: '\u00b0C',   color: '#f87171', yaxis: 'y3' },
+    'dewpoint_c':       { label: 'Dewpoint',          btn: 'Dewpt',     units: '\u00b0C',   color: '#a78bfa', yaxis: 'y3' },
+    'theta_e':          { label: '\u03b8e',            btn: '\u03b8e',   units: 'K',    color: '#e879f9', yaxis: 'y3' },
+    'gps_alt_m':        { label: 'GPS Altitude',      btn: 'Alt',       units: 'm',    color: '#6b7280', yaxis: 'y4' },
 };
 
 // Multi-resolution config (matches real-time _FL_RES_STYLE)
@@ -7758,7 +7758,7 @@ function _archivePopulateFLVarButtons(flData) {
         if (!hasData) continue;
         html += '<button class="fl-ts-var-btn' + (isActive ? ' active' : '') +
             '" data-var="' + vk + '" onclick="archFLToggleVar(this)" style="--var-color:' + vcfg.color + '">' +
-            vcfg.label + '</button>';
+            (vcfg.btn || vcfg.label) + '</button>';
     }
     el.innerHTML = html;
 }
