@@ -4764,6 +4764,10 @@ function initCompositePanel() {
                             '<input type="checkbox" id="wiz-chk-pv">' +
                             '<label for="wiz-chk-pv">\uD83D\uDDFA Plan View<small>Horizontal map at height</small></label>' +
                         '</div>' +
+                        '<div class="wizard-output-item" id="wiz-out-cfad" onclick="_wizardToggleOutput(this, event)">' +
+                            '<input type="checkbox" id="wiz-chk-cfad">' +
+                            '<label for="wiz-chk-cfad">\uD83D\uDCCA CFAD<small>Frequency by altitude diagram</small></label>' +
+                        '</div>' +
                     '</div>' +
 
                     '<div class="wizard-section-title env">Environment Outputs</div>' +
@@ -4902,6 +4906,30 @@ function initCompositePanel() {
                                         '<button onclick="resetCompColorRange()" title="Reset">\u21BA</button>' +
                                     '</div>' +
                                 '</div>' +
+                                // CFAD-specific options (visible only when CFAD is checked)
+                                '<div id="wiz-cfg-cfad-opts" style="display:none;border-top:1px solid rgba(255,255,255,0.06);padding-top:8px;margin-top:4px;">' +
+                                    '<div style="font-size:10px;font-weight:600;color:#22d3ee;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">\uD83D\uDCCA CFAD Options</div>' +
+                                    '<div class="wizard-config-row"><label>Bin Width</label>' +
+                                        '<input type="number" id="cfad-bin-width" value="" placeholder="auto" min="0.1" step="any" style="width:80px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                                        '<span style="font-size:9px;color:#6b7280;margin-left:4px;">(leave blank for auto)</span>' +
+                                    '</div>' +
+                                    '<div class="wizard-config-row"><label>Normalisation</label>' +
+                                        '<select id="cfad-normalise" style="font-size:11px;">' +
+                                            '<option value="total">% of Total Pixels</option>' +
+                                            '<option value="height">% at Each Height</option>' +
+                                            '<option value="raw">Raw Counts</option>' +
+                                        '</select>' +
+                                    '</div>' +
+                                    '<div class="wizard-config-row"><label>Max Radius (km)</label>' +
+                                        '<input type="number" id="cfad-max-radius" value="200" min="10" max="500" step="10" style="width:80px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                                    '</div>' +
+                                    '<div class="wizard-config-row">' +
+                                        '<div class="wizard-config-inline">' +
+                                            '<input type="checkbox" id="cfad-use-rmw">' +
+                                            '<label for="cfad-use-rmw" style="font-size:11px;color:#9ca3af;">Use RMW-normalised radius (max becomes R/RMW)</label>' +
+                                        '</div>' +
+                                    '</div>' +
+                                '</div>' +
                             '</div>' +
                         '</div>' +
 
@@ -4978,6 +5006,7 @@ function initCompositePanel() {
                         '<div id="comp-result-az" style="display:none;"></div>' +
                         '<div id="comp-result-sq" style="display:none;"></div>' +
                         '<div id="comp-result-pv" style="display:none;"></div>' +
+                        '<div id="comp-result-cfad" style="display:none;"></div>' +
                         // Environment result containers
                         '<div id="comp-env-status" style="display:none;"></div>' +
                         '<div id="comp-env-scalars" style="display:none;"></div>' +
@@ -5141,7 +5170,8 @@ function _wizardUpdateConfigVisibility() {
     var chkAz = document.getElementById('wiz-chk-az').checked;
     var chkSq = document.getElementById('wiz-chk-sq').checked;
     var chkPv = document.getElementById('wiz-chk-pv').checked;
-    var anyTDR = chkAz || chkSq || chkPv;
+    var chkCfad = document.getElementById('wiz-chk-cfad') && document.getElementById('wiz-chk-cfad').checked;
+    var anyTDR = chkAz || chkSq || chkPv || chkCfad;
     var envPV  = document.getElementById('wiz-chk-env-pv').checked;
     var envSC  = document.getElementById('wiz-chk-env-sc').checked;
     var envTH  = document.getElementById('wiz-chk-env-th').checked;
@@ -5175,6 +5205,10 @@ function _wizardUpdateConfigVisibility() {
             if (levelHint) levelHint.style.display = '';
         }
     }
+
+    // CFAD options — show only when CFAD checkbox is checked
+    var cfadOpts = document.getElementById('wiz-cfg-cfad-opts');
+    if (cfadOpts) cfadOpts.style.display = chkCfad ? '' : 'none';
 
     // When Thermo Profiles is selected, auto-select Scalar Diagnostics too,
     // since shear/mid-level RH/SST etc. are needed for vertical profile context.
@@ -5220,6 +5254,7 @@ function _wizardUpdateSummary() {
     if (document.getElementById('wiz-chk-az') && document.getElementById('wiz-chk-az').checked) outputs.push('Az Mean');
     if (document.getElementById('wiz-chk-sq') && document.getElementById('wiz-chk-sq').checked) outputs.push('Quad');
     if (document.getElementById('wiz-chk-pv') && document.getElementById('wiz-chk-pv').checked) outputs.push('Plan');
+    if (document.getElementById('wiz-chk-cfad') && document.getElementById('wiz-chk-cfad').checked) outputs.push('CFAD');
     if (document.getElementById('wiz-chk-env-pv') && document.getElementById('wiz-chk-env-pv').checked) outputs.push('Env PV');
     if (document.getElementById('wiz-chk-env-sc') && document.getElementById('wiz-chk-env-sc').checked) outputs.push('Env Scalars');
     if (document.getElementById('wiz-chk-env-th') && document.getElementById('wiz-chk-env-th').checked) outputs.push('Env Thermo');
@@ -5264,6 +5299,7 @@ function _wizardUpdateGenerateSummary() {
     if (document.getElementById('wiz-chk-az').checked) outputs.push('Azimuthal Mean');
     if (document.getElementById('wiz-chk-sq').checked) outputs.push('Shear Quadrants');
     if (document.getElementById('wiz-chk-pv').checked) outputs.push('Plan View');
+    if (document.getElementById('wiz-chk-cfad') && document.getElementById('wiz-chk-cfad').checked) outputs.push('CFAD');
     if (document.getElementById('wiz-chk-env-pv').checked) outputs.push('ERA5 Plan View');
     if (document.getElementById('wiz-chk-env-sc').checked) outputs.push('Scalar Diagnostics');
     if (document.getElementById('wiz-chk-env-th').checked) outputs.push('Thermo Profiles');
@@ -5312,6 +5348,9 @@ function _wizardGenerateSelected() {
     }
     if (document.getElementById('wiz-chk-pv').checked) {
         if (isDiff) generateCompDiffPlanView(); else generateCompositePlanView();
+    }
+    if (document.getElementById('wiz-chk-cfad') && document.getElementById('wiz-chk-cfad').checked) {
+        generateCompositeCFAD();
     }
 
     // Environment outputs
@@ -6147,6 +6186,107 @@ function generateCompositeAzMean() {
             if (btnAz) btnAz.disabled = false; if (btnSq) btnSq.disabled = false; if (btnPv) if (btnPv) btnPv.disabled = false;
             if (btnAz) btnAz.textContent = '\u27F3 Azimuthal Mean';
         });
+}
+
+function generateCompositeCFAD() {
+    var filters = _getCompositeFilters();
+    var variable = document.getElementById('comp-var').value;
+    var dataType = document.getElementById('comp-dtype').value;
+    var _crp = document.getElementById('comp-result-placeholder') || document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
+    _showCompStatus('loading', 'Computing CFAD \u2014 this may take 30\u201390 seconds for many cases\u2026');
+
+    // Gather CFAD-specific options
+    var cfadBinWidthEl = document.getElementById('cfad-bin-width');
+    var cfadNormEl = document.getElementById('cfad-normalise');
+    var cfadMaxREl = document.getElementById('cfad-max-radius');
+    var cfadUseRmwEl = document.getElementById('cfad-use-rmw');
+    var binWidth = cfadBinWidthEl ? parseFloat(cfadBinWidthEl.value) : 0;
+    var normalise = cfadNormEl ? cfadNormEl.value : 'total';
+    var maxRadius = cfadMaxREl ? parseFloat(cfadMaxREl.value) || 200 : 200;
+    var useRmw = cfadUseRmwEl ? cfadUseRmwEl.checked : false;
+
+    var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType +
+        '&max_radius=' + maxRadius + '&normalise=' + encodeURIComponent(normalise);
+    if (useRmw) qs += '&use_rmw=true';
+    if (binWidth > 0) qs += '&bin_width=' + binWidth;
+
+    _fetchCompositeStream(API_BASE + '/composite/cfad?' + qs, 'Computing CFAD')
+        .then(function(json) {
+            _showCompStatus('success', '\u2713 CFAD computed: ' + json.n_cases + ' cases processed');
+            _updateBadgeFromResult(json.n_cases);
+            renderCompositeCFADInto('comp-result-cfad', json, filters);
+        })
+        .catch(function(err) { _showCompStatus('error', '\u2717 ' + (err.message || String(err))); });
+}
+
+function renderCompositeCFADInto(targetId, json, filters) {
+    var el = document.getElementById(targetId); if (!el) return;
+    var cfadData = json.cfad;
+    var binCenters = json.bin_centers;
+    var heightKm = json.height_km;
+    var varInfo = json.variable;
+    var normLabel = json.norm_label;
+
+    var fontSize = { title:14, axis:12, tick:10, cbar:12, cbarTick:10, hover:13 };
+
+    // CFAD uses a sequential frequency colormap — Viridis or Hot
+    var cfadColorscale = [
+        [0, 'rgba(10,22,40,0)'],
+        [0.001, '#440154'],
+        [0.05, '#482878'],
+        [0.1, '#3e4989'],
+        [0.2, '#31688e'],
+        [0.3, '#26838e'],
+        [0.4, '#1f9e89'],
+        [0.5, '#35b779'],
+        [0.6, '#6ece58'],
+        [0.7, '#b5de2b'],
+        [0.85, '#fde725'],
+        [1.0, '#fde725']
+    ];
+
+    // Find the actual max for colorbar scaling
+    var zMax = 0;
+    for (var h = 0; h < cfadData.length; h++) {
+        for (var b = 0; b < cfadData[h].length; b++) {
+            var v = cfadData[h][b];
+            if (v !== null && v > zMax) zMax = v;
+        }
+    }
+    if (zMax === 0) zMax = 1;
+
+    var heatmap = {
+        z: cfadData, x: binCenters, y: heightKm, type: 'heatmap',
+        colorscale: cfadColorscale, zmin: 0, zmax: zMax,
+        colorbar: { title: { text: normLabel, font: { color:'#ccc', size:fontSize.cbar } }, tickfont: { color:'#ccc', size:fontSize.cbarTick }, thickness:14, len:0.85 },
+        hovertemplate: '<b>' + varInfo.display_name + '</b>: %{x:.1f} ' + varInfo.units +
+            '<br>Height: %{y:.1f} km<br>Frequency: %{z:.2f} ' + normLabel + '<extra></extra>',
+        hoverongaps: false
+    };
+
+    var dtypeLabel = (document.getElementById('comp-dtype') && document.getElementById('comp-dtype').value === 'merge') ? ' (Merge)' : '';
+    var meanVmax = _computeCompositeMeanVmax(filters);
+    var vmaxNote = meanVmax !== null ? ' | Mean V<sub>max</sub>=' + meanVmax + ' kt' : '';
+    var binNote = ' | Bin width=' + json.bin_width + ' ' + varInfo.units;
+    var title = _compositeFilterSummary(filters, json.n_cases) + vmaxNote +
+        '<br>CFAD: ' + varInfo.display_name + dtypeLabel + binNote +
+        ' | Norm: ' + normLabel;
+
+    var plotBg = '#0a1628';
+    var layout = {
+        title: { text: title, font: { color:'#e5e7eb', size:fontSize.title }, y:0.97, x:0.5, xanchor:'center' },
+        paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+        xaxis: { title: { text: varInfo.display_name + ' (' + varInfo.units + ')', font:{color:'#aaa',size:fontSize.axis} }, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
+        yaxis: { title: { text:'Height (km)', font:{color:'#aaa',size:fontSize.axis} }, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
+        margin: { l:55, r:24, t:156, b:50 },
+        hoverlabel: { bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
+        showlegend: false
+    };
+
+    el.style.display = 'block';
+    _lastCompJson = json; _lastCompType = 'cfad';
+    el.innerHTML = '<div id="comp-cfad-chart" style="width:100%;height:560px;border-radius:8px;overflow:hidden;"></div>' + _buildCompToolbar();
+    Plotly.newPlot('comp-cfad-chart', [heatmap], layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
 }
 
 function generateCompositeQuadMean() {
