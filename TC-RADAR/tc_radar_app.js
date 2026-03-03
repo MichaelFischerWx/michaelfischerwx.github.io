@@ -32,6 +32,35 @@ function showToast(message, type, duration) {
     }, duration);
 }
 
+// ── Save plot as PNG ─────────────────────────────────────────
+function archiveSavePlotPNG(chartDivId, defaultName) {
+    var gd = document.getElementById(chartDivId);
+    if (!gd || !gd.data) { showToast('No plot to save', 'warn'); return; }
+    var fname = defaultName || chartDivId;
+    var now = new Date();
+    var ts = now.getFullYear() +
+        String(now.getMonth() + 1).padStart(2, '0') +
+        String(now.getDate()).padStart(2, '0') + '_' +
+        String(now.getHours()).padStart(2, '0') +
+        String(now.getMinutes()).padStart(2, '0') +
+        String(now.getSeconds()).padStart(2, '0');
+    Plotly.downloadImage(gd, {
+        format: 'png',
+        width: gd.offsetWidth * 2,
+        height: gd.offsetHeight * 2,
+        scale: 2,
+        filename: fname + '_' + ts,
+    });
+}
+
+function _archSaveBtnHTML(chartDivId, defaultName) {
+    return '<button onclick="archiveSavePlotPNG(\'' + chartDivId + '\',\'' + (defaultName || chartDivId) + '\')" ' +
+        'title="Save as PNG" class="rt-save-png-btn" style="position:absolute;top:6px;right:40px;z-index:10;">' +
+        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+        '<path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>' +
+        '<circle cx="12" cy="13" r="4"/></svg></button>';
+}
+
 // ── API cold-start pre-warming ───────────────────────────────
 var _apiReady = false;
 (function warmAPI() {
@@ -261,6 +290,7 @@ function openSidePanel(caseData, fromQuickSelect) {
                     '<div class="fl-ts-header">' +
                         '<span class="fl-ts-title">\u2708 Along-Track Time Series</span>' +
                         '<div class="fl-ts-res-group" id="arch-fl-res-group"></div>' +
+                        '<button onclick="archiveSavePlotPNG(\'fl-ts-chart\',\'FL_TimeSeries\')" class="rt-save-png-btn" style="margin-left:4px;" title="Save as PNG"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></button>' +
                         '<button onclick="archFLCloseTimeSeries()" class="fl-ts-close" title="Close">&times;</button>' +
                     '</div>' +
                     '<div class="fl-ts-var-bar" id="arch-fl-ts-vars"></div>' +
@@ -3217,7 +3247,7 @@ function buildMaxAnnotation(maxInfo, units, xLabel, yLabel, fontSize) {
         xref: 'paper', yref: 'paper', x: 0.01, y: -0.01,
         xanchor: 'left', yanchor: 'top',
         showarrow: false,
-        font: { color: '#d1d5db', size: fs, family: 'JetBrains Mono, monospace' },
+        font: { color: '#d1d5db', size: fs, family: 'DM Sans, sans-serif' },
         bgcolor: 'rgba(10,22,40,0.8)',
         borderpad: 3,
         bordercolor: 'rgba(255,255,255,0.15)',
@@ -3230,7 +3260,7 @@ function renderPlotFromJSON(json, resultDiv) {
     var thumbWrap = document.getElementById('thumbnail-wrap');
     if (thumbWrap) thumbWrap.style.display = 'none';
 
-    resultDiv.innerHTML = '<div style="position:relative;"><div id="plotly-chart" style="width:100%;height:360px;border-radius:6px;overflow:hidden;"></div><button onclick="openPlotModal()" title="Expand to fullscreen" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">\u26F6</button></div><div style="font-size:11px;color:var(--slate);text-align:center;margin-top:4px;">Hover for values \u00b7 scroll to zoom \u00b7 drag to pan \u00b7 \u26F6 expand</div>';
+    resultDiv.innerHTML = '<div style="position:relative;"><div id="plotly-chart" style="width:100%;height:360px;border-radius:6px;overflow:hidden;"></div>' + _archSaveBtnHTML('plotly-chart', 'TDR_PlanView') + '<button onclick="openPlotModal()" title="Expand to fullscreen" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">\u26F6</button></div><div style="font-size:11px;color:var(--slate);text-align:center;margin-top:4px;">Hover for values \u00b7 scroll to zoom \u00b7 drag to pan \u00b7 \u26F6 expand</div>';
 
     // Scroll panel to top so plot is visible
     var panelInner = document.getElementById('side-panel-inner');
@@ -3461,7 +3491,7 @@ function renderAzimuthalMeanInto(targetId, json, fullsize) {
     if (!fullsize) {
         var thumbWrap = document.getElementById('thumbnail-wrap');
         if (thumbWrap) thumbWrap.style.display = 'none';
-        el.innerHTML = '<div style="position:relative;"><div id="az-chart" style="width:100%;height:340px;border-radius:6px;overflow:hidden;"></div><button onclick="openPlotModal()" title="Expand to fullscreen" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">\u26F6</button></div><div style="font-size:11px;color:var(--slate);text-align:center;margin-top:4px;">Hover \u00b7 zoom \u00b7 pan \u00b7 \u26F6 expand</div>';
+        el.innerHTML = '<div style="position:relative;"><div id="az-chart" style="width:100%;height:340px;border-radius:6px;overflow:hidden;"></div>' + _archSaveBtnHTML('az-chart', 'TDR_AzMean') + '<button onclick="openPlotModal()" title="Expand to fullscreen" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">\u26F6</button></div><div style="font-size:11px;color:var(--slate);text-align:center;margin-top:4px;">Hover \u00b7 zoom \u00b7 pan \u00b7 \u26F6 expand</div>';
         Plotly.newPlot('az-chart', [heatmap].concat(azOverlayTraces).concat(azMaxTraces), layout, { responsive:true,displayModeBar:false,displaylogo:false });
         var panelInner = document.getElementById('side-panel-inner');
         if (panelInner) panelInner.scrollTop = 0;
@@ -3770,7 +3800,7 @@ function renderQuadrantMeansInto(targetId, json, fullsize) {
     if (!fullsize) {
         var thumbWrap = document.getElementById('thumbnail-wrap');
         if (thumbWrap) thumbWrap.style.display = 'none';
-        el.innerHTML = '<div style="position:relative;"><div id="sq-chart" style="width:100%;height:400px;border-radius:6px;overflow:hidden;"></div><button onclick="openPlotModal()" title="Expand to fullscreen" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">\u26F6</button></div><div style="font-size:11px;color:var(--slate);text-align:center;margin-top:4px;">Hover \u00b7 zoom \u00b7 pan \u00b7 \u26F6 expand</div>';
+        el.innerHTML = '<div style="position:relative;"><div id="sq-chart" style="width:100%;height:400px;border-radius:6px;overflow:hidden;"></div>' + _archSaveBtnHTML('sq-chart', 'TDR_Profile') + '<button onclick="openPlotModal()" title="Expand to fullscreen" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">\u26F6</button></div><div style="font-size:11px;color:var(--slate);text-align:center;margin-top:4px;">Hover \u00b7 zoom \u00b7 pan \u00b7 \u26F6 expand</div>';
         Plotly.newPlot('sq-chart', traces, layout, { responsive:true, displayModeBar:false, displaylogo:false });
         var panelInner = document.getElementById('side-panel-inner');
         if (panelInner) panelInner.scrollTop = 0;
@@ -7647,6 +7677,16 @@ function _archiveRenderFLOverlay(flData) {
         );
     }
 
+    // Inherit the TDR heatmap's colorscale + range so scatter matches shading
+    var tdrColorscale = 'Inferno';
+    var tdrCmin = 0, tdrCmax = 80;
+    if (plotDiv.data && plotDiv.data.length > 0) {
+        var tdrTrace = plotDiv.data[0];
+        if (tdrTrace.colorscale) tdrColorscale = tdrTrace.colorscale;
+        if (tdrTrace.zmin != null) tdrCmin = tdrTrace.zmin;
+        if (tdrTrace.zmax != null) tdrCmax = tdrTrace.zmax;
+    }
+
     var flTrackTrace = {
         x: x,
         y: y,
@@ -7654,15 +7694,9 @@ function _archiveRenderFLOverlay(flData) {
         mode: 'markers',
         marker: {
             color: colors,
-            colorscale: [
-                [0, 'rgb(0,100,255)'],
-                [0.25, 'rgb(0,200,150)'],
-                [0.5, 'rgb(255,255,0)'],
-                [0.75, 'rgb(255,140,0)'],
-                [1.0, 'rgb(255,0,0)']
-            ],
-            cmin: 0,
-            cmax: 80,
+            colorscale: tdrColorscale,
+            cmin: tdrCmin,
+            cmax: tdrCmax,
             size: sizes,
             line: { width: 1, color: 'rgba(255,255,255,0.6)' },
             showscale: false,  // No separate colorbar — use legend in time series
@@ -8039,7 +8073,7 @@ function _archFLTSRender(flData) {
             x: 0.01, y: 0.98, xref: 'paper', yref: 'paper',
             text: insetLines.join('<br>'),
             showarrow: false,
-            font: { family: 'JetBrains Mono, monospace', size: 10, color: '#cbd5e1' },
+            font: { family: 'DM Sans, sans-serif', size: 10, color: '#cbd5e1' },
             align: 'left', xanchor: 'left', yanchor: 'top',
             bgcolor: 'rgba(10,15,25,0.75)',
             bordercolor: 'rgba(96,165,250,0.3)',

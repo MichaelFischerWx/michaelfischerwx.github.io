@@ -389,7 +389,7 @@
             xref: 'paper', yref: 'paper', x: 0.01, y: -0.01,
             xanchor: 'left', yanchor: 'top',
             showarrow: false,
-            font: { color: '#d1d5db', size: fs, family: 'JetBrains Mono, monospace' },
+            font: { color: '#d1d5db', size: fs, family: 'DM Sans, sans-serif' },
             bgcolor: 'rgba(10,22,40,0.8)',
             borderpad: 3,
             bordercolor: 'rgba(255,255,255,0.15)',
@@ -2532,6 +2532,7 @@
     var _rtFLVisible = false;           // toggle state
     var _rtFLMode = 'off';             // 'off' | 'on'
     var _rtFLMapLayers = [];            // Leaflet layers for map view
+    var _rtFLPlotTraceIndices = [];     // Plotly trace indices on XY chart
     var _rtFLFetching = false;          // prevent duplicate fetches
     var _rtFLColorVar = 'fl_wspd_ms';  // which variable colours the track
     // Which resolutions are visible on the time series
@@ -2606,6 +2607,7 @@
         _rtFLMode = 'off';
         _rtFLFetching = false;
         _rtRemoveFLFromMap();
+        _rtRemoveFLFromPlot();
         var btn = document.getElementById('rt-fl-btn');
         if (btn) { btn.textContent = '\u2708 FL Off'; btn.classList.remove('active'); }
     }
@@ -2680,6 +2682,103 @@
         _rtFLMapLayers = [];
         var legend = document.getElementById('rt-fl-legend');
         if (legend) legend.remove();
+    }
+
+    // ── Plotly XY chart: FL scatter overlay ─────────────────────
+    function _rtRemoveFLFromPlot() {
+        var plotDiv = document.getElementById('rt-plotly-chart');
+        if (!plotDiv || !plotDiv.data) return;
+        if (_rtFLPlotTraceIndices.length > 0) {
+            var toRemove = _rtFLPlotTraceIndices.slice().sort(function (a, b) { return b - a; });
+            for (var i = 0; i < toRemove.length; i++) {
+                if (toRemove[i] < plotDiv.data.length) {
+                    Plotly.deleteTraces('rt-plotly-chart', toRemove[i]);
+                }
+            }
+            _rtFLPlotTraceIndices = [];
+        }
+    }
+
+    function _rtRenderFLOnPlot() {
+        var plotDiv = document.getElementById('rt-plotly-chart');
+        var obs = _rtFLData ? _rtFLData.observations : [];
+        if (!plotDiv || !plotDiv.data || !obs || obs.length === 0) return;
+
+        _rtRemoveFLFromPlot();
+        var x = [], y = [], colors = [], texts = [], sizes = [];
+        for (var i = 0; i < obs.length; i++) {
+            var o = obs[i];
+            if (o.x_km == null || o.y_km == null) continue;
+            x.push(o.x_km);
+            y.push(o.y_km);
+            var ws = o.fl_wspd_ms;
+            colors.push(ws != null ? ws : 0);
+            sizes.push(ws != null ? Math.max(5, Math.min(12, ws / 5)) : 5);
+
+            var tdrStr = '';
+            if (o.tdr_wspd_fl_alt != null) {
+                var altKm = (o.gps_alt_m != null) ? (o.gps_alt_m / 1000).toFixed(2) + ' km' : '?';
+                tdrStr += 'TDR@FL (' + altKm + '): ' + o.tdr_wspd_fl_alt.toFixed(1) + ' m/s';
+            }
+            if (o.tdr_wspd_0p5km != null) tdrStr += (tdrStr ? '<br>' : '') + 'TDR 0.5km: ' + o.tdr_wspd_0p5km.toFixed(1) + ' m/s';
+            if (o.tdr_wspd_2km != null) tdrStr += (tdrStr ? '<br>' : '') + 'TDR 2km: ' + o.tdr_wspd_2km.toFixed(1) + ' m/s';
+
+            var tOffsetMin = (o.time_offset_s != null && isFinite(o.time_offset_s)) ? (o.time_offset_s / 60) : null;
+            var timeStr = (o.time || '') + ' UTC';
+            if (tOffsetMin != null) timeStr += ' (T' + (tOffsetMin >= 0 ? '+' : '') + tOffsetMin.toFixed(1) + ' min)';
+
+            var altStr = '';
+            if (o.gps_alt_m != null && isFinite(o.gps_alt_m)) {
+                altStr = 'Alt: ' + o.gps_alt_m.toFixed(0) + ' m (' + Math.round(o.gps_alt_m * 3.28084) + ' ft)<br>';
+            }
+
+            texts.push(
+                '<b>\u2708 Flight Level</b><br>' +
+                'Wind: ' + (ws != null ? ws.toFixed(1) + ' m/s (' + (ws * 1.94384).toFixed(0) + ' kt)' : 'N/A') + '<br>' +
+                'Dir: ' + (o.fl_wdir_deg != null ? o.fl_wdir_deg.toFixed(0) + '\u00b0' : 'N/A') + '<br>' +
+                altStr +
+                (tdrStr ? tdrStr + '<br>' : '') +
+                'Time: ' + timeStr
+            );
+        }
+
+        // Inherit TDR heatmap colorscale + range
+        var tdrColorscale = 'Jet';
+        var tdrCmin = 0, tdrCmax = 80;
+        if (plotDiv.data && plotDiv.data.length > 0) {
+            var tdrTrace = plotDiv.data[0];
+            if (tdrTrace.colorscale) tdrColorscale = tdrTrace.colorscale;
+            if (tdrTrace.zmin != null) tdrCmin = tdrTrace.zmin;
+            if (tdrTrace.zmax != null) tdrCmax = tdrTrace.zmax;
+        }
+
+        var flLineTrace = {
+            x: x, y: y,
+            type: 'scatter', mode: 'lines',
+            line: { color: 'rgba(255,255,255,0.3)', width: 1.5 },
+            hoverinfo: 'skip', showlegend: false,
+            name: 'FL Track Line',
+        };
+        var flScatterTrace = {
+            x: x, y: y,
+            type: 'scatter', mode: 'markers',
+            marker: {
+                color: colors,
+                colorscale: tdrColorscale,
+                cmin: tdrCmin, cmax: tdrCmax,
+                size: sizes,
+                line: { width: 1, color: 'rgba(255,255,255,0.6)' },
+                showscale: false,
+            },
+            text: texts,
+            hovertemplate: '%{text}<extra></extra>',
+            name: '\u2708 Flight Level',
+            showlegend: true,
+        };
+
+        var baseCount = plotDiv.data.length;
+        Plotly.addTraces('rt-plotly-chart', [flLineTrace, flScatterTrace]);
+        _rtFLPlotTraceIndices = [baseCount, baseCount + 1];
     }
 
     // ── Legend / colour variable selector (injected into map wrapper) ──
@@ -2763,6 +2862,7 @@
                     rtToast(_toastMsg, 'info', 6000);
 
                     _rtRenderFLOnMap();
+                    _rtRenderFLOnPlot();
                     _rtRenderFLTimeSeries();
                 })
                 .catch(function (err) {
@@ -2778,6 +2878,7 @@
             _rtFLMode = 'off';
             _rtFLVisible = false;
             _rtRemoveFLFromMap();
+            _rtRemoveFLFromPlot();
             window.rtFLCloseTimeSeries();
             var offBtn = document.getElementById('rt-fl-btn');
             if (offBtn) { offBtn.textContent = '\u2708 FL Off'; offBtn.classList.remove('active'); }
@@ -2785,6 +2886,7 @@
             _rtFLMode = 'on';
             _rtFLVisible = true;
             _rtRenderFLOnMap();
+            _rtRenderFLOnPlot();
             _rtRenderFLTimeSeries();
             var onBtn = document.getElementById('rt-fl-btn');
             if (onBtn) {
@@ -3056,7 +3158,7 @@
                 yref: 'paper',
                 text: insetLines.join('<br>'),
                 showarrow: false,
-                font: { family: 'JetBrains Mono, monospace', size: 10, color: '#cbd5e1' },
+                font: { family: 'DM Sans, sans-serif', size: 10, color: '#cbd5e1' },
                 align: 'left',
                 xanchor: 'left',
                 yanchor: 'top',
