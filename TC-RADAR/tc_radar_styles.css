@@ -898,6 +898,40 @@ footer a:hover { text-decoration: underline; }
 .wizard-generate-btn:hover { background: #67e8f9; }
 .wizard-generate-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .wizard-generate-summary { font-size: 11px; color: var(--slate); }
+
+/* ── Inline shading toolbar on Step 4 ── */
+.comp-shading-toolbar {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 14px; margin-bottom: 10px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+}
+.cst-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cst-label { font-size: 10px; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
+.cst-select {
+    padding: 3px 6px; font-size: 11px; border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 5px; background: var(--navy); color: var(--text);
+    font-family: 'JetBrains Mono', monospace; cursor: pointer;
+}
+.cst-select:hover { border-color: rgba(255,255,255,0.2); }
+.cst-input {
+    width: 58px; padding: 3px 6px; font-size: 11px;
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 5px;
+    background: var(--navy); color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+}
+.cst-input:focus { border-color: var(--cyan); outline: none; }
+.cst-to { font-size: 10px; color: var(--slate); }
+.cst-sep { width: 1px; height: 18px; background: rgba(255,255,255,0.08); margin: 0 4px; }
+.cst-reset {
+    padding: 2px 7px; font-size: 11px; border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 5px; background: var(--navy); color: var(--slate);
+    cursor: pointer; font-family: 'JetBrains Mono', monospace;
+}
+.cst-reset:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+
 .wizard-results-area { }
 .wizard-result-section {
     margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.06);

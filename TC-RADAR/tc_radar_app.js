@@ -3154,7 +3154,7 @@ function applyCompCmap() {
     var cs = sel.value;
     if (!cs && _compDefaultColorscale) cs = _compDefaultColorscale; if (!cs) return;
     var colorscale; try { colorscale = JSON.parse(cs); } catch(e) { colorscale = cs; }
-    ['comp-az-chart','comp-sq-chart'].forEach(function(id) {
+    ['comp-az-chart','comp-sq-chart','comp-pv-chart'].forEach(function(id) {
         var plotDiv = document.getElementById(id);
         if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
         // Restyle all heatmap traces (quadrant view has 4)
@@ -3167,7 +3167,7 @@ function applyCompCmap() {
 function applyCompColorRange() {
     var zmin = _getCompVmin(_compDefaultVmin), zmax = _getCompVmax(_compDefaultVmax);
     if (zmin === null || zmax === null) return;
-    ['comp-az-chart','comp-sq-chart'].forEach(function(id) {
+    ['comp-az-chart','comp-sq-chart','comp-pv-chart'].forEach(function(id) {
         var plotDiv = document.getElementById(id);
         if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
         var indices = plotDiv.data.map(function(_,i){return i;});
@@ -3181,7 +3181,7 @@ function resetCompColorRange() {
     var vminInput = document.getElementById('comp-vmin'), vmaxInput = document.getElementById('comp-vmax');
     if (vminInput) vminInput.value = ''; if (vmaxInput) vmaxInput.value = '';
     if (_compDefaultVmin !== null && _compDefaultVmax !== null) {
-        ['comp-az-chart','comp-sq-chart'].forEach(function(id) {
+        ['comp-az-chart','comp-sq-chart','comp-pv-chart'].forEach(function(id) {
             var plotDiv = document.getElementById(id);
             if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
             var indices = plotDiv.data.map(function(_,i){return i;});
@@ -3190,6 +3190,56 @@ function resetCompColorRange() {
             Plotly.restyle(plotDiv, { zmin: zminArr, zmax: zmaxArr }, indices);
         });
     }
+}
+
+// ── Inline shading toolbar helpers (Step 4) ─────────────────
+// These sync the inline toolbar on the Results step with the
+// existing comp-cmap / comp-vmin / comp-vmax controls on Step 3,
+// then trigger the same Plotly.restyle logic.
+
+function _syncCompCmapFromInline() {
+    var inline = document.getElementById('comp-cmap-inline');
+    var master = document.getElementById('comp-cmap');
+    if (inline && master) { master.value = inline.value; }
+    applyCompCmap();
+}
+
+function _syncCompRangeFromInline() {
+    var inMin = document.getElementById('comp-vmin-inline');
+    var inMax = document.getElementById('comp-vmax-inline');
+    var master_min = document.getElementById('comp-vmin');
+    var master_max = document.getElementById('comp-vmax');
+    if (inMin && master_min) master_min.value = inMin.value;
+    if (inMax && master_max) master_max.value = inMax.value;
+    applyCompColorRange();
+}
+
+function _resetCompShadingInline() {
+    var inMin = document.getElementById('comp-vmin-inline');
+    var inMax = document.getElementById('comp-vmax-inline');
+    var inCmap = document.getElementById('comp-cmap-inline');
+    if (inMin) inMin.value = '';
+    if (inMax) inMax.value = '';
+    if (inCmap) inCmap.value = '';
+    resetCompColorRange();
+    // Also reset colormap to default
+    var master = document.getElementById('comp-cmap');
+    if (master) { master.value = ''; applyCompCmap(); }
+}
+
+function _showCompShadingToolbar() {
+    var toolbar = document.getElementById('comp-shading-toolbar');
+    if (toolbar) toolbar.style.display = '';
+    // Sync inline controls from Step 3 master controls
+    var masterCmap = document.getElementById('comp-cmap');
+    var inlineCmap = document.getElementById('comp-cmap-inline');
+    if (masterCmap && inlineCmap) inlineCmap.value = masterCmap.value;
+    var masterMin = document.getElementById('comp-vmin');
+    var inlineMin = document.getElementById('comp-vmin-inline');
+    if (masterMin && inlineMin) { inlineMin.value = masterMin.value; inlineMin.placeholder = masterMin.placeholder; }
+    var masterMax = document.getElementById('comp-vmax');
+    var inlineMax = document.getElementById('comp-vmax-inline');
+    if (masterMax && inlineMax) { inlineMax.value = masterMax.value; inlineMax.placeholder = masterMax.placeholder; }
 }
 
 // ── Max value helper ─────────────────────────────────────────
@@ -3290,7 +3340,7 @@ function renderPlotFromJSON(json, resultDiv) {
     var plotBg = '#0a1628';
     var baseLayout = { paper_bgcolor: plotBg, plot_bgcolor: plotBg, xaxis: { title: { text: 'Eastward distance (km)', font: { color: '#aaa' } }, tickfont: { color: '#aaa' }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false, scaleanchor: 'y' }, yaxis: { title: { text: 'Northward distance (km)', font: { color: '#aaa' } }, tickfont: { color: '#aaa' }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, shapes: shapes, hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 12 } }, showlegend: false };
     var config = { responsive: true, displayModeBar: true, modeBarButtonsToRemove: ['lasso2d','select2d','toggleSpikelines'], displaylogo: false };
-    var smallLayout = Object.assign({}, baseLayout, { title: { text: title, font: { color: '#e5e7eb', size: 11 }, y: 0.98, x: 0.5, xanchor: 'center' }, margin: { l: 52, r: 16, t: json.overlay ? 82 : 66, b: 44 }, xaxis: Object.assign({}, baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }), yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }) });
+    var smallLayout = Object.assign({}, baseLayout, { title: { text: title, font: { color: '#e5e7eb', size: 11 }, y: 0.98, x: 0.5, xanchor: 'center' }, margin: { l: 52, r: 16, t: json.overlay ? 94 : 78, b: 44 }, xaxis: Object.assign({}, baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }), yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }) });
 
     var overlayTraces = buildOverlayContours(json, x, y);
 
@@ -3471,7 +3521,7 @@ function renderAzimuthalMeanInto(targetId, json, fullsize) {
     var shapes = [];
     if (meta.rmw_km && !isNaN(meta.rmw_km)) shapes.push({ type:'line',xref:'x',yref:'paper',x0:meta.rmw_km,x1:meta.rmw_km,y0:0,y1:1,line:{color:'white',width:1.5,dash:'dash'} });
     var plotBg = '#0a1628';
-    var layout = { title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' }, paper_bgcolor: plotBg, plot_bgcolor: plotBg, xaxis: { title: { text: 'Radius (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, margin: fullsize ? { l:55,r:24,t:json.overlay?80:64,b:46 } : { l:45,r:12,t:json.overlay?66:52,b:38 }, shapes: shapes, hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: fontSize.hover } }, showlegend: false };
+    var layout = { title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' }, paper_bgcolor: plotBg, plot_bgcolor: plotBg, xaxis: { title: { text: 'Radius (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, margin: fullsize ? { l:55,r:24,t:json.overlay?96:80,b:46 } : { l:45,r:12,t:json.overlay?78:64,b:38 }, shapes: shapes, hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: fontSize.hover } }, showlegend: false };
 
     // Max value marker + annotation for azimuthal mean
     var azMaxInfo = findDataMax(azData, radius_km, height_km);
@@ -3696,7 +3746,7 @@ function renderQuadrantMeansInto(targetId, json, fullsize) {
     var plotBg = '#0a1628';
     var layout = {
         paper_bgcolor: plotBg, plot_bgcolor: plotBg,
-        margin: fullsize ? { l:55, r:70, t:84, b:50 } : { l:45, r:55, t:72, b:42 },
+        margin: fullsize ? { l:55, r:70, t:100, b:50 } : { l:45, r:55, t:84, b:42 },
         showlegend: false,
         annotations: annotations,
         shapes: shapes,
@@ -4166,7 +4216,7 @@ function openPlotModal(csJson) {
     }
 
     var d = window._lastPlotlyData;
-    var fullLayout = Object.assign({}, d.baseLayout, { title: { text: d.title, font: { color: '#e5e7eb', size: 15 }, y: 0.97, x: 0.5, xanchor: 'center' }, margin: { l:65,r:30,t:d.overlayTraces&&d.overlayTraces.length?96:80,b:55 }, xaxis: Object.assign({}, d.baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }), yaxis: Object.assign({}, d.baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }) });
+    var fullLayout = Object.assign({}, d.baseLayout, { title: { text: d.title, font: { color: '#e5e7eb', size: 15 }, y: 0.97, x: 0.5, xanchor: 'center' }, margin: { l:65,r:30,t:d.overlayTraces&&d.overlayTraces.length?110:94,b:55 }, xaxis: Object.assign({}, d.baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }), yaxis: Object.assign({}, d.baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }) });
     // Scale up annotations for fullscreen
     if (fullLayout.annotations) {
         fullLayout.annotations = fullLayout.annotations.map(function(a) {
@@ -4853,6 +4903,24 @@ function initCompositePanel() {
                         '<button class="wizard-generate-btn" id="wiz-generate-btn" onclick="_wizardGenerateSelected()">\u25B6 Generate Selected</button>' +
                         '<span class="wizard-generate-summary" id="wiz-generate-summary"></span>' +
                     '</div>' +
+                    // ── Inline shading toolbar (mirrors Step 3 controls for live adjustment) ──
+                    '<div class="comp-shading-toolbar" id="comp-shading-toolbar" style="display:none;">' +
+                        '<div class="cst-row">' +
+                            '<label class="cst-label">Colormap</label>' +
+                            '<select id="comp-cmap-inline" class="cst-select" onchange="_syncCompCmapFromInline()">' +
+                                '<option value="">Default</option>' +
+                                '<optgroup label="Sequential"><option value="Viridis">Viridis</option><option value="Inferno">Inferno</option><option value="Magma">Magma</option><option value="Plasma">Plasma</option><option value="Cividis">Cividis</option><option value="Hot">Hot</option><option value="YlOrRd">YlOrRd</option><option value="YlGnBu">YlGnBu</option><option value="Blues">Blues</option><option value="Reds">Reds</option><option value="Greys">Greys</option></optgroup>' +
+                                '<optgroup label="Diverging"><option value="RdBu">RdBu</option><option value=\'[[0,"rgb(5,10,172)"],[0.5,"rgb(255,255,255)"],[1,"rgb(178,10,28)"]]\'>BuWtRd</option><option value="Picnic">Picnic</option><option value="Portland">Portland</option></optgroup>' +
+                                '<optgroup label="Other"><option value="Jet">Jet</option><option value="Rainbow">Rainbow</option><option value="Electric">Electric</option></optgroup>' +
+                            '</select>' +
+                            '<span class="cst-sep"></span>' +
+                            '<label class="cst-label">Range</label>' +
+                            '<input type="number" id="comp-vmin-inline" class="cst-input" placeholder="min" step="any" onchange="_syncCompRangeFromInline()">' +
+                            '<span class="cst-to">to</span>' +
+                            '<input type="number" id="comp-vmax-inline" class="cst-input" placeholder="max" step="any" onchange="_syncCompRangeFromInline()">' +
+                            '<button class="cst-reset" onclick="_resetCompShadingInline()" title="Reset to default">\u21BA</button>' +
+                        '</div>' +
+                    '</div>' +
                     '<div class="wizard-results-area" id="wizard-results-area">' +
                         '<div class="wizard-result-placeholder" id="wiz-result-placeholder">' +
                             '<div class="wrp-icon">\uD83C\uDF00</div>' +
@@ -5295,6 +5363,8 @@ function updateCompositeCount() {
                 el.title = '';
                 if (capNote) { capNote.classList.remove('capped'); capNote.textContent = 'Composites are limited to ' + json.max_cases + ' cases per group.'; }
             }
+            // Keep the summary badge in sync with the latest count
+            _wizardUpdateSummary();
         })
         .catch(function() { el.textContent = '?'; });
 }
@@ -5856,7 +5926,7 @@ function renderCompositeAzMeanInto(targetId, json, filters) {
         paper_bgcolor: plotBg, plot_bgcolor: plotBg,
         xaxis: { title: { text:rLabel, font:{color:'#aaa',size:fontSize.axis} }, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
         yaxis: { title: { text:'Height (km)', font:{color:'#aaa',size:fontSize.axis} }, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
-        margin: { l:55, r:24, t: json.overlay ? 130 : 116, b:46 }, shapes: shapes,
+        margin: { l:55, r:24, t: json.overlay ? 150 : 136, b:46 }, shapes: shapes,
         hoverlabel: { bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
         showlegend: false
     };
@@ -5963,7 +6033,7 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
     var layout = Object.assign({
         title:{ text:title, font:{color:'#e5e7eb',size:fontSize.title}, y:0.99, x:0.5, xanchor:'center' },
         paper_bgcolor:plotBg, plot_bgcolor:plotBg,
-        margin:{ l:50, r:60, t: json.overlay ? 130 : 116, b:50 },
+        margin:{ l:50, r:60, t: json.overlay ? 150 : 136, b:50 },
         annotations:annotations, shapes:shapes.concat(shearInset.shapes || []),
         hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
         showlegend:false
@@ -5989,12 +6059,16 @@ function generateCompositeAzMean() {
     _showCompStatus('loading', 'Computing composite azimuthal mean \u2014 this may take 30\u201390 seconds for many cases\u2026');
 
     var overlay = (document.getElementById('comp-overlay') || {}).value || '';
-    var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage;
+    var maxRRmw = parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 8.0;
+    var drRmw   = parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.25;
+    var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage +
+        '&max_r_rmw=' + maxRRmw + '&dr_rmw=' + drRmw;
     if (overlay) qs += '&overlay=' + encodeURIComponent(overlay);
     _fetchCompositeStream(API_BASE + '/composite/azimuthal_mean?' + qs, 'Computing azimuthal mean')
         .then(function(json) {
             _showCompStatus('success', '\u2713 Composite computed: ' + json.n_cases + ' cases processed');
             renderCompositeAzMeanInto('comp-result-az', json, filters);
+            _showCompShadingToolbar();
             history.replaceState(null, '', '#' + _buildCompPermalinkHash());
         })
         .catch(function(err) { _showCompStatus('error', '\u2717 ' + err.message); })
@@ -6018,12 +6092,16 @@ function generateCompositeQuadMean() {
     _showCompStatus('loading', 'Computing composite shear quadrants \u2014 this may take 30\u201390 seconds for many cases\u2026');
 
     var overlay = (document.getElementById('comp-overlay') || {}).value || '';
-    var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage;
+    var maxRRmw = parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 8.0;
+    var drRmw   = parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.25;
+    var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage +
+        '&max_r_rmw=' + maxRRmw + '&dr_rmw=' + drRmw;
     if (overlay) qs += '&overlay=' + encodeURIComponent(overlay);
     _fetchCompositeStream(API_BASE + '/composite/quadrant_mean?' + qs, 'Computing shear quadrants')
         .then(function(json) {
             _showCompStatus('success', '\u2713 Composite computed: ' + json.n_cases + ' cases processed (' + (json.n_with_shear_and_rmw || json.n_with_shear || '?') + ' with shear data)');
             renderCompositeQuadMeanInto('comp-result-sq', json, filters);
+            _showCompShadingToolbar();
             history.replaceState(null, '', '#' + _buildCompPermalinkHash());
         })
         .catch(function(err) { _showCompStatus('error', '\u2717 ' + err.message); })
@@ -6078,6 +6156,7 @@ function generateCompositePlanView() {
         .then(function(json) {
             _showCompStatus('success', '\u2713 Plan-view composite computed: ' + json.n_cases + ' cases processed');
             renderCompositePlanViewInto('comp-result-pv', json, filters, pvParams);
+            _showCompShadingToolbar();
             history.replaceState(null, '', '#' + _buildCompPermalinkHash());
         })
         .catch(function(err) { _showCompStatus('error', '\u2717 ' + err.message); })
@@ -6197,7 +6276,7 @@ function renderCompositePlanViewInto(targetId, json, filters, pvParams) {
                  gridcolor:'rgba(255,255,255,0.04)', zeroline:true,
                  zerolinecolor:'rgba(255,255,255,0.12)',
                  scaleanchor:'x', scaleratio:1 },
-        margin: { l:60, r:24, t: json.overlay ? 130 : 116, b:50 },
+        margin: { l:60, r:24, t: json.overlay ? 150 : 136, b:50 },
         shapes: shapes, annotations: annotations,
         hoverlabel: { bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
         showlegend: false
@@ -6285,6 +6364,8 @@ function _updateGroupBCount() {
                 el.title = '';
                 if (capNote) { capNote.classList.remove('capped'); capNote.textContent = 'Composites are limited to ' + json.max_cases + ' cases per group.'; }
             }
+            // Keep the summary badge in sync with the latest count
+            _wizardUpdateSummary();
         })
         .catch(function() { el.textContent = '?'; });
 }
@@ -6355,7 +6436,10 @@ function generateCompDiffAzMean() {
     document.getElementById('comp-result-pv').style.display = 'none';
     _showCompStatus('loading', 'Computing difference composite (A\u2212B) azimuthal mean\u2026');
 
-    var baseQS = '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage;
+    var maxRRmw = parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 8.0;
+    var drRmw   = parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.25;
+    var baseQS = '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage +
+        '&max_r_rmw=' + maxRRmw + '&dr_rmw=' + drRmw;
     if (overlay) baseQS += '&overlay=' + encodeURIComponent(overlay);
     var urlA = API_BASE + '/composite/azimuthal_mean?' + _compositeQueryString(filtersA) + baseQS;
     var urlB = API_BASE + '/composite/azimuthal_mean?' + _compositeQueryString(filtersB) + baseQS;
@@ -6432,7 +6516,10 @@ function generateCompDiffQuadMean() {
     document.getElementById('comp-result-pv').style.display = 'none';
     _showCompStatus('loading', 'Computing difference composite (A\u2212B) shear quadrants\u2026');
 
-    var baseQS = '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage;
+    var maxRRmw = parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 8.0;
+    var drRmw   = parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.25;
+    var baseQS = '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage +
+        '&max_r_rmw=' + maxRRmw + '&dr_rmw=' + drRmw;
     if (overlay) baseQS += '&overlay=' + encodeURIComponent(overlay);
     var urlA = API_BASE + '/composite/quadrant_mean?' + _compositeQueryString(filtersA) + baseQS;
     var urlB = API_BASE + '/composite/quadrant_mean?' + _compositeQueryString(filtersB) + baseQS;
@@ -6550,7 +6637,7 @@ function _renderDiffAzMean(targetId, diffJson, jsonA, jsonB, filtersA, filtersB)
             paper_bgcolor:plotBg, plot_bgcolor:plotBg,
             xaxis: { title:{text:rLabel,font:{color:'#aaa',size:fontSize.axis}}, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
             yaxis: { title:{text:'Height (km)',font:{color:'#aaa',size:fontSize.axis}}, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
-            margin:{ l:55, r:24, t:96, b:42 }, shapes:rmwShape,
+            margin:{ l:55, r:24, t:116, b:42 }, shapes:rmwShape,
             hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
             showlegend:false
         };
@@ -6667,7 +6754,7 @@ function _renderDiffQuadMean(targetId, diffJson, jsonA, jsonB, filtersA, filters
         var layout = Object.assign({
             title:{ text:titleText, font:{color:'#e5e7eb',size:fontSize.title}, y:0.99, x:0.5, xanchor:'center' },
             paper_bgcolor:plotBg, plot_bgcolor:plotBg,
-            margin:{ l:50, r:60, t:100, b:44 },
+            margin:{ l:50, r:60, t:120, b:44 },
             annotations:annotations, shapes:shapes.concat(shearInset.shapes || []),
             hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
             showlegend:false
@@ -6852,7 +6939,7 @@ function _renderDiffPlanView(targetId, diffJson, jsonA, jsonB, filtersA, filters
             paper_bgcolor:plotBg, plot_bgcolor:plotBg,
             xaxis: { title:{text:xLabel,font:{color:'#aaa',size:fontSize.axis}}, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:true, zerolinecolor:'rgba(255,255,255,0.12)' },
             yaxis: { title:{text:yLabel,font:{color:'#aaa',size:fontSize.axis}}, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:true, zerolinecolor:'rgba(255,255,255,0.12)', scaleanchor:'x', scaleratio:1 },
-            margin:{ l:60, r:24, t:100, b:50 },
+            margin:{ l:60, r:24, t:120, b:50 },
             shapes: sInset.shapes || [], annotations: sInset.annotations || [],
             hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
             showlegend:false
