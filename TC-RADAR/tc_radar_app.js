@@ -606,7 +606,7 @@ function _era5RenderCanvas(data2d, field) {
 function fetchERA5Data(caseIndex, field, callback) {
     if (_era5Fetching) return;
     _era5Fetching = true;
-    var url = API_BASE + '/era5?case_index=' + caseIndex + '&field=' + (field || 'shear_mag') + '&radius_km=300';
+    var url = API_BASE + '/era5?case_index=' + caseIndex + '&field=' + (field || 'shear_mag') + '&radius_km=300' + '&data_type=' + _activeDataType;
     fetch(url)
         .then(function(r) {
             if (!r.ok) { _era5Fetching = false; if (callback) callback(null); return null; }
@@ -1568,7 +1568,7 @@ function renderSkewT(profiles, divId) {
 
 // ── Skew-T sounding fetch with configurable radius ──────────
 function fetchSkewTSounding(caseIdx, radiusKm, callback) {
-    var url = API_BASE + '/era5_sounding?case_index=' + caseIdx + '&radius_km=' + radiusKm;
+    var url = API_BASE + '/era5_sounding?case_index=' + caseIdx + '&radius_km=' + radiusKm + '&data_type=' + _activeDataType;
     fetch(url)
         .then(function(r) { return r.ok ? r.json() : null; })
         .then(function(data) { if (callback) callback(data); })
@@ -1759,7 +1759,7 @@ function _envOverlayShowLoading() {
 
 function _envOverlayFetchAndRender(caseIdx, radiusKm) {
     var field = document.getElementById('env-ov-field').value || 'shear_mag';
-    var url = API_BASE + '/era5?case_index=' + caseIdx + '&field=' + field + '&radius_km=' + radiusKm;
+    var url = API_BASE + '/era5?case_index=' + caseIdx + '&field=' + field + '&radius_km=' + radiusKm + '&data_type=' + _activeDataType;
     fetch(url)
         .then(function(r) { return r.ok ? r.json() : null; })
         .then(function(data) {
@@ -2086,7 +2086,7 @@ function envOverlayChangeField(field) {
     _envOverlayField = field;
     if (!currentCaseIndex && currentCaseIndex !== 0) return;
     var radiusKm = parseInt(document.getElementById('env-ov-radius').value) || 500;
-    var url = API_BASE + '/era5?case_index=' + currentCaseIndex + '&field=' + field + '&radius_km=' + radiusKm;
+    var url = API_BASE + '/era5?case_index=' + currentCaseIndex + '&field=' + field + '&radius_km=' + radiusKm + '&data_type=' + _activeDataType;
     fetch(url)
         .then(function(r) { return r.ok ? r.json() : null; })
         .then(function(data) {
@@ -2107,7 +2107,7 @@ function envOverlayRadiusChange(val) {
     window._envRadiusTimer = setTimeout(function() {
         if (!currentCaseIndex && currentCaseIndex !== 0) return;
         var field = document.getElementById('env-ov-field').value || 'shear_mag';
-        var url = API_BASE + '/era5?case_index=' + currentCaseIndex + '&field=' + field + '&radius_km=' + _envOverlayCropKm;
+        var url = API_BASE + '/era5?case_index=' + currentCaseIndex + '&field=' + field + '&radius_km=' + _envOverlayCropKm + '&data_type=' + _activeDataType;
         fetch(url)
             .then(function(r) { return r.ok ? r.json() : null; })
             .then(function(data) {
@@ -2129,7 +2129,7 @@ function envOverlayRecomputeScalars() {
     if (btn) { btn.disabled = true; btn.textContent = 'Computing...'; }
 
     var url = API_BASE + '/era5_scalars?case_index=' + currentCaseIndex +
-        '&inner_km=' + innerKm + '&outer_km=' + outerKm;
+        '&inner_km=' + innerKm + '&outer_km=' + outerKm + '&data_type=' + _activeDataType;
     fetch(url)
         .then(function(r) { return r.ok ? r.json() : null; })
         .then(function(data) {
@@ -2466,7 +2466,7 @@ function fetchIRData(caseIndex, callback) {
     _irBoundsSet = false;  // force setBounds() on new case (center may differ)
 
     // Phase 1: Fetch metadata + t=0 frame for instant display
-    var url = API_BASE + '/ir?case_index=' + caseIndex;
+    var url = API_BASE + '/ir?case_index=' + caseIndex + '&data_type=' + _activeDataType;
     fetch(url)
         .then(function(r) {
             if (!r.ok) { _irFetching = false; if (callback) callback(null); return null; }
@@ -2510,7 +2510,7 @@ function _fetchRemainingFramesParallel(caseIndex, startIdx) {
     var promises = [];
     for (var i = startIdx; i < _irFrameURLs.length; i++) {
         (function(lagIdx) {
-            var url = API_BASE + '/ir_frame?case_index=' + caseIndex + '&lag_index=' + lagIdx;
+            var url = API_BASE + '/ir_frame?case_index=' + caseIndex + '&lag_index=' + lagIdx + '&data_type=' + _activeDataType;
             promises.push(
                 fetch(url)
                     .then(function(r) { return r.ok ? r.json() : null; })
