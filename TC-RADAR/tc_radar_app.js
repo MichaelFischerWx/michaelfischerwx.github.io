@@ -4909,24 +4909,56 @@ function initCompositePanel() {
                                 // CFAD-specific options (visible only when CFAD is checked)
                                 '<div id="wiz-cfg-cfad-opts" style="display:none;border-top:1px solid rgba(255,255,255,0.06);padding-top:8px;margin-top:4px;">' +
                                     '<div style="font-size:10px;font-weight:600;color:#22d3ee;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">\uD83D\uDCCA CFAD Options</div>' +
+
+                                    // Bin width
                                     '<div class="wizard-config-row"><label>Bin Width</label>' +
                                         '<input type="number" id="cfad-bin-width" value="" placeholder="auto" min="0.1" step="any" style="width:80px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
                                         '<span style="font-size:9px;color:#6b7280;margin-left:4px;">(leave blank for auto)</span>' +
                                     '</div>' +
+
+                                    // Normalisation
                                     '<div class="wizard-config-row"><label>Normalisation</label>' +
                                         '<select id="cfad-normalise" style="font-size:11px;">' +
+                                            '<option value="height">% at Each Height (standard)</option>' +
                                             '<option value="total">% of Total Pixels</option>' +
-                                            '<option value="height">% at Each Height</option>' +
                                             '<option value="raw">Raw Counts</option>' +
                                         '</select>' +
                                     '</div>' +
-                                    '<div class="wizard-config-row"><label>Max Radius (km)</label>' +
-                                        '<input type="number" id="cfad-max-radius" value="200" min="10" max="500" step="10" style="width:80px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+
+                                    // Radial domain (min + max)
+                                    '<div class="wizard-config-row"><label>Radial Domain</label>' +
+                                        '<div style="display:flex;align-items:center;gap:6px;">' +
+                                            '<input type="number" id="cfad-min-radius" value="0" min="0" max="500" step="5" style="width:65px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                                            '<span style="font-size:10px;color:#6b7280;">to</span>' +
+                                            '<input type="number" id="cfad-max-radius" value="200" min="10" max="500" step="5" style="width:65px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                                            '<span id="cfad-radius-unit" style="font-size:10px;color:#6b7280;">km</span>' +
+                                        '</div>' +
                                     '</div>' +
+
+                                    // RMW toggle
                                     '<div class="wizard-config-row">' +
                                         '<div class="wizard-config-inline">' +
-                                            '<input type="checkbox" id="cfad-use-rmw">' +
-                                            '<label for="cfad-use-rmw" style="font-size:11px;color:#9ca3af;">Use RMW-normalised radius (max becomes R/RMW)</label>' +
+                                            '<input type="checkbox" id="cfad-use-rmw" onchange="_cfadUpdateRadiusUnit()">' +
+                                            '<label for="cfad-use-rmw" style="font-size:11px;color:#9ca3af;">Normalise by RMW (radii become R/RMW)</label>' +
+                                        '</div>' +
+                                    '</div>' +
+
+                                    // Shear-relative quadrant selector
+                                    '<div class="wizard-config-row"><label>Quadrant Filter</label>' +
+                                        '<div id="cfad-quad-btns" style="display:flex;gap:4px;flex-wrap:wrap;">' +
+                                            '<button type="button" class="cfad-quad-btn active" data-quad="ALL" onclick="_cfadToggleQuad(this)" style="padding:4px 10px;font-size:10px;font-weight:600;border:1px solid rgba(34,211,238,0.3);border-radius:4px;background:rgba(34,211,238,0.15);color:#22d3ee;cursor:pointer;font-family:\'JetBrains Mono\',monospace;">All</button>' +
+                                            '<button type="button" class="cfad-quad-btn" data-quad="DSL" onclick="_cfadToggleQuad(this)" style="padding:4px 10px;font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:rgba(255,255,255,0.03);color:#9ca3af;cursor:pointer;font-family:\'JetBrains Mono\',monospace;">DSL</button>' +
+                                            '<button type="button" class="cfad-quad-btn" data-quad="DSR" onclick="_cfadToggleQuad(this)" style="padding:4px 10px;font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:rgba(255,255,255,0.03);color:#9ca3af;cursor:pointer;font-family:\'JetBrains Mono\',monospace;">DSR</button>' +
+                                            '<button type="button" class="cfad-quad-btn" data-quad="USL" onclick="_cfadToggleQuad(this)" style="padding:4px 10px;font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:rgba(255,255,255,0.03);color:#9ca3af;cursor:pointer;font-family:\'JetBrains Mono\',monospace;">USL</button>' +
+                                            '<button type="button" class="cfad-quad-btn" data-quad="USR" onclick="_cfadToggleQuad(this)" style="padding:4px 10px;font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:rgba(255,255,255,0.03);color:#9ca3af;cursor:pointer;font-family:\'JetBrains Mono\',monospace;">USR</button>' +
+                                        '</div>' +
+                                    '</div>' +
+
+                                    // Log-scale toggle
+                                    '<div class="wizard-config-row">' +
+                                        '<div class="wizard-config-inline">' +
+                                            '<input type="checkbox" id="cfad-log-scale" checked>' +
+                                            '<label for="cfad-log-scale" style="font-size:11px;color:#9ca3af;">Log-scale colorbar</label>' +
                                         '</div>' +
                                     '</div>' +
                                 '</div>' +
@@ -6188,6 +6220,58 @@ function generateCompositeAzMean() {
         });
 }
 
+// ── CFAD helper functions ──
+
+function _cfadUpdateRadiusUnit() {
+    var unitEl = document.getElementById('cfad-radius-unit');
+    var useRmw = document.getElementById('cfad-use-rmw');
+    if (unitEl && useRmw) {
+        unitEl.textContent = useRmw.checked ? 'R/RMW' : 'km';
+    }
+}
+
+function _cfadToggleQuad(btn) {
+    var quad = btn.getAttribute('data-quad');
+    var allBtns = document.querySelectorAll('#cfad-quad-btns .cfad-quad-btn');
+    var activeStyle = 'padding:4px 10px;font-size:10px;font-weight:600;border:1px solid rgba(34,211,238,0.3);border-radius:4px;background:rgba(34,211,238,0.15);color:#22d3ee;cursor:pointer;font-family:\'JetBrains Mono\',monospace;';
+    var inactiveStyle = 'padding:4px 10px;font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:rgba(255,255,255,0.03);color:#9ca3af;cursor:pointer;font-family:\'JetBrains Mono\',monospace;';
+
+    if (quad === 'ALL') {
+        // "All" is exclusive — deselect everything else, activate All
+        allBtns.forEach(function(b) {
+            var isAll = b.getAttribute('data-quad') === 'ALL';
+            b.classList.toggle('active', isAll);
+            b.style.cssText = isAll ? activeStyle : inactiveStyle;
+        });
+    } else {
+        // Deselect "All" if it's active
+        var allBtn = document.querySelector('#cfad-quad-btns .cfad-quad-btn[data-quad="ALL"]');
+        if (allBtn && allBtn.classList.contains('active')) {
+            allBtn.classList.remove('active');
+            allBtn.style.cssText = inactiveStyle;
+        }
+        // Toggle this quadrant
+        var isActive = btn.classList.toggle('active');
+        btn.style.cssText = isActive ? activeStyle : inactiveStyle;
+        // If no quadrants are selected, re-activate "All"
+        var anyActive = document.querySelector('#cfad-quad-btns .cfad-quad-btn.active:not([data-quad="ALL"])');
+        if (!anyActive && allBtn) {
+            allBtn.classList.add('active');
+            allBtn.style.cssText = activeStyle;
+        }
+    }
+}
+
+function _cfadGetSelectedQuadrants() {
+    var allBtn = document.querySelector('#cfad-quad-btns .cfad-quad-btn.active[data-quad="ALL"]');
+    if (allBtn) return [];  // empty = all azimuths
+    var selected = [];
+    document.querySelectorAll('#cfad-quad-btns .cfad-quad-btn.active').forEach(function(b) {
+        selected.push(b.getAttribute('data-quad'));
+    });
+    return selected;
+}
+
 function generateCompositeCFAD() {
     var filters = _getCompositeFilters();
     var variable = document.getElementById('comp-var').value;
@@ -6196,19 +6280,18 @@ function generateCompositeCFAD() {
     _showCompStatus('loading', 'Computing CFAD \u2014 this may take 30\u201390 seconds for many cases\u2026');
 
     // Gather CFAD-specific options
-    var cfadBinWidthEl = document.getElementById('cfad-bin-width');
-    var cfadNormEl = document.getElementById('cfad-normalise');
-    var cfadMaxREl = document.getElementById('cfad-max-radius');
-    var cfadUseRmwEl = document.getElementById('cfad-use-rmw');
-    var binWidth = cfadBinWidthEl ? parseFloat(cfadBinWidthEl.value) : 0;
-    var normalise = cfadNormEl ? cfadNormEl.value : 'total';
-    var maxRadius = cfadMaxREl ? parseFloat(cfadMaxREl.value) || 200 : 200;
-    var useRmw = cfadUseRmwEl ? cfadUseRmwEl.checked : false;
+    var binWidth = parseFloat((document.getElementById('cfad-bin-width') || {}).value) || 0;
+    var normalise = (document.getElementById('cfad-normalise') || {}).value || 'height';
+    var minRadius = parseFloat((document.getElementById('cfad-min-radius') || {}).value) || 0;
+    var maxRadius = parseFloat((document.getElementById('cfad-max-radius') || {}).value) || 200;
+    var useRmw = !!(document.getElementById('cfad-use-rmw') || {}).checked;
+    var quadrants = _cfadGetSelectedQuadrants();
 
     var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType +
-        '&max_radius=' + maxRadius + '&normalise=' + encodeURIComponent(normalise);
+        '&min_radius=' + minRadius + '&max_radius=' + maxRadius + '&normalise=' + encodeURIComponent(normalise);
     if (useRmw) qs += '&use_rmw=true';
     if (binWidth > 0) qs += '&bin_width=' + binWidth;
+    if (quadrants.length > 0) qs += '&quadrants=' + encodeURIComponent(quadrants.join(','));
 
     _fetchCompositeStream(API_BASE + '/composite/cfad?' + qs, 'Computing CFAD')
         .then(function(json) {
@@ -6229,35 +6312,118 @@ function renderCompositeCFADInto(targetId, json, filters) {
 
     var fontSize = { title:14, axis:12, tick:10, cbar:12, cbarTick:10, hover:13 };
 
+    // Check if log scale is requested
+    var useLog = !!(document.getElementById('cfad-log-scale') || {}).checked;
+
     // CFAD colorscale — Spectral_r from the backend (matplotlib), with fallback
     var cfadColorscale = json.cfad_colorscale || 'RdYlBu';
 
-    // Find the actual max for colorbar scaling
-    var zMax = 0;
+    // Find the actual min (non-zero) and max for colorbar scaling
+    var zMax = 0, zMinPos = Infinity;
     for (var h = 0; h < cfadData.length; h++) {
         for (var b = 0; b < cfadData[h].length; b++) {
             var v = cfadData[h][b];
             if (v !== null && v > zMax) zMax = v;
+            if (v !== null && v > 0 && v < zMinPos) zMinPos = v;
         }
     }
     if (zMax === 0) zMax = 1;
+    if (zMinPos === Infinity) zMinPos = 0.001;
 
+    // Apply log10 transform if requested
+    var plotData, plotZmin, plotZmax, cbarTitle, hoverSuffix;
+    if (useLog && zMax > 0) {
+        // Log10 transform: replace 0/null with NaN so they render as gaps
+        plotData = [];
+        for (var h2 = 0; h2 < cfadData.length; h2++) {
+            var row = [];
+            for (var b2 = 0; b2 < cfadData[h2].length; b2++) {
+                var val = cfadData[h2][b2];
+                if (val === null || val <= 0) {
+                    row.push(null);
+                } else {
+                    row.push(Math.log10(val));
+                }
+            }
+            plotData.push(row);
+        }
+        plotZmin = Math.log10(Math.max(zMinPos * 0.5, 1e-6));
+        plotZmax = Math.log10(zMax);
+
+        // Build custom tick values for the colorbar in log space
+        var tickVals = [], tickText = [];
+        // Generate nice tick labels spanning the log range
+        var logMin = Math.floor(plotZmin), logMax = Math.ceil(plotZmax);
+        for (var p = logMin; p <= logMax; p++) {
+            var tv = Math.pow(10, p);
+            tickVals.push(p);
+            if (normLabel === 'count') {
+                tickText.push(tv >= 1 ? String(Math.round(tv)) : tv.toExponential(0));
+            } else {
+                // Percentage labels
+                if (tv >= 1) tickText.push(tv.toFixed(0) + '%');
+                else if (tv >= 0.1) tickText.push(tv.toFixed(1) + '%');
+                else if (tv >= 0.01) tickText.push(tv.toFixed(2) + '%');
+                else tickText.push(tv.toExponential(0) + '%');
+            }
+        }
+        cbarTitle = normLabel + ' (log\u2081\u2080)';
+        hoverSuffix = normLabel;
+    } else {
+        plotData = cfadData;
+        plotZmin = 0;
+        plotZmax = zMax;
+        cbarTitle = normLabel;
+        hoverSuffix = normLabel;
+    }
+
+    var colorbar = {
+        title: { text: cbarTitle, font: { color:'#ccc', size:fontSize.cbar } },
+        tickfont: { color:'#ccc', size:fontSize.cbarTick },
+        thickness:14, len:0.85
+    };
+    if (useLog && typeof tickVals !== 'undefined' && tickVals.length > 0) {
+        colorbar.tickvals = tickVals;
+        colorbar.ticktext = tickText;
+    }
+
+    // Custom hovertemplate: show original (non-log) value on hover
+    var customData = null;
+    if (useLog) {
+        // Store original values in customdata for hover
+        customData = cfadData;
+    }
     var heatmap = {
-        z: cfadData, x: binCenters, y: heightKm, type: 'heatmap',
-        colorscale: cfadColorscale, zmin: 0, zmax: zMax,
-        colorbar: { title: { text: normLabel, font: { color:'#ccc', size:fontSize.cbar } }, tickfont: { color:'#ccc', size:fontSize.cbarTick }, thickness:14, len:0.85 },
-        hovertemplate: '<b>' + varInfo.display_name + '</b>: %{x:.1f} ' + varInfo.units +
-            '<br>Height: %{y:.1f} km<br>Frequency: %{z:.2f} ' + normLabel + '<extra></extra>',
+        z: plotData, x: binCenters, y: heightKm, type: 'heatmap',
+        colorscale: cfadColorscale, zmin: plotZmin, zmax: plotZmax,
+        colorbar: colorbar,
         hoverongaps: false
     };
+    if (useLog && customData) {
+        heatmap.customdata = customData;
+        heatmap.hovertemplate = '<b>' + varInfo.display_name + '</b>: %{x:.1f} ' + varInfo.units +
+            '<br>Height: %{y:.1f} km<br>Frequency: %{customdata:.3f} ' + hoverSuffix + '<extra></extra>';
+    } else {
+        heatmap.hovertemplate = '<b>' + varInfo.display_name + '</b>: %{x:.1f} ' + varInfo.units +
+            '<br>Height: %{y:.1f} km<br>Frequency: %{z:.2f} ' + hoverSuffix + '<extra></extra>';
+    }
 
     var dtypeLabel = (document.getElementById('comp-dtype') && document.getElementById('comp-dtype').value === 'merge') ? ' (Merge)' : '';
     var meanVmax = _computeCompositeMeanVmax(filters);
     var vmaxNote = meanVmax !== null ? ' | Mean V<sub>max</sub>=' + meanVmax + ' kt' : '';
-    var binNote = ' | Bin width=' + json.bin_width + ' ' + varInfo.units;
+    var binNote = ' | Bin=' + json.bin_width + ' ' + varInfo.units;
+    var radialNote = '';
+    if (json.radial_domain) {
+        var rUnit = json.use_rmw ? ' R/RMW' : ' km';
+        radialNote = ' | R=' + json.radial_domain[0] + '\u2013' + json.radial_domain[1] + rUnit;
+    }
+    var quadNote = '';
+    if (json.quadrants && json.quadrants.length > 0) {
+        quadNote = ' | ' + json.quadrants.join('+');
+    }
     var title = _compositeFilterSummary(filters, json.n_cases) + vmaxNote +
-        '<br>CFAD: ' + varInfo.display_name + dtypeLabel + binNote +
-        ' | Norm: ' + normLabel;
+        '<br>CFAD: ' + varInfo.display_name + dtypeLabel + binNote + radialNote + quadNote +
+        ' | ' + normLabel + (useLog ? ' (log)' : '');
 
     var plotBg = '#0a1628';
     var layout = {
