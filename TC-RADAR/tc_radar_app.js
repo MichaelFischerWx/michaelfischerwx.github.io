@@ -7506,7 +7506,7 @@ var _archiveFLTraceIndices = [];  // Plotly trace indices to remove
 // Variable config for archive time series (matches real-time _FL_TS_CONFIG)
 var _ARCH_FL_TS_CONFIG = {
     'fl_wspd_ms':       { label: 'FL Wind Speed',    btn: 'FL Wind',   units: 'm/s',  color: '#60a5fa', yaxis: 'y'  },
-    'tdr_wspd_fl_alt':  { label: 'TDR at FL Alt',    btn: 'TDR@FL',    units: 'm/s',  color: '#22d3ee', yaxis: 'y'  },
+    'tdr_wspd_fl_alt':  { label: 'TDR at FL Alt',    btn: 'TDR@FL',    units: 'm/s',  color: '#f472b6', yaxis: 'y'  },
     'tdr_wspd_0p5km':   { label: 'TDR Wind 0.5 km',  btn: 'TDR 0.5km', units: 'm/s',  color: '#34d399', yaxis: 'y'  },
     'tdr_wspd_2km':     { label: 'TDR Wind 2.0 km',  btn: 'TDR 2km',   units: 'm/s',  color: '#c084fc', yaxis: 'y'  },
     'static_pres_hpa':  { label: 'Static Pressure',   btn: 'Static P',  units: 'hPa',  color: '#fb923c', yaxis: 'y2' },

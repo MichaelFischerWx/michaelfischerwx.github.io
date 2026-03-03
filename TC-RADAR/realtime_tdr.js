@@ -2802,9 +2802,10 @@
 
     // Variable config for time series traces
     var _FL_TS_CONFIG = {
-        'fl_wspd_ms':      { label: 'FL Wind Speed',   units: 'm/s',  color: '#60a5fa', yaxis: 'y'  },
-        'tdr_wspd_0p5km':  { label: 'TDR Wind 0.5 km', units: 'm/s',  color: '#34d399', yaxis: 'y'  },
-        'tdr_wspd_2km':    { label: 'TDR Wind 2.0 km', units: 'm/s',  color: '#c084fc', yaxis: 'y'  },
+        'fl_wspd_ms':       { label: 'FL Wind Speed',    units: 'm/s',  color: '#60a5fa', yaxis: 'y'  },
+        'tdr_wspd_fl_alt':  { label: 'TDR @ FL Alt',    units: 'm/s',  color: '#f472b6', yaxis: 'y'  },
+        'tdr_wspd_0p5km':   { label: 'TDR Wind 0.5 km', units: 'm/s',  color: '#34d399', yaxis: 'y'  },
+        'tdr_wspd_2km':     { label: 'TDR Wind 2.0 km', units: 'm/s',  color: '#c084fc', yaxis: 'y'  },
         'slp_hpa':         { label: 'Sea-Level Pres',   units: 'hPa',  color: '#fbbf24', yaxis: 'y2' },
         'static_pres_hpa': { label: 'Static Pressure',  units: 'hPa',  color: '#fb923c', yaxis: 'y2' },
         'temp_c':          { label: 'Temperature',      units: '\u00b0C',   color: '#f87171', yaxis: 'y3' },
@@ -2995,6 +2996,7 @@
         var insetLines = [];
         var windVars = [
             { key: 'fl_wspd_ms',      label: 'FL Wind'      },
+            { key: 'tdr_wspd_fl_alt', label: 'TDR@FL'       },
             { key: 'tdr_wspd_0p5km',  label: 'TDR 0.5 km'   },
             { key: 'tdr_wspd_2km',    label: 'TDR 2.0 km'   },
         ];
@@ -3110,6 +3112,7 @@
                 '<strong style="color:#60a5fa;">T' + (o.time_offset_s >= 0 ? '+' : '') + (o.time_offset_s / 60).toFixed(1) + ' min</strong><br>';
             if (o.fl_wspd_ms != null) popTxt += 'FL Wind (10s): <strong>' + o.fl_wspd_ms.toFixed(1) + ' m/s (' + (o.fl_wspd_ms * 1.94384).toFixed(0) + ' kt)</strong><br>';
             if (o.fl_wdir_deg != null) popTxt += 'FL Dir: ' + o.fl_wdir_deg.toFixed(0) + '\u00b0<br>';
+            if (o.tdr_wspd_fl_alt != null) popTxt += 'TDR @ FL: <strong>' + o.tdr_wspd_fl_alt.toFixed(1) + ' m/s (' + (o.tdr_wspd_fl_alt * 1.94384).toFixed(0) + ' kt)</strong><br>';
             if (o.tdr_wspd_0p5km != null) popTxt += 'TDR 0.5 km: ' + o.tdr_wspd_0p5km.toFixed(1) + ' m/s (' + (o.tdr_wspd_0p5km * 1.94384).toFixed(0) + ' kt)<br>';
             if (o.tdr_wspd_2km != null) popTxt += 'TDR 2.0 km: ' + o.tdr_wspd_2km.toFixed(1) + ' m/s (' + (o.tdr_wspd_2km * 1.94384).toFixed(0) + ' kt)<br>';
             if (o.slp_hpa != null) popTxt += 'SLP: <strong>' + o.slp_hpa.toFixed(1) + ' hPa</strong><br>';
