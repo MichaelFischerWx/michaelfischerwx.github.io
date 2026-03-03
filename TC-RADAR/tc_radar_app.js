@@ -97,6 +97,8 @@ const filters = {
     minIntensity:0, maxIntensity:200,
     minVmaxChange:-100, maxVmaxChange:85,
     minTilt:0, maxTilt:200,
+    minWspd05:0, maxWspd05:100,
+    minWspd20:0, maxWspd20:100,
     minYear:1997, maxYear:2024,
     stormName:'all'
 };
@@ -3855,6 +3857,8 @@ function passesFilters(c) {
     if (vmax < filters.minIntensity || vmax > filters.maxIntensity) return false;
     if (filters.minVmaxChange !== -100 || filters.maxVmaxChange !== 85) { if (c['24-h_vmax_change_kt'] === null) return false; var vc = c['24-h_vmax_change_kt']; if (vc < filters.minVmaxChange || vc > filters.maxVmaxChange) return false; }
     if (filters.minTilt !== 0 || filters.maxTilt !== 200) { if (c.tilt_magnitude_km === null) return false; if (c.tilt_magnitude_km < filters.minTilt || c.tilt_magnitude_km > filters.maxTilt) return false; }
+    if (filters.minWspd05 !== 0 || filters.maxWspd05 !== 100) { if (c.max_er_wspd_05km == null) return false; if (c.max_er_wspd_05km < filters.minWspd05 || c.max_er_wspd_05km > filters.maxWspd05) return false; }
+    if (filters.minWspd20 !== 0 || filters.maxWspd20 !== 100) { if (c.max_er_wspd_20km == null) return false; if (c.max_er_wspd_20km < filters.minWspd20 || c.max_er_wspd_20km > filters.maxWspd20) return false; }
     if (c.year < filters.minYear || c.year > filters.maxYear) return false;
     if (filters.stormName !== 'all' && c.storm_name !== filters.stormName) return false;
     return true;
@@ -3887,6 +3891,20 @@ function updateTiltSlider() {
     document.getElementById('min-tilt-value').textContent = min; document.getElementById('max-tilt-value').textContent = max;
     var rf = document.getElementById('tilt-range-fill'); rf.style.left = (min/200*100)+'%'; rf.style.width = ((max-min)/200*100)+'%'; updateMarkers();
 }
+function updateWspd05Slider() {
+    var min = parseInt(document.getElementById('min-wspd05').value), max = parseInt(document.getElementById('max-wspd05').value);
+    if (min > max) { document.getElementById('min-wspd05').value = max; min = max; }
+    filters.minWspd05 = min; filters.maxWspd05 = max;
+    document.getElementById('min-wspd05-value').textContent = min; document.getElementById('max-wspd05-value').textContent = max;
+    var rf = document.getElementById('wspd05-range-fill'); rf.style.left = (min/100*100)+'%'; rf.style.width = ((max-min)/100*100)+'%'; updateMarkers();
+}
+function updateWspd20Slider() {
+    var min = parseInt(document.getElementById('min-wspd20').value), max = parseInt(document.getElementById('max-wspd20').value);
+    if (min > max) { document.getElementById('min-wspd20').value = max; min = max; }
+    filters.minWspd20 = min; filters.maxWspd20 = max;
+    document.getElementById('min-wspd20-value').textContent = min; document.getElementById('max-wspd20-value').textContent = max;
+    var rf = document.getElementById('wspd20-range-fill'); rf.style.left = (min/100*100)+'%'; rf.style.width = ((max-min)/100*100)+'%'; updateMarkers();
+}
 function updateYearFilter() { var min = parseInt(document.getElementById('min-year').value), max = parseInt(document.getElementById('max-year').value); if (min > max) { document.getElementById('min-year').value = max; min = max; } filters.minYear = min; filters.maxYear = max; updateMarkers(); }
 function updateStormFilter() { filters.stormName = document.getElementById('storm-select').value || 'all'; updateMarkers(); }
 
@@ -3894,6 +3912,8 @@ function resetFilters() {
     filters.minIntensity=0; filters.maxIntensity=200; document.getElementById('min-intensity').value=0; document.getElementById('max-intensity').value=200; updateIntensitySlider();
     filters.minVmaxChange=-100; filters.maxVmaxChange=85; document.getElementById('min-vmax-change').value=-100; document.getElementById('max-vmax-change').value=85; updateVmaxChangeSlider();
     filters.minTilt=0; filters.maxTilt=200; document.getElementById('min-tilt').value=0; document.getElementById('max-tilt').value=200; updateTiltSlider();
+    filters.minWspd05=0; filters.maxWspd05=100; document.getElementById('min-wspd05').value=0; document.getElementById('max-wspd05').value=100; updateWspd05Slider();
+    filters.minWspd20=0; filters.maxWspd20=100; document.getElementById('min-wspd20').value=0; document.getElementById('max-wspd20').value=100; updateWspd20Slider();
     filters.minYear=1997; filters.maxYear=2024; document.getElementById('min-year').value=1997; document.getElementById('max-year').value=2024;
     filters.stormName='all'; document.getElementById('storm-select').value=''; updateMarkers();
     // Also reset case dropdown
@@ -3909,10 +3929,40 @@ function initializeFilters() {
     document.getElementById('max-vmax-change').addEventListener('input', updateVmaxChangeSlider);
     document.getElementById('min-tilt').addEventListener('input', updateTiltSlider);
     document.getElementById('max-tilt').addEventListener('input', updateTiltSlider);
+    document.getElementById('min-wspd05').addEventListener('input', updateWspd05Slider);
+    document.getElementById('max-wspd05').addEventListener('input', updateWspd05Slider);
+    document.getElementById('min-wspd20').addEventListener('input', updateWspd20Slider);
+    document.getElementById('max-wspd20').addEventListener('input', updateWspd20Slider);
     document.getElementById('min-year').addEventListener('change', updateYearFilter);
     document.getElementById('max-year').addEventListener('change', updateYearFilter);
     // Storm filtering handled by two-step handler at top of file
     updateIntensitySlider(); updateVmaxChangeSlider(); updateTiltSlider();
+    updateWspd05Slider(); updateWspd20Slider();
+}
+
+// ── Fetch enriched metadata (max wind speeds from API) ───────
+function _fetchEnrichedWindData(dataType) {
+    fetch(API_BASE + '/metadata_all?data_type=' + dataType)
+        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function(enriched) {
+            var target = dataType === 'merge' ? mergeData : allData;
+            if (!target || !target.cases) return;
+            // Build lookup by case_index
+            var lookup = {};
+            enriched.cases.forEach(function(ec) { lookup[ec.case_index] = ec; });
+            // Merge max wind speed fields into existing case objects
+            var merged = 0;
+            target.cases.forEach(function(c) {
+                var ec = lookup[c.case_index];
+                if (ec) {
+                    if (ec.max_er_wspd_05km != null) { c.max_er_wspd_05km = ec.max_er_wspd_05km; merged++; }
+                    if (ec.max_er_wspd_20km != null) { c.max_er_wspd_20km = ec.max_er_wspd_20km; }
+                }
+            });
+            console.log('Enriched ' + merged + ' ' + dataType + ' cases with max wind speed data');
+            updateMarkers();
+        })
+        .catch(function(err) { console.warn('Enriched metadata not available (' + dataType + '): ' + err.message); });
 }
 
 // ── Pre-warm API ─────────────────────────────────────────────
@@ -3922,7 +3972,7 @@ fetch(API_BASE + '/health').catch(function(){});
 var mergeData = null;
 fetch('tc_radar_metadata_merge.json')
     .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-    .then(function(data) { mergeData = data; console.log('Merge metadata loaded: ' + data.total_cases + ' cases'); })
+    .then(function(data) { mergeData = data; console.log('Merge metadata loaded: ' + data.total_cases + ' cases'); _fetchEnrichedWindData('merge'); })
     .catch(function(err) { console.warn('Merge metadata not available: ' + err.message); });
 
 fetch('tc_radar_metadata.json')
@@ -3970,6 +4020,9 @@ fetch('tc_radar_metadata.json')
         };
         legend.addTo(map);
         initializeFilters();
+
+        // Fetch enriched metadata from API to populate max wind speed fields
+        _fetchEnrichedWindData('swath');
 
         // Check for composite permalink in URL hash
         _checkCompPermalink();
