@@ -6488,11 +6488,14 @@ function generateCompDiffAzMean() {
     var urlA = API_BASE + '/composite/azimuthal_mean?' + _compositeQueryString(filtersA) + baseQS;
     var urlB = API_BASE + '/composite/azimuthal_mean?' + _compositeQueryString(filtersB) + baseQS;
 
-    Promise.all([
-        _fetchWithTimeout(urlA).then(function(r) { if (!r.ok) return r.json().then(function(e){var d=e.detail;if(typeof d==='object')d=Array.isArray(d)?d.map(function(x){return x.msg||JSON.stringify(x);}).join('; '):JSON.stringify(d);throw new Error('Group A: '+(d||'error'));}); return r.json(); }),
-        _fetchWithTimeout(urlB).then(function(r) { if (!r.ok) return r.json().then(function(e){var d=e.detail;if(typeof d==='object')d=Array.isArray(d)?d.map(function(x){return x.msg||JSON.stringify(x);}).join('; '):JSON.stringify(d);throw new Error('Group B: '+(d||'error'));}); return r.json(); })
-    ]).then(function(results) {
-        var jsonA = results[0], jsonB = results[1];
+    // Sequential streaming: fetch Group A first, then Group B, to avoid
+    // doubling memory/thread pressure on the server.
+    var jsonA;
+    _fetchCompositeStream(urlA, 'Group A azimuthal mean').then(function(result) {
+        jsonA = result;
+        _showCompStatus('loading', 'Group A done (' + jsonA.n_cases + ' cases). Computing Group B\u2026');
+        return _fetchCompositeStream(urlB, 'Group B azimuthal mean');
+    }).then(function(jsonB) {
         var diffData = _subtractArrays2D(jsonA.azimuthal_mean, jsonB.azimuthal_mean);
         var symRange = _symmetricRange(diffData);
 
@@ -6570,11 +6573,14 @@ function generateCompDiffQuadMean() {
     var urlA = API_BASE + '/composite/quadrant_mean?' + _compositeQueryString(filtersA) + baseQS;
     var urlB = API_BASE + '/composite/quadrant_mean?' + _compositeQueryString(filtersB) + baseQS;
 
-    Promise.all([
-        _fetchWithTimeout(urlA).then(function(r) { if (!r.ok) return r.json().then(function(e){var d=e.detail;if(typeof d==='object')d=Array.isArray(d)?d.map(function(x){return x.msg||JSON.stringify(x);}).join('; '):JSON.stringify(d);throw new Error('Group A: '+(d||'error'));}); return r.json(); }),
-        _fetchWithTimeout(urlB).then(function(r) { if (!r.ok) return r.json().then(function(e){var d=e.detail;if(typeof d==='object')d=Array.isArray(d)?d.map(function(x){return x.msg||JSON.stringify(x);}).join('; '):JSON.stringify(d);throw new Error('Group B: '+(d||'error'));}); return r.json(); })
-    ]).then(function(results) {
-        var jsonA = results[0], jsonB = results[1];
+    // Sequential streaming: fetch Group A first, then Group B, to avoid
+    // doubling memory/thread pressure on the server.
+    var jsonA;
+    _fetchCompositeStream(urlA, 'Group A shear quadrants').then(function(result) {
+        jsonA = result;
+        _showCompStatus('loading', 'Group A done (' + jsonA.n_cases + ' cases). Computing Group B\u2026');
+        return _fetchCompositeStream(urlB, 'Group B shear quadrants');
+    }).then(function(jsonB) {
         var diffQuads = {};
         var allDiffVals = [];
         var quadKeys = ['DSL','DSR','USL','USR'];
@@ -6691,17 +6697,25 @@ function _renderDiffAzMean(targetId, diffJson, jsonA, jsonB, filtersA, filtersB)
         Plotly.newPlot(chartId, [hm], layout, plotOpts);
     }
 
+    // Store defaults and apply user overrides for Group A/B panels
+    _compDefaultColorscale = varInfoA.colorscale; _compDefaultVmin = varInfoA.vmin; _compDefaultVmax = varInfoA.vmax;
+    var vminInp = document.getElementById('comp-vmin'), vmaxInp = document.getElementById('comp-vmax');
+    if (vminInp) vminInp.placeholder = varInfoA.vmin; if (vmaxInp) vmaxInp.placeholder = varInfoA.vmax;
+    var activeColorscale = _getCompColorscale(varInfoA.colorscale);
+    var activeVmin = _getCompVmin(varInfoA.vmin);
+    var activeVmax = _getCompVmax(varInfoA.vmax);
+
     var meanVmaxA = _computeCompositeMeanVmax(filtersA);
     var vmaxNoteA = meanVmaxA !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxA + ' kt' : '';
     var titleA = _compositeFilterSummary(filtersA, jsonA.n_cases) + vmaxNoteA +
                  '<br>Azimuthal Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
-    buildAzPlot('comp-diff-az-a', jsonA.azimuthal_mean, titleA, varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax, varInfoA.units);
+    buildAzPlot('comp-diff-az-a', jsonA.azimuthal_mean, titleA, activeColorscale, activeVmin, activeVmax, varInfoA.units);
 
     var meanVmaxB = _computeCompositeMeanVmax(filtersB);
     var vmaxNoteB = meanVmaxB !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxB + ' kt' : '';
     var titleB = _compositeFilterSummary(filtersB, jsonB.n_cases) + vmaxNoteB +
                  '<br>Azimuthal Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
-    buildAzPlot('comp-diff-az-b', jsonB.azimuthal_mean, titleB, varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax, varInfoA.units);
+    buildAzPlot('comp-diff-az-b', jsonB.azimuthal_mean, titleB, activeColorscale, activeVmin, activeVmax, varInfoA.units);
 
     var diffVarInfo = diffJson.variable;
     var diffVmaxNote = '';
@@ -6810,19 +6824,27 @@ function _renderDiffQuadMean(targetId, diffJson, jsonA, jsonB, filtersA, filters
         Plotly.newPlot(chartId, traces, layout, plotOpts);
     }
 
+    // Store defaults and apply user overrides for Group A/B panels
+    _compDefaultColorscale = varInfoA.colorscale; _compDefaultVmin = varInfoA.vmin; _compDefaultVmax = varInfoA.vmax;
+    var vminInp = document.getElementById('comp-vmin'), vmaxInp = document.getElementById('comp-vmax');
+    if (vminInp) vminInp.placeholder = varInfoA.vmin; if (vmaxInp) vmaxInp.placeholder = varInfoA.vmax;
+    var activeColorscale = _getCompColorscale(varInfoA.colorscale);
+    var activeVmin = _getCompVmin(varInfoA.vmin);
+    var activeVmax = _getCompVmax(varInfoA.vmax);
+
     // Group A
     var meanVmaxA = _computeCompositeMeanVmax(filtersA);
     var vmaxNoteA = meanVmaxA !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxA + ' kt' : '';
     var titleA = _compositeFilterSummary(filtersA, jsonA.n_cases) + vmaxNoteA +
                  '<br>Shear-Relative Quadrant Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
-    buildQuadPlot('comp-diff-sq-a', jsonA.quadrant_means, titleA, varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax, varInfoA.units);
+    buildQuadPlot('comp-diff-sq-a', jsonA.quadrant_means, titleA, activeColorscale, activeVmin, activeVmax, varInfoA.units);
 
     // Group B
     var meanVmaxB = _computeCompositeMeanVmax(filtersB);
     var vmaxNoteB = meanVmaxB !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxB + ' kt' : '';
     var titleB = _compositeFilterSummary(filtersB, jsonB.n_cases) + vmaxNoteB +
                  '<br>Shear-Relative Quadrant Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
-    buildQuadPlot('comp-diff-sq-b', jsonB.quadrant_means, titleB, varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax, varInfoA.units);
+    buildQuadPlot('comp-diff-sq-b', jsonB.quadrant_means, titleB, activeColorscale, activeVmin, activeVmax, varInfoA.units);
 
     // Difference
     var diffVarInfo = diffJson.variable;
@@ -6870,11 +6892,14 @@ function generateCompDiffPlanView() {
     var urlA = API_BASE + '/composite/plan_view?' + _compositeQueryString(filtersA) + baseQS;
     var urlB = API_BASE + '/composite/plan_view?' + _compositeQueryString(filtersB) + baseQS;
 
-    Promise.all([
-        _fetchWithTimeout(urlA).then(function(r) { if (!r.ok) return r.json().then(function(e){var d=e.detail;if(typeof d==='object')d=Array.isArray(d)?d.map(function(x){return x.msg||JSON.stringify(x);}).join('; '):JSON.stringify(d);throw new Error('Group A: '+(d||'error'));}); return r.json(); }),
-        _fetchWithTimeout(urlB).then(function(r) { if (!r.ok) return r.json().then(function(e){var d=e.detail;if(typeof d==='object')d=Array.isArray(d)?d.map(function(x){return x.msg||JSON.stringify(x);}).join('; '):JSON.stringify(d);throw new Error('Group B: '+(d||'error'));}); return r.json(); })
-    ]).then(function(results) {
-        var jsonA = results[0], jsonB = results[1];
+    // Sequential streaming: fetch Group A first, then Group B, to avoid
+    // doubling memory/thread pressure on the server.
+    var jsonA;
+    _fetchCompositeStream(urlA, 'Group A plan view').then(function(result) {
+        jsonA = result;
+        _showCompStatus('loading', 'Group A done (' + jsonA.n_cases + ' cases). Computing Group B\u2026');
+        return _fetchCompositeStream(urlB, 'Group B plan view');
+    }).then(function(jsonB) {
         var diffData = _subtractArrays2D(jsonA.plan_view, jsonB.plan_view);
         var symRange = _symmetricRange(diffData);
 
@@ -7000,19 +7025,27 @@ function _renderDiffPlanView(targetId, diffJson, jsonA, jsonB, filtersA, filters
         Plotly.newPlot(chartId, [hm].concat(rmwCircleTrace()), layout, plotOpts);
     }
 
+    // Store defaults and apply user overrides for Group A/B panels
+    _compDefaultColorscale = varInfoA.colorscale; _compDefaultVmin = varInfoA.vmin; _compDefaultVmax = varInfoA.vmax;
+    var vminInp = document.getElementById('comp-vmin'), vmaxInp = document.getElementById('comp-vmax');
+    if (vminInp) vminInp.placeholder = varInfoA.vmin; if (vmaxInp) vmaxInp.placeholder = varInfoA.vmax;
+    var activeColorscale = _getCompColorscale(varInfoA.colorscale);
+    var activeVmin = _getCompVmin(varInfoA.vmin);
+    var activeVmax = _getCompVmax(varInfoA.vmax);
+
     // ── Group A plot ──
     var meanVmaxA = _computeCompositeMeanVmax(filtersA);
     var vmaxNoteA = meanVmaxA !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxA + ' kt' : '';
     var titleA = _compositeFilterSummary(filtersA, jsonA.n_cases) + vmaxNoteA +
                  '<br>Plan View @ ' + levelKm + ' km: ' + varInfoA.display_name + dtypeLabel + normLabel + shearLabel;
-    buildPvPlot('comp-diff-pv-a', jsonA.plan_view, titleA, varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax, varInfoA.units);
+    buildPvPlot('comp-diff-pv-a', jsonA.plan_view, titleA, activeColorscale, activeVmin, activeVmax, varInfoA.units);
 
     // ── Group B plot ──
     var meanVmaxB = _computeCompositeMeanVmax(filtersB);
     var vmaxNoteB = meanVmaxB !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxB + ' kt' : '';
     var titleB = _compositeFilterSummary(filtersB, jsonB.n_cases) + vmaxNoteB +
                  '<br>Plan View @ ' + levelKm + ' km: ' + varInfoA.display_name + dtypeLabel + normLabel + shearLabel;
-    buildPvPlot('comp-diff-pv-b', jsonB.plan_view, titleB, varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax, varInfoA.units);
+    buildPvPlot('comp-diff-pv-b', jsonB.plan_view, titleB, activeColorscale, activeVmin, activeVmax, varInfoA.units);
 
     // ── Difference plot ──
     var diffVarInfo = diffJson.variable;
