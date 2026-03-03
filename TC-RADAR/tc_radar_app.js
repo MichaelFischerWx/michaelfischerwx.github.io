@@ -2692,7 +2692,9 @@ function toggleIRMapVisibility() {
 
 function _injectIRMapControls() {
     if (document.getElementById('ir-map-controls')) return;
-    var mapWrapper = document.getElementById('map-wrapper');
+    // Anchor to #map-container (not #map-wrapper) so controls stay pinned
+    // to the bottom of the visible map, not the bottom of the full layout
+    var mapWrapper = document.getElementById('map-container');
     if (!mapWrapper) return;
     var n = _irFrameURLs.length;
     var disabledCls = _irAllFramesLoaded ? '' : ' ir-ctrl-disabled';
