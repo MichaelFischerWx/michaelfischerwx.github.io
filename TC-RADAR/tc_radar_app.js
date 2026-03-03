@@ -3252,6 +3252,43 @@ function _showCompShadingToolbar() {
     if (masterMax && inlineMax) { inlineMax.value = masterMax.value; inlineMax.placeholder = masterMax.placeholder; }
 }
 
+// ── Tight data-extent helper for plan-view axes ─────────────
+// Scans a 2D array and returns the bounding box of non-NaN/non-null
+// cells in terms of the provided x/y coordinate arrays.  Falls back
+// to the full grid extent when the data is entirely NaN.
+function _tightDataExtent(zData, xCoords, yCoords, pad) {
+    if (pad === undefined) pad = 0.25;
+    var minCol = Infinity, maxCol = -Infinity;
+    var minRow = Infinity, maxRow = -Infinity;
+    for (var r = 0; r < zData.length; r++) {
+        if (!zData[r]) continue;
+        for (var c = 0; c < zData[r].length; c++) {
+            var v = zData[r][c];
+            if (v !== null && v !== undefined && isFinite(v)) {
+                if (c < minCol) minCol = c;
+                if (c > maxCol) maxCol = c;
+                if (r < minRow) minRow = r;
+                if (r > maxRow) maxRow = r;
+            }
+        }
+    }
+    if (!isFinite(minCol)) {
+        // All NaN — fall back to full grid
+        return {
+            xMin: xCoords[0] - pad,
+            xMax: xCoords[xCoords.length - 1] + pad,
+            yMin: yCoords[0] - pad,
+            yMax: yCoords[yCoords.length - 1] + pad
+        };
+    }
+    return {
+        xMin: xCoords[minCol] - pad,
+        xMax: xCoords[maxCol] + pad,
+        yMin: yCoords[minRow] - pad,
+        yMax: yCoords[maxRow] + pad
+    };
+}
+
 // ── Max value helper ─────────────────────────────────────────
 function findDataMax(zData, xCoords, yCoords) {
     var maxVal = -Infinity, maxI = 0, maxJ = 0;
@@ -6301,10 +6338,8 @@ function renderCompositePlanViewInto(targetId, json, filters, pvParams) {
         }
     }
 
-    // Compute tight axis range from the actual data grid
-    var xMin = xAxis[0], xMax = xAxis[xAxis.length - 1];
-    var yMin = yAxis[0], yMax = yAxis[yAxis.length - 1];
-    var pad = 0.15;  // small pad so edge pixels aren't clipped
+    // Compute tight axis range from actual non-NaN data extent
+    var ext = _tightDataExtent(planData, xAxis, yAxis, 0.25);
     var layout = {
         title: { text: title, font: { color:'#e5e7eb', size:fontSize.title }, y:0.97, x:0.5, xanchor:'center' },
         paper_bgcolor: plotBg, plot_bgcolor: plotBg,
@@ -6312,13 +6347,13 @@ function renderCompositePlanViewInto(targetId, json, filters, pvParams) {
                  tickfont:{color:'#aaa',size:fontSize.tick},
                  gridcolor:'rgba(255,255,255,0.04)', zeroline:true,
                  zerolinecolor:'rgba(255,255,255,0.12)',
-                 range:[xMin - pad, xMax + pad] },
+                 range:[ext.xMin, ext.xMax] },
         yaxis: { title: { text:yLabel, font:{color:'#aaa',size:fontSize.axis} },
                  tickfont:{color:'#aaa',size:fontSize.tick},
                  gridcolor:'rgba(255,255,255,0.04)', zeroline:true,
                  zerolinecolor:'rgba(255,255,255,0.12)',
                  scaleanchor:'x', scaleratio:1,
-                 range:[yMin - pad, yMax + pad] },
+                 range:[ext.yMin, ext.yMax] },
         margin: { l:60, r:24, t: json.overlay ? 170 : 156, b:50 },
         shapes: shapes, annotations: annotations,
         hoverlabel: { bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
@@ -6997,13 +7032,10 @@ function _renderDiffPlanView(targetId, diffJson, jsonA, jsonB, filtersA, filters
         return buildShearInset(90, true);
     }
 
-    // Compute tight axis range from the actual data grid
-    var pvXMin = xAxis[0], pvXMax = xAxis[xAxis.length - 1];
-    var pvYMin = yAxis[0], pvYMax = yAxis[yAxis.length - 1];
-    var pvPad = 0.15;
-
     // Helper to build a single plan-view plot
     function buildPvPlot(chartId, data, titleText, colorscale, zmin, zmax, units) {
+        // Compute tight axis range from actual non-NaN data extent
+        var ext = _tightDataExtent(data, xAxis, yAxis, 0.25);
         var hm = {
             z: data, x: xAxis, y: yAxis, type: 'heatmap',
             colorscale: colorscale, zmin: zmin, zmax: zmax,
@@ -7015,8 +7047,8 @@ function _renderDiffPlanView(targetId, diffJson, jsonA, jsonB, filtersA, filters
         var layout = {
             title: { text:titleText, font:{color:'#e5e7eb',size:fontSize.title}, y:0.97, x:0.5, xanchor:'center' },
             paper_bgcolor:plotBg, plot_bgcolor:plotBg,
-            xaxis: { title:{text:xLabel,font:{color:'#aaa',size:fontSize.axis}}, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:true, zerolinecolor:'rgba(255,255,255,0.12)', range:[pvXMin - pvPad, pvXMax + pvPad] },
-            yaxis: { title:{text:yLabel,font:{color:'#aaa',size:fontSize.axis}}, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:true, zerolinecolor:'rgba(255,255,255,0.12)', scaleanchor:'x', scaleratio:1, range:[pvYMin - pvPad, pvYMax + pvPad] },
+            xaxis: { title:{text:xLabel,font:{color:'#aaa',size:fontSize.axis}}, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:true, zerolinecolor:'rgba(255,255,255,0.12)', range:[ext.xMin, ext.xMax] },
+            yaxis: { title:{text:yLabel,font:{color:'#aaa',size:fontSize.axis}}, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:true, zerolinecolor:'rgba(255,255,255,0.12)', scaleanchor:'x', scaleratio:1, range:[ext.yMin, ext.yMax] },
             margin:{ l:60, r:24, t:120, b:50 },
             shapes: sInset.shapes || [], annotations: sInset.annotations || [],
             hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
