@@ -3149,12 +3149,22 @@ function _getCompColorscale(fallback) {
 function _getCompVmin(fallback) { var inp = document.getElementById('comp-vmin'); if (inp && inp.value !== '') return parseFloat(inp.value); return fallback; }
 function _getCompVmax(fallback) { var inp = document.getElementById('comp-vmax'); if (inp && inp.value !== '') return parseFloat(inp.value); return fallback; }
 
+function _allCompChartIds() {
+    // Non-diff charts + diff-mode Group A, Group B, and Difference panels
+    return [
+        'comp-az-chart','comp-sq-chart','comp-pv-chart',
+        'comp-diff-az-a','comp-diff-az-b','comp-diff-az-d',
+        'comp-diff-sq-a','comp-diff-sq-b','comp-diff-sq-d',
+        'comp-diff-pv-a','comp-diff-pv-b','comp-diff-pv-d'
+    ];
+}
+
 function applyCompCmap() {
     var sel = document.getElementById('comp-cmap'); if (!sel) return;
     var cs = sel.value;
     if (!cs && _compDefaultColorscale) cs = _compDefaultColorscale; if (!cs) return;
     var colorscale; try { colorscale = JSON.parse(cs); } catch(e) { colorscale = cs; }
-    ['comp-az-chart','comp-sq-chart','comp-pv-chart'].forEach(function(id) {
+    _allCompChartIds().forEach(function(id) {
         var plotDiv = document.getElementById(id);
         if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
         // Restyle all heatmap traces (quadrant view has 4)
@@ -3167,7 +3177,7 @@ function applyCompCmap() {
 function applyCompColorRange() {
     var zmin = _getCompVmin(_compDefaultVmin), zmax = _getCompVmax(_compDefaultVmax);
     if (zmin === null || zmax === null) return;
-    ['comp-az-chart','comp-sq-chart','comp-pv-chart'].forEach(function(id) {
+    _allCompChartIds().forEach(function(id) {
         var plotDiv = document.getElementById(id);
         if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
         var indices = plotDiv.data.map(function(_,i){return i;});
@@ -3181,7 +3191,7 @@ function resetCompColorRange() {
     var vminInput = document.getElementById('comp-vmin'), vmaxInput = document.getElementById('comp-vmax');
     if (vminInput) vminInput.value = ''; if (vmaxInput) vmaxInput.value = '';
     if (_compDefaultVmin !== null && _compDefaultVmax !== null) {
-        ['comp-az-chart','comp-sq-chart','comp-pv-chart'].forEach(function(id) {
+        _allCompChartIds().forEach(function(id) {
             var plotDiv = document.getElementById(id);
             if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
             var indices = plotDiv.data.map(function(_,i){return i;});
@@ -5948,7 +5958,7 @@ function renderCompositeAzMeanInto(targetId, json, filters) {
         paper_bgcolor: plotBg, plot_bgcolor: plotBg,
         xaxis: { title: { text:rLabel, font:{color:'#aaa',size:fontSize.axis} }, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
         yaxis: { title: { text:'Height (km)', font:{color:'#aaa',size:fontSize.axis} }, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
-        margin: { l:55, r:24, t: json.overlay ? 150 : 136, b:46 }, shapes: shapes,
+        margin: { l:55, r:24, t: json.overlay ? 170 : 156, b:46 }, shapes: shapes,
         hoverlabel: { bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
         showlegend: false
     };
@@ -6053,9 +6063,9 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
     var compQuadOverlay = buildCompQuadOverlayContours(json, radius, height_km, panelOrder);
 
     var layout = Object.assign({
-        title:{ text:title, font:{color:'#e5e7eb',size:fontSize.title}, y:0.99, x:0.5, xanchor:'center' },
+        title:{ text:title, font:{color:'#e5e7eb',size:fontSize.title}, y:0.98, x:0.5, xanchor:'center', yanchor:'top' },
         paper_bgcolor:plotBg, plot_bgcolor:plotBg,
-        margin:{ l:50, r:60, t: json.overlay ? 150 : 136, b:50 },
+        margin:{ l:50, r:60, t: json.overlay ? 170 : 156, b:50 },
         annotations:annotations, shapes:shapes.concat(shearInset.shapes || []),
         hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
         showlegend:false
@@ -6291,19 +6301,25 @@ function renderCompositePlanViewInto(targetId, json, filters, pvParams) {
         }
     }
 
+    // Compute tight axis range from the actual data grid
+    var xMin = xAxis[0], xMax = xAxis[xAxis.length - 1];
+    var yMin = yAxis[0], yMax = yAxis[yAxis.length - 1];
+    var pad = 0.15;  // small pad so edge pixels aren't clipped
     var layout = {
         title: { text: title, font: { color:'#e5e7eb', size:fontSize.title }, y:0.97, x:0.5, xanchor:'center' },
         paper_bgcolor: plotBg, plot_bgcolor: plotBg,
         xaxis: { title: { text:xLabel, font:{color:'#aaa',size:fontSize.axis} },
                  tickfont:{color:'#aaa',size:fontSize.tick},
                  gridcolor:'rgba(255,255,255,0.04)', zeroline:true,
-                 zerolinecolor:'rgba(255,255,255,0.12)' },
+                 zerolinecolor:'rgba(255,255,255,0.12)',
+                 range:[xMin - pad, xMax + pad] },
         yaxis: { title: { text:yLabel, font:{color:'#aaa',size:fontSize.axis} },
                  tickfont:{color:'#aaa',size:fontSize.tick},
                  gridcolor:'rgba(255,255,255,0.04)', zeroline:true,
                  zerolinecolor:'rgba(255,255,255,0.12)',
-                 scaleanchor:'x', scaleratio:1 },
-        margin: { l:60, r:24, t: json.overlay ? 150 : 136, b:50 },
+                 scaleanchor:'x', scaleratio:1,
+                 range:[yMin - pad, yMax + pad] },
+        margin: { l:60, r:24, t: json.overlay ? 170 : 156, b:50 },
         shapes: shapes, annotations: annotations,
         hoverlabel: { bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
         showlegend: false
@@ -6519,6 +6535,7 @@ function generateCompDiffAzMean() {
 
         _showCompStatus('success', '\u2713 Difference computed: Group A (' + jsonA.n_cases + ' cases) \u2212 Group B (' + jsonB.n_cases + ' cases)');
         _renderDiffAzMean('comp-result-az', diffJson, jsonA, jsonB, filtersA, filtersB);
+        _showCompShadingToolbar();
     }).catch(function(err) {
         _showCompStatus('error', '\u2717 ' + (err.message || String(err)));
     }).finally(function() {
@@ -6618,6 +6635,7 @@ function generateCompDiffQuadMean() {
 
         _showCompStatus('success', '\u2713 Difference computed: Group A (' + jsonA.n_cases + ' cases) \u2212 Group B (' + jsonB.n_cases + ' cases)');
         _renderDiffQuadMean('comp-result-sq', diffJson, jsonA, jsonB, filtersA, filtersB);
+        _showCompShadingToolbar();
     }).catch(function(err) {
         _showCompStatus('error', '\u2717 ' + (err.message || String(err)));
     }).finally(function() {
@@ -6901,6 +6919,7 @@ function generateCompDiffPlanView() {
 
         _showCompStatus('success', '\u2713 Difference computed: Group A (' + jsonA.n_cases + ' cases) \u2212 Group B (' + jsonB.n_cases + ' cases)');
         _renderDiffPlanView('comp-result-pv', diffJson, jsonA, jsonB, filtersA, filtersB, pvParams);
+        _showCompShadingToolbar();
     }).catch(function(err) {
         _showCompStatus('error', '\u2717 ' + (err.message || String(err)));
     }).finally(function() {
@@ -6953,6 +6972,11 @@ function _renderDiffPlanView(targetId, diffJson, jsonA, jsonB, filtersA, filters
         return buildShearInset(90, true);
     }
 
+    // Compute tight axis range from the actual data grid
+    var pvXMin = xAxis[0], pvXMax = xAxis[xAxis.length - 1];
+    var pvYMin = yAxis[0], pvYMax = yAxis[yAxis.length - 1];
+    var pvPad = 0.15;
+
     // Helper to build a single plan-view plot
     function buildPvPlot(chartId, data, titleText, colorscale, zmin, zmax, units) {
         var hm = {
@@ -6966,8 +6990,8 @@ function _renderDiffPlanView(targetId, diffJson, jsonA, jsonB, filtersA, filters
         var layout = {
             title: { text:titleText, font:{color:'#e5e7eb',size:fontSize.title}, y:0.97, x:0.5, xanchor:'center' },
             paper_bgcolor:plotBg, plot_bgcolor:plotBg,
-            xaxis: { title:{text:xLabel,font:{color:'#aaa',size:fontSize.axis}}, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:true, zerolinecolor:'rgba(255,255,255,0.12)' },
-            yaxis: { title:{text:yLabel,font:{color:'#aaa',size:fontSize.axis}}, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:true, zerolinecolor:'rgba(255,255,255,0.12)', scaleanchor:'x', scaleratio:1 },
+            xaxis: { title:{text:xLabel,font:{color:'#aaa',size:fontSize.axis}}, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:true, zerolinecolor:'rgba(255,255,255,0.12)', range:[pvXMin - pvPad, pvXMax + pvPad] },
+            yaxis: { title:{text:yLabel,font:{color:'#aaa',size:fontSize.axis}}, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:true, zerolinecolor:'rgba(255,255,255,0.12)', scaleanchor:'x', scaleratio:1, range:[pvYMin - pvPad, pvYMax + pvPad] },
             margin:{ l:60, r:24, t:120, b:50 },
             shapes: sInset.shapes || [], annotations: sInset.annotations || [],
             hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
