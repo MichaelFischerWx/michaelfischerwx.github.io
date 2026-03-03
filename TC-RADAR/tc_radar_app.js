@@ -6064,8 +6064,9 @@ function generateCompositeAzMean() {
     _showCompStatus('loading', 'Computing composite azimuthal mean \u2014 this may take 30\u201390 seconds for many cases\u2026');
 
     var overlay = (document.getElementById('comp-overlay') || {}).value || '';
-    var maxRRmw = parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 8.0;
-    var drRmw   = parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.25;
+    var normRmw = !!(document.getElementById('comp-norm-rmw') || {}).checked;
+    var maxRRmw = normRmw ? (parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 8.0) : 8.0;
+    var drRmw   = normRmw ? Math.max(0.05, parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.25) : 0.25;
     var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage +
         '&max_r_rmw=' + maxRRmw + '&dr_rmw=' + drRmw;
     if (overlay) qs += '&overlay=' + encodeURIComponent(overlay);
@@ -6097,8 +6098,9 @@ function generateCompositeQuadMean() {
     _showCompStatus('loading', 'Computing composite shear quadrants \u2014 this may take 30\u201390 seconds for many cases\u2026');
 
     var overlay = (document.getElementById('comp-overlay') || {}).value || '';
-    var maxRRmw = parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 8.0;
-    var drRmw   = parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.25;
+    var normRmw = !!(document.getElementById('comp-norm-rmw') || {}).checked;
+    var maxRRmw = normRmw ? (parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 8.0) : 8.0;
+    var drRmw   = normRmw ? Math.max(0.05, parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.25) : 0.25;
     var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage +
         '&max_r_rmw=' + maxRRmw + '&dr_rmw=' + drRmw;
     if (overlay) qs += '&overlay=' + encodeURIComponent(overlay);
@@ -6441,8 +6443,9 @@ function generateCompDiffAzMean() {
     document.getElementById('comp-result-pv').style.display = 'none';
     _showCompStatus('loading', 'Computing difference composite (A\u2212B) azimuthal mean\u2026');
 
-    var maxRRmw = parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 8.0;
-    var drRmw   = parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.25;
+    var normRmw = !!(document.getElementById('comp-norm-rmw') || {}).checked;
+    var maxRRmw = normRmw ? (parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 8.0) : 8.0;
+    var drRmw   = normRmw ? Math.max(0.05, parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.25) : 0.25;
     var baseQS = '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage +
         '&max_r_rmw=' + maxRRmw + '&dr_rmw=' + drRmw;
     if (overlay) baseQS += '&overlay=' + encodeURIComponent(overlay);
@@ -6521,8 +6524,9 @@ function generateCompDiffQuadMean() {
     document.getElementById('comp-result-pv').style.display = 'none';
     _showCompStatus('loading', 'Computing difference composite (A\u2212B) shear quadrants\u2026');
 
-    var maxRRmw = parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 8.0;
-    var drRmw   = parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.25;
+    var normRmw = !!(document.getElementById('comp-norm-rmw') || {}).checked;
+    var maxRRmw = normRmw ? (parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 8.0) : 8.0;
+    var drRmw   = normRmw ? Math.max(0.05, parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.25) : 0.25;
     var baseQS = '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage +
         '&max_r_rmw=' + maxRRmw + '&dr_rmw=' + drRmw;
     if (overlay) baseQS += '&overlay=' + encodeURIComponent(overlay);
