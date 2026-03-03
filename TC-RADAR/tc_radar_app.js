@@ -5463,7 +5463,12 @@ function _fetchCompositeStream(url, label, ms) {
         clearTimeout(timer);
         if (!resp.ok) {
             return resp.text().then(function(t) {
-                try { var j = JSON.parse(t); throw new Error(j.detail || 'API error'); }
+                try {
+                    var j = JSON.parse(t);
+                    var detail = j.detail;
+                    if (typeof detail === 'object') detail = Array.isArray(detail) ? detail.map(function(d){return d.msg||JSON.stringify(d);}).join('; ') : JSON.stringify(detail);
+                    throw new Error(detail || 'API error (HTTP ' + resp.status + ')');
+                }
                 catch(e) { if (e.message) throw e; throw new Error('API error: ' + t); }
             });
         }
@@ -5488,7 +5493,7 @@ function _fetchCompositeStream(url, label, ms) {
                             var pct = Math.round(100 * obj.progress / obj.total);
                             _showCompStatus('loading', label + ' — ' + obj.progress + ' / ' + obj.total + ' cases (' + pct + '%)');
                         } else if (obj.error) {
-                            throw new Error(obj.error);
+                            throw new Error(typeof obj.error === 'string' ? obj.error : JSON.stringify(obj.error));
                         } else {
                             // Final result JSON
                             lastResult = obj;
@@ -6071,7 +6076,7 @@ function generateCompositeAzMean() {
             _showCompShadingToolbar();
             history.replaceState(null, '', '#' + _buildCompPermalinkHash());
         })
-        .catch(function(err) { _showCompStatus('error', '\u2717 ' + err.message); })
+        .catch(function(err) { _showCompStatus('error', '\u2717 ' + (err.message || String(err))); })
         .finally(function() {
             if (btnAz) btnAz.disabled = false; if (btnSq) btnSq.disabled = false; if (btnPv) if (btnPv) btnPv.disabled = false;
             if (btnAz) btnAz.textContent = '\u27F3 Azimuthal Mean';
@@ -6104,7 +6109,7 @@ function generateCompositeQuadMean() {
             _showCompShadingToolbar();
             history.replaceState(null, '', '#' + _buildCompPermalinkHash());
         })
-        .catch(function(err) { _showCompStatus('error', '\u2717 ' + err.message); })
+        .catch(function(err) { _showCompStatus('error', '\u2717 ' + (err.message || String(err))); })
         .finally(function() {
             if (btnAz) btnAz.disabled = false; if (btnSq) btnSq.disabled = false; if (btnPv) if (btnPv) btnPv.disabled = false;
             if (btnSq) btnSq.textContent = '\u25D1 Shear Quadrants';
@@ -6159,7 +6164,7 @@ function generateCompositePlanView() {
             _showCompShadingToolbar();
             history.replaceState(null, '', '#' + _buildCompPermalinkHash());
         })
-        .catch(function(err) { _showCompStatus('error', '\u2717 ' + err.message); })
+        .catch(function(err) { _showCompStatus('error', '\u2717 ' + (err.message || String(err))); })
         .finally(function() {
             if (btnPv) btnPv.disabled = false; if (btnAz) btnAz.disabled = false; if (btnSq) btnSq.disabled = false;
             if (btnPv) btnPv.textContent = '\uD83D\uDDFA Plan View';
@@ -6445,8 +6450,8 @@ function generateCompDiffAzMean() {
     var urlB = API_BASE + '/composite/azimuthal_mean?' + _compositeQueryString(filtersB) + baseQS;
 
     Promise.all([
-        _fetchWithTimeout(urlA).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group A: '+(e.detail||'error'));}); return r.json(); }),
-        _fetchWithTimeout(urlB).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group B: '+(e.detail||'error'));}); return r.json(); })
+        _fetchWithTimeout(urlA).then(function(r) { if (!r.ok) return r.json().then(function(e){var d=e.detail;if(typeof d==='object')d=Array.isArray(d)?d.map(function(x){return x.msg||JSON.stringify(x);}).join('; '):JSON.stringify(d);throw new Error('Group A: '+(d||'error'));}); return r.json(); }),
+        _fetchWithTimeout(urlB).then(function(r) { if (!r.ok) return r.json().then(function(e){var d=e.detail;if(typeof d==='object')d=Array.isArray(d)?d.map(function(x){return x.msg||JSON.stringify(x);}).join('; '):JSON.stringify(d);throw new Error('Group B: '+(d||'error'));}); return r.json(); })
     ]).then(function(results) {
         var jsonA = results[0], jsonB = results[1];
         var diffData = _subtractArrays2D(jsonA.azimuthal_mean, jsonB.azimuthal_mean);
@@ -6492,7 +6497,7 @@ function generateCompDiffAzMean() {
         _showCompStatus('success', '\u2713 Difference computed: Group A (' + jsonA.n_cases + ' cases) \u2212 Group B (' + jsonB.n_cases + ' cases)');
         _renderDiffAzMean('comp-result-az', diffJson, jsonA, jsonB, filtersA, filtersB);
     }).catch(function(err) {
-        _showCompStatus('error', '\u2717 ' + err.message);
+        _showCompStatus('error', '\u2717 ' + (err.message || String(err)));
     }).finally(function() {
         btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = false; });
         if (btnDiffAz) btnDiffAz.textContent = '\u0394 Az Mean (A\u2212B)';
@@ -6525,8 +6530,8 @@ function generateCompDiffQuadMean() {
     var urlB = API_BASE + '/composite/quadrant_mean?' + _compositeQueryString(filtersB) + baseQS;
 
     Promise.all([
-        _fetchWithTimeout(urlA).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group A: '+(e.detail||'error'));}); return r.json(); }),
-        _fetchWithTimeout(urlB).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group B: '+(e.detail||'error'));}); return r.json(); })
+        _fetchWithTimeout(urlA).then(function(r) { if (!r.ok) return r.json().then(function(e){var d=e.detail;if(typeof d==='object')d=Array.isArray(d)?d.map(function(x){return x.msg||JSON.stringify(x);}).join('; '):JSON.stringify(d);throw new Error('Group A: '+(d||'error'));}); return r.json(); }),
+        _fetchWithTimeout(urlB).then(function(r) { if (!r.ok) return r.json().then(function(e){var d=e.detail;if(typeof d==='object')d=Array.isArray(d)?d.map(function(x){return x.msg||JSON.stringify(x);}).join('; '):JSON.stringify(d);throw new Error('Group B: '+(d||'error'));}); return r.json(); })
     ]).then(function(results) {
         var jsonA = results[0], jsonB = results[1];
         var diffQuads = {};
@@ -6590,7 +6595,7 @@ function generateCompDiffQuadMean() {
         _showCompStatus('success', '\u2713 Difference computed: Group A (' + jsonA.n_cases + ' cases) \u2212 Group B (' + jsonB.n_cases + ' cases)');
         _renderDiffQuadMean('comp-result-sq', diffJson, jsonA, jsonB, filtersA, filtersB);
     }).catch(function(err) {
-        _showCompStatus('error', '\u2717 ' + err.message);
+        _showCompStatus('error', '\u2717 ' + (err.message || String(err)));
     }).finally(function() {
         btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = false; });
         if (btnDiffSq) btnDiffSq.textContent = '\u0394 Quad Mean (A\u2212B)';
@@ -6824,8 +6829,8 @@ function generateCompDiffPlanView() {
     var urlB = API_BASE + '/composite/plan_view?' + _compositeQueryString(filtersB) + baseQS;
 
     Promise.all([
-        _fetchWithTimeout(urlA).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group A: '+(e.detail||'error'));}); return r.json(); }),
-        _fetchWithTimeout(urlB).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group B: '+(e.detail||'error'));}); return r.json(); })
+        _fetchWithTimeout(urlA).then(function(r) { if (!r.ok) return r.json().then(function(e){var d=e.detail;if(typeof d==='object')d=Array.isArray(d)?d.map(function(x){return x.msg||JSON.stringify(x);}).join('; '):JSON.stringify(d);throw new Error('Group A: '+(d||'error'));}); return r.json(); }),
+        _fetchWithTimeout(urlB).then(function(r) { if (!r.ok) return r.json().then(function(e){var d=e.detail;if(typeof d==='object')d=Array.isArray(d)?d.map(function(x){return x.msg||JSON.stringify(x);}).join('; '):JSON.stringify(d);throw new Error('Group B: '+(d||'error'));}); return r.json(); })
     ]).then(function(results) {
         var jsonA = results[0], jsonB = results[1];
         var diffData = _subtractArrays2D(jsonA.plan_view, jsonB.plan_view);
@@ -6873,7 +6878,7 @@ function generateCompDiffPlanView() {
         _showCompStatus('success', '\u2713 Difference computed: Group A (' + jsonA.n_cases + ' cases) \u2212 Group B (' + jsonB.n_cases + ' cases)');
         _renderDiffPlanView('comp-result-pv', diffJson, jsonA, jsonB, filtersA, filtersB, pvParams);
     }).catch(function(err) {
-        _showCompStatus('error', '\u2717 ' + err.message);
+        _showCompStatus('error', '\u2717 ' + (err.message || String(err)));
     }).finally(function() {
         btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = false; });
         if (btnDiffPv) btnDiffPv.textContent = '\u0394 Plan View (A\u2212B)';
