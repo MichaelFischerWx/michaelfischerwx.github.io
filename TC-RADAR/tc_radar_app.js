@@ -6229,21 +6229,8 @@ function renderCompositeCFADInto(targetId, json, filters) {
 
     var fontSize = { title:14, axis:12, tick:10, cbar:12, cbarTick:10, hover:13 };
 
-    // CFAD uses a sequential frequency colormap — Viridis or Hot
-    var cfadColorscale = [
-        [0, 'rgba(10,22,40,0)'],
-        [0.001, '#440154'],
-        [0.05, '#482878'],
-        [0.1, '#3e4989'],
-        [0.2, '#31688e'],
-        [0.3, '#26838e'],
-        [0.4, '#1f9e89'],
-        [0.5, '#35b779'],
-        [0.6, '#6ece58'],
-        [0.7, '#b5de2b'],
-        [0.85, '#fde725'],
-        [1.0, '#fde725']
-    ];
+    // CFAD colorscale — Spectral_r from the backend (matplotlib), with fallback
+    var cfadColorscale = json.cfad_colorscale || 'RdYlBu';
 
     // Find the actual max for colorbar scaling
     var zMax = 0;
