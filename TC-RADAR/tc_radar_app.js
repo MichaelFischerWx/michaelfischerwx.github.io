@@ -5331,12 +5331,11 @@ function _computeCompositeMeanVmax(filters) {
 
 /**
  * Fetch with a timeout — rejects with a clear message if the server doesn't
- * respond within `ms` milliseconds.  Helps surface OOM crashes on the
- * 512 MB free-tier Render server instead of leaving the user with a
- * perpetual spinner.
+ * respond within `ms` milliseconds.  Helps surface crashes or stalls on the
+ * Render server instead of leaving the user with a perpetual spinner.
  */
 function _fetchWithTimeout(url, ms) {
-    if (!ms) ms = 180000; // 3 minutes default
+    if (!ms) ms = 300000; // 5 minutes default (upgraded 2 GB Render plan)
     var controller = new AbortController();
     var timer = setTimeout(function() { controller.abort(); }, ms);
     return fetch(url, { signal: controller.signal })
