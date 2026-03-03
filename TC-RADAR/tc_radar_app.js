@@ -5371,6 +5371,75 @@ function _fetchWithTimeout(url, ms) {
         });
 }
 
+/**
+ * Streaming composite fetch: reads NDJSON progress lines, updates the
+ * loading status with a progress percentage, and returns the final result
+ * JSON.  Falls back to a normal fetch if the browser doesn't support
+ * ReadableStream (shouldn't happen in any modern browser).
+ *
+ * @param {string} url  – API URL (stream=true will be appended)
+ * @param {string} label – Human label for the loading message
+ * @param {number} [ms]  – Timeout in milliseconds (default 300 000)
+ * @returns {Promise<Object>} – The final result JSON object
+ */
+function _fetchCompositeStream(url, label, ms) {
+    if (!ms) ms = 300000;
+    var sep = url.indexOf('?') === -1 ? '?' : '&';
+    var streamUrl = url + sep + 'stream=true';
+    var controller = new AbortController();
+    var timer = setTimeout(function() { controller.abort(); }, ms);
+
+    return fetch(streamUrl, { signal: controller.signal }).then(function(resp) {
+        clearTimeout(timer);
+        if (!resp.ok) {
+            return resp.text().then(function(t) {
+                try { var j = JSON.parse(t); throw new Error(j.detail || 'API error'); }
+                catch(e) { if (e.message) throw e; throw new Error('API error: ' + t); }
+            });
+        }
+        var reader = resp.body.getReader();
+        var decoder = new TextDecoder();
+        var buffer = '';
+        var lastResult = null;
+
+        function pump() {
+            return reader.read().then(function(chunk) {
+                if (chunk.done) return lastResult;
+                buffer += decoder.decode(chunk.value, { stream: true });
+                // Process complete lines
+                var lines = buffer.split('\n');
+                buffer = lines.pop(); // keep incomplete line in buffer
+                for (var i = 0; i < lines.length; i++) {
+                    var line = lines[i].trim();
+                    if (!line) continue;
+                    try {
+                        var obj = JSON.parse(line);
+                        if (obj.progress !== undefined && obj.total !== undefined) {
+                            var pct = Math.round(100 * obj.progress / obj.total);
+                            _showCompStatus('loading', label + ' — ' + obj.progress + ' / ' + obj.total + ' cases (' + pct + '%)');
+                        } else if (obj.error) {
+                            throw new Error(obj.error);
+                        } else {
+                            // Final result JSON
+                            lastResult = obj;
+                        }
+                    } catch(e) {
+                        if (e.message && e.message !== 'Unexpected end of JSON input') throw e;
+                    }
+                }
+                return pump();
+            });
+        }
+        return pump();
+    }).catch(function(err) {
+        clearTimeout(timer);
+        if (err.name === 'AbortError') {
+            throw new Error('Server timed out — the composite may be too large. Try narrowing your filters to reduce the case count.');
+        }
+        throw err;
+    });
+}
+
 function _showCompStatus(cls, msg) {
     var el = document.getElementById('comp-status');
     el.className = 'comp-status ' + cls;
@@ -5922,8 +5991,7 @@ function generateCompositeAzMean() {
     var overlay = (document.getElementById('comp-overlay') || {}).value || '';
     var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage;
     if (overlay) qs += '&overlay=' + encodeURIComponent(overlay);
-    _fetchWithTimeout(API_BASE + '/composite/azimuthal_mean?' + qs)
-        .then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error(e.detail||'API error');}); return r.json(); })
+    _fetchCompositeStream(API_BASE + '/composite/azimuthal_mean?' + qs, 'Computing azimuthal mean')
         .then(function(json) {
             _showCompStatus('success', '\u2713 Composite computed: ' + json.n_cases + ' cases processed');
             renderCompositeAzMeanInto('comp-result-az', json, filters);
@@ -5952,10 +6020,9 @@ function generateCompositeQuadMean() {
     var overlay = (document.getElementById('comp-overlay') || {}).value || '';
     var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage;
     if (overlay) qs += '&overlay=' + encodeURIComponent(overlay);
-    _fetchWithTimeout(API_BASE + '/composite/quadrant_mean?' + qs)
-        .then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error(e.detail||'API error');}); return r.json(); })
+    _fetchCompositeStream(API_BASE + '/composite/quadrant_mean?' + qs, 'Computing shear quadrants')
         .then(function(json) {
-            _showCompStatus('success', '\u2713 Composite computed: ' + json.n_cases + ' cases processed (' + json.n_with_shear + ' with shear data)');
+            _showCompStatus('success', '\u2713 Composite computed: ' + json.n_cases + ' cases processed (' + (json.n_with_shear_and_rmw || json.n_with_shear || '?') + ' with shear data)');
             renderCompositeQuadMeanInto('comp-result-sq', json, filters);
             history.replaceState(null, '', '#' + _buildCompPermalinkHash());
         })
@@ -6007,8 +6074,7 @@ function generateCompositePlanView() {
         '&shear_relative=' + (pvParams.shear_relative ? 'true' : 'false');
     if (overlay) qs += '&overlay=' + encodeURIComponent(overlay);
 
-    _fetchWithTimeout(API_BASE + '/composite/plan_view?' + qs)
-        .then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error(e.detail||'API error');}); return r.json(); })
+    _fetchCompositeStream(API_BASE + '/composite/plan_view?' + qs, 'Computing plan-view composite at ' + pvParams.level_km + ' km')
         .then(function(json) {
             _showCompStatus('success', '\u2713 Plan-view composite computed: ' + json.n_cases + ' cases processed');
             renderCompositePlanViewInto('comp-result-pv', json, filters, pvParams);
@@ -6870,8 +6936,7 @@ function generateEnvComposite() {
 
     var pvData, profData, scalarData;
 
-    _fetchWithTimeout(planViewUrl).then(function(r) { return r.ok ? r.json() : null; })
-    .then(function(pv) {
+    _fetchCompositeStream(planViewUrl, 'Computing ERA5 plan view').then(function(pv) {
         pvData = pv;
         _showEnvCompStatus('loading', '\u23F3 Plan view done. Computing profiles & scalars\u2026');
         // Profiles and scalars are lightweight — safe to run in parallel
