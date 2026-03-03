@@ -5199,6 +5199,17 @@ function _wizardUpdateSummary() {
     el.innerHTML = parts.join(' ');
 }
 
+// Update the case-count badge from the actual composite result's n_cases.
+// This is the authoritative count from the backend after filtering + processing.
+function _updateBadgeFromResult(nCases) {
+    if (nCases == null) return;
+    var el = document.getElementById('comp-count-num');
+    if (el) {
+        el.textContent = nCases;
+        _wizardUpdateSummary();
+    }
+}
+
 function _wizardUpdateGenerateSummary() {
     var el = document.getElementById('wiz-generate-summary');
     if (!el) return;
@@ -5236,6 +5247,12 @@ function _wizardWireFilters() {
 function _wizardGenerateSelected() {
     var placeholder = document.getElementById('wiz-result-placeholder');
     if (placeholder) placeholder.style.display = 'none';
+
+    // Belt-and-suspenders: refresh the case count with current filters
+    // right before generating, so the badge is up-to-date
+    if (_wizardMode !== 'diff') {
+        updateCompositeCount();
+    }
 
     var isDiff = _wizardMode === 'diff';
 
@@ -6073,6 +6090,7 @@ function generateCompositeAzMean() {
     _fetchCompositeStream(API_BASE + '/composite/azimuthal_mean?' + qs, 'Computing azimuthal mean')
         .then(function(json) {
             _showCompStatus('success', '\u2713 Composite computed: ' + json.n_cases + ' cases processed');
+            _updateBadgeFromResult(json.n_cases);
             renderCompositeAzMeanInto('comp-result-az', json, filters);
             _showCompShadingToolbar();
             history.replaceState(null, '', '#' + _buildCompPermalinkHash());
@@ -6107,6 +6125,7 @@ function generateCompositeQuadMean() {
     _fetchCompositeStream(API_BASE + '/composite/quadrant_mean?' + qs, 'Computing shear quadrants')
         .then(function(json) {
             _showCompStatus('success', '\u2713 Composite computed: ' + json.n_cases + ' cases processed (' + (json.n_with_shear_and_rmw || json.n_with_shear || '?') + ' with shear data)');
+            _updateBadgeFromResult(json.n_cases);
             renderCompositeQuadMeanInto('comp-result-sq', json, filters);
             _showCompShadingToolbar();
             history.replaceState(null, '', '#' + _buildCompPermalinkHash());
@@ -6162,6 +6181,7 @@ function generateCompositePlanView() {
     _fetchCompositeStream(API_BASE + '/composite/plan_view?' + qs, 'Computing plan-view composite at ' + pvParams.level_km + ' km')
         .then(function(json) {
             _showCompStatus('success', '\u2713 Plan-view composite computed: ' + json.n_cases + ' cases processed');
+            _updateBadgeFromResult(json.n_cases);
             renderCompositePlanViewInto('comp-result-pv', json, filters, pvParams);
             _showCompShadingToolbar();
             history.replaceState(null, '', '#' + _buildCompPermalinkHash());
@@ -7050,6 +7070,7 @@ function generateEnvComposite() {
             return;
         }
 
+        _updateBadgeFromResult(nCases);
         var summary = _compositeFilterSummary(filters, nCases);
         _showEnvCompStatus('', '\u2713 ' + summary);
 
