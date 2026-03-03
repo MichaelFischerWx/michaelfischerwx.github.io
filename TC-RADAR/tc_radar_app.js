@@ -4728,8 +4728,9 @@ function initCompositePanel() {
                             '</div>' +
                             '<div class="wizard-config-body">' +
                                 '<div class="wizard-config-row"><label>Variable</label>' + _varOptionsHTML('comp') + '</div>' +
-                                '<div class="wizard-config-row"><label>Height Level</label>' +
+                                '<div class="wizard-config-row" id="wiz-cfg-level-row"><label>Height Level</label>' +
                                     '<select id="comp-level">' + levelOpts + '</select>' +
+                                    '<div class="wiz-level-hint" id="wiz-level-hint" style="display:none;font-size:10px;color:#6b7280;margin-top:4px;">Not applicable — Azimuthal Mean and Shear Quadrants use all levels.</div>' +
                                 '</div>' +
                                 '<div class="wizard-config-row"><label>Coverage Threshold</label>' +
                                     '<div class="wizard-slider-row">' +
@@ -5022,9 +5023,10 @@ function _wizardToggleSection(section) {
 }
 
 function _wizardUpdateConfigVisibility() {
-    var anyTDR = document.getElementById('wiz-chk-az').checked ||
-                 document.getElementById('wiz-chk-sq').checked ||
-                 document.getElementById('wiz-chk-pv').checked;
+    var chkAz = document.getElementById('wiz-chk-az').checked;
+    var chkSq = document.getElementById('wiz-chk-sq').checked;
+    var chkPv = document.getElementById('wiz-chk-pv').checked;
+    var anyTDR = chkAz || chkSq || chkPv;
     var envPV  = document.getElementById('wiz-chk-env-pv').checked;
     var envSC  = document.getElementById('wiz-chk-env-sc').checked;
     var envTH  = document.getElementById('wiz-chk-env-th').checked;
@@ -5037,6 +5039,26 @@ function _wizardUpdateConfigVisibility() {
     if (!anyTDR && !anyEnv) {
         if (tdrCfg) tdrCfg.style.display = '';
         if (envCfg) envCfg.style.display = '';
+    }
+
+    // Height Level is only relevant for Plan View — hide it when only
+    // Azimuthal Mean and/or Shear Quadrants are selected.
+    var levelRow = document.getElementById('wiz-cfg-level-row');
+    var levelHint = document.getElementById('wiz-level-hint');
+    if (levelRow) {
+        if (chkPv) {
+            // Plan View selected — show the height selector normally
+            levelRow.style.display = '';
+            var lvlSel = document.getElementById('comp-level');
+            if (lvlSel) lvlSel.disabled = false;
+            if (levelHint) levelHint.style.display = 'none';
+        } else if (chkAz || chkSq) {
+            // Only radius-height outputs — show row but indicate not applicable
+            levelRow.style.display = '';
+            var lvlSel = document.getElementById('comp-level');
+            if (lvlSel) lvlSel.disabled = true;
+            if (levelHint) levelHint.style.display = '';
+        }
     }
 
     // When Thermo Profiles is selected, auto-select Scalar Diagnostics too,

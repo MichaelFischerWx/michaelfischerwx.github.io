@@ -804,9 +804,9 @@ footer a:hover { text-decoration: underline; }
 .wizard-group-col.group-b .wizard-case-count { border-color: rgba(245,158,11,0.2); }
 .wizard-group-col.group-b .wizard-case-count .wcc-num { color: #fbbf24; }
 .wcc-cap-note {
-    font-size: 9px; color: #6b7280; line-height: 1.3; margin-top: 6px;
-    padding: 4px 8px; border-radius: 4px;
-    background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04);
+    font-size: 10px; color: #9ca3af; line-height: 1.3; margin-top: 6px;
+    padding: 6px 10px; border-radius: 4px;
+    background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.12);
     transition: color 0.2s, background 0.2s, border-color 0.2s;
 }
 .wcc-cap-note.capped {
