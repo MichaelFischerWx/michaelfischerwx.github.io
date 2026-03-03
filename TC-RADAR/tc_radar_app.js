@@ -6711,8 +6711,8 @@ function _renderDiffAzMean(targetId, diffJson, jsonA, jsonB, filtersA, filtersB)
     var fontSize = { title:13, axis:11, tick:10, cbar:11, cbarTick:10, hover:12 };
     var rmwShape = isNorm ? [{ type:'line', xref:'x', yref:'paper', x0:1, x1:1, y0:0, y1:1, line:{ color:'white', width:1.5, dash:'dash' } }] : [];
 
-    // Helper to build a single az mean plot
-    function buildAzPlot(chartId, data, titleText, colorscale, zmin, zmax, units) {
+    // Helper to build a single az mean plot (overlayJson optional)
+    function buildAzPlot(chartId, data, titleText, colorscale, zmin, zmax, units, overlayJson) {
         var hm = {
             z: data, x: radius, y: height_km, type: 'heatmap',
             colorscale: colorscale, zmin: zmin, zmax: zmax,
@@ -6720,6 +6720,7 @@ function _renderDiffAzMean(targetId, diffJson, jsonA, jsonB, filtersA, filtersB)
             hovertemplate: '%{z:.2f} ' + units + '<br>' + rLabel + ': %{x:.2f}<br>Height: %{y:.1f} km<extra></extra>',
             hoverongaps: false
         };
+        var ovTraces = overlayJson ? buildCompAzOverlayContours(overlayJson, radius, height_km) : [];
         var layout = {
             title: { text:titleText, font:{color:'#e5e7eb',size:fontSize.title}, y:0.97, x:0.5, xanchor:'center' },
             paper_bgcolor:plotBg, plot_bgcolor:plotBg,
@@ -6729,7 +6730,7 @@ function _renderDiffAzMean(targetId, diffJson, jsonA, jsonB, filtersA, filtersB)
             hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
             showlegend:false
         };
-        Plotly.newPlot(chartId, [hm], layout, plotOpts);
+        Plotly.newPlot(chartId, [hm].concat(ovTraces), layout, plotOpts);
     }
 
     // Store defaults and apply user overrides for Group A/B panels
@@ -6744,13 +6745,13 @@ function _renderDiffAzMean(targetId, diffJson, jsonA, jsonB, filtersA, filtersB)
     var vmaxNoteA = meanVmaxA !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxA + ' kt' : '';
     var titleA = _compositeFilterSummary(filtersA, jsonA.n_cases) + vmaxNoteA +
                  '<br>Azimuthal Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
-    buildAzPlot('comp-diff-az-a', jsonA.azimuthal_mean, titleA, activeColorscale, activeVmin, activeVmax, varInfoA.units);
+    buildAzPlot('comp-diff-az-a', jsonA.azimuthal_mean, titleA, activeColorscale, activeVmin, activeVmax, varInfoA.units, jsonA);
 
     var meanVmaxB = _computeCompositeMeanVmax(filtersB);
     var vmaxNoteB = meanVmaxB !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxB + ' kt' : '';
     var titleB = _compositeFilterSummary(filtersB, jsonB.n_cases) + vmaxNoteB +
                  '<br>Azimuthal Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
-    buildAzPlot('comp-diff-az-b', jsonB.azimuthal_mean, titleB, activeColorscale, activeVmin, activeVmax, varInfoA.units);
+    buildAzPlot('comp-diff-az-b', jsonB.azimuthal_mean, titleB, activeColorscale, activeVmin, activeVmax, varInfoA.units, jsonB);
 
     var diffVarInfo = diffJson.variable;
     var diffVmaxNote = '';
@@ -6762,7 +6763,7 @@ function _renderDiffAzMean(targetId, diffJson, jsonA, jsonB, filtersA, filtersB)
     }
     var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) + diffVmaxNote +
                  '<br>\u0394 Azimuthal Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
-    buildAzPlot('comp-diff-az-d', diffJson.azimuthal_mean, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, diffVarInfo.units);
+    buildAzPlot('comp-diff-az-d', diffJson.azimuthal_mean, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, diffVarInfo.units, diffJson);
 }
 
 function _renderDiffQuadMean(targetId, diffJson, jsonA, jsonB, filtersA, filtersB) {
@@ -6797,7 +6798,7 @@ function _renderDiffQuadMean(targetId, diffJson, jsonA, jsonB, filtersA, filters
     ];
     var quadColors = { DSL:'#f59e0b', DSR:'#f59e0b', USL:'#60a5fa', USR:'#60a5fa' };
 
-    function buildQuadPlot(chartId, quads, titleText, colorscale, zmin, zmax, units) {
+    function buildQuadPlot(chartId, quads, titleText, colorscale, zmin, zmax, units, overlayJson) {
         var traces = [], annotations = [], shapes = [];
         var gap=0.08, cbarW=0.04, leftM=0.06, rightM=0.02+cbarW+0.02, topM=0.18, botM=0.06;
         var pw = (1-leftM-rightM-gap)/2, ph = (1-topM-botM-gap)/2;
@@ -6856,7 +6857,8 @@ function _renderDiffQuadMean(targetId, diffJson, jsonA, jsonB, filtersA, filters
             showlegend:false
         }, layoutAxes);
 
-        Plotly.newPlot(chartId, traces, layout, plotOpts);
+        var ovTraces = overlayJson ? buildCompQuadOverlayContours(overlayJson, radius, height_km, panelOrder) : [];
+        Plotly.newPlot(chartId, traces.concat(ovTraces), layout, plotOpts);
     }
 
     // Store defaults and apply user overrides for Group A/B panels
@@ -6872,14 +6874,14 @@ function _renderDiffQuadMean(targetId, diffJson, jsonA, jsonB, filtersA, filters
     var vmaxNoteA = meanVmaxA !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxA + ' kt' : '';
     var titleA = _compositeFilterSummary(filtersA, jsonA.n_cases) + vmaxNoteA +
                  '<br>Shear-Relative Quadrant Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
-    buildQuadPlot('comp-diff-sq-a', jsonA.quadrant_means, titleA, activeColorscale, activeVmin, activeVmax, varInfoA.units);
+    buildQuadPlot('comp-diff-sq-a', jsonA.quadrant_means, titleA, activeColorscale, activeVmin, activeVmax, varInfoA.units, jsonA);
 
     // Group B
     var meanVmaxB = _computeCompositeMeanVmax(filtersB);
     var vmaxNoteB = meanVmaxB !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxB + ' kt' : '';
     var titleB = _compositeFilterSummary(filtersB, jsonB.n_cases) + vmaxNoteB +
                  '<br>Shear-Relative Quadrant Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
-    buildQuadPlot('comp-diff-sq-b', jsonB.quadrant_means, titleB, activeColorscale, activeVmin, activeVmax, varInfoA.units);
+    buildQuadPlot('comp-diff-sq-b', jsonB.quadrant_means, titleB, activeColorscale, activeVmin, activeVmax, varInfoA.units, jsonB);
 
     // Difference
     var diffVarInfo = diffJson.variable;
@@ -6892,7 +6894,7 @@ function _renderDiffQuadMean(targetId, diffJson, jsonA, jsonB, filtersA, filters
     }
     var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) + diffVmaxNote +
                  '<br>\u0394 Shear-Relative Quadrant Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
-    buildQuadPlot('comp-diff-sq-d', diffJson.quadrant_means, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, diffVarInfo.units);
+    buildQuadPlot('comp-diff-sq-d', diffJson.quadrant_means, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, diffVarInfo.units, diffJson);
 }
 
 // ── Composite Difference Plan View ──────────────────
@@ -7033,7 +7035,7 @@ function _renderDiffPlanView(targetId, diffJson, jsonA, jsonB, filtersA, filters
     }
 
     // Helper to build a single plan-view plot
-    function buildPvPlot(chartId, data, titleText, colorscale, zmin, zmax, units) {
+    function buildPvPlot(chartId, data, titleText, colorscale, zmin, zmax, units, overlayJson) {
         // Compute tight axis range from actual non-NaN data extent
         var ext = _tightDataExtent(data, xAxis, yAxis, 0.25);
         var hm = {
@@ -7043,6 +7045,7 @@ function _renderDiffPlanView(targetId, diffJson, jsonA, jsonB, filtersA, filters
             hovertemplate: '%{z:.2f} ' + units + '<br>' + xLabel + ': %{x:.1f}<br>' + yLabel + ': %{y:.1f}<extra></extra>',
             hoverongaps: false
         };
+        var ovTraces = overlayJson ? buildCompPlanViewOverlayContours(overlayJson, xAxis, yAxis) : [];
         var sInset = shearShapes();
         var layout = {
             title: { text:titleText, font:{color:'#e5e7eb',size:fontSize.title}, y:0.97, x:0.5, xanchor:'center' },
@@ -7054,7 +7057,7 @@ function _renderDiffPlanView(targetId, diffJson, jsonA, jsonB, filtersA, filters
             hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
             showlegend:false
         };
-        Plotly.newPlot(chartId, [hm].concat(rmwCircleTrace()), layout, plotOpts);
+        Plotly.newPlot(chartId, [hm].concat(ovTraces).concat(rmwCircleTrace()), layout, plotOpts);
     }
 
     // Store defaults and apply user overrides for Group A/B panels
@@ -7070,14 +7073,14 @@ function _renderDiffPlanView(targetId, diffJson, jsonA, jsonB, filtersA, filters
     var vmaxNoteA = meanVmaxA !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxA + ' kt' : '';
     var titleA = _compositeFilterSummary(filtersA, jsonA.n_cases) + vmaxNoteA +
                  '<br>Plan View @ ' + levelKm + ' km: ' + varInfoA.display_name + dtypeLabel + normLabel + shearLabel;
-    buildPvPlot('comp-diff-pv-a', jsonA.plan_view, titleA, activeColorscale, activeVmin, activeVmax, varInfoA.units);
+    buildPvPlot('comp-diff-pv-a', jsonA.plan_view, titleA, activeColorscale, activeVmin, activeVmax, varInfoA.units, jsonA);
 
     // ── Group B plot ──
     var meanVmaxB = _computeCompositeMeanVmax(filtersB);
     var vmaxNoteB = meanVmaxB !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxB + ' kt' : '';
     var titleB = _compositeFilterSummary(filtersB, jsonB.n_cases) + vmaxNoteB +
                  '<br>Plan View @ ' + levelKm + ' km: ' + varInfoA.display_name + dtypeLabel + normLabel + shearLabel;
-    buildPvPlot('comp-diff-pv-b', jsonB.plan_view, titleB, activeColorscale, activeVmin, activeVmax, varInfoA.units);
+    buildPvPlot('comp-diff-pv-b', jsonB.plan_view, titleB, activeColorscale, activeVmin, activeVmax, varInfoA.units, jsonB);
 
     // ── Difference plot ──
     var diffVarInfo = diffJson.variable;
@@ -7090,7 +7093,7 @@ function _renderDiffPlanView(targetId, diffJson, jsonA, jsonB, filtersA, filters
     }
     var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) + diffVmaxNote +
                  '<br>\u0394 Plan View @ ' + levelKm + ' km: ' + varInfoA.display_name + dtypeLabel + normLabel + shearLabel;
-    buildPvPlot('comp-diff-pv-d', diffJson.plan_view, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, diffVarInfo.units);
+    buildPvPlot('comp-diff-pv-d', diffJson.plan_view, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, diffVarInfo.units, diffJson);
 }
 
 // ══════════════════════════════════════════════════════════════
