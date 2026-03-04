@@ -7692,6 +7692,37 @@ function _cfadApplyLog(rawData, zMinPos) {
     return plotData;
 }
 
+function _cfadSignedLog(data2d) {
+    // sign(x) * log10(1 + |x|) — preserves sign, compresses magnitude
+    var result = [];
+    for (var h = 0; h < data2d.length; h++) {
+        var row = [];
+        for (var b = 0; b < data2d[h].length; b++) {
+            var v = data2d[h][b];
+            if (v === null || v === undefined || isNaN(v)) { row.push(null); }
+            else { row.push(v >= 0 ? Math.log10(1 + v) : -Math.log10(1 + Math.abs(v))); }
+        }
+        result.push(row);
+    }
+    return result;
+}
+
+function _cfadSignedLogTicks(symRange) {
+    // Build colorbar ticks for signed-log space
+    // symRange is in signed-log space (the max absolute transformed value)
+    var tickVals = [0], tickText = ['0'];
+    // Generate nice positive/negative ticks
+    var origVals = [0.1, 0.5, 1, 2, 5, 10, 20, 50, 100];
+    for (var i = 0; i < origVals.length; i++) {
+        var ov = origVals[i];
+        var tv = Math.log10(1 + ov);
+        if (tv > symRange * 1.05) break;
+        tickVals.push(tv);  tickText.push('+' + ov + '%');
+        tickVals.push(-tv); tickText.push('\u2212' + ov + '%');
+    }
+    return { vals: tickVals, text: tickText };
+}
+
 function _renderDiffCFAD(targetId, jsonA, jsonB, filtersA, filtersB) {
     var el = document.getElementById(targetId); if (!el) return;
     var binCenters = jsonA.bin_centers;
@@ -7785,11 +7816,36 @@ function _renderDiffCFAD(targetId, jsonA, jsonB, filtersA, filtersB) {
     layB.title.text = titleB;
     Plotly.newPlot('comp-diff-cfad-b', [trB], layB, {responsive:true,displayModeBar:false});
 
-    // Render Difference
-    var cbarD = { title:{text:'\u0394 ' + normLabel,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:12, len:0.85 };
-    var trD = _buildCfadHeatmap(diffData, binCenters, heightKm, -symRange, symRange, _DIFF_COLORSCALE, cbarD, 'x', 'y', varInfo, normLabel, null, true);
+    // Render Difference — apply signed log transform if log-scale enabled
+    var diffPlotData, diffZmin, diffZmax, diffCbarTitle, diffCustomData = null;
+    if (useLog) {
+        diffPlotData = _cfadSignedLog(diffData);
+        diffCustomData = diffData;
+        var sLogMax = 0;
+        for (var dh = 0; dh < diffPlotData.length; dh++) {
+            for (var db = 0; db < diffPlotData[dh].length; db++) {
+                var dv = diffPlotData[dh][db];
+                if (dv !== null && Math.abs(dv) > sLogMax) sLogMax = Math.abs(dv);
+            }
+        }
+        if (sLogMax === 0) sLogMax = 1;
+        diffZmin = -sLogMax; diffZmax = sLogMax;
+        diffCbarTitle = '\u0394 ' + normLabel + ' (signed log)';
+    } else {
+        diffPlotData = diffData;
+        diffZmin = -symRange; diffZmax = symRange;
+        diffCbarTitle = '\u0394 ' + normLabel;
+    }
+
+    var cbarD = { title:{text:diffCbarTitle,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:12, len:0.85 };
+    if (useLog) {
+        var slTicks = _cfadSignedLogTicks(diffZmax);
+        cbarD.tickvals = slTicks.vals; cbarD.ticktext = slTicks.text;
+    }
+    var trD = _buildCfadHeatmap(diffPlotData, binCenters, heightKm, diffZmin, diffZmax, _DIFF_COLORSCALE, cbarD, 'x', 'y', varInfo,
+        '\u0394 ' + normLabel, diffCustomData, true);
     var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) +
-        '<br>\u0394 CFAD: ' + varInfo.display_name + binNote + radialNote + quadNote;
+        '<br>\u0394 CFAD: ' + varInfo.display_name + binNote + radialNote + quadNote + (useLog ? ' (signed log)' : '');
     var layD = JSON.parse(JSON.stringify(layA));
     layD.title.text = titleD;
     Plotly.newPlot('comp-diff-cfad-diff', [trD], layD, {responsive:true,displayModeBar:true,displaylogo:false,modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines']});
@@ -7885,15 +7941,24 @@ function _renderDiffCFADMulti(targetId, jsonA, jsonB, filtersA, filtersB) {
         _buildCompToolbar();
 
     // Helper: build 2x2 subplot for a set of 4 quadrant CFADs
-    function build2x2(chartId, multiData, titleText, colorscale, zMin, zMax, cbarObj, isLog, isDiff) {
+    // diffSignedLog: if true, apply signed log transform to data and use custom ticks
+    function build2x2(chartId, multiData, titleText, colorscale, zMin, zMax, cbarObj, isLog, isDiff, diffSignedLog) {
         var traces = [];
         var anns = [];
         for (var si = 0; si < quadOrder.length; si++) {
             var qk = quadOrder[si];
             var raw = multiData[qk];
             if (!raw) continue;
-            var pData = (isLog && !isDiff) ? _cfadApplyLog(raw) : raw;
-            var cData = (isLog && !isDiff) ? raw : null;
+            var pData, cData = null;
+            if (diffSignedLog) {
+                pData = _cfadSignedLog(raw);
+                cData = raw;
+            } else if (isLog && !isDiff) {
+                pData = _cfadApplyLog(raw);
+                cData = raw;
+            } else {
+                pData = raw;
+            }
             var xR = 'x' + (si === 0 ? '' : String(si + 1));
             var yR = 'y' + (si === 0 ? '' : String(si + 1));
             var showCbar = (si === 1);
@@ -7907,10 +7972,10 @@ function _renderDiffCFADMulti(targetId, jsonA, jsonB, filtersA, filtersB) {
             if (cData) {
                 tr.customdata = cData;
                 tr.hovertemplate = '<b>' + quadLabels[qk] + '</b><br>' + varInfo.display_name + ': %{x:.1f} ' + varInfo.units +
-                    '<br>Height: %{y:.1f} km<br>Freq: %{customdata:.3f} ' + normLabel + '<extra></extra>';
+                    '<br>Height: %{y:.1f} km<br>Freq: %{customdata:.3f} ' + (isDiff ? '\u0394 ' : '') + normLabel + '<extra></extra>';
             } else {
                 tr.hovertemplate = '<b>' + quadLabels[qk] + '</b><br>' + varInfo.display_name + ': %{x:.1f} ' + varInfo.units +
-                    '<br>Height: %{y:.1f} km<br>Freq: %{z:.2f} ' + (isDiff ? '\u0394' : '') + normLabel + '<extra></extra>';
+                    '<br>Height: %{y:.1f} km<br>Freq: %{z:.2f} ' + (isDiff ? '\u0394 ' : '') + normLabel + '<extra></extra>';
             }
             traces.push(tr);
             anns.push({
@@ -7948,18 +8013,45 @@ function _renderDiffCFADMulti(targetId, jsonA, jsonB, filtersA, filtersB) {
     if (useLog && cbarTickVals) { cbarAB.tickvals = cbarTickVals; cbarAB.ticktext = cbarTickText; }
     build2x2('comp-diff-cfadm-a', jsonA.cfad_multi,
         '<span style="color:#60a5fa;">Group A</span> (N=' + jsonA.n_cases + ') | 4-Quadrant CFAD' + binNote + radialNote,
-        cfadColorscale, plotZmin, plotZmax, cbarAB, useLog, false);
+        cfadColorscale, plotZmin, plotZmax, cbarAB, useLog, false, false);
 
     // Render B
     build2x2('comp-diff-cfadm-b', jsonB.cfad_multi,
         '<span style="color:#f59e0b;">Group B</span> (N=' + jsonB.n_cases + ') | 4-Quadrant CFAD' + binNote + radialNote,
-        cfadColorscale, plotZmin, plotZmax, cbarAB, useLog, false);
+        cfadColorscale, plotZmin, plotZmax, cbarAB, useLog, false, false);
 
-    // Render Difference
-    var cbarDiff = { title:{text:'\u0394 ' + normLabel,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:12, len:0.9 };
+    // Render Difference — apply signed log if log-scale enabled
+    var diffDZmin, diffDZmax, diffCbarTitle;
+    var diffSignedLog = useLog;
+    if (diffSignedLog) {
+        // Compute signed-log range across all quadrant diffs
+        var sLogMax = 0;
+        for (var qi4 = 0; qi4 < quadOrder.length; qi4++) {
+            var dq = diffMulti[quadOrder[qi4]];
+            if (!dq) continue;
+            var slData = _cfadSignedLog(dq);
+            for (var sh = 0; sh < slData.length; sh++) {
+                for (var sb = 0; sb < slData[sh].length; sb++) {
+                    var sv = slData[sh][sb];
+                    if (sv !== null && Math.abs(sv) > sLogMax) sLogMax = Math.abs(sv);
+                }
+            }
+        }
+        if (sLogMax === 0) sLogMax = 1;
+        diffDZmin = -sLogMax; diffDZmax = sLogMax;
+        diffCbarTitle = '\u0394 ' + normLabel + ' (signed log)';
+    } else {
+        diffDZmin = -symRange; diffDZmax = symRange;
+        diffCbarTitle = '\u0394 ' + normLabel;
+    }
+    var cbarDiff = { title:{text:diffCbarTitle,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:12, len:0.9 };
+    if (diffSignedLog) {
+        var slTicks = _cfadSignedLogTicks(diffDZmax);
+        cbarDiff.tickvals = slTicks.vals; cbarDiff.ticktext = slTicks.text;
+    }
     build2x2('comp-diff-cfadm-diff', diffMulti,
-        _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) + '<br>\u0394 4-Quadrant CFAD: ' + varInfo.display_name + binNote + radialNote,
-        _DIFF_COLORSCALE, -symRange, symRange, cbarDiff, false, true);
+        _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) + '<br>\u0394 4-Quadrant CFAD: ' + varInfo.display_name + binNote + radialNote + (diffSignedLog ? ' (signed log)' : ''),
+        _DIFF_COLORSCALE, diffDZmin, diffDZmax, cbarDiff, false, true, diffSignedLog);
 }
 
 // ══════════════════════════════════════════════════════════════
