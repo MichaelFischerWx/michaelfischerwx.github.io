@@ -4916,6 +4916,22 @@ function initCompositePanel() {
                                         '<span style="font-size:9px;color:#6b7280;margin-left:4px;">(leave blank for auto)</span>' +
                                     '</div>' +
 
+                                    // Number of bins
+                                    '<div class="wizard-config-row"><label>Number of Bins</label>' +
+                                        '<input type="number" id="cfad-n-bins" value="20" min="5" max="200" step="1" style="width:80px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                                        '<span style="font-size:9px;color:#6b7280;margin-left:4px;">(used when bin width is blank)</span>' +
+                                    '</div>' +
+
+                                    // Bin range (min/max)
+                                    '<div class="wizard-config-row"><label>Bin Range</label>' +
+                                        '<div style="display:flex;align-items:center;gap:6px;">' +
+                                            '<input type="number" id="cfad-bin-min" value="" placeholder="auto" step="any" style="width:72px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                                            '<span style="font-size:10px;color:#6b7280;">to</span>' +
+                                            '<input type="number" id="cfad-bin-max" value="" placeholder="auto" step="any" style="width:72px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                                            '<span style="font-size:9px;color:#6b7280;margin-left:4px;">(blank = auto from variable)</span>' +
+                                        '</div>' +
+                                    '</div>' +
+
                                     // Normalisation
                                     '<div class="wizard-config-row"><label>Normalisation</label>' +
                                         '<select id="cfad-normalise" style="font-size:11px;">' +
@@ -4928,9 +4944,9 @@ function initCompositePanel() {
                                     // Radial domain (min + max)
                                     '<div class="wizard-config-row"><label>Radial Domain</label>' +
                                         '<div style="display:flex;align-items:center;gap:6px;">' +
-                                            '<input type="number" id="cfad-min-radius" value="0" min="0" max="500" step="5" style="width:65px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                                            '<input type="number" id="cfad-min-radius" value="0" min="0" max="500" step="any" style="width:65px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
                                             '<span style="font-size:10px;color:#6b7280;">to</span>' +
-                                            '<input type="number" id="cfad-max-radius" value="200" min="10" max="500" step="5" style="width:65px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                                            '<input type="number" id="cfad-max-radius" value="200" min="0.1" max="500" step="any" style="width:65px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
                                             '<span id="cfad-radius-unit" style="font-size:10px;color:#6b7280;">km</span>' +
                                         '</div>' +
                                     '</div>' +
@@ -4943,7 +4959,7 @@ function initCompositePanel() {
                                         '</div>' +
                                     '</div>' +
 
-                                    // Shear-relative quadrant selector
+                                    // Shear-relative quadrant selector (with MULTI button)
                                     '<div class="wizard-config-row"><label>Quadrant Filter</label>' +
                                         '<div id="cfad-quad-btns" style="display:flex;gap:4px;flex-wrap:wrap;">' +
                                             '<button type="button" class="cfad-quad-btn active" data-quad="ALL" onclick="_cfadToggleQuad(this)" style="padding:4px 10px;font-size:10px;font-weight:600;border:1px solid rgba(34,211,238,0.3);border-radius:4px;background:rgba(34,211,238,0.15);color:#22d3ee;cursor:pointer;font-family:\'JetBrains Mono\',monospace;">All</button>' +
@@ -4951,6 +4967,7 @@ function initCompositePanel() {
                                             '<button type="button" class="cfad-quad-btn" data-quad="DSR" onclick="_cfadToggleQuad(this)" style="padding:4px 10px;font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:rgba(255,255,255,0.03);color:#9ca3af;cursor:pointer;font-family:\'JetBrains Mono\',monospace;">DSR</button>' +
                                             '<button type="button" class="cfad-quad-btn" data-quad="USL" onclick="_cfadToggleQuad(this)" style="padding:4px 10px;font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:rgba(255,255,255,0.03);color:#9ca3af;cursor:pointer;font-family:\'JetBrains Mono\',monospace;">USL</button>' +
                                             '<button type="button" class="cfad-quad-btn" data-quad="USR" onclick="_cfadToggleQuad(this)" style="padding:4px 10px;font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:rgba(255,255,255,0.03);color:#9ca3af;cursor:pointer;font-family:\'JetBrains Mono\',monospace;">USR</button>' +
+                                            '<button type="button" class="cfad-quad-btn" data-quad="MULTI" onclick="_cfadToggleQuad(this)" style="padding:4px 10px;font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:rgba(255,255,255,0.03);color:#9ca3af;cursor:pointer;font-family:\'JetBrains Mono\',monospace;">Multi</button>' +
                                         '</div>' +
                                     '</div>' +
 
@@ -6236,33 +6253,40 @@ function _cfadToggleQuad(btn) {
     var activeStyle = 'padding:4px 10px;font-size:10px;font-weight:600;border:1px solid rgba(34,211,238,0.3);border-radius:4px;background:rgba(34,211,238,0.15);color:#22d3ee;cursor:pointer;font-family:\'JetBrains Mono\',monospace;';
     var inactiveStyle = 'padding:4px 10px;font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:rgba(255,255,255,0.03);color:#9ca3af;cursor:pointer;font-family:\'JetBrains Mono\',monospace;';
 
-    if (quad === 'ALL') {
-        // "All" is exclusive — deselect everything else, activate All
+    if (quad === 'ALL' || quad === 'MULTI') {
+        // "All" and "Multi" are exclusive — deselect everything else, activate this one
         allBtns.forEach(function(b) {
-            var isAll = b.getAttribute('data-quad') === 'ALL';
-            b.classList.toggle('active', isAll);
-            b.style.cssText = isAll ? activeStyle : inactiveStyle;
+            var match = b.getAttribute('data-quad') === quad;
+            b.classList.toggle('active', match);
+            b.style.cssText = match ? activeStyle : inactiveStyle;
         });
     } else {
-        // Deselect "All" if it's active
-        var allBtn = document.querySelector('#cfad-quad-btns .cfad-quad-btn[data-quad="ALL"]');
-        if (allBtn && allBtn.classList.contains('active')) {
-            allBtn.classList.remove('active');
-            allBtn.style.cssText = inactiveStyle;
-        }
+        // Deselect "All" and "Multi" if either is active
+        allBtns.forEach(function(b) {
+            var d = b.getAttribute('data-quad');
+            if ((d === 'ALL' || d === 'MULTI') && b.classList.contains('active')) {
+                b.classList.remove('active');
+                b.style.cssText = inactiveStyle;
+            }
+        });
         // Toggle this quadrant
         var isActive = btn.classList.toggle('active');
         btn.style.cssText = isActive ? activeStyle : inactiveStyle;
         // If no quadrants are selected, re-activate "All"
-        var anyActive = document.querySelector('#cfad-quad-btns .cfad-quad-btn.active:not([data-quad="ALL"])');
-        if (!anyActive && allBtn) {
-            allBtn.classList.add('active');
-            allBtn.style.cssText = activeStyle;
+        var anyActive = document.querySelector('#cfad-quad-btns .cfad-quad-btn.active:not([data-quad="ALL"]):not([data-quad="MULTI"])');
+        if (!anyActive) {
+            var allBtn = document.querySelector('#cfad-quad-btns .cfad-quad-btn[data-quad="ALL"]');
+            if (allBtn) {
+                allBtn.classList.add('active');
+                allBtn.style.cssText = activeStyle;
+            }
         }
     }
 }
 
 function _cfadGetSelectedQuadrants() {
+    var multiBtn = document.querySelector('#cfad-quad-btns .cfad-quad-btn.active[data-quad="MULTI"]');
+    if (multiBtn) return ['MULTI'];
     var allBtn = document.querySelector('#cfad-quad-btns .cfad-quad-btn.active[data-quad="ALL"]');
     if (allBtn) return [];  // empty = all azimuths
     var selected = [];
@@ -6281,23 +6305,38 @@ function generateCompositeCFAD() {
 
     // Gather CFAD-specific options
     var binWidth = parseFloat((document.getElementById('cfad-bin-width') || {}).value) || 0;
+    var nBins = parseInt((document.getElementById('cfad-n-bins') || {}).value, 10) || 20;
+    var binMinVal = (document.getElementById('cfad-bin-min') || {}).value;
+    var binMaxVal = (document.getElementById('cfad-bin-max') || {}).value;
     var normalise = (document.getElementById('cfad-normalise') || {}).value || 'height';
     var minRadius = parseFloat((document.getElementById('cfad-min-radius') || {}).value) || 0;
     var maxRadius = parseFloat((document.getElementById('cfad-max-radius') || {}).value) || 200;
     var useRmw = !!(document.getElementById('cfad-use-rmw') || {}).checked;
     var quadrants = _cfadGetSelectedQuadrants();
+    var isMulti = quadrants.length === 1 && quadrants[0] === 'MULTI';
 
     var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType +
-        '&min_radius=' + minRadius + '&max_radius=' + maxRadius + '&normalise=' + encodeURIComponent(normalise);
+        '&min_radius=' + minRadius + '&max_radius=' + maxRadius + '&normalise=' + encodeURIComponent(normalise) +
+        '&n_bins=' + nBins;
     if (useRmw) qs += '&use_rmw=true';
     if (binWidth > 0) qs += '&bin_width=' + binWidth;
-    if (quadrants.length > 0) qs += '&quadrants=' + encodeURIComponent(quadrants.join(','));
+    if (binMinVal !== '' && binMinVal !== undefined && !isNaN(parseFloat(binMinVal))) qs += '&bin_min=' + parseFloat(binMinVal);
+    if (binMaxVal !== '' && binMaxVal !== undefined && !isNaN(parseFloat(binMaxVal))) qs += '&bin_max=' + parseFloat(binMaxVal);
+    if (isMulti) {
+        qs += '&quadrants=MULTI';
+    } else if (quadrants.length > 0) {
+        qs += '&quadrants=' + encodeURIComponent(quadrants.join(','));
+    }
 
     _fetchCompositeStream(API_BASE + '/composite/cfad?' + qs, 'Computing CFAD')
         .then(function(json) {
             _showCompStatus('success', '\u2713 CFAD computed: ' + json.n_cases + ' cases processed');
             _updateBadgeFromResult(json.n_cases);
-            renderCompositeCFADInto('comp-result-cfad', json, filters);
+            if (json.multi) {
+                renderCompositeCFADMultiInto('comp-result-cfad', json, filters);
+            } else {
+                renderCompositeCFADInto('comp-result-cfad', json, filters);
+            }
         })
         .catch(function(err) { _showCompStatus('error', '\u2717 ' + (err.message || String(err))); });
 }
@@ -6440,6 +6479,180 @@ function renderCompositeCFADInto(targetId, json, filters) {
     _lastCompJson = json; _lastCompType = 'cfad';
     el.innerHTML = '<div id="comp-cfad-chart" style="width:100%;height:560px;border-radius:8px;overflow:hidden;"></div>' + _buildCompToolbar();
     Plotly.newPlot('comp-cfad-chart', [heatmap], layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
+}
+
+function renderCompositeCFADMultiInto(targetId, json, filters) {
+    var el = document.getElementById(targetId); if (!el) return;
+    var cfadMulti = json.cfad_multi;
+    var binCenters = json.bin_centers;
+    var heightKm = json.height_km;
+    var varInfo = json.variable;
+    var normLabel = json.norm_label;
+    var cfadColorscale = json.cfad_colorscale || 'RdYlBu';
+
+    var useLog = !!(document.getElementById('cfad-log-scale') || {}).checked;
+    var fontSize = { title:13, axis:11, tick:9, cbar:11, cbarTick:9, hover:12 };
+
+    // Quadrant layout: 2x2 grid — USL USR on top, DSL DSR on bottom
+    var quadOrder = ['USL', 'USR', 'DSL', 'DSR'];
+    var quadLabels = { 'USL': 'Upshear Left', 'USR': 'Upshear Right', 'DSL': 'Downshear Left', 'DSR': 'Downshear Right' };
+
+    // Find global min/max across all quadrants for consistent color scaling
+    var gZmax = 0, gZminPos = Infinity;
+    for (var qi = 0; qi < quadOrder.length; qi++) {
+        var qname = quadOrder[qi];
+        var qdata = cfadMulti[qname];
+        if (!qdata) continue;
+        for (var h = 0; h < qdata.length; h++) {
+            for (var b = 0; b < qdata[h].length; b++) {
+                var v = qdata[h][b];
+                if (v !== null && v > gZmax) gZmax = v;
+                if (v !== null && v > 0 && v < gZminPos) gZminPos = v;
+            }
+        }
+    }
+    if (gZmax === 0) gZmax = 1;
+    if (gZminPos === Infinity) gZminPos = 0.001;
+
+    // Determine shared z-range
+    var plotZmin, plotZmax, cbarTitle, hoverSuffix;
+    var tickVals = [], tickText = [];
+    if (useLog && gZmax > 0) {
+        plotZmin = Math.log10(Math.max(gZminPos * 0.5, 1e-6));
+        plotZmax = Math.log10(gZmax);
+        var logMin = Math.floor(plotZmin), logMax = Math.ceil(plotZmax);
+        for (var p = logMin; p <= logMax; p++) {
+            var tv = Math.pow(10, p);
+            tickVals.push(p);
+            if (normLabel === 'count') {
+                tickText.push(tv >= 1 ? String(Math.round(tv)) : tv.toExponential(0));
+            } else {
+                if (tv >= 1) tickText.push(tv.toFixed(0) + '%');
+                else if (tv >= 0.1) tickText.push(tv.toFixed(1) + '%');
+                else if (tv >= 0.01) tickText.push(tv.toFixed(2) + '%');
+                else tickText.push(tv.toExponential(0) + '%');
+            }
+        }
+        cbarTitle = normLabel + ' (log\u2081\u2080)';
+        hoverSuffix = normLabel;
+    } else {
+        plotZmin = 0;
+        plotZmax = gZmax;
+        cbarTitle = normLabel;
+        hoverSuffix = normLabel;
+    }
+
+    // Build 4 heatmap traces for subplots
+    var traces = [];
+    var annotations = [];
+    for (var si = 0; si < quadOrder.length; si++) {
+        var qn = quadOrder[si];
+        var rawData = cfadMulti[qn];
+        if (!rawData) continue;
+
+        var plotData, customData = null;
+        if (useLog && gZmax > 0) {
+            plotData = [];
+            customData = rawData;
+            for (var rh = 0; rh < rawData.length; rh++) {
+                var row = [];
+                for (var rb = 0; rb < rawData[rh].length; rb++) {
+                    var val = rawData[rh][rb];
+                    row.push((val === null || val <= 0) ? null : Math.log10(val));
+                }
+                plotData.push(row);
+            }
+        } else {
+            plotData = rawData;
+        }
+
+        var xRef = 'x' + (si === 0 ? '' : String(si + 1));
+        var yRef = 'y' + (si === 0 ? '' : String(si + 1));
+        var showCbar = (si === 1);  // show colorbar on top-right panel only
+
+        var colorbar = showCbar ? {
+            title: { text: cbarTitle, font: { color:'#ccc', size:fontSize.cbar } },
+            tickfont: { color:'#ccc', size:fontSize.cbarTick },
+            thickness: 12, len: 0.9, x: 1.02
+        } : null;
+        if (showCbar && useLog && tickVals.length > 0) {
+            colorbar.tickvals = tickVals;
+            colorbar.ticktext = tickText;
+        }
+
+        var trace = {
+            z: plotData, x: binCenters, y: heightKm, type: 'heatmap',
+            colorscale: cfadColorscale, zmin: plotZmin, zmax: plotZmax,
+            xaxis: xRef, yaxis: yRef,
+            showscale: showCbar, hoverongaps: false
+        };
+        if (showCbar && colorbar) trace.colorbar = colorbar;
+        if (useLog && customData) {
+            trace.customdata = customData;
+            trace.hovertemplate = '<b>' + quadLabels[qn] + '</b><br>' + varInfo.display_name + ': %{x:.1f} ' + varInfo.units +
+                '<br>Height: %{y:.1f} km<br>Frequency: %{customdata:.3f} ' + hoverSuffix + '<extra></extra>';
+        } else {
+            trace.hovertemplate = '<b>' + quadLabels[qn] + '</b><br>' + varInfo.display_name + ': %{x:.1f} ' + varInfo.units +
+                '<br>Height: %{y:.1f} km<br>Frequency: %{z:.2f} ' + hoverSuffix + '<extra></extra>';
+        }
+        traces.push(trace);
+
+        // Add annotation for quadrant label
+        var row2 = si < 2 ? 0 : 1;
+        var col2 = si % 2;
+        annotations.push({
+            text: '<b>' + quadLabels[qn] + '</b>',
+            xref: xRef.replace('x', 'x') + ' domain',
+            yref: yRef.replace('y', 'y') + ' domain',
+            x: 0.5, y: 1.08, showarrow: false,
+            font: { size: 12, color: '#e5e7eb' },
+            xanchor: 'center', yanchor: 'bottom'
+        });
+    }
+
+    var dtypeLabel = (document.getElementById('comp-dtype') && document.getElementById('comp-dtype').value === 'merge') ? ' (Merge)' : '';
+    var meanVmax = _computeCompositeMeanVmax(filters);
+    var vmaxNote = meanVmax !== null ? ' | Mean V<sub>max</sub>=' + meanVmax + ' kt' : '';
+    var binNote = ' | Bin=' + json.bin_width + ' ' + varInfo.units;
+    var radialNote = '';
+    if (json.radial_domain) {
+        var rUnit = json.use_rmw ? ' R/RMW' : ' km';
+        radialNote = ' | R=' + json.radial_domain[0] + '\u2013' + json.radial_domain[1] + rUnit;
+    }
+    var title = _compositeFilterSummary(filters, json.n_cases) + vmaxNote +
+        '<br>CFAD: ' + varInfo.display_name + dtypeLabel + binNote + radialNote +
+        ' | 4-Quadrant | ' + normLabel + (useLog ? ' (log)' : '');
+
+    var plotBg = '#0a1628';
+    var layout = {
+        title: { text: title, font: { color:'#e5e7eb', size:fontSize.title }, y:0.98, x:0.5, xanchor:'center' },
+        paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+        grid: { rows: 2, columns: 2, pattern: 'independent', xgap: 0.08, ygap: 0.12 },
+        annotations: annotations,
+        margin: { l:55, r:60, t:120, b:50 },
+        hoverlabel: { bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
+        showlegend: false
+    };
+
+    // Configure each subplot axis
+    var axNames = [['xaxis','yaxis'],['xaxis2','yaxis2'],['xaxis3','yaxis3'],['xaxis4','yaxis4']];
+    for (var ai = 0; ai < axNames.length; ai++) {
+        var xName = axNames[ai][0], yName = axNames[ai][1];
+        var isBottom = ai >= 2, isLeft = ai % 2 === 0;
+        layout[xName] = {
+            title: isBottom ? { text: varInfo.display_name + ' (' + varInfo.units + ')', font:{color:'#aaa',size:fontSize.axis} } : undefined,
+            tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false
+        };
+        layout[yName] = {
+            title: isLeft ? { text:'Height (km)', font:{color:'#aaa',size:fontSize.axis} } : undefined,
+            tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false
+        };
+    }
+
+    el.style.display = 'block';
+    _lastCompJson = json; _lastCompType = 'cfad_multi';
+    el.innerHTML = '<div id="comp-cfad-chart" style="width:100%;height:820px;border-radius:8px;overflow:hidden;"></div>' + _buildCompToolbar();
+    Plotly.newPlot('comp-cfad-chart', traces, layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
 }
 
 function generateCompositeQuadMean() {
