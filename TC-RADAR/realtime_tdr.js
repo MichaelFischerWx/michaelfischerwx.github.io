@@ -93,6 +93,7 @@
         _rtVisible = !_rtVisible;
 
         if (_rtVisible) {
+            gtag('event', 'tab_click', { tab_name: 'real_time' });
             // Hide archive, show real-time
             archiveSections.forEach(function (el) { el.style.display = 'none'; });
             section.style.display = 'block';
@@ -114,6 +115,7 @@
     };
 
     window.showArchiveTab = function () {
+        gtag('event', 'tab_click', { tab_name: 'archive' });
         if (_rtVisible) toggleRealtimeTab();
     };
 

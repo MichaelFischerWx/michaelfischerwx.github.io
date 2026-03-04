@@ -1677,6 +1677,7 @@ function initEnvOverlay() {
 }
 
 function toggleEnvOverlay() {
+    gtag('event', 'tab_click', { tab_name: 'environment_era5' });
     // Ensure Plotly is loaded for ERA5 visualizations
     if (typeof Plotly === 'undefined') {
         ensurePlotly(function() { toggleEnvOverlay(); });
@@ -5456,6 +5457,7 @@ function _injectCompositeStyles() {
 }
 
 function toggleCompositePanel() {
+    gtag('event', 'tab_click', { tab_name: 'composites' });
     initCompositePanel();
     _injectCompositeStyles();
     var panel = document.getElementById('composite-panel');
