@@ -5399,7 +5399,7 @@ function _wizardGenerateSelected() {
         if (isDiff) generateCompDiffPlanView(); else generateCompositePlanView();
     }
     if (document.getElementById('wiz-chk-cfad') && document.getElementById('wiz-chk-cfad').checked) {
-        generateCompositeCFAD();
+        if (isDiff) generateCompDiffCFAD(); else generateCompositeCFAD();
     }
 
     // Environment outputs
@@ -7600,6 +7600,364 @@ function _renderDiffPlanView(targetId, diffJson, jsonA, jsonB, filtersA, filters
     var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) + diffVmaxNote +
                  '<br>\u0394 Plan View @ ' + levelKm + ' km: ' + varInfoA.display_name + dtypeLabel + normLabel + shearLabel;
     buildPvPlot('comp-diff-pv-d', diffJson.plan_view, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, diffVarInfo.units, diffJson);
+}
+
+// ── CFAD Difference ──
+
+function generateCompDiffCFAD() {
+    var filtersA = _getCompositeFilters();
+    var filtersB = _getCompGroupBFilters();
+    var variable = document.getElementById('comp-var').value;
+    var dataType = document.getElementById('comp-dtype').value;
+    var _crp = document.getElementById('comp-result-placeholder') || document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
+    _showCompStatus('loading', 'Computing CFAD difference (A\u2212B)\u2026');
+
+    // Gather CFAD options (shared for A and B)
+    var binWidth = parseFloat((document.getElementById('cfad-bin-width') || {}).value) || 0;
+    var nBins = parseInt((document.getElementById('cfad-n-bins') || {}).value, 10) || 20;
+    var binMinVal = (document.getElementById('cfad-bin-min') || {}).value;
+    var binMaxVal = (document.getElementById('cfad-bin-max') || {}).value;
+    var normalise = (document.getElementById('cfad-normalise') || {}).value || 'height';
+    var minRadius = parseFloat((document.getElementById('cfad-min-radius') || {}).value) || 0;
+    var maxRadius = parseFloat((document.getElementById('cfad-max-radius') || {}).value) || 200;
+    var useRmw = !!(document.getElementById('cfad-use-rmw') || {}).checked;
+    var quadrants = _cfadGetSelectedQuadrants();
+    var isMulti = quadrants.length === 1 && quadrants[0] === 'MULTI';
+
+    var cfadQS = '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType +
+        '&min_radius=' + minRadius + '&max_radius=' + maxRadius + '&normalise=' + encodeURIComponent(normalise) +
+        '&n_bins=' + nBins;
+    if (useRmw) cfadQS += '&use_rmw=true';
+    if (binWidth > 0) cfadQS += '&bin_width=' + binWidth;
+    if (binMinVal !== '' && binMinVal !== undefined && !isNaN(parseFloat(binMinVal))) cfadQS += '&bin_min=' + parseFloat(binMinVal);
+    if (binMaxVal !== '' && binMaxVal !== undefined && !isNaN(parseFloat(binMaxVal))) cfadQS += '&bin_max=' + parseFloat(binMaxVal);
+    if (isMulti) {
+        cfadQS += '&quadrants=MULTI';
+    } else if (quadrants.length > 0) {
+        cfadQS += '&quadrants=' + encodeURIComponent(quadrants.join(','));
+    }
+
+    var urlA = API_BASE + '/composite/cfad?' + _compositeQueryString(filtersA) + cfadQS;
+    var urlB = API_BASE + '/composite/cfad?' + _compositeQueryString(filtersB) + cfadQS;
+
+    var jsonA;
+    _fetchCompositeStream(urlA, 'Group A CFAD').then(function(result) {
+        jsonA = result;
+        _showCompStatus('loading', 'Group A done (' + jsonA.n_cases + ' cases). Computing Group B\u2026');
+        return _fetchCompositeStream(urlB, 'Group B CFAD');
+    }).then(function(jsonB) {
+        _showCompStatus('success', '\u2713 CFAD difference computed: A (' + jsonA.n_cases + ') \u2212 B (' + jsonB.n_cases + ')');
+        _updateBadgeFromResult(jsonA.n_cases);
+
+        if (jsonA.multi && jsonB.multi) {
+            _renderDiffCFADMulti('comp-result-cfad', jsonA, jsonB, filtersA, filtersB);
+        } else {
+            _renderDiffCFAD('comp-result-cfad', jsonA, jsonB, filtersA, filtersB);
+        }
+    }).catch(function(err) {
+        _showCompStatus('error', '\u2717 ' + (err.message || String(err)));
+    });
+}
+
+function _buildCfadHeatmap(plotData, binCenters, heightKm, zmin, zmax, colorscale, cbar, xRef, yRef, varInfo, hoverSuffix, customData, showScale) {
+    var trace = {
+        z: plotData, x: binCenters, y: heightKm, type: 'heatmap',
+        colorscale: colorscale, zmin: zmin, zmax: zmax,
+        xaxis: xRef || 'x', yaxis: yRef || 'y',
+        showscale: !!showScale, hoverongaps: false
+    };
+    if (cbar) trace.colorbar = cbar;
+    if (customData) {
+        trace.customdata = customData;
+        trace.hovertemplate = varInfo.display_name + ': %{x:.1f} ' + varInfo.units +
+            '<br>Height: %{y:.1f} km<br>Frequency: %{customdata:.3f} ' + hoverSuffix + '<extra></extra>';
+    } else {
+        trace.hovertemplate = varInfo.display_name + ': %{x:.1f} ' + varInfo.units +
+            '<br>Height: %{y:.1f} km<br>Frequency: %{z:.2f} ' + hoverSuffix + '<extra></extra>';
+    }
+    return trace;
+}
+
+function _cfadApplyLog(rawData, zMinPos) {
+    var plotData = [];
+    for (var h = 0; h < rawData.length; h++) {
+        var row = [];
+        for (var b = 0; b < rawData[h].length; b++) {
+            var val = rawData[h][b];
+            row.push((val === null || val <= 0) ? null : Math.log10(val));
+        }
+        plotData.push(row);
+    }
+    return plotData;
+}
+
+function _renderDiffCFAD(targetId, jsonA, jsonB, filtersA, filtersB) {
+    var el = document.getElementById(targetId); if (!el) return;
+    var binCenters = jsonA.bin_centers;
+    var heightKm = jsonA.height_km;
+    var varInfo = jsonA.variable;
+    var normLabel = jsonA.norm_label;
+    var cfadColorscale = jsonA.cfad_colorscale || 'RdYlBu';
+    var useLog = !!(document.getElementById('cfad-log-scale') || {}).checked;
+    var fontSize = { title:13, axis:11, tick:9, cbar:11, cbarTick:9, hover:12 };
+
+    // Compute difference (no log for diff — subtract raw percentages)
+    var diffData = _subtractArrays2D(jsonA.cfad, jsonB.cfad);
+    var symRange = _symmetricRange(diffData);
+
+    // For groups A and B, find shared z range
+    var gZmax = 0, gZminPos = Infinity;
+    [jsonA.cfad, jsonB.cfad].forEach(function(data) {
+        for (var h = 0; h < data.length; h++) {
+            for (var b = 0; b < data[h].length; b++) {
+                var v = data[h][b];
+                if (v !== null && v > gZmax) gZmax = v;
+                if (v !== null && v > 0 && v < gZminPos) gZminPos = v;
+            }
+        }
+    });
+    if (gZmax === 0) gZmax = 1;
+    if (gZminPos === Infinity) gZminPos = 0.001;
+
+    // Determine A/B plot params
+    var plotZmin, plotZmax, cbarTitle;
+    var cbarTickVals, cbarTickText;
+    if (useLog) {
+        plotZmin = Math.log10(Math.max(gZminPos * 0.5, 1e-6));
+        plotZmax = Math.log10(gZmax);
+        cbarTickVals = []; cbarTickText = [];
+        for (var p = Math.floor(plotZmin); p <= Math.ceil(plotZmax); p++) {
+            var tv = Math.pow(10, p);
+            cbarTickVals.push(p);
+            if (normLabel === 'count') cbarTickText.push(tv >= 1 ? String(Math.round(tv)) : tv.toExponential(0));
+            else if (tv >= 1) cbarTickText.push(tv.toFixed(0) + '%');
+            else if (tv >= 0.1) cbarTickText.push(tv.toFixed(1) + '%');
+            else if (tv >= 0.01) cbarTickText.push(tv.toFixed(2) + '%');
+            else cbarTickText.push(tv.toExponential(0) + '%');
+        }
+        cbarTitle = normLabel + ' (log\u2081\u2080)';
+    } else {
+        plotZmin = 0; plotZmax = gZmax;
+        cbarTitle = normLabel;
+    }
+
+    var plotBg = '#0a1628';
+    var radialNote = '';
+    if (jsonA.radial_domain) {
+        var rUnit = jsonA.use_rmw ? ' R/RMW' : ' km';
+        radialNote = ' | R=' + jsonA.radial_domain[0] + '\u2013' + jsonA.radial_domain[1] + rUnit;
+    }
+    var quadNote = '';
+    if (jsonA.quadrants && jsonA.quadrants.length > 0) quadNote = ' | ' + jsonA.quadrants.join('+');
+    var binNote = ' | Bin=' + jsonA.bin_width + ' ' + varInfo.units;
+
+    // Build 3 panels: A, B, Difference
+    var panels = ['A', 'B', 'Diff'];
+    var panelHtml = '';
+    for (var pi = 0; pi < 3; pi++) {
+        panelHtml += '<div id="comp-diff-cfad-' + panels[pi].toLowerCase() + '" style="width:100%;height:460px;border-radius:8px;overflow:hidden;margin-bottom:8px;"></div>';
+    }
+
+    el.style.display = 'block';
+    _lastCompJson = jsonA; _lastCompType = 'cfad_diff';
+    el.innerHTML = panelHtml + _buildCompToolbar();
+
+    // Render A
+    var dataA = useLog ? _cfadApplyLog(jsonA.cfad) : jsonA.cfad;
+    var cbarA = { title:{text:cbarTitle,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:12, len:0.85 };
+    if (useLog && cbarTickVals) { cbarA.tickvals = cbarTickVals; cbarA.ticktext = cbarTickText; }
+    var trA = _buildCfadHeatmap(dataA, binCenters, heightKm, plotZmin, plotZmax, cfadColorscale, cbarA, 'x', 'y', varInfo, normLabel, useLog ? jsonA.cfad : null, true);
+    var titleA = '<span style="color:#60a5fa;">Group A</span> (N=' + jsonA.n_cases + ')' + binNote + radialNote + quadNote;
+    var layA = { title:{text:titleA,font:{color:'#e5e7eb',size:fontSize.title},y:0.97,x:0.5,xanchor:'center'}, paper_bgcolor:plotBg, plot_bgcolor:plotBg,
+        xaxis:{title:{text:varInfo.display_name+' ('+varInfo.units+')',font:{color:'#aaa',size:fontSize.axis}},tickfont:{color:'#aaa',size:fontSize.tick},gridcolor:'rgba(255,255,255,0.04)',zeroline:false},
+        yaxis:{title:{text:'Height (km)',font:{color:'#aaa',size:fontSize.axis}},tickfont:{color:'#aaa',size:fontSize.tick},gridcolor:'rgba(255,255,255,0.04)',zeroline:false},
+        margin:{l:55,r:24,t:80,b:50}, hoverlabel:{bgcolor:'#1f2937',font:{color:'#e5e7eb',size:fontSize.hover}}, showlegend:false };
+    Plotly.newPlot('comp-diff-cfad-a', [trA], layA, {responsive:true,displayModeBar:false});
+
+    // Render B
+    var dataB = useLog ? _cfadApplyLog(jsonB.cfad) : jsonB.cfad;
+    var cbarB = { title:{text:cbarTitle,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:12, len:0.85 };
+    if (useLog && cbarTickVals) { cbarB.tickvals = cbarTickVals; cbarB.ticktext = cbarTickText; }
+    var trB = _buildCfadHeatmap(dataB, binCenters, heightKm, plotZmin, plotZmax, cfadColorscale, cbarB, 'x', 'y', varInfo, normLabel, useLog ? jsonB.cfad : null, true);
+    var titleB = '<span style="color:#f59e0b;">Group B</span> (N=' + jsonB.n_cases + ')' + binNote + radialNote + quadNote;
+    var layB = JSON.parse(JSON.stringify(layA));
+    layB.title.text = titleB;
+    Plotly.newPlot('comp-diff-cfad-b', [trB], layB, {responsive:true,displayModeBar:false});
+
+    // Render Difference
+    var cbarD = { title:{text:'\u0394 ' + normLabel,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:12, len:0.85 };
+    var trD = _buildCfadHeatmap(diffData, binCenters, heightKm, -symRange, symRange, _DIFF_COLORSCALE, cbarD, 'x', 'y', varInfo, normLabel, null, true);
+    var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) +
+        '<br>\u0394 CFAD: ' + varInfo.display_name + binNote + radialNote + quadNote;
+    var layD = JSON.parse(JSON.stringify(layA));
+    layD.title.text = titleD;
+    Plotly.newPlot('comp-diff-cfad-diff', [trD], layD, {responsive:true,displayModeBar:true,displaylogo:false,modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines']});
+}
+
+function _renderDiffCFADMulti(targetId, jsonA, jsonB, filtersA, filtersB) {
+    var el = document.getElementById(targetId); if (!el) return;
+    var binCenters = jsonA.bin_centers;
+    var heightKm = jsonA.height_km;
+    var varInfo = jsonA.variable;
+    var normLabel = jsonA.norm_label;
+    var cfadColorscale = jsonA.cfad_colorscale || 'RdYlBu';
+    var useLog = !!(document.getElementById('cfad-log-scale') || {}).checked;
+    var fontSize = { title:12, axis:10, tick:9, cbar:10, cbarTick:9, hover:11 };
+    var quadOrder = ['USL', 'USR', 'DSL', 'DSR'];
+    var quadLabels = { 'USL': 'Upshear Left', 'USR': 'Upshear Right', 'DSL': 'Downshear Left', 'DSR': 'Downshear Right' };
+
+    // Compute differences per quadrant
+    var diffMulti = {};
+    for (var qi = 0; qi < quadOrder.length; qi++) {
+        var qn = quadOrder[qi];
+        if (jsonA.cfad_multi[qn] && jsonB.cfad_multi[qn]) {
+            diffMulti[qn] = _subtractArrays2D(jsonA.cfad_multi[qn], jsonB.cfad_multi[qn]);
+        }
+    }
+
+    // Global z-range for A/B panels
+    var gZmax = 0, gZminPos = Infinity;
+    [jsonA.cfad_multi, jsonB.cfad_multi].forEach(function(multi) {
+        for (var qi2 = 0; qi2 < quadOrder.length; qi2++) {
+            var data = multi[quadOrder[qi2]];
+            if (!data) continue;
+            for (var h = 0; h < data.length; h++) {
+                for (var b = 0; b < data[h].length; b++) {
+                    var v = data[h][b];
+                    if (v !== null && v > gZmax) gZmax = v;
+                    if (v !== null && v > 0 && v < gZminPos) gZminPos = v;
+                }
+            }
+        }
+    });
+    if (gZmax === 0) gZmax = 1;
+    if (gZminPos === Infinity) gZminPos = 0.001;
+
+    // Symmetric range for diff
+    var allDiffVals = [];
+    for (var qi3 = 0; qi3 < quadOrder.length; qi3++) {
+        var dd = diffMulti[quadOrder[qi3]];
+        if (!dd) continue;
+        for (var h2 = 0; h2 < dd.length; h2++) {
+            for (var b2 = 0; b2 < dd[h2].length; b2++) {
+                if (dd[h2][b2] !== null) allDiffVals.push(dd[h2][b2]);
+            }
+        }
+    }
+    var symRange = _symmetricRange([allDiffVals]);
+
+    var plotZmin, plotZmax, cbarTitle, cbarTickVals, cbarTickText;
+    if (useLog) {
+        plotZmin = Math.log10(Math.max(gZminPos * 0.5, 1e-6));
+        plotZmax = Math.log10(gZmax);
+        cbarTickVals = []; cbarTickText = [];
+        for (var p = Math.floor(plotZmin); p <= Math.ceil(plotZmax); p++) {
+            var tv = Math.pow(10, p);
+            cbarTickVals.push(p);
+            if (normLabel === 'count') cbarTickText.push(tv >= 1 ? String(Math.round(tv)) : tv.toExponential(0));
+            else if (tv >= 1) cbarTickText.push(tv.toFixed(0) + '%');
+            else if (tv >= 0.1) cbarTickText.push(tv.toFixed(1) + '%');
+            else cbarTickText.push(tv.toExponential(0) + '%');
+        }
+        cbarTitle = normLabel + ' (log\u2081\u2080)';
+    } else {
+        plotZmin = 0; plotZmax = gZmax;
+        cbarTitle = normLabel;
+    }
+
+    var plotBg = '#0a1628';
+    var radialNote = '';
+    if (jsonA.radial_domain) {
+        var rUnit = jsonA.use_rmw ? ' R/RMW' : ' km';
+        radialNote = ' | R=' + jsonA.radial_domain[0] + '\u2013' + jsonA.radial_domain[1] + rUnit;
+    }
+    var binNote = ' | Bin=' + jsonA.bin_width + ' ' + varInfo.units;
+
+    // Create 3 chart containers: A (2x2), B (2x2), Diff (2x2)
+    el.style.display = 'block';
+    _lastCompJson = jsonA; _lastCompType = 'cfad_diff_multi';
+    el.innerHTML =
+        '<div id="comp-diff-cfadm-a" style="width:100%;height:720px;border-radius:8px;overflow:hidden;margin-bottom:8px;"></div>' +
+        '<div id="comp-diff-cfadm-b" style="width:100%;height:720px;border-radius:8px;overflow:hidden;margin-bottom:8px;"></div>' +
+        '<div id="comp-diff-cfadm-diff" style="width:100%;height:720px;border-radius:8px;overflow:hidden;margin-bottom:8px;"></div>' +
+        _buildCompToolbar();
+
+    // Helper: build 2x2 subplot for a set of 4 quadrant CFADs
+    function build2x2(chartId, multiData, titleText, colorscale, zMin, zMax, cbarObj, isLog, isDiff) {
+        var traces = [];
+        var anns = [];
+        for (var si = 0; si < quadOrder.length; si++) {
+            var qk = quadOrder[si];
+            var raw = multiData[qk];
+            if (!raw) continue;
+            var pData = (isLog && !isDiff) ? _cfadApplyLog(raw) : raw;
+            var cData = (isLog && !isDiff) ? raw : null;
+            var xR = 'x' + (si === 0 ? '' : String(si + 1));
+            var yR = 'y' + (si === 0 ? '' : String(si + 1));
+            var showCbar = (si === 1);
+            var cb = showCbar ? JSON.parse(JSON.stringify(cbarObj)) : null;
+            var tr = {
+                z: pData, x: binCenters, y: heightKm, type: 'heatmap',
+                colorscale: colorscale, zmin: zMin, zmax: zMax,
+                xaxis: xR, yaxis: yR, showscale: showCbar, hoverongaps: false
+            };
+            if (cb) { cb.x = 1.02; tr.colorbar = cb; }
+            if (cData) {
+                tr.customdata = cData;
+                tr.hovertemplate = '<b>' + quadLabels[qk] + '</b><br>' + varInfo.display_name + ': %{x:.1f} ' + varInfo.units +
+                    '<br>Height: %{y:.1f} km<br>Freq: %{customdata:.3f} ' + normLabel + '<extra></extra>';
+            } else {
+                tr.hovertemplate = '<b>' + quadLabels[qk] + '</b><br>' + varInfo.display_name + ': %{x:.1f} ' + varInfo.units +
+                    '<br>Height: %{y:.1f} km<br>Freq: %{z:.2f} ' + (isDiff ? '\u0394' : '') + normLabel + '<extra></extra>';
+            }
+            traces.push(tr);
+            anns.push({
+                text: '<b>' + quadLabels[qk] + '</b>', showarrow: false,
+                xref: xR + ' domain', yref: yR + ' domain',
+                x: 0.5, y: 1.08, font: {size:11, color:'#e5e7eb'}, xanchor:'center', yanchor:'bottom'
+            });
+        }
+        var layout = {
+            title: { text: titleText, font:{color:'#e5e7eb',size:fontSize.title}, y:0.98, x:0.5, xanchor:'center' },
+            paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+            grid: { rows:2, columns:2, pattern:'independent', xgap:0.08, ygap:0.12 },
+            annotations: anns,
+            margin: { l:55, r:60, t:100, b:50 },
+            hoverlabel: { bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
+            showlegend: false
+        };
+        var axNames = [['xaxis','yaxis'],['xaxis2','yaxis2'],['xaxis3','yaxis3'],['xaxis4','yaxis4']];
+        for (var ai = 0; ai < axNames.length; ai++) {
+            var isBottom = ai >= 2, isLeft = ai % 2 === 0;
+            layout[axNames[ai][0]] = {
+                title: isBottom ? {text:varInfo.display_name+' ('+varInfo.units+')',font:{color:'#aaa',size:fontSize.axis}} : undefined,
+                tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false
+            };
+            layout[axNames[ai][1]] = {
+                title: isLeft ? {text:'Height (km)',font:{color:'#aaa',size:fontSize.axis}} : undefined,
+                tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false
+            };
+        }
+        Plotly.newPlot(chartId, traces, layout, {responsive:true, displayModeBar: isDiff, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines']});
+    }
+
+    // Render A
+    var cbarAB = { title:{text:cbarTitle,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:12, len:0.9 };
+    if (useLog && cbarTickVals) { cbarAB.tickvals = cbarTickVals; cbarAB.ticktext = cbarTickText; }
+    build2x2('comp-diff-cfadm-a', jsonA.cfad_multi,
+        '<span style="color:#60a5fa;">Group A</span> (N=' + jsonA.n_cases + ') | 4-Quadrant CFAD' + binNote + radialNote,
+        cfadColorscale, plotZmin, plotZmax, cbarAB, useLog, false);
+
+    // Render B
+    build2x2('comp-diff-cfadm-b', jsonB.cfad_multi,
+        '<span style="color:#f59e0b;">Group B</span> (N=' + jsonB.n_cases + ') | 4-Quadrant CFAD' + binNote + radialNote,
+        cfadColorscale, plotZmin, plotZmax, cbarAB, useLog, false);
+
+    // Render Difference
+    var cbarDiff = { title:{text:'\u0394 ' + normLabel,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:12, len:0.9 };
+    build2x2('comp-diff-cfadm-diff', diffMulti,
+        _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) + '<br>\u0394 4-Quadrant CFAD: ' + varInfo.display_name + binNote + radialNote,
+        _DIFF_COLORSCALE, -symRange, symRange, cbarDiff, false, true);
 }
 
 // ══════════════════════════════════════════════════════════════
