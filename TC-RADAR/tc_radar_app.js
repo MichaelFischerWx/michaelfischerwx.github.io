@@ -6493,8 +6493,9 @@ function renderCompositeCFADMultiInto(targetId, json, filters) {
     var useLog = !!(document.getElementById('cfad-log-scale') || {}).checked;
     var fontSize = { title:13, axis:11, tick:9, cbar:11, cbarTick:9, hover:12 };
 
-    // Quadrant layout: 2x2 grid — USL USR on top, DSL DSR on bottom
-    var quadOrder = ['USL', 'USR', 'DSL', 'DSR'];
+    // Quadrant layout: 2x2 grid — shear vector points right
+    // Top row: USL (left), DSL (right)  |  Bottom row: USR (left), DSR (right)
+    var quadOrder = ['USL', 'DSL', 'USR', 'DSR'];
     var quadLabels = { 'USL': 'Upshear Left', 'USR': 'Upshear Right', 'DSL': 'Downshear Left', 'DSR': 'Downshear Right' };
 
     // Find global min/max across all quadrants for consistent color scaling
@@ -7803,7 +7804,8 @@ function _renderDiffCFADMulti(targetId, jsonA, jsonB, filtersA, filtersB) {
     var cfadColorscale = jsonA.cfad_colorscale || 'RdYlBu';
     var useLog = !!(document.getElementById('cfad-log-scale') || {}).checked;
     var fontSize = { title:12, axis:10, tick:9, cbar:10, cbarTick:9, hover:11 };
-    var quadOrder = ['USL', 'USR', 'DSL', 'DSR'];
+    // Shear vector points right: USL/DSL top, USR/DSR bottom
+    var quadOrder = ['USL', 'DSL', 'USR', 'DSR'];
     var quadLabels = { 'USL': 'Upshear Left', 'USR': 'Upshear Right', 'DSL': 'Downshear Left', 'DSR': 'Downshear Right' };
 
     // Compute differences per quadrant
