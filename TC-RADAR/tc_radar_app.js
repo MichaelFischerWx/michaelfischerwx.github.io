@@ -5996,12 +5996,21 @@ function _downloadCompCSV() {
         }
     }
 
-    // Append case list
+    // Append case list(s)
     if (json.case_list && json.case_list.length > 0) {
         lines.push('');
-        lines.push('# Cases used in composite');
+        var groupLabel = json._isDiff ? '# Cases in Group A' : '# Cases used in composite';
+        lines.push(groupLabel);
         lines.push('case_index,storm_name,datetime,vmax_kt');
         json.case_list.forEach(function(c) {
+            lines.push([c.case_index, c.storm_name, c.datetime, c.vmax_kt !== null ? c.vmax_kt : ''].join(','));
+        });
+    }
+    if (json._isDiff && json.case_list_b && json.case_list_b.length > 0) {
+        lines.push('');
+        lines.push('# Cases in Group B');
+        lines.push('case_index,storm_name,datetime,vmax_kt');
+        json.case_list_b.forEach(function(c) {
             lines.push([c.case_index, c.storm_name, c.datetime, c.vmax_kt !== null ? c.vmax_kt : ''].join(','));
         });
     }
@@ -6011,16 +6020,46 @@ function _downloadCompCSV() {
     _triggerDownload(lines.join('\n'), filename, 'text/csv');
 }
 
+var _caseListShowingGroup = 'A';  // Track which group is visible in diff mode
+
 function _toggleCompCaseList() {
     var el = document.getElementById('comp-case-list');
     if (!el || !_lastCompJson) return;
     if (el.style.display !== 'none') { el.style.display = 'none'; return; }
-    var caseList = _lastCompJson.case_list || [];
-    if (caseList.length === 0) { el.innerHTML = '<div class="comp-cl-empty">No case list available.</div>'; el.style.display = 'block'; return; }
-    // Build table
-    var html = '<div class="comp-cl-header">' +
-        '<span class="comp-cl-title">\uD83D\uDCCB ' + caseList.length + ' cases used in composite</span>' +
-        '<button class="comp-tool-btn comp-cl-copy" onclick="_copyCompCaseIndices()" title="Copy case indices to clipboard">\uD83D\uDCCB Copy Indices</button>' +
+    _caseListShowingGroup = 'A';
+    _renderCompCaseList();
+}
+
+function _renderCompCaseList() {
+    var el = document.getElementById('comp-case-list');
+    if (!el || !_lastCompJson) return;
+    var isDiff = !!_lastCompJson._isDiff;
+    var group = _caseListShowingGroup;
+    var caseList = (isDiff && group === 'B') ? (_lastCompJson.case_list_b || []) : (_lastCompJson.case_list || []);
+
+    if (caseList.length === 0) {
+        el.innerHTML = '<div class="comp-cl-empty">No case list available for Group ' + group + '.</div>';
+        el.style.display = 'block';
+        return;
+    }
+
+    var html = '<div class="comp-cl-header">';
+    // Add A/B toggle buttons in diff mode
+    if (isDiff) {
+        var nA = (_lastCompJson.case_list || []).length;
+        var nB = (_lastCompJson.case_list_b || []).length;
+        var activeA = group === 'A' ? 'background:rgba(96,165,250,0.2);border-color:rgba(96,165,250,0.5);color:#60a5fa;' : '';
+        var activeB = group === 'B' ? 'background:rgba(245,158,11,0.2);border-color:rgba(245,158,11,0.5);color:#f59e0b;' : '';
+        html += '<div style="display:flex;gap:4px;margin-right:8px;">' +
+            '<button onclick="_switchCaseListGroup(\'A\')" style="padding:3px 10px;font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,0.15);border-radius:4px;cursor:pointer;font-family:\'JetBrains Mono\',monospace;' + activeA + '">Group A (' + nA + ')</button>' +
+            '<button onclick="_switchCaseListGroup(\'B\')" style="padding:3px 10px;font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,0.15);border-radius:4px;cursor:pointer;font-family:\'JetBrains Mono\',monospace;' + activeB + '">Group B (' + nB + ')</button>' +
+        '</div>';
+        var groupColor = group === 'A' ? '#60a5fa' : '#f59e0b';
+        html += '<span class="comp-cl-title" style="color:' + groupColor + ';">\uD83D\uDCCB Group ' + group + ': ' + caseList.length + ' cases</span>';
+    } else {
+        html += '<span class="comp-cl-title">\uD83D\uDCCB ' + caseList.length + ' cases used in composite</span>';
+    }
+    html += '<button class="comp-tool-btn comp-cl-copy" onclick="_copyCompCaseIndices()" title="Copy case indices to clipboard">\uD83D\uDCCB Copy Indices</button>' +
     '</div>' +
     '<div class="comp-cl-scroll"><table class="comp-cl-table"><thead><tr>' +
         '<th>Index</th><th>Storm</th><th>Date/Time</th><th>V<sub>max</sub> (kt)</th>' +
@@ -6036,9 +6075,17 @@ function _toggleCompCaseList() {
     el.style.display = 'block';
 }
 
+function _switchCaseListGroup(group) {
+    _caseListShowingGroup = group;
+    _renderCompCaseList();
+}
+
 function _copyCompCaseIndices() {
-    if (!_lastCompJson || !_lastCompJson.case_list) return;
-    var indices = _lastCompJson.case_list.map(function(c) { return c.case_index; });
+    if (!_lastCompJson) return;
+    var caseList = (_lastCompJson._isDiff && _caseListShowingGroup === 'B')
+        ? (_lastCompJson.case_list_b || [])
+        : (_lastCompJson.case_list || []);
+    var indices = caseList.map(function(c) { return c.case_index; });
     navigator.clipboard.writeText(indices.join(', ')).then(function() {
         var btn = document.querySelector('.comp-cl-copy');
         if (btn) { var orig = btn.textContent; btn.textContent = '\u2713 Copied!'; setTimeout(function() { btn.textContent = orig; }, 1500); }
@@ -7051,6 +7098,7 @@ function generateCompDiffAzMean() {
             n_cases: jsonA.n_cases,
             n_with_rmw: jsonA.n_with_rmw,
             case_list: jsonA.case_list,
+            case_list_b: jsonB.case_list,
             _isDiff: true,
             _nA: jsonA.n_cases,
             _nB: jsonB.n_cases,
@@ -7149,6 +7197,7 @@ function generateCompDiffQuadMean() {
             n_with_shear: jsonA.n_with_shear,
             n_with_shear_and_rmw: jsonA.n_with_shear_and_rmw,
             case_list: jsonA.case_list,
+            case_list_b: jsonB.case_list,
             _isDiff: true,
             _nA: jsonA.n_cases,
             _nB: jsonB.n_cases,
@@ -7459,6 +7508,7 @@ function generateCompDiffPlanView() {
             coverage_min: jsonA.coverage_min,
             n_cases: jsonA.n_cases,
             case_list: jsonA.case_list,
+            case_list_b: jsonB.case_list,
             _isDiff: true,
             _nA: jsonA.n_cases,
             _nB: jsonB.n_cases,
@@ -7791,6 +7841,7 @@ function _renderDiffCFAD(targetId, jsonA, jsonB, filtersA, filtersB) {
     }
 
     el.style.display = 'block';
+    jsonA._isDiff = true; jsonA.case_list_b = jsonB.case_list; jsonA._nA = jsonA.n_cases; jsonA._nB = jsonB.n_cases;
     _lastCompJson = jsonA; _lastCompType = 'cfad_diff';
     el.innerHTML = panelHtml + _buildCompToolbar();
 
@@ -7933,6 +7984,7 @@ function _renderDiffCFADMulti(targetId, jsonA, jsonB, filtersA, filtersB) {
 
     // Create 3 chart containers: A (2x2), B (2x2), Diff (2x2)
     el.style.display = 'block';
+    jsonA._isDiff = true; jsonA.case_list_b = jsonB.case_list; jsonA._nA = jsonA.n_cases; jsonA._nB = jsonB.n_cases;
     _lastCompJson = jsonA; _lastCompType = 'cfad_diff_multi';
     el.innerHTML =
         '<div id="comp-diff-cfadm-a" style="width:100%;height:720px;border-radius:8px;overflow:hidden;margin-bottom:8px;"></div>' +
