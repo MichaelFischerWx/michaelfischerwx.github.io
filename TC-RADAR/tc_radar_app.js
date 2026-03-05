@@ -3916,6 +3916,7 @@ function renderVPScatterInto(targetId, json, fullsize) {
         var vhs = withVF.map(function(p) { return p.vortex_height; });
         var vws = withVF.map(function(p) { return p.vortex_width; });
         var dvs = withVF.map(function(p) { return p[colorBy] || 0; });
+        var vmaxs = withVF.map(function(p) { return p.vmax_kt != null ? p.vmax_kt : ''; });
         var labels = withVF.map(function(p) { return p.storm_name + ' ' + p.datetime; });
 
         // ── Left panel: VP vs Vortex Favorability (xaxis, yaxis) ──
@@ -3923,7 +3924,8 @@ function renderVPScatterInto(targetId, json, fullsize) {
             x: vps, y: vfs, mode: 'markers', type: 'scatter',
             xaxis: 'x', yaxis: 'y',
             marker: buildMarker(dvs, false),
-            text: labels, hovertemplate: '<b>%{text}</b><br>VP: %{x:.1f}<br>Vortex Fav: %{y:.2f}<br>\u0394Vmax: %{marker.color:.0f} kt<extra></extra>',
+            text: labels, customdata: vmaxs,
+            hovertemplate: '<b>%{text}</b><br>Vmax: %{customdata} kt<br>VP: %{x:.1f}<br>Vortex Fav: %{y:.2f}<br>\u0394Vmax: %{marker.color:.0f} kt<extra></extra>',
             name: 'Cases', legendgroup: 'cases'
         });
 
@@ -3932,7 +3934,8 @@ function renderVPScatterInto(targetId, json, fullsize) {
             x: vhs, y: vws, mode: 'markers', type: 'scatter',
             xaxis: 'x2', yaxis: 'y2',
             marker: buildMarker(dvs, true),
-            text: labels, hovertemplate: '<b>%{text}</b><br>Height: %{x:.2f}<br>Width: %{y:.2f}<br>\u0394Vmax: %{marker.color:.0f} kt<extra></extra>',
+            text: labels, customdata: vmaxs,
+            hovertemplate: '<b>%{text}</b><br>Vmax: %{customdata} kt<br>Height: %{x:.2f}<br>Width: %{y:.2f}<br>\u0394Vmax: %{marker.color:.0f} kt<extra></extra>',
             name: 'Cases', legendgroup: 'cases', showlegend: false
         });
     }
@@ -4007,6 +4010,7 @@ function renderVPScatterInto(targetId, json, fullsize) {
     if (curCase) {
         var curLabel = curCase.storm_name + ' ' + curCase.datetime;
         var curDv = curCase[colorBy] || 0;
+        var curVmax = curCase.vmax_kt != null ? curCase.vmax_kt + ' kt' : 'N/A';
         var starStyle = {
             symbol: 'star', size: 18,
             color: '#facc15', opacity: 1,
@@ -4019,7 +4023,7 @@ function renderVPScatterInto(targetId, json, fullsize) {
             xaxis: 'x', yaxis: 'y',
             marker: starStyle,
             text: [curLabel],
-            hovertemplate: '<b>%{text} \u2605</b><br>VP: %{x:.1f}<br>Vortex Fav: %{y:.2f}<br>\u0394Vmax: ' + curDv + ' kt<extra></extra>',
+            hovertemplate: '<b>%{text} \u2605</b><br>Vmax: ' + curVmax + '<br>VP: %{x:.1f}<br>Vortex Fav: %{y:.2f}<br>\u0394Vmax: ' + curDv + ' kt<extra></extra>',
             name: '\u2605 Current', legendgroup: 'current', showlegend: true
         });
         // Right panel
@@ -4030,7 +4034,7 @@ function renderVPScatterInto(targetId, json, fullsize) {
                 xaxis: 'x2', yaxis: 'y2',
                 marker: starStyle,
                 text: [curLabel],
-                hovertemplate: '<b>%{text} \u2605</b><br>Height: %{x:.2f}<br>Width: %{y:.2f}<br>\u0394Vmax: ' + curDv + ' kt<extra></extra>',
+                hovertemplate: '<b>%{text} \u2605</b><br>Vmax: ' + curVmax + '<br>Height: %{x:.2f}<br>Width: %{y:.2f}<br>\u0394Vmax: ' + curDv + ' kt<extra></extra>',
                 name: '\u2605 Current', legendgroup: 'current', showlegend: false
             });
         }
