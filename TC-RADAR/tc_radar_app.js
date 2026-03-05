@@ -3697,9 +3697,16 @@ function _buildHybridXAxis(rHAxis, nInner) {
             if (i === nInner) {
                 tickvals.push(i);
                 ticktext.push('RMW');
-            } else if (Math.abs(km % 20) < 1.5 || Math.abs(km % 20 - 20) < 1.5) {
-                tickvals.push(i);
-                ticktext.push('+' + Math.round(km));
+            } else {
+                // Snap to nearest 20-km mark; only label once per target
+                var target = Math.round(km / 20) * 20;
+                if (target > 0 && Math.abs(km - target) < 2.0) {
+                    var thisLabel = '+' + target;
+                    if (ticktext.length === 0 || ticktext[ticktext.length - 1] !== thisLabel) {
+                        tickvals.push(i);
+                        ticktext.push(thisLabel);
+                    }
+                }
             }
         }
     }
