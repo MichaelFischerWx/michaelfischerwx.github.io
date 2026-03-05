@@ -3619,7 +3619,7 @@ function fetchVPScatter(colorBy) {
     resultDiv.innerHTML = _hurricaneLoadingHTML('Loading VP scatter data\u2026', true);
     if (btn) { btn.disabled = true; btn.textContent = '\u27F3 Loading\u2026'; }
     var url = API_BASE + '/scatter/vp_favorability?data_type=merge&color_by=' + colorBy;
-    fetch(url)
+    fetch(url, { cache: 'no-store' })
         .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
         .then(function(json) { _lastVPScatterJson = json; _lastAzJson = null; _lastHybridAzJson = null; _lastAnomalyAzJson = null; renderVPScatterInto('az-result', json, false); openPlotModal(); })
         .catch(function(err) { resultDiv.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + err.message + '</div>'; })
@@ -3875,53 +3875,83 @@ function renderVPScatterInto(targetId, json, fullsize) {
 
     // Separate points with and without vortex favorability
     var withVF = points.filter(function(p) { return p.vortex_favorability !== null && p.vortex_favorability !== undefined; });
-    var withoutVF = points.filter(function(p) { return p.vortex_favorability === null || p.vortex_favorability === undefined; });
 
     var traces = [];
+    var dvmaxLabel = colorBy === 'dvmax_12h' ? '12-h \u0394Vmax (kt)' : '24-h \u0394Vmax (kt)';
+    var dvmaxColorscale = [
+        [0.0, 'rgb(5,48,97)'], [0.15, 'rgb(33,102,172)'],
+        [0.3, 'rgb(67,147,195)'], [0.4, 'rgb(146,197,222)'],
+        [0.5, 'rgb(247,247,247)'],
+        [0.6, 'rgb(253,219,199)'], [0.7, 'rgb(244,165,130)'],
+        [0.85, 'rgb(214,96,77)'], [1.0, 'rgb(178,24,43)']
+    ];
+
+    // ── Helper: build marker arrays with current-case highlighting ──
+    function buildMarker(dvs, showColorbar, xaxisRef) {
+        var sizes = withVF.map(function(p) { return p.case_index === currentCaseIndex ? 14 : 8; });
+        var lnColors = withVF.map(function(p) { return p.case_index === currentCaseIndex ? '#ffffff' : 'rgba(0,0,0,0.3)'; });
+        var lnWidths = withVF.map(function(p) { return p.case_index === currentCaseIndex ? 2.5 : 0.5; });
+        var m = {
+            size: sizes, color: dvs, colorscale: dvmaxColorscale, cmin: -30, cmax: 30,
+            line: { color: lnColors, width: lnWidths }
+        };
+        if (showColorbar) {
+            m.colorbar = {
+                title: { text: dvmaxLabel, font: { color: '#ccc', size: fontSize.tick } },
+                tickfont: { color: '#ccc', size: fontSize.tick }, thickness: 12, len: 0.85
+            };
+        } else {
+            m.showscale = false;
+        }
+        return m;
+    }
 
     if (withVF.length > 0) {
         var vps = withVF.map(function(p) { return p.vp; });
         var vfs = withVF.map(function(p) { return p.vortex_favorability; });
+        var vhs = withVF.map(function(p) { return p.vortex_height; });
+        var vws = withVF.map(function(p) { return p.vortex_width; });
         var dvs = withVF.map(function(p) { return p[colorBy] || 0; });
         var labels = withVF.map(function(p) { return p.storm_name + ' ' + p.datetime; });
 
-        // Highlight current case
-        var markerSizes = withVF.map(function(p) { return p.case_index === currentCaseIndex ? 14 : 8; });
-        var markerLines = withVF.map(function(p) {
-            return p.case_index === currentCaseIndex ?
-                { color: '#ffffff', width: 2.5 } : { color: 'rgba(0,0,0,0.3)', width: 0.5 };
-        });
-
+        // ── Left panel: VP vs Vortex Favorability (xaxis, yaxis) ──
         traces.push({
             x: vps, y: vfs, mode: 'markers', type: 'scatter',
-            marker: {
-                size: markerSizes, color: dvs,
-                colorscale: [
-                    [0.0, 'rgb(5,48,97)'], [0.15, 'rgb(33,102,172)'],
-                    [0.3, 'rgb(67,147,195)'], [0.4, 'rgb(146,197,222)'],
-                    [0.5, 'rgb(247,247,247)'],
-                    [0.6, 'rgb(253,219,199)'], [0.7, 'rgb(244,165,130)'],
-                    [0.85, 'rgb(214,96,77)'], [1.0, 'rgb(178,24,43)']
-                ],
-                cmin: -30, cmax: 30,
-                colorbar: {
-                    title: { text: colorBy === 'dvmax_12h' ? '12-h \u0394Vmax (kt)' : '24-h \u0394Vmax (kt)',
-                             font: { color: '#ccc', size: fontSize.tick } },
-                    tickfont: { color: '#ccc', size: fontSize.tick }, thickness: 12, len: 0.85
-                },
-                line: { color: markerLines.map(function(l) { return l.color; }),
-                        width: markerLines.map(function(l) { return l.width; }) }
-            },
+            xaxis: 'x', yaxis: 'y',
+            marker: buildMarker(dvs, false),
             text: labels, hovertemplate: '<b>%{text}</b><br>VP: %{x:.1f}<br>Vortex Fav: %{y:.2f}<br>\u0394Vmax: %{marker.color:.0f} kt<extra></extra>',
-            name: 'Cases'
+            name: 'Cases', legendgroup: 'cases'
+        });
+
+        // ── Right panel: Vortex Height vs Vortex Width (xaxis2, yaxis2) ──
+        traces.push({
+            x: vhs, y: vws, mode: 'markers', type: 'scatter',
+            xaxis: 'x2', yaxis: 'y2',
+            marker: buildMarker(dvs, true),
+            text: labels, hovertemplate: '<b>%{text}</b><br>Height: %{x:.2f}<br>Width: %{y:.2f}<br>\u0394Vmax: %{marker.color:.0f} kt<extra></extra>',
+            name: 'Cases', legendgroup: 'cases', showlegend: false
         });
     }
 
-    // 2σ ellipses
+    // ── 2σ ellipses for left panel ──
     var grpColors = { RI: 'rgba(239,68,68,0.6)', SI: 'rgba(251,191,36,0.6)', NI: 'rgba(96,165,250,0.6)' };
+
+    // Compute group stats for height/width from data (not in API ellipses)
+    var hwGroups = { RI: { h: [], w: [] }, SI: { h: [], w: [] }, NI: { h: [], w: [] } };
+    for (var gi = 0; gi < withVF.length; gi++) {
+        var p = withVF[gi];
+        if (p.vortex_height === null || p.vortex_width === null) continue;
+        var dv = p[colorBy] || 0;
+        var gk = dv >= 20 ? 'RI' : (dv > 0 ? 'SI' : 'NI');
+        hwGroups[gk].h.push(p.vortex_height);
+        hwGroups[gk].w.push(p.vortex_width);
+    }
+
     for (var grp in ellipses) {
         var e = ellipses[grp];
         if (!e) continue;
+
+        // Left panel ellipse (VP vs Favorability)
         var ellX = [], ellY = [];
         for (var a = 0; a <= 360; a += 5) {
             var rad = a * Math.PI / 180;
@@ -3930,30 +3960,68 @@ function renderVPScatterInto(targetId, json, fullsize) {
         }
         traces.push({
             x: ellX, y: ellY, mode: 'lines', type: 'scatter',
+            xaxis: 'x', yaxis: 'y',
             line: { color: grpColors[grp] || 'rgba(255,255,255,0.4)', width: 2, dash: 'dot' },
-            name: grp + ' (2\u03c3)', showlegend: true
+            name: grp + ' (2\u03c3)', legendgroup: grp, showlegend: true
         });
-        // Mean marker
         traces.push({
             x: [e.mean_vp], y: [e.mean_vf], mode: 'markers', type: 'scatter',
-            marker: { symbol: 'square', size: 10, color: grpColors[grp] || '#fff',
-                      line: { color: '#fff', width: 1 } },
-            name: grp + ' mean', showlegend: false
+            xaxis: 'x', yaxis: 'y',
+            marker: { symbol: 'square', size: 10, color: grpColors[grp] || '#fff', line: { color: '#fff', width: 1 } },
+            name: grp + ' mean', legendgroup: grp, showlegend: false
         });
+
+        // Right panel ellipse (Height vs Width)
+        var hw = hwGroups[grp];
+        if (hw && hw.h.length >= 3) {
+            var mH = hw.h.reduce(function(a,b){return a+b;},0) / hw.h.length;
+            var mW = hw.w.reduce(function(a,b){return a+b;},0) / hw.w.length;
+            var sH = Math.sqrt(hw.h.reduce(function(a,b){return a+(b-mH)*(b-mH);},0) / hw.h.length);
+            var sW = Math.sqrt(hw.w.reduce(function(a,b){return a+(b-mW)*(b-mW);},0) / hw.w.length);
+            var eX2 = [], eY2 = [];
+            for (var a2 = 0; a2 <= 360; a2 += 5) {
+                var r2 = a2 * Math.PI / 180;
+                eX2.push(mH + 2 * sH * Math.cos(r2));
+                eY2.push(mW + 2 * sW * Math.sin(r2));
+            }
+            traces.push({
+                x: eX2, y: eY2, mode: 'lines', type: 'scatter',
+                xaxis: 'x2', yaxis: 'y2',
+                line: { color: grpColors[grp] || 'rgba(255,255,255,0.4)', width: 2, dash: 'dot' },
+                name: grp + ' (2\u03c3)', legendgroup: grp, showlegend: false
+            });
+            traces.push({
+                x: [mH], y: [mW], mode: 'markers', type: 'scatter',
+                xaxis: 'x2', yaxis: 'y2',
+                marker: { symbol: 'square', size: 10, color: grpColors[grp] || '#fff', line: { color: '#fff', width: 1 } },
+                name: grp + ' mean', legendgroup: grp, showlegend: false
+            });
+        }
     }
 
     var plotBg = '#0a1628';
-    var title = 'VP vs Vortex Favorability' + (currentCaseIndex !== null ? ' (current case highlighted)' : '');
+    var title = 'VP vs Vortex Favorability & Decomposition' + (currentCaseIndex !== null ? ' (current case highlighted)' : '');
     var layout = {
-        title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' },
+        title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.98, x: 0.5, xanchor: 'center' },
         paper_bgcolor: plotBg, plot_bgcolor: plotBg,
-        xaxis: { title: { text: 'Ventilation Proxy', font: { color: '#aaa', size: fontSize.axis } },
-                 tickfont: { color: '#aaa', size: fontSize.tick },
-                 gridcolor: 'rgba(255,255,255,0.06)', zeroline: false },
-        yaxis: { title: { text: 'Vortex Favorability', font: { color: '#aaa', size: fontSize.axis } },
-                 tickfont: { color: '#aaa', size: fontSize.tick },
-                 gridcolor: 'rgba(255,255,255,0.06)', zeroline: false },
-        margin: fullsize ? { l:60,r:30,t:60,b:50 } : { l:50,r:16,t:50,b:42 },
+        // Left panel: VP vs Favorability
+        xaxis:  { title: { text: 'Ventilation Proxy', font: { color: '#aaa', size: fontSize.axis } },
+                  tickfont: { color: '#aaa', size: fontSize.tick },
+                  gridcolor: 'rgba(255,255,255,0.06)', zeroline: false,
+                  domain: [0, 0.45] },
+        yaxis:  { title: { text: 'Vortex Favorability', font: { color: '#aaa', size: fontSize.axis } },
+                  tickfont: { color: '#aaa', size: fontSize.tick },
+                  gridcolor: 'rgba(255,255,255,0.06)', zeroline: false },
+        // Right panel: Vortex Height vs Width
+        xaxis2: { title: { text: 'Anomalous Vortex Height (H1)', font: { color: '#aaa', size: fontSize.axis } },
+                  tickfont: { color: '#aaa', size: fontSize.tick },
+                  gridcolor: 'rgba(255,255,255,0.06)', zeroline: false,
+                  domain: [0.55, 1.0], anchor: 'y2' },
+        yaxis2: { title: { text: 'Anomalous Vortex Width (W1\u2013W2)', font: { color: '#aaa', size: fontSize.axis } },
+                  tickfont: { color: '#aaa', size: fontSize.tick },
+                  gridcolor: 'rgba(255,255,255,0.06)', zeroline: false,
+                  anchor: 'x2' },
+        margin: fullsize ? { l:60,r:60,t:60,b:50 } : { l:50,r:50,t:50,b:42 },
         showlegend: true,
         legend: { font: { color: '#aaa', size: 9 }, bgcolor: 'rgba(0,0,0,0.3)',
                   x: 0.02, y: 0.98, xanchor: 'left', yanchor: 'top' },
