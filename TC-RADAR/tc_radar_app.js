@@ -3950,13 +3950,13 @@ function renderVPScatterInto(targetId, json, fullsize) {
             name: 'Cases', legendgroup: 'cases'
         });
 
-        // ── Right panel: Vortex Height vs Vortex Width (xaxis2, yaxis2) ──
+        // ── Right panel: Vortex Width vs Vortex Height (xaxis2, yaxis2) ──
         traces.push({
-            x: vhs, y: vws, mode: 'markers', type: 'scatter',
+            x: vws, y: vhs, mode: 'markers', type: 'scatter',
             xaxis: 'x2', yaxis: 'y2',
             marker: buildMarker(dvs, true),
             text: labels, customdata: vmaxs,
-            hovertemplate: '<b>%{text}</b><br>Vmax: %{customdata} kt<br>Height: %{x:.2f}<br>Width: %{y:.2f}<br>\u0394Vmax: %{marker.color:.0f} kt<extra></extra>',
+            hovertemplate: '<b>%{text}</b><br>Vmax: %{customdata} kt<br>Width: %{x:.2f}<br>Height: %{y:.2f}<br>\u0394Vmax: %{marker.color:.0f} kt<extra></extra>',
             name: 'Cases', legendgroup: 'cases', showlegend: false
         });
     }
@@ -4026,15 +4026,15 @@ function renderVPScatterInto(targetId, json, fullsize) {
             name: grp + ' mean', legendgroup: grp, showlegend: false
         });
 
-        // Right panel ellipse (Height vs Width)
+        // Right panel ellipse (Width vs Height)
         var hw = hwGroups[grp];
         if (hw && hw.h.length >= 3) {
             var hStat = _meanStd(hw.h), wStat = _meanStd(hw.w);
             var eX2 = [], eY2 = [];
             for (var a2 = 0; a2 <= 360; a2 += 5) {
                 var r2 = a2 * Math.PI / 180;
-                eX2.push(hStat.m + 2 * hStat.s * Math.cos(r2));
-                eY2.push(wStat.m + 2 * wStat.s * Math.sin(r2));
+                eX2.push(wStat.m + 2 * wStat.s * Math.cos(r2));
+                eY2.push(hStat.m + 2 * hStat.s * Math.sin(r2));
             }
             traces.push({
                 x: eX2, y: eY2, mode: 'lines', type: 'scatter',
@@ -4043,7 +4043,7 @@ function renderVPScatterInto(targetId, json, fullsize) {
                 name: grp + ' (2\u03c3)', legendgroup: grp, showlegend: false
             });
             traces.push({
-                x: [hStat.m], y: [wStat.m], mode: 'markers', type: 'scatter',
+                x: [wStat.m], y: [hStat.m], mode: 'markers', type: 'scatter',
                 xaxis: 'x2', yaxis: 'y2',
                 marker: { symbol: 'square', size: 10, color: grpColors[grp] || '#fff', line: { color: '#fff', width: 1 } },
                 name: grp + ' mean', legendgroup: grp, showlegend: false
@@ -4074,12 +4074,12 @@ function renderVPScatterInto(targetId, json, fullsize) {
         // Right panel
         if (curCase.vortex_height !== null && curCase.vortex_width !== null) {
             traces.push({
-                x: [curCase.vortex_height], y: [curCase.vortex_width],
+                x: [curCase.vortex_width], y: [curCase.vortex_height],
                 mode: 'markers', type: 'scatter',
                 xaxis: 'x2', yaxis: 'y2',
                 marker: starStyle,
                 text: [curLabel],
-                hovertemplate: '<b>%{text} \u2605</b><br>Vmax: ' + curVmax + '<br>Height: %{x:.2f}<br>Width: %{y:.2f}<br>\u0394Vmax: ' + curDv + ' kt<extra></extra>',
+                hovertemplate: '<b>%{text} \u2605</b><br>Vmax: ' + curVmax + '<br>Width: %{x:.2f}<br>Height: %{y:.2f}<br>\u0394Vmax: ' + curDv + ' kt<extra></extra>',
                 name: '\u2605 Current', legendgroup: 'current', showlegend: false
             });
         }
@@ -4100,11 +4100,11 @@ function renderVPScatterInto(targetId, json, fullsize) {
                   tickfont: { color: '#aaa', size: fontSize.tick },
                   gridcolor: 'rgba(255,255,255,0.06)', zeroline: false },
         // Right panel: Vortex Height vs Width
-        xaxis2: { title: { text: 'Anomalous Vortex Height (H1)', font: { color: '#aaa', size: fontSize.axis } },
+        xaxis2: { title: { text: 'Anomalous Vortex Width (W1\u2013W2)', font: { color: '#aaa', size: fontSize.axis } },
                   tickfont: { color: '#aaa', size: fontSize.tick },
                   gridcolor: 'rgba(255,255,255,0.06)', zeroline: false,
                   domain: [0.55, 1.0], anchor: 'y2' },
-        yaxis2: { title: { text: 'Anomalous Vortex Width (W1\u2013W2)', font: { color: '#aaa', size: fontSize.axis } },
+        yaxis2: { title: { text: 'Anomalous Vortex Height (H1)', font: { color: '#aaa', size: fontSize.axis } },
                   tickfont: { color: '#aaa', size: fontSize.tick },
                   gridcolor: 'rgba(255,255,255,0.06)', zeroline: false,
                   anchor: 'x2' },
