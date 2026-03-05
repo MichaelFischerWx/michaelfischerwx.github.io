@@ -3678,6 +3678,13 @@ function renderAzimuthalMeanInto(targetId, json, fullsize) {
 
 // ── Hybrid R_H Azimuthal Mean Renderer ──────────────────────────────────
 
+var _fischerCitation = {
+    text: 'Fischer et al. (2025, MWR) | doi:10.1175/MWR-D-24-0118.1',
+    xref: 'paper', yref: 'paper', x: 1.0, y: -0.01,
+    xanchor: 'right', yanchor: 'top', showarrow: false,
+    font: { color: 'rgba(150,150,150,0.5)', size: 8 }
+};
+
 function _buildHybridXAxis(rHAxis, nInner) {
     // Build tick labels for the hybrid coordinate
     // Inner bins: show as fraction of RMW (e.g., 0.2, 0.4, ..., 0.8)
@@ -3757,7 +3764,8 @@ function renderHybridAzimuthalMeanInto(targetId, json, fullsize) {
                  tickfont: { color: '#aaa', size: fontSize.tick },
                  gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
         margin: fullsize ? { l:55,r:24,t:80,b:46 } : { l:45,r:12,t:64,b:38 },
-        shapes: shapes, showlegend: false
+        shapes: shapes, showlegend: false,
+        annotations: [_fischerCitation]
     };
 
     if (!fullsize) {
@@ -3846,7 +3854,8 @@ function renderAnomalyAzimuthalMeanInto(targetId, json, fullsize) {
                  tickfont: { color: '#aaa', size: fontSize.tick },
                  gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
         margin: fullsize ? { l:55,r:24,t:96,b:46 } : { l:45,r:12,t:78,b:38 },
-        shapes: shapes, showlegend: false
+        shapes: shapes, showlegend: false,
+        annotations: [_fischerCitation]
     };
 
     if (!fullsize) {
@@ -4091,7 +4100,8 @@ function renderVPScatterInto(targetId, json, fullsize) {
         showlegend: true,
         legend: { font: { color: '#aaa', size: 9 }, bgcolor: 'rgba(0,0,0,0.3)',
                   x: 0.50, y: 0.98, xanchor: 'center', yanchor: 'top' },
-        hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 11 } }
+        hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 11 } },
+        annotations: [_fischerCitation]
     };
 
     if (!fullsize) {
