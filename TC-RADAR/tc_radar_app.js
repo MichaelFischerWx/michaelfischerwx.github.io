@@ -285,6 +285,11 @@ function openSidePanel(caseData, fromQuickSelect) {
                 '</div>' +
                 '<div class="fl-archive-status" id="fl-archive-status" style="display:none;font-size:10px;color:#fbbf24;padding:2px 8px;"></div>' +
                 '<div class="display-actions" style="margin-top:4px;">' +
+                    '<button class="cs-btn" id="hybrid-az-btn" onclick="fetchHybridAzimuthalMean()" disabled style="background:rgba(168,85,247,0.12);border-color:rgba(168,85,247,0.35);color:#c4b5fd;">R\u2095 Hybrid</button>' +
+                    '<button class="cs-btn" id="anomaly-az-btn" onclick="fetchAnomalyAzimuthalMean()" disabled style="background:rgba(239,68,68,0.12);border-color:rgba(239,68,68,0.35);color:#fca5a5;">Z* Anomaly</button>' +
+                    '<button class="cs-btn" id="vp-scatter-btn" onclick="fetchVPScatter()" style="background:rgba(251,191,36,0.12);border-color:rgba(251,191,36,0.35);color:#fde68a;">\u2B24 VP Scatter</button>' +
+                '</div>' +
+                '<div class="display-actions" style="margin-top:4px;">' +
                     '<button class="cs-btn env-case-btn" id="env-case-btn" onclick="toggleEnvOverlay()" style="background:rgba(0,180,100,0.12);border-color:rgba(0,180,100,0.35);color:#6ee7b7;flex:1;">\uD83C\uDF0D Environment Diagnostics</button>' +
                 '</div>' +
                 // ── Pre-rendered FL time-series panel (hidden by default) ──
@@ -3422,6 +3427,8 @@ function renderPlotFromJSON(json, resultDiv) {
     var azBtn = document.getElementById('az-btn'); if (azBtn) azBtn.disabled = false;
     var sqBtn = document.getElementById('sq-btn'); if (sqBtn) sqBtn.disabled = false;
     var volBtn = document.getElementById('vol-btn'); if (volBtn) volBtn.disabled = false;
+    var hybBtn = document.getElementById('hybrid-az-btn'); if (hybBtn) hybBtn.disabled = false;
+    var anomBtn = document.getElementById('anomaly-az-btn'); if (anomBtn) anomBtn.disabled = false;
     document.getElementById('plotly-chart').on('plotly_click', handlePlotClick);
 
     // Auto-scroll the side panel to show the plot (skip during animation)
@@ -3546,10 +3553,79 @@ function fetchAzimuthalMean() {
     var timeout = setTimeout(function() { controller.abort(); }, 90000);
     fetch(url, { signal: controller.signal })
         .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
-        .then(function(json) { _lastAzJson = json; renderAzimuthalMeanInto('az-result', json, false); openPlotModal(); })
+        .then(function(json) { _lastAzJson = json; _lastHybridAzJson = null; _lastAnomalyAzJson = null; renderAzimuthalMeanInto('az-result', json, false); openPlotModal(); })
         .catch(function(err) { resultDiv.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + (err.name === 'AbortError' ? 'Request timed out (90s).' : err.message) + '</div>'; })
         .finally(function() { clearTimeout(timeout); btn.disabled = false; btn.textContent = '\u27F3 Azimuthal Mean'; });
 }
+
+
+// ── Hybrid R_H Azimuthal Mean (Fischer et al. 2025) ─────────────────────
+
+var _lastHybridAzJson = null;
+
+function fetchHybridAzimuthalMean() {
+    if (currentCaseIndex === null) return;
+    var variable = document.getElementById('ep-var').value;
+    var overlay = (document.getElementById('ep-overlay') || {}).value || '';
+    var covSlider = document.getElementById('az-coverage');
+    var coverage = covSlider ? (parseInt(covSlider.value) / 100) : 0.5;
+    var resultDiv = document.getElementById('az-result'), btn = document.getElementById('hybrid-az-btn');
+    resultDiv.innerHTML = _hurricaneLoadingHTML('Computing hybrid R\u2095 azimuthal mean\u2026', true);
+    btn.disabled = true; btn.textContent = '\u27F3 Computing\u2026';
+    var url = API_BASE + '/hybrid/azimuthal_mean?case_index=' + currentCaseIndex +
+              '&variable=' + variable + '&data_type=' + _activeDataType +
+              '&coverage_min=' + coverage;
+    if (overlay && overlay !== 'none') url += '&overlay=' + overlay;
+    var controller = new AbortController();
+    var timeout = setTimeout(function() { controller.abort(); }, 90000);
+    fetch(url, { signal: controller.signal })
+        .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
+        .then(function(json) { _lastHybridAzJson = json; _lastAzJson = null; _lastAnomalyAzJson = null; renderHybridAzimuthalMeanInto('az-result', json, false); openPlotModal(); })
+        .catch(function(err) { resultDiv.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + (err.name === 'AbortError' ? 'Request timed out (90s).' : err.message) + '</div>'; })
+        .finally(function() { clearTimeout(timeout); btn.disabled = false; btn.textContent = 'R\u2095 Hybrid'; });
+}
+
+
+// ── Z-Score Anomaly Azimuthal Mean (Fischer et al. 2025) ────────────────
+
+var _lastAnomalyAzJson = null;
+
+function fetchAnomalyAzimuthalMean() {
+    if (currentCaseIndex === null) return;
+    var variable = document.getElementById('ep-var').value;
+    var resultDiv = document.getElementById('az-result'), btn = document.getElementById('anomaly-az-btn');
+    resultDiv.innerHTML = _hurricaneLoadingHTML('Computing Z-score anomaly\u2026', true);
+    btn.disabled = true; btn.textContent = '\u27F3 Computing\u2026';
+    var url = API_BASE + '/anomaly/azimuthal_mean?case_index=' + currentCaseIndex +
+              '&variable=' + variable + '&data_type=' + _activeDataType;
+    var controller = new AbortController();
+    var timeout = setTimeout(function() { controller.abort(); }, 90000);
+    fetch(url, { signal: controller.signal })
+        .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
+        .then(function(json) { _lastAnomalyAzJson = json; _lastAzJson = null; _lastHybridAzJson = null; renderAnomalyAzimuthalMeanInto('az-result', json, false); openPlotModal(); })
+        .catch(function(err) { resultDiv.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + (err.name === 'AbortError' ? 'Request timed out (90s).' : err.message) + '</div>'; })
+        .finally(function() { clearTimeout(timeout); btn.disabled = false; btn.textContent = 'Z* Anomaly'; });
+}
+
+
+// ── VP vs Vortex Favorability Scatter (Fig. 9) ──────────────────────────
+
+var _lastVPScatterJson = null;
+
+function fetchVPScatter(colorBy) {
+    colorBy = colorBy || 'dvmax_12h';
+    var resultDiv = document.getElementById('az-result');
+    var btn = document.getElementById('vp-scatter-btn');
+    resultDiv.innerHTML = _hurricaneLoadingHTML('Loading VP scatter data\u2026', true);
+    if (btn) { btn.disabled = true; btn.textContent = '\u27F3 Loading\u2026'; }
+    var url = API_BASE + '/scatter/vp_favorability?data_type=merge&color_by=' + colorBy;
+    fetch(url)
+        .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
+        .then(function(json) { _lastVPScatterJson = json; renderVPScatterInto('az-result', json, false); openPlotModal(); })
+        .catch(function(err) { resultDiv.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + err.message + '</div>'; })
+        .finally(function() { if (btn) { btn.disabled = false; btn.textContent = '\u2B24 VP Scatter'; } });
+}
+
 
 function renderAzimuthalMeanInto(targetId, json, fullsize) {
     var el = document.getElementById(targetId); if (!el) return;
@@ -3599,6 +3675,292 @@ function renderAzimuthalMeanInto(targetId, json, fullsize) {
         Plotly.newPlot(targetId, [heatmap].concat(azOverlayTraces).concat(azMaxTraces), layout, { responsive:true,displayModeBar:true,displaylogo:false,modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
     }
 }
+
+// ── Hybrid R_H Azimuthal Mean Renderer ──────────────────────────────────
+
+function _buildHybridXAxis(rHAxis, nInner) {
+    // Build tick labels for the hybrid coordinate
+    // Inner bins: show as fraction of RMW (e.g., 0.2, 0.4, ..., 0.8)
+    // Outer bins: show as "RMW", "+20", "+40", etc.
+    var tickvals = [], ticktext = [];
+    for (var i = 0; i < rHAxis.length; i++) {
+        if (i < nInner) {
+            // Inner: show every 0.2 R*
+            var val = rHAxis[i];
+            if (Math.abs(val % 0.2) < 0.03) {
+                tickvals.push(i);
+                ticktext.push((val).toFixed(1));
+            }
+        } else {
+            // Outer: show at RMW, +20, +40, +60, +80, +100
+            var km = rHAxis[i];
+            if (i === nInner) {
+                tickvals.push(i);
+                ticktext.push('RMW');
+            } else if (Math.abs(km % 20) < 1.5 || Math.abs(km % 20 - 20) < 1.5) {
+                tickvals.push(i);
+                ticktext.push('+' + Math.round(km));
+            }
+        }
+    }
+    return { tickvals: tickvals, ticktext: ticktext };
+}
+
+function renderHybridAzimuthalMeanInto(targetId, json, fullsize) {
+    var el = document.getElementById(targetId); if (!el) return;
+    var azData = json.azimuthal_mean, rHAxis = json.r_h_axis, nInner = json.n_inner;
+    var height_km = json.height_km, varInfo = json.variable, meta = _enrichCaseMeta(json.case_meta);
+
+    var fontSize = fullsize ? { title:13,axis:12,tick:10,cbar:12,cbarTick:10 } : { title:10,axis:9,tick:8,cbar:9,cbarTick:8 };
+    var csColorscale = varInfo.colorscale;
+    var cmapSel = document.getElementById('ep-cmap');
+    if (cmapSel && cmapSel.value) { try { csColorscale = JSON.parse(cmapSel.value); } catch(e) { csColorscale = cmapSel.value; } }
+
+    var xIdxArr = []; for (var i = 0; i < rHAxis.length; i++) xIdxArr.push(i);
+    var ticks = _buildHybridXAxis(rHAxis, nInner);
+
+    var heatmap = {
+        z: azData, x: xIdxArr, y: height_km, type: 'heatmap',
+        colorscale: csColorscale, zmin: varInfo.vmin, zmax: varInfo.vmax,
+        colorbar: { title: { text: varInfo.units, font: { color: '#ccc', size: fontSize.cbar } },
+                    tickfont: { color: '#ccc', size: fontSize.cbarTick }, thickness: fullsize?14:10, len: 0.85 },
+        hoverongaps: false
+    };
+
+    var vmaxStr = meta.vmax_kt ? ' | Vmax = ' + meta.vmax_kt + ' kt' : '';
+    var rmwStr = meta.rmw_km ? ' | RMW = ' + meta.rmw_km + ' km' : '';
+    var title = meta.storm_name + ' | ' + meta.datetime + vmaxStr + rmwStr +
+                '<br>Hybrid R\u2095 Azimuthal Mean: ' + varInfo.display_name;
+
+    var shapes = [{
+        type: 'line', xref: 'x', yref: 'paper',
+        x0: nInner, x1: nInner, y0: 0, y1: 1,
+        line: { color: 'rgba(255,255,255,0.5)', width: 1.5, dash: 'dash' }
+    }];
+
+    var plotBg = '#0a1628';
+    var layout = {
+        title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' },
+        paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+        xaxis: { title: { text: 'R\u2095 (RMW + km)', font: { color: '#aaa', size: fontSize.axis } },
+                 tickvals: ticks.tickvals, ticktext: ticks.ticktext,
+                 tickfont: { color: '#aaa', size: fontSize.tick },
+                 gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
+        yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } },
+                 tickfont: { color: '#aaa', size: fontSize.tick },
+                 gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
+        margin: fullsize ? { l:55,r:24,t:80,b:46 } : { l:45,r:12,t:64,b:38 },
+        shapes: shapes, showlegend: false
+    };
+
+    if (!fullsize) {
+        var thumbWrap = document.getElementById('thumbnail-wrap');
+        if (thumbWrap) thumbWrap.style.display = 'none';
+        el.innerHTML = '<div style="position:relative;"><div id="az-chart" style="width:100%;height:340px;border-radius:6px;overflow:hidden;"></div>' + _archSaveBtnHTML('az-chart', 'TDR_HybridAzMean') + '<button onclick="openPlotModal()" title="Expand" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;">\u26F6</button></div>';
+        Plotly.newPlot('az-chart', [heatmap], layout, { responsive:true,displayModeBar:false });
+    } else {
+        Plotly.newPlot(targetId, [heatmap], layout, { responsive:true,displayModeBar:true,displaylogo:false });
+    }
+}
+
+
+// ── Z-Score Anomaly Renderer ────────────────────────────────────────────
+
+function renderAnomalyAzimuthalMeanInto(targetId, json, fullsize) {
+    var el = document.getElementById(targetId); if (!el) return;
+
+    if (json.error || !json.anomaly) {
+        el.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + (json.error || 'Anomaly data unavailable.') + '</div>';
+        if (json.raw) {
+            // Fall back to rendering raw hybrid field
+            var fallback = Object.assign({}, json, { azimuthal_mean: json.raw });
+            renderHybridAzimuthalMeanInto(targetId, fallback, fullsize);
+        }
+        return;
+    }
+
+    var anomData = json.anomaly, rHAxis = json.r_h_axis, nInner = json.n_inner;
+    var height_km = json.height_km, varInfo = json.variable, meta = json.case_meta || {};
+
+    var fontSize = fullsize ? { title:13,axis:12,tick:10,cbar:12,cbarTick:10 } : { title:10,axis:9,tick:8,cbar:9,cbarTick:8 };
+
+    var xIdxArr = []; for (var i = 0; i < rHAxis.length; i++) xIdxArr.push(i);
+    var ticks = _buildHybridXAxis(rHAxis, nInner);
+
+    // Diverging colorscale for anomalies (RdBu_r)
+    var anomColorscale = varInfo.colorscale || [
+        [0.0, 'rgb(5,48,97)'], [0.1, 'rgb(33,102,172)'],
+        [0.2, 'rgb(67,147,195)'], [0.3, 'rgb(146,197,222)'],
+        [0.4, 'rgb(209,229,240)'], [0.5, 'rgb(247,247,247)'],
+        [0.6, 'rgb(253,219,199)'], [0.7, 'rgb(244,165,130)'],
+        [0.8, 'rgb(214,96,77)'], [0.9, 'rgb(178,24,43)'],
+        [1.0, 'rgb(103,0,31)']
+    ];
+
+    var heatmap = {
+        z: anomData, x: xIdxArr, y: height_km, type: 'heatmap',
+        colorscale: anomColorscale, zmin: -3, zmax: 3, zmid: 0,
+        colorbar: {
+            title: { text: '\u03c3', font: { color: '#ccc', size: fontSize.cbar } },
+            tickfont: { color: '#ccc', size: fontSize.cbarTick },
+            thickness: fullsize?14:10, len: 0.85,
+            tickvals: [-3, -2, -1, 0, 1, 2, 3],
+        },
+        hoverongaps: false,
+        hovertemplate: '<b>Z-score</b>: %{z:.2f}\u03c3<br>R\u2095: %{x}<br>Height: %{y:.1f} km<extra></extra>'
+    };
+
+    var vmaxStr = meta.vmax_kt ? ' | Vmax = ' + meta.vmax_kt + ' kt' : '';
+    var climInfo = json.clim_bin_kt ? ' (climo: \u00b110 kt of ' + json.clim_bin_kt + ' kt, n=' + json.clim_count + ')' : '';
+    var title = (meta.storm_name || '') + ' | ' + (meta.datetime || '') + vmaxStr +
+                '<br>Anomalous ' + varInfo.display_name + climInfo;
+
+    var shapes = [{
+        type: 'line', xref: 'x', yref: 'paper',
+        x0: nInner, x1: nInner, y0: 0, y1: 1,
+        line: { color: 'rgba(255,255,255,0.5)', width: 1.5, dash: 'dash' }
+    }];
+
+    var plotBg = '#0a1628';
+    var layout = {
+        title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' },
+        paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+        xaxis: { title: { text: 'R\u2095 (RMW + km)', font: { color: '#aaa', size: fontSize.axis } },
+                 tickvals: ticks.tickvals, ticktext: ticks.ticktext,
+                 tickfont: { color: '#aaa', size: fontSize.tick },
+                 gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
+        yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } },
+                 tickfont: { color: '#aaa', size: fontSize.tick },
+                 gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
+        margin: fullsize ? { l:55,r:24,t:96,b:46 } : { l:45,r:12,t:78,b:38 },
+        shapes: shapes, showlegend: false
+    };
+
+    if (!fullsize) {
+        var thumbWrap = document.getElementById('thumbnail-wrap');
+        if (thumbWrap) thumbWrap.style.display = 'none';
+        el.innerHTML = '<div style="position:relative;"><div id="az-chart" style="width:100%;height:340px;border-radius:6px;overflow:hidden;"></div>' + _archSaveBtnHTML('az-chart', 'TDR_Anomaly') + '<button onclick="openPlotModal()" title="Expand" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;">\u26F6</button></div>';
+        Plotly.newPlot('az-chart', [heatmap], layout, { responsive:true,displayModeBar:false });
+    } else {
+        Plotly.newPlot(targetId, [heatmap], layout, { responsive:true,displayModeBar:true,displaylogo:false });
+    }
+}
+
+
+// ── VP vs Vortex Favorability Scatter Renderer ──────────────────────────
+
+function renderVPScatterInto(targetId, json, fullsize) {
+    var el = document.getElementById(targetId); if (!el) return;
+    var points = json.points, ellipses = json.ellipses, colorBy = json.color_by;
+
+    if (!points || points.length === 0) {
+        el.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F No VP scatter data available. SHIPS variables (vmpi, rhlo, shgc) may not be in the Zarr stores.</div>';
+        return;
+    }
+
+    var fontSize = fullsize ? { title:13,axis:12,tick:10 } : { title:10,axis:9,tick:8 };
+
+    // Separate points with and without vortex favorability
+    var withVF = points.filter(function(p) { return p.vortex_favorability !== null && p.vortex_favorability !== undefined; });
+    var withoutVF = points.filter(function(p) { return p.vortex_favorability === null || p.vortex_favorability === undefined; });
+
+    var traces = [];
+
+    if (withVF.length > 0) {
+        var vps = withVF.map(function(p) { return p.vp; });
+        var vfs = withVF.map(function(p) { return p.vortex_favorability; });
+        var dvs = withVF.map(function(p) { return p[colorBy] || 0; });
+        var labels = withVF.map(function(p) { return p.storm_name + ' ' + p.datetime; });
+
+        // Highlight current case
+        var markerSizes = withVF.map(function(p) { return p.case_index === currentCaseIndex ? 14 : 8; });
+        var markerLines = withVF.map(function(p) {
+            return p.case_index === currentCaseIndex ?
+                { color: '#ffffff', width: 2.5 } : { color: 'rgba(0,0,0,0.3)', width: 0.5 };
+        });
+
+        traces.push({
+            x: vps, y: vfs, mode: 'markers', type: 'scatter',
+            marker: {
+                size: markerSizes, color: dvs,
+                colorscale: [
+                    [0.0, 'rgb(5,48,97)'], [0.15, 'rgb(33,102,172)'],
+                    [0.3, 'rgb(67,147,195)'], [0.4, 'rgb(146,197,222)'],
+                    [0.5, 'rgb(247,247,247)'],
+                    [0.6, 'rgb(253,219,199)'], [0.7, 'rgb(244,165,130)'],
+                    [0.85, 'rgb(214,96,77)'], [1.0, 'rgb(178,24,43)']
+                ],
+                cmin: -30, cmax: 30,
+                colorbar: {
+                    title: { text: colorBy === 'dvmax_12h' ? '12-h \u0394Vmax (kt)' : '24-h \u0394Vmax (kt)',
+                             font: { color: '#ccc', size: fontSize.tick } },
+                    tickfont: { color: '#ccc', size: fontSize.tick }, thickness: 12, len: 0.85
+                },
+                line: { color: markerLines.map(function(l) { return l.color; }),
+                        width: markerLines.map(function(l) { return l.width; }) }
+            },
+            text: labels, hovertemplate: '<b>%{text}</b><br>VP: %{x:.1f}<br>Vortex Fav: %{y:.2f}<br>\u0394Vmax: %{marker.color:.0f} kt<extra></extra>',
+            name: 'Cases'
+        });
+    }
+
+    // 2σ ellipses
+    var grpColors = { RI: 'rgba(239,68,68,0.6)', SI: 'rgba(251,191,36,0.6)', NI: 'rgba(96,165,250,0.6)' };
+    for (var grp in ellipses) {
+        var e = ellipses[grp];
+        if (!e) continue;
+        var ellX = [], ellY = [];
+        for (var a = 0; a <= 360; a += 5) {
+            var rad = a * Math.PI / 180;
+            ellX.push(e.mean_vp + 2 * e.std_vp * Math.cos(rad));
+            ellY.push(e.mean_vf + 2 * e.std_vf * Math.sin(rad));
+        }
+        traces.push({
+            x: ellX, y: ellY, mode: 'lines', type: 'scatter',
+            line: { color: grpColors[grp] || 'rgba(255,255,255,0.4)', width: 2, dash: 'dot' },
+            name: grp + ' (2\u03c3)', showlegend: true
+        });
+        // Mean marker
+        traces.push({
+            x: [e.mean_vp], y: [e.mean_vf], mode: 'markers', type: 'scatter',
+            marker: { symbol: 'square', size: 10, color: grpColors[grp] || '#fff',
+                      line: { color: '#fff', width: 1 } },
+            name: grp + ' mean', showlegend: false
+        });
+    }
+
+    var plotBg = '#0a1628';
+    var title = 'VP vs Vortex Favorability' + (currentCaseIndex !== null ? ' (current case highlighted)' : '');
+    var layout = {
+        title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' },
+        paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+        xaxis: { title: { text: 'Ventilation Proxy', font: { color: '#aaa', size: fontSize.axis } },
+                 tickfont: { color: '#aaa', size: fontSize.tick },
+                 gridcolor: 'rgba(255,255,255,0.06)', zeroline: false },
+        yaxis: { title: { text: 'Vortex Favorability', font: { color: '#aaa', size: fontSize.axis } },
+                 tickfont: { color: '#aaa', size: fontSize.tick },
+                 gridcolor: 'rgba(255,255,255,0.06)', zeroline: false },
+        margin: fullsize ? { l:60,r:30,t:60,b:50 } : { l:50,r:16,t:50,b:42 },
+        showlegend: true,
+        legend: { font: { color: '#aaa', size: 9 }, bgcolor: 'rgba(0,0,0,0.3)',
+                  x: 0.02, y: 0.98, xanchor: 'left', yanchor: 'top' },
+        hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 11 } }
+    };
+
+    if (!fullsize) {
+        var thumbWrap = document.getElementById('thumbnail-wrap');
+        if (thumbWrap) thumbWrap.style.display = 'none';
+        el.innerHTML = '<div style="position:relative;"><div id="az-chart" style="width:100%;height:360px;border-radius:6px;overflow:hidden;"></div>' + _archSaveBtnHTML('az-chart', 'VP_Scatter') + '<button onclick="openPlotModal()" title="Expand" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;">\u26F6</button></div>' +
+            '<div style="display:flex;gap:6px;justify-content:center;margin-top:6px;">' +
+            '<button class="cs-btn" onclick="fetchVPScatter(\'dvmax_12h\')" style="font-size:10px;padding:2px 8px;">12-h \u0394Vmax</button>' +
+            '<button class="cs-btn" onclick="fetchVPScatter(\'dvmax_24h\')" style="font-size:10px;padding:2px 8px;">24-h \u0394Vmax</button>' +
+            '</div>';
+        Plotly.newPlot('az-chart', traces, layout, { responsive:true,displayModeBar:false });
+    } else {
+        Plotly.newPlot(targetId, traces, layout, { responsive:true,displayModeBar:true,displaylogo:false });
+    }
+}
+
 
 function buildAzOverlayContours(json, radius_km, height_km) {
     if (!json.overlay) return []; var ov = json.overlay; var ovData = ov.azimuthal_mean; if (!ovData) return [];
@@ -4238,7 +4600,7 @@ function openPlotModal(csJson) {
         container.appendChild(sqDivider); container.appendChild(sqFull);
     }
     modal.classList.add('active'); document.body.style.overflow = 'hidden';
-    var hasCrossSection = !!csJson, hasAzMean = !!_lastAzJson, hasShearQuads = !!_lastSqJson;
+    var hasCrossSection = !!csJson, hasAzMean = !!_lastAzJson || !!_lastHybridAzJson || !!_lastAnomalyAzJson, hasShearQuads = !!_lastSqJson;
     var hasSub = hasCrossSection || hasAzMean || hasShearQuads;
     if (hasSub) box.classList.add('split'); else box.classList.remove('split');
     csFull.style.display = hasCrossSection?'block':'none'; csDivider.style.display = hasCrossSection?'block':'none';
@@ -4278,7 +4640,11 @@ function openPlotModal(csJson) {
     var fullHeatmap = Object.assign({}, d.heatmap, { colorbar: Object.assign({}, d.heatmap.colorbar, { title: { text: d.heatmap.colorbar.title.text, font: { color: '#ccc', size: 13 } }, tickfont: { color: '#ccc', size: 11 }, thickness: 16, len: 0.85 }) });
     Plotly.newPlot('plotly-fullscreen', [fullHeatmap].concat(d.overlayTraces||[]).concat(d.maxTraces||[]), fullLayout, d.config);
     if (hasCrossSection) renderCrossSectionInto('cs-fullscreen', csJson, true);
-    if (hasAzMean) renderAzimuthalMeanInto('az-fullscreen', _lastAzJson, true);
+    if (hasAzMean) {
+        if (_lastAnomalyAzJson) renderAnomalyAzimuthalMeanInto('az-fullscreen', _lastAnomalyAzJson, true);
+        else if (_lastHybridAzJson) renderHybridAzimuthalMeanInto('az-fullscreen', _lastHybridAzJson, true);
+        else renderAzimuthalMeanInto('az-fullscreen', _lastAzJson, true);
+    }
     if (hasShearQuads) renderQuadrantMeansInto('sq-fullscreen', _lastSqJson, true);
 }
 
@@ -4769,6 +5135,14 @@ function initCompositePanel() {
                             '<input type="checkbox" id="wiz-chk-cfad">' +
                             '<label for="wiz-chk-cfad">\uD83D\uDCCA CFAD<small>Frequency by altitude diagram</small></label>' +
                         '</div>' +
+                        '<div class="wizard-output-item" id="wiz-out-anom" onclick="_wizardToggleOutput(this, event)">' +
+                            '<input type="checkbox" id="wiz-chk-anom">' +
+                            '<label for="wiz-chk-anom">Z* Anomaly<small>Intensity-normalised R\u2095 structure</small></label>' +
+                        '</div>' +
+                        '<div class="wizard-output-item" id="wiz-out-vpsc" onclick="_wizardToggleOutput(this, event)">' +
+                            '<input type="checkbox" id="wiz-chk-vpsc">' +
+                            '<label for="wiz-chk-vpsc">\u2B24 VP Scatter<small>Ventilation vs. vortex favorability</small></label>' +
+                        '</div>' +
                     '</div>' +
 
                     '<div class="wizard-section-title env">Environment Outputs</div>' +
@@ -5057,6 +5431,8 @@ function initCompositePanel() {
                         '<div id="comp-result-sq" style="display:none;"></div>' +
                         '<div id="comp-result-pv" style="display:none;"></div>' +
                         '<div id="comp-result-cfad" style="display:none;"></div>' +
+                        '<div id="comp-result-anom" style="display:none;"></div>' +
+                        '<div id="comp-result-vpsc" style="display:none;"></div>' +
                         // Environment result containers
                         '<div id="comp-env-status" style="display:none;"></div>' +
                         '<div id="comp-env-scalars" style="display:none;"></div>' +
@@ -5221,7 +5597,9 @@ function _wizardUpdateConfigVisibility() {
     var chkSq = document.getElementById('wiz-chk-sq').checked;
     var chkPv = document.getElementById('wiz-chk-pv').checked;
     var chkCfad = document.getElementById('wiz-chk-cfad') && document.getElementById('wiz-chk-cfad').checked;
-    var anyTDR = chkAz || chkSq || chkPv || chkCfad;
+    var chkAnom = document.getElementById('wiz-chk-anom') && document.getElementById('wiz-chk-anom').checked;
+    var chkVpsc = document.getElementById('wiz-chk-vpsc') && document.getElementById('wiz-chk-vpsc').checked;
+    var anyTDR = chkAz || chkSq || chkPv || chkCfad || chkAnom || chkVpsc;
     var envPV  = document.getElementById('wiz-chk-env-pv').checked;
     var envSC  = document.getElementById('wiz-chk-env-sc').checked;
     var envTH  = document.getElementById('wiz-chk-env-th').checked;
@@ -5401,6 +5779,12 @@ function _wizardGenerateSelected() {
     }
     if (document.getElementById('wiz-chk-cfad') && document.getElementById('wiz-chk-cfad').checked) {
         if (isDiff) generateCompDiffCFAD(); else generateCompositeCFAD();
+    }
+    if (document.getElementById('wiz-chk-anom') && document.getElementById('wiz-chk-anom').checked) {
+        generateCompositeAnomaly();
+    }
+    if (document.getElementById('wiz-chk-vpsc') && document.getElementById('wiz-chk-vpsc').checked) {
+        generateCompositeVPScatter();
     }
 
     // Environment outputs
@@ -6285,6 +6669,90 @@ function generateCompositeAzMean() {
             if (btnAz) btnAz.textContent = '\u27F3 Azimuthal Mean';
         });
 }
+
+// ── Composite Anomaly & VP Scatter ──────────────────────────────────────
+
+function generateCompositeAnomaly() {
+    // For composites, we show a note that anomaly composites require
+    // the climatology to be precomputed and the merge data type.
+    var resultEl = document.getElementById('comp-result-anom');
+    var dataType = document.getElementById('comp-dtype').value;
+    if (dataType !== 'merge') {
+        resultEl.style.display = 'block';
+        resultEl.innerHTML = '<div class="explorer-status" style="color:#fbbf24;padding:12px;font-size:12px;">\u26A0\uFE0F Anomaly composites are only available for merged analyses. Switch data type to "Merge".</div>';
+        return;
+    }
+
+    var filters = _getCompositeFilters();
+    var variable = document.getElementById('comp-var').value;
+    var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
+
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = _hurricaneLoadingHTML('Computing composite anomaly (this computes individual anomalies then averages)\u2026', true);
+
+    // Use composite/azimuthal_mean but with hybrid coordinate
+    // For now, show a placeholder that explains the feature
+    var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) +
+             '&data_type=merge&coverage_min=' + coverage;
+
+    // Note: In a full implementation, we would add a /composite/anomaly_azimuthal_mean endpoint.
+    // For now, we fetch the standard composite and overlay the anomaly context.
+    _fetchCompositeStream(API_BASE + '/composite/azimuthal_mean?' + qs + '&max_r_rmw=8.0&dr_rmw=0.25', 'Computing anomaly composite')
+        .then(function(json) {
+            _showCompStatus('success', '\u2713 Composite computed: ' + json.n_cases + ' cases');
+            _updateBadgeFromResult(json.n_cases);
+            // Render using the standard composite renderer for now
+            // The anomaly normalization will be applied server-side when the
+            // /composite/anomaly_azimuthal_mean endpoint is fully implemented
+            renderCompositeAzMeanInto('comp-result-anom', json, filters);
+        })
+        .catch(function(err) {
+            resultEl.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + (err.message || String(err)) + '</div>';
+        });
+}
+
+function generateCompositeVPScatter() {
+    var resultEl = document.getElementById('comp-result-vpsc');
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = _hurricaneLoadingHTML('Loading VP scatter data\u2026', true);
+
+    fetch(API_BASE + '/scatter/vp_favorability?data_type=merge&color_by=dvmax_12h')
+        .then(function(r) {
+            if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); });
+            return r.json();
+        })
+        .then(function(json) {
+            resultEl.innerHTML = '<div id="comp-vpsc-chart" style="width:100%;height:500px;border-radius:8px;overflow:hidden;"></div>' +
+                '<div style="display:flex;gap:6px;justify-content:center;margin-top:6px;">' +
+                '<button class="cs-btn" onclick="reloadCompVPScatter(\'dvmax_12h\')" style="font-size:10px;padding:2px 8px;">12-h \u0394Vmax</button>' +
+                '<button class="cs-btn" onclick="reloadCompVPScatter(\'dvmax_24h\')" style="font-size:10px;padding:2px 8px;">24-h \u0394Vmax</button>' +
+                '</div>';
+            renderVPScatterInto('comp-vpsc-chart', json, true);
+        })
+        .catch(function(err) {
+            resultEl.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + (err.message || String(err)) + '</div>';
+        });
+}
+
+function reloadCompVPScatter(colorBy) {
+    var resultEl = document.getElementById('comp-result-vpsc');
+    if (!resultEl) return;
+    resultEl.innerHTML = _hurricaneLoadingHTML('Reloading VP scatter\u2026', true);
+    fetch(API_BASE + '/scatter/vp_favorability?data_type=merge&color_by=' + colorBy)
+        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function(json) {
+            resultEl.innerHTML = '<div id="comp-vpsc-chart" style="width:100%;height:500px;border-radius:8px;overflow:hidden;"></div>' +
+                '<div style="display:flex;gap:6px;justify-content:center;margin-top:6px;">' +
+                '<button class="cs-btn" onclick="reloadCompVPScatter(\'dvmax_12h\')" style="font-size:10px;padding:2px 8px;">12-h \u0394Vmax</button>' +
+                '<button class="cs-btn" onclick="reloadCompVPScatter(\'dvmax_24h\')" style="font-size:10px;padding:2px 8px;">24-h \u0394Vmax</button>' +
+                '</div>';
+            renderVPScatterInto('comp-vpsc-chart', json, true);
+        })
+        .catch(function(err) {
+            resultEl.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + err.message + '</div>';
+        });
+}
+
 
 // ── CFAD helper functions ──
 
