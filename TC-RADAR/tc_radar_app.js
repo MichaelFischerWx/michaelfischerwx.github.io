@@ -3553,7 +3553,7 @@ function fetchAzimuthalMean() {
     var timeout = setTimeout(function() { controller.abort(); }, 90000);
     fetch(url, { signal: controller.signal })
         .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
-        .then(function(json) { _lastAzJson = json; _lastHybridAzJson = null; _lastAnomalyAzJson = null; renderAzimuthalMeanInto('az-result', json, false); openPlotModal(); })
+        .then(function(json) { _lastAzJson = json; _lastHybridAzJson = null; _lastAnomalyAzJson = null; _lastVPScatterJson = null; renderAzimuthalMeanInto('az-result', json, false); openPlotModal(); })
         .catch(function(err) { resultDiv.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + (err.name === 'AbortError' ? 'Request timed out (90s).' : err.message) + '</div>'; })
         .finally(function() { clearTimeout(timeout); btn.disabled = false; btn.textContent = '\u27F3 Azimuthal Mean'; });
 }
@@ -3580,7 +3580,7 @@ function fetchHybridAzimuthalMean() {
     var timeout = setTimeout(function() { controller.abort(); }, 90000);
     fetch(url, { signal: controller.signal })
         .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
-        .then(function(json) { _lastHybridAzJson = json; _lastAzJson = null; _lastAnomalyAzJson = null; renderHybridAzimuthalMeanInto('az-result', json, false); openPlotModal(); })
+        .then(function(json) { _lastHybridAzJson = json; _lastAzJson = null; _lastAnomalyAzJson = null; _lastVPScatterJson = null; renderHybridAzimuthalMeanInto('az-result', json, false); openPlotModal(); })
         .catch(function(err) { resultDiv.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + (err.name === 'AbortError' ? 'Request timed out (90s).' : err.message) + '</div>'; })
         .finally(function() { clearTimeout(timeout); btn.disabled = false; btn.textContent = 'R\u2095 Hybrid'; });
 }
@@ -3602,7 +3602,7 @@ function fetchAnomalyAzimuthalMean() {
     var timeout = setTimeout(function() { controller.abort(); }, 90000);
     fetch(url, { signal: controller.signal })
         .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
-        .then(function(json) { _lastAnomalyAzJson = json; _lastAzJson = null; _lastHybridAzJson = null; renderAnomalyAzimuthalMeanInto('az-result', json, false); openPlotModal(); })
+        .then(function(json) { _lastAnomalyAzJson = json; _lastAzJson = null; _lastHybridAzJson = null; _lastVPScatterJson = null; renderAnomalyAzimuthalMeanInto('az-result', json, false); openPlotModal(); })
         .catch(function(err) { resultDiv.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + (err.name === 'AbortError' ? 'Request timed out (90s).' : err.message) + '</div>'; })
         .finally(function() { clearTimeout(timeout); btn.disabled = false; btn.textContent = 'Z* Anomaly'; });
 }
@@ -3621,7 +3621,7 @@ function fetchVPScatter(colorBy) {
     var url = API_BASE + '/scatter/vp_favorability?data_type=merge&color_by=' + colorBy;
     fetch(url)
         .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
-        .then(function(json) { _lastVPScatterJson = json; renderVPScatterInto('az-result', json, false); openPlotModal(); })
+        .then(function(json) { _lastVPScatterJson = json; _lastAzJson = null; _lastHybridAzJson = null; _lastAnomalyAzJson = null; renderVPScatterInto('az-result', json, false); openPlotModal(); })
         .catch(function(err) { resultDiv.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + err.message + '</div>'; })
         .finally(function() { if (btn) { btn.disabled = false; btn.textContent = '\u2B24 VP Scatter'; } });
 }
@@ -4613,7 +4613,7 @@ function openPlotModal(csJson) {
         container.appendChild(sqDivider); container.appendChild(sqFull);
     }
     modal.classList.add('active'); document.body.style.overflow = 'hidden';
-    var hasCrossSection = !!csJson, hasAzMean = !!_lastAzJson || !!_lastHybridAzJson || !!_lastAnomalyAzJson, hasShearQuads = !!_lastSqJson;
+    var hasCrossSection = !!csJson, hasAzMean = !!_lastAzJson || !!_lastHybridAzJson || !!_lastAnomalyAzJson || !!_lastVPScatterJson, hasShearQuads = !!_lastSqJson;
     var hasSub = hasCrossSection || hasAzMean || hasShearQuads;
     if (hasSub) box.classList.add('split'); else box.classList.remove('split');
     csFull.style.display = hasCrossSection?'block':'none'; csDivider.style.display = hasCrossSection?'block':'none';
@@ -4654,7 +4654,8 @@ function openPlotModal(csJson) {
     Plotly.newPlot('plotly-fullscreen', [fullHeatmap].concat(d.overlayTraces||[]).concat(d.maxTraces||[]), fullLayout, d.config);
     if (hasCrossSection) renderCrossSectionInto('cs-fullscreen', csJson, true);
     if (hasAzMean) {
-        if (_lastAnomalyAzJson) renderAnomalyAzimuthalMeanInto('az-fullscreen', _lastAnomalyAzJson, true);
+        if (_lastVPScatterJson) renderVPScatterInto('az-fullscreen', _lastVPScatterJson, true);
+        else if (_lastAnomalyAzJson) renderAnomalyAzimuthalMeanInto('az-fullscreen', _lastAnomalyAzJson, true);
         else if (_lastHybridAzJson) renderHybridAzimuthalMeanInto('az-fullscreen', _lastHybridAzJson, true);
         else renderAzimuthalMeanInto('az-fullscreen', _lastAzJson, true);
     }
