@@ -4096,13 +4096,13 @@ function renderVPScatterInto(targetId, json, fullsize) {
                   tickfont: { color: '#aaa', size: fontSize.tick },
                   gridcolor: 'rgba(255,255,255,0.06)', zeroline: false,
                   anchor: 'x2' },
-        margin: fullsize ? { l:60,r:60,t:60,b:50 } : { l:50,r:50,t:50,b:42 },
+        margin: fullsize ? { l:60,r:60,t:60,b:65 } : { l:50,r:50,t:50,b:55 },
         showlegend: true,
         legend: { font: { color: '#aaa', size: 9 }, bgcolor: 'rgba(0,0,0,0.3)',
                   x: 0.46, y: 0.98, xanchor: 'right', yanchor: 'top',
                   orientation: 'h' },
         hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 11 } },
-        annotations: [_fischerCitation]
+        annotations: [Object.assign({}, _fischerCitation, { y: -0.12 })]
     };
 
     if (!fullsize) {
