@@ -3886,14 +3886,12 @@ function renderVPScatterInto(targetId, json, fullsize) {
         [0.85, 'rgb(214,96,77)'], [1.0, 'rgb(178,24,43)']
     ];
 
-    // ── Helper: build marker arrays with current-case highlighting ──
-    function buildMarker(dvs, showColorbar, xaxisRef) {
-        var sizes = withVF.map(function(p) { return p.case_index === currentCaseIndex ? 14 : 8; });
-        var lnColors = withVF.map(function(p) { return p.case_index === currentCaseIndex ? '#ffffff' : 'rgba(0,0,0,0.3)'; });
-        var lnWidths = withVF.map(function(p) { return p.case_index === currentCaseIndex ? 2.5 : 0.5; });
+    // ── Helper: build marker for background cases ──
+    function buildMarker(dvs, showColorbar) {
         var m = {
-            size: sizes, color: dvs, colorscale: dvmaxColorscale, cmin: -30, cmax: 30,
-            line: { color: lnColors, width: lnWidths }
+            size: 7, color: dvs, colorscale: dvmaxColorscale, cmin: -30, cmax: 30,
+            opacity: 0.7,
+            line: { color: 'rgba(0,0,0,0.3)', width: 0.5 }
         };
         if (showColorbar) {
             m.colorbar = {
@@ -3904,6 +3902,12 @@ function renderVPScatterInto(targetId, json, fullsize) {
             m.showscale = false;
         }
         return m;
+    }
+
+    // ── Find current case in withVF for highlighting ──
+    var curCase = null;
+    for (var ci = 0; ci < withVF.length; ci++) {
+        if (withVF[ci].case_index === currentCaseIndex) { curCase = withVF[ci]; break; }
     }
 
     if (withVF.length > 0) {
@@ -3995,6 +3999,39 @@ function renderVPScatterInto(targetId, json, fullsize) {
                 xaxis: 'x2', yaxis: 'y2',
                 marker: { symbol: 'square', size: 10, color: grpColors[grp] || '#fff', line: { color: '#fff', width: 1 } },
                 name: grp + ' mean', legendgroup: grp, showlegend: false
+            });
+        }
+    }
+
+    // ── Current case highlight (rendered last = on top) ──
+    if (curCase) {
+        var curLabel = curCase.storm_name + ' ' + curCase.datetime;
+        var curDv = curCase[colorBy] || 0;
+        var starStyle = {
+            symbol: 'star', size: 18,
+            color: '#facc15', opacity: 1,
+            line: { color: '#ffffff', width: 2 }
+        };
+        // Left panel
+        traces.push({
+            x: [curCase.vp], y: [curCase.vortex_favorability],
+            mode: 'markers', type: 'scatter',
+            xaxis: 'x', yaxis: 'y',
+            marker: starStyle,
+            text: [curLabel],
+            hovertemplate: '<b>%{text} \u2605</b><br>VP: %{x:.1f}<br>Vortex Fav: %{y:.2f}<br>\u0394Vmax: ' + curDv + ' kt<extra></extra>',
+            name: '\u2605 Current', legendgroup: 'current', showlegend: true
+        });
+        // Right panel
+        if (curCase.vortex_height !== null && curCase.vortex_width !== null) {
+            traces.push({
+                x: [curCase.vortex_height], y: [curCase.vortex_width],
+                mode: 'markers', type: 'scatter',
+                xaxis: 'x2', yaxis: 'y2',
+                marker: starStyle,
+                text: [curLabel],
+                hovertemplate: '<b>%{text} \u2605</b><br>Height: %{x:.2f}<br>Width: %{y:.2f}<br>\u0394Vmax: ' + curDv + ' kt<extra></extra>',
+                name: '\u2605 Current', legendgroup: 'current', showlegend: false
             });
         }
     }
