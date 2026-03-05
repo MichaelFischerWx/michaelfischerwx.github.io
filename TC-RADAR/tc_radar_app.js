@@ -3890,8 +3890,8 @@ function renderVPScatterInto(targetId, json, fullsize) {
     function buildMarker(dvs, showColorbar) {
         var m = {
             size: 7, color: dvs, colorscale: dvmaxColorscale, cmin: -30, cmax: 30,
-            opacity: 0.7,
-            line: { color: 'rgba(0,0,0,0.3)', width: 0.5 }
+            opacity: 0.85,
+            line: { color: 'rgba(255,255,255,0.5)', width: 0.75 }
         };
         if (showColorbar) {
             m.colorbar = {
