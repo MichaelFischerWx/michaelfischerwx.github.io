@@ -3888,9 +3888,9 @@ function renderVPScatterInto(targetId, json, fullsize) {
     var traces = [];
     var dvmaxLabel = colorBy === 'dvmax_12h' ? '12-h \u0394Vmax (kt)' : '24-h \u0394Vmax (kt)';
     var dvmaxColorscale = [
-        [0.0, 'rgb(5,48,97)'], [0.15, 'rgb(33,102,172)'],
-        [0.3, 'rgb(67,147,195)'], [0.4, 'rgb(146,197,222)'],
-        [0.5, 'rgb(247,247,247)'],
+        [0.0, 'rgb(0,128,128)'], [0.15, 'rgb(64,175,175)'],
+        [0.3, 'rgb(140,210,210)'], [0.4, 'rgb(200,235,235)'],
+        [0.5, 'rgb(245,245,245)'],
         [0.6, 'rgb(253,219,199)'], [0.7, 'rgb(244,165,130)'],
         [0.85, 'rgb(214,96,77)'], [1.0, 'rgb(178,24,43)']
     ];
@@ -4099,7 +4099,8 @@ function renderVPScatterInto(targetId, json, fullsize) {
         margin: fullsize ? { l:60,r:60,t:60,b:50 } : { l:50,r:50,t:50,b:42 },
         showlegend: true,
         legend: { font: { color: '#aaa', size: 9 }, bgcolor: 'rgba(0,0,0,0.3)',
-                  x: 0.50, y: 0.98, xanchor: 'center', yanchor: 'top' },
+                  x: 0.46, y: 0.98, xanchor: 'right', yanchor: 'top',
+                  orientation: 'h' },
         hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 11 } },
         annotations: [_fischerCitation]
     };
