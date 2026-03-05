@@ -4048,7 +4048,7 @@ function renderVPScatterInto(targetId, json, fullsize) {
             marker: starStyle,
             text: [curLabel],
             hovertemplate: '<b>%{text} \u2605</b><br>Vmax: ' + curVmax + '<br>VP: %{x:.1f}<br>Vortex Fav: %{y:.2f}<br>\u0394Vmax: ' + curDv + ' kt<extra></extra>',
-            name: '\u2605 Current', legendgroup: 'current', showlegend: true
+            name: '\u2605 Current', legendgroup: 'current', showlegend: false
         });
         // Right panel
         if (curCase.vortex_height !== null && curCase.vortex_width !== null) {
@@ -4090,7 +4090,7 @@ function renderVPScatterInto(targetId, json, fullsize) {
         margin: fullsize ? { l:60,r:60,t:60,b:50 } : { l:50,r:50,t:50,b:42 },
         showlegend: true,
         legend: { font: { color: '#aaa', size: 9 }, bgcolor: 'rgba(0,0,0,0.3)',
-                  x: 0.02, y: 0.98, xanchor: 'left', yanchor: 'top' },
+                  x: 0.50, y: 0.98, xanchor: 'center', yanchor: 'top' },
         hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 11 } }
     };
 
