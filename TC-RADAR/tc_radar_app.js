@@ -3772,8 +3772,14 @@ function renderAnomalyAzimuthalMeanInto(targetId, json, fullsize) {
     if (json.error || !json.anomaly) {
         el.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + (json.error || 'Anomaly data unavailable.') + '</div>';
         if (json.raw) {
-            // Fall back to rendering raw hybrid field
-            var fallback = Object.assign({}, json, { azimuthal_mean: json.raw });
+            // Fall back to rendering raw hybrid field with natural colorbar range
+            var vi = json.variable || {};
+            var rawVar = Object.assign({}, vi, {
+                vmin: vi.raw_vmin != null ? vi.raw_vmin : vi.vmin,
+                vmax: vi.raw_vmax != null ? vi.raw_vmax : vi.vmax,
+                colorscale: vi.raw_colorscale || vi.colorscale,
+            });
+            var fallback = Object.assign({}, json, { azimuthal_mean: json.raw, variable: rawVar });
             renderHybridAzimuthalMeanInto(targetId, fallback, fullsize);
         }
         return;
