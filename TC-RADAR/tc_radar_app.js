@@ -3940,39 +3940,66 @@ function renderVPScatterInto(targetId, json, fullsize) {
         });
     }
 
-    // ── 2σ ellipses for left panel ──
+    // ── 2σ ellipses (filtered: overwater, ≤100 kt) ──
     var grpColors = { RI: 'rgba(239,68,68,0.6)', SI: 'rgba(251,191,36,0.6)', NI: 'rgba(96,165,250,0.6)' };
+    var dtlKey = colorBy === 'dvmax_24h' ? 'dtl_min_24h' : 'dtl_min_12h';
 
-    // Compute group stats for height/width from data (not in API ellipses)
+    // Filter for ellipse-eligible cases: overwater (DTL > 0) and Vmax ≤ 100 kt
+    var ellipseEligible = withVF.filter(function(p) {
+        if (p.vmax_kt == null || p.vmax_kt > 100) return false;
+        var dtl = p[dtlKey];
+        if (dtl == null || dtl <= 0) return false;
+        return true;
+    });
+
+    // Group eligible cases by intensification rate
+    var vpGroups = { RI: { vp: [], vf: [] }, SI: { vp: [], vf: [] }, NI: { vp: [], vf: [] } };
     var hwGroups = { RI: { h: [], w: [] }, SI: { h: [], w: [] }, NI: { h: [], w: [] } };
-    for (var gi = 0; gi < withVF.length; gi++) {
-        var p = withVF[gi];
-        if (p.vortex_height === null || p.vortex_width === null) continue;
+    var nEllipse = 0;
+    for (var gi = 0; gi < ellipseEligible.length; gi++) {
+        var p = ellipseEligible[gi];
+        if (p.vortex_favorability === null || p.vortex_favorability === undefined) continue;
         var dv = p[colorBy] || 0;
         var gk = dv >= 20 ? 'RI' : (dv > 0 ? 'SI' : 'NI');
-        hwGroups[gk].h.push(p.vortex_height);
-        hwGroups[gk].w.push(p.vortex_width);
+        vpGroups[gk].vp.push(p.vp);
+        vpGroups[gk].vf.push(p.vortex_favorability);
+        if (p.vortex_height != null && p.vortex_width != null) {
+            hwGroups[gk].h.push(p.vortex_height);
+            hwGroups[gk].w.push(p.vortex_width);
+        }
+        nEllipse++;
     }
 
-    for (var grp in ellipses) {
-        var e = ellipses[grp];
-        if (!e) continue;
+    // Helper: compute mean and std of an array
+    function _meanStd(arr) {
+        var n = arr.length; if (n === 0) return { m: 0, s: 0 };
+        var m = arr.reduce(function(a,b){return a+b;},0) / n;
+        var s = Math.sqrt(arr.reduce(function(a,b){return a+(b-m)*(b-m);},0) / n);
+        return { m: m, s: s };
+    }
+
+    var grpNames = ['RI', 'SI', 'NI'];
+    for (var gIdx = 0; gIdx < grpNames.length; gIdx++) {
+        var grp = grpNames[gIdx];
+        var vg = vpGroups[grp];
+        if (vg.vp.length < 3) continue;
 
         // Left panel ellipse (VP vs Favorability)
+        var vpStat = _meanStd(vg.vp), vfStat = _meanStd(vg.vf);
         var ellX = [], ellY = [];
         for (var a = 0; a <= 360; a += 5) {
             var rad = a * Math.PI / 180;
-            ellX.push(e.mean_vp + 2 * e.std_vp * Math.cos(rad));
-            ellY.push(e.mean_vf + 2 * e.std_vf * Math.sin(rad));
+            ellX.push(vpStat.m + 2 * vpStat.s * Math.cos(rad));
+            ellY.push(vfStat.m + 2 * vfStat.s * Math.sin(rad));
         }
         traces.push({
             x: ellX, y: ellY, mode: 'lines', type: 'scatter',
             xaxis: 'x', yaxis: 'y',
             line: { color: grpColors[grp] || 'rgba(255,255,255,0.4)', width: 2, dash: 'dot' },
-            name: grp + ' (2\u03c3)', legendgroup: grp, showlegend: true
+            name: grp + ' (2\u03c3, n=' + vg.vp.length + ')', legendgroup: grp, showlegend: true
         });
         traces.push({
-            x: [e.mean_vp], y: [e.mean_vf], mode: 'markers', type: 'scatter',
+            x: [vpStat.m], y: [vfStat.m], mode: 'markers', type: 'scatter',
             xaxis: 'x', yaxis: 'y',
             marker: { symbol: 'square', size: 10, color: grpColors[grp] || '#fff', line: { color: '#fff', width: 1 } },
             name: grp + ' mean', legendgroup: grp, showlegend: false
@@ -3981,15 +4008,12 @@ function renderVPScatterInto(targetId, json, fullsize) {
         // Right panel ellipse (Height vs Width)
         var hw = hwGroups[grp];
         if (hw && hw.h.length >= 3) {
-            var mH = hw.h.reduce(function(a,b){return a+b;},0) / hw.h.length;
-            var mW = hw.w.reduce(function(a,b){return a+b;},0) / hw.w.length;
-            var sH = Math.sqrt(hw.h.reduce(function(a,b){return a+(b-mH)*(b-mH);},0) / hw.h.length);
-            var sW = Math.sqrt(hw.w.reduce(function(a,b){return a+(b-mW)*(b-mW);},0) / hw.w.length);
+            var hStat = _meanStd(hw.h), wStat = _meanStd(hw.w);
             var eX2 = [], eY2 = [];
             for (var a2 = 0; a2 <= 360; a2 += 5) {
                 var r2 = a2 * Math.PI / 180;
-                eX2.push(mH + 2 * sH * Math.cos(r2));
-                eY2.push(mW + 2 * sW * Math.sin(r2));
+                eX2.push(hStat.m + 2 * hStat.s * Math.cos(r2));
+                eY2.push(wStat.m + 2 * wStat.s * Math.sin(r2));
             }
             traces.push({
                 x: eX2, y: eY2, mode: 'lines', type: 'scatter',
@@ -3998,7 +4022,7 @@ function renderVPScatterInto(targetId, json, fullsize) {
                 name: grp + ' (2\u03c3)', legendgroup: grp, showlegend: false
             });
             traces.push({
-                x: [mH], y: [mW], mode: 'markers', type: 'scatter',
+                x: [hStat.m], y: [wStat.m], mode: 'markers', type: 'scatter',
                 xaxis: 'x2', yaxis: 'y2',
                 marker: { symbol: 'square', size: 10, color: grpColors[grp] || '#fff', line: { color: '#fff', width: 1 } },
                 name: grp + ' mean', legendgroup: grp, showlegend: false
@@ -4041,7 +4065,8 @@ function renderVPScatterInto(targetId, json, fullsize) {
     }
 
     var plotBg = '#0a1628';
-    var title = 'VP vs Vortex Favorability & Decomposition' + (currentCaseIndex !== null ? ' (current case highlighted)' : '');
+    var ellipseNote = nEllipse > 0 ? '  |  Ellipses: overwater, \u2264100 kt (n=' + nEllipse + ')' : '';
+    var title = 'VP vs Vortex Favorability & Decomposition' + ellipseNote;
     var layout = {
         title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.98, x: 0.5, xanchor: 'center' },
         paper_bgcolor: plotBg, plot_bgcolor: plotBg,
