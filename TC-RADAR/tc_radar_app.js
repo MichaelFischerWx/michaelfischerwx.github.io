@@ -3880,6 +3880,18 @@ function renderVPScatterInto(targetId, json, fullsize) {
         return;
     }
 
+    // If vortex metrics haven't been computed yet (server still loading), show status
+    if (json.vortex_ready === false) {
+        var nVF = 0;
+        for (var vi = 0; vi < points.length; vi++) {
+            if (points[vi].vortex_favorability !== null && points[vi].vortex_favorability !== undefined) nVF++;
+        }
+        if (nVF === 0) {
+            el.innerHTML = '<div class="explorer-status">\u23F3 Vortex metrics still loading on the server (' + points.length + ' cases have VP data). Please wait ~1 min and refresh.</div>';
+            return;
+        }
+    }
+
     var fontSize = fullsize ? { title:13,axis:12,tick:10 } : { title:10,axis:9,tick:8 };
 
     // Separate points with and without vortex favorability
