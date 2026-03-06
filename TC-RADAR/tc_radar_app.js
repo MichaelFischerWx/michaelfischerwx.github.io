@@ -3244,18 +3244,85 @@ function _resetCompShadingInline() {
 }
 
 function _showCompShadingToolbar() {
-    var toolbar = document.getElementById('comp-shading-toolbar');
-    if (toolbar) toolbar.style.display = '';
-    // Sync inline controls from Step 3 master controls
-    var masterCmap = document.getElementById('comp-cmap');
-    var inlineCmap = document.getElementById('comp-cmap-inline');
-    if (masterCmap && inlineCmap) inlineCmap.value = masterCmap.value;
-    var masterMin = document.getElementById('comp-vmin');
-    var inlineMin = document.getElementById('comp-vmin-inline');
-    if (masterMin && inlineMin) { inlineMin.value = masterMin.value; inlineMin.placeholder = masterMin.placeholder; }
-    var masterMax = document.getElementById('comp-vmax');
-    var inlineMax = document.getElementById('comp-vmax-inline');
-    if (masterMax && inlineMax) { inlineMax.value = masterMax.value; inlineMax.placeholder = masterMax.placeholder; }
+    // No-op: replaced by per-result _buildShadingControlsRow() controls
+}
+
+// ── Per-result shading controls ─────────────────────────────────────────
+// Registry: maps prefix → { chartIds, defaultColorscale, defaultVmin, defaultVmax }
+var _shadingRegistry = {};
+
+function _registerShadingTargets(prefix, chartIds, colorscale, vmin, vmax) {
+    _shadingRegistry[prefix] = {
+        chartIds: chartIds,
+        defaultColorscale: colorscale,
+        defaultVmin: vmin,
+        defaultVmax: vmax
+    };
+}
+
+var _SHADING_CMAP_OPTIONS =
+    '<option value="">Default</option>' +
+    '<optgroup label="Sequential"><option value="Viridis">Viridis</option><option value="Inferno">Inferno</option><option value="Magma">Magma</option><option value="Plasma">Plasma</option><option value="Cividis">Cividis</option><option value="Hot">Hot</option><option value="YlOrRd">YlOrRd</option><option value="YlGnBu">YlGnBu</option><option value="Blues">Blues</option><option value="Reds">Reds</option><option value="Greys">Greys</option></optgroup>' +
+    '<optgroup label="Diverging"><option value="RdBu">RdBu</option><option value=\'[[0,&quot;rgb(5,10,172)&quot;],[0.5,&quot;rgb(255,255,255)&quot;],[1,&quot;rgb(178,10,28)&quot;]]\'>BuWtRd</option><option value="Picnic">Picnic</option><option value="Portland">Portland</option></optgroup>' +
+    '<optgroup label="Other"><option value="Jet">Jet</option><option value="Rainbow">Rainbow</option><option value="Electric">Electric</option></optgroup>';
+
+function _buildShadingControlsRow(prefix, opts) {
+    if (!opts) opts = {};
+    var label = opts.label || '';
+    var labelHtml = label
+        ? '<span class="cst-label" style="margin-right:4px;">' + label + '</span><span class="cst-sep"></span>'
+        : '';
+    return '<div class="comp-shading-toolbar" style="margin-top:8px;">' +
+        '<div class="cst-row">' +
+            labelHtml +
+            '<label class="cst-label">Colormap</label>' +
+            '<select id="' + prefix + '-cmap" class="cst-select" onchange="_applyShadingFor(\'' + prefix + '\')">' +
+                _SHADING_CMAP_OPTIONS +
+            '</select>' +
+            '<span class="cst-sep"></span>' +
+            '<label class="cst-label">Range</label>' +
+            '<input type="number" id="' + prefix + '-vmin" class="cst-input" placeholder="' + (opts.defaultVmin != null ? opts.defaultVmin : 'min') + '" step="any" onchange="_applyShadingFor(\'' + prefix + '\')">' +
+            '<span class="cst-to">to</span>' +
+            '<input type="number" id="' + prefix + '-vmax" class="cst-input" placeholder="' + (opts.defaultVmax != null ? opts.defaultVmax : 'max') + '" step="any" onchange="_applyShadingFor(\'' + prefix + '\')">' +
+            '<button class="cst-reset" onclick="_resetShadingFor(\'' + prefix + '\')" title="Reset to default">\u21BA</button>' +
+        '</div>' +
+    '</div>';
+}
+
+function _applyShadingFor(prefix) {
+    var reg = _shadingRegistry[prefix];
+    if (!reg) return;
+    var cmapEl = document.getElementById(prefix + '-cmap');
+    var vminEl = document.getElementById(prefix + '-vmin');
+    var vmaxEl = document.getElementById(prefix + '-vmax');
+
+    // Colorscale
+    var cs = cmapEl ? cmapEl.value : '';
+    if (!cs) cs = reg.defaultColorscale;
+    else { try { cs = JSON.parse(cs); } catch(e) { /* string name like "Viridis" */ } }
+
+    // Range
+    var zmin = (vminEl && vminEl.value !== '') ? parseFloat(vminEl.value) : reg.defaultVmin;
+    var zmax = (vmaxEl && vmaxEl.value !== '') ? parseFloat(vmaxEl.value) : reg.defaultVmax;
+
+    reg.chartIds.forEach(function(id) {
+        var plotDiv = document.getElementById(id);
+        if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
+        // Only restyle trace 0 (heatmap) — leave contour overlays untouched
+        Plotly.restyle(plotDiv, { colorscale: [cs], zmin: [zmin], zmax: [zmax] }, [0]);
+    });
+}
+
+function _resetShadingFor(prefix) {
+    var reg = _shadingRegistry[prefix];
+    if (!reg) return;
+    var cmapEl = document.getElementById(prefix + '-cmap');
+    var vminEl = document.getElementById(prefix + '-vmin');
+    var vmaxEl = document.getElementById(prefix + '-vmax');
+    if (cmapEl) cmapEl.value = '';
+    if (vminEl) vminEl.value = '';
+    if (vmaxEl) vmaxEl.value = '';
+    _applyShadingFor(prefix);
 }
 
 // ── Tight data-extent helper for plan-view axes ─────────────
@@ -5583,7 +5650,7 @@ function initCompositePanel() {
                         '<span class="wizard-generate-summary" id="wiz-generate-summary"></span>' +
                     '</div>' +
                     // ── Inline shading toolbar (mirrors Step 3 controls for live adjustment) ──
-                    '<div class="comp-shading-toolbar" id="comp-shading-toolbar" style="display:none;">' +
+                    '<div class="comp-shading-toolbar" id="comp-shading-toolbar" style="display:none !important;">' +
                         '<div class="cst-row">' +
                             '<label class="cst-label">Colormap</label>' +
                             '<select id="comp-cmap-inline" class="cst-select" onchange="_syncCompCmapFromInline()">' +
@@ -6683,17 +6750,9 @@ function renderCompositeAzMeanInto(targetId, json, filters) {
     var isNorm = json.normalized;
     var rLabel = isNorm ? 'R / RMW' : 'Radius (km)';
     var fontSize = { title:14, axis:12, tick:10, cbar:12, cbarTick:10, hover:13 };
-    // Store defaults and update placeholders
-    _compDefaultColorscale = varInfo.colorscale; _compDefaultVmin = varInfo.vmin; _compDefaultVmax = varInfo.vmax;
-    var vminInp = document.getElementById('comp-vmin'), vmaxInp = document.getElementById('comp-vmax');
-    if (vminInp) vminInp.placeholder = varInfo.vmin; if (vmaxInp) vmaxInp.placeholder = varInfo.vmax;
-    // Apply user overrides
-    var activeColorscale = _getCompColorscale(varInfo.colorscale);
-    var activeVmin = _getCompVmin(varInfo.vmin);
-    var activeVmax = _getCompVmax(varInfo.vmax);
     var heatmap = {
         z: azData, x: radius, y: height_km, type: 'heatmap',
-        colorscale: activeColorscale, zmin: activeVmin, zmax: activeVmax,
+        colorscale: varInfo.colorscale, zmin: varInfo.vmin, zmax: varInfo.vmax,
         colorbar: { title: { text: varInfo.units, font: { color:'#ccc', size:fontSize.cbar } }, tickfont: { color:'#ccc', size:fontSize.cbarTick }, thickness:14, len:0.85 },
         hovertemplate: '<b>' + varInfo.display_name + '</b>: %{z:.2f} ' + varInfo.units + '<br>' + rLabel + ': %{x:.2f}<br>Height: %{y:.1f} km<extra></extra>',
         hoverongaps: false
@@ -6727,7 +6786,8 @@ function renderCompositeAzMeanInto(targetId, json, filters) {
     var compAzOverlay = buildCompAzOverlayContours(json, radius, height_km);
     el.style.display = 'block';
     _lastCompJson = json; _lastCompType = 'az';
-    el.innerHTML = '<div id="comp-az-chart" style="width:100%;height:560px;border-radius:8px;overflow:hidden;"></div>' + _buildCompToolbar();
+    _registerShadingTargets('shd-az', ['comp-az-chart'], varInfo.colorscale, varInfo.vmin, varInfo.vmax);
+    el.innerHTML = '<div id="comp-az-chart" style="width:100%;height:560px;border-radius:8px;overflow:hidden;"></div>' + _buildShadingControlsRow('shd-az', {defaultVmin: varInfo.vmin, defaultVmax: varInfo.vmax}) + _buildCompToolbar();
     Plotly.newPlot('comp-az-chart', [heatmap].concat(compAzOverlay), layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
 }
 
@@ -6738,13 +6798,7 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
     var isNorm = json.normalized;
     var rLabel = isNorm ? 'R / RMW' : 'Radius (km)';
     var fontSize = { title:14, axis:11, tick:10, cbar:11, cbarTick:10, hover:12, panel:12 };
-    // Store defaults and update placeholders
-    _compDefaultColorscale = varInfo.colorscale; _compDefaultVmin = varInfo.vmin; _compDefaultVmax = varInfo.vmax;
-    var vminInp = document.getElementById('comp-vmin'), vmaxInp = document.getElementById('comp-vmax');
-    if (vminInp) vminInp.placeholder = varInfo.vmin; if (vmaxInp) vmaxInp.placeholder = varInfo.vmax;
-    // Apply user overrides
-    var activeColorscale = _getCompColorscale(varInfo.colorscale);
-    var zmin = _getCompVmin(varInfo.vmin), zmax = _getCompVmax(varInfo.vmax);
+    var zmin = varInfo.vmin, zmax = varInfo.vmax;
 
     var panelOrder = [
         { key:'USL', label:'Upshear Left', row:0, col:0 },
@@ -6769,7 +6823,7 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
         var showCbar = (i === 1);
         traces.push({
             z:qData.data, x:radius, y:height_km, type:'heatmap',
-            colorscale:activeColorscale, zmin:zmin, zmax:zmax,
+            colorscale:varInfo.colorscale, zmin:zmin, zmax:zmax,
             xaxis:'x'+axSuffix, yaxis:'y'+axSuffix,
             showscale:showCbar,
             colorbar: showCbar ? { title:{text:varInfo.units,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:14, len:0.85, x:1.02, y:0.5 } : undefined,
@@ -6830,7 +6884,8 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
 
     el.style.display = 'block';
     _lastCompJson = json; _lastCompType = 'sq';
-    el.innerHTML = '<div id="comp-sq-chart" style="width:100%;height:740px;border-radius:8px;overflow:hidden;"></div>' + _buildCompToolbar();
+    _registerShadingTargets('shd-sq', ['comp-sq-chart'], varInfo.colorscale, varInfo.vmin, varInfo.vmax);
+    el.innerHTML = '<div id="comp-sq-chart" style="width:100%;height:740px;border-radius:8px;overflow:hidden;"></div>' + _buildShadingControlsRow('shd-sq', {defaultVmin: varInfo.vmin, defaultVmax: varInfo.vmax}) + _buildCompToolbar();
     Plotly.newPlot('comp-sq-chart', traces.concat(compQuadOverlay), layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
 }
 
@@ -7037,7 +7092,8 @@ function renderCompositeAnomalyInto(targetId, json, filters) {
 
     el.style.display = 'block';
     _lastCompJson = json; _lastCompType = 'anom';
-    el.innerHTML = '<div id="comp-anom-chart" style="width:100%;height:560px;border-radius:8px;overflow:hidden;"></div>' + _buildCompToolbar();
+    _registerShadingTargets('shd-anom', ['comp-anom-chart'], anomColorscale, zmin, zmax);
+    el.innerHTML = '<div id="comp-anom-chart" style="width:100%;height:560px;border-radius:8px;overflow:hidden;"></div>' + _buildShadingControlsRow('shd-anom', {defaultVmin: zmin, defaultVmax: zmax}) + _buildCompToolbar();
     Plotly.newPlot('comp-anom-chart', [heatmap], layout, { responsive: true, displayModeBar: true, displaylogo: false });
 }
 
@@ -7052,9 +7108,17 @@ function _renderDiffAnomaly(targetId, diffJson, jsonA, jsonB, filtersA, filtersB
         '<div id="comp-diff-anom-a" style="width:100%;height:460px;border-radius:8px;overflow:hidden;"></div>' +
         '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#f59e0b;">\uD83D\uDFE0 Group B</div>' +
         '<div id="comp-diff-anom-b" style="width:100%;height:460px;border-radius:8px;overflow:hidden;"></div>' +
+        _buildShadingControlsRow('shd-danom-ab', {label: 'Panels A &amp; B', defaultVmin: -3, defaultVmax: 3}) +
         '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#ef4444;">\u0394 Difference (A \u2212 B)</div>' +
         '<div id="comp-diff-anom-d" style="width:100%;height:460px;border-radius:8px;overflow:hidden;"></div>' +
+        _buildShadingControlsRow('shd-danom-d', {label: 'Difference', defaultVmin: diffJson.variable.vmin, defaultVmax: diffJson.variable.vmax}) +
         _buildCompToolbar();
+
+    _registerShadingTargets('shd-danom-ab', ['comp-diff-anom-a', 'comp-diff-anom-b'], jsonA.variable.colorscale || [
+        [0.0,'rgb(5,48,97)'],[0.1,'rgb(33,102,172)'],[0.2,'rgb(67,147,195)'],[0.3,'rgb(146,197,222)'],
+        [0.4,'rgb(209,229,240)'],[0.5,'rgb(247,247,247)'],[0.6,'rgb(253,219,199)'],
+        [0.7,'rgb(244,165,130)'],[0.8,'rgb(214,96,77)'],[0.9,'rgb(178,24,43)'],[1.0,'rgb(103,0,31)']
+    ], -3, 3);
 
     var plotOpts = { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] };
     var plotBg = '#0a1628';
@@ -7119,6 +7183,8 @@ function _renderDiffAnomaly(targetId, diffJson, jsonA, jsonB, filtersA, filtersB
     }
     var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) + diffVmaxNote +
                  '<br>\u0394 Z-score Anomaly: ' + jsonA.variable.display_name + ' (Merge)';
+
+    _registerShadingTargets('shd-danom-d', ['comp-diff-anom-d'], _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax);
     buildAnomPlot('comp-diff-anom-d', diffJson.anomaly, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, '\u0394\u03c3');
 }
 
@@ -7405,7 +7471,8 @@ function renderCompositeCFADInto(targetId, json, filters) {
 
     el.style.display = 'block';
     _lastCompJson = json; _lastCompType = 'cfad';
-    el.innerHTML = '<div id="comp-cfad-chart" style="width:100%;height:560px;border-radius:8px;overflow:hidden;"></div>' + _buildCompToolbar();
+    _registerShadingTargets('shd-cfad', ['comp-cfad-chart'], cfadColorscale, plotZmin, plotZmax);
+    el.innerHTML = '<div id="comp-cfad-chart" style="width:100%;height:560px;border-radius:8px;overflow:hidden;"></div>' + _buildShadingControlsRow('shd-cfad', {defaultVmin: plotZmin, defaultVmax: plotZmax}) + _buildCompToolbar();
     Plotly.newPlot('comp-cfad-chart', [heatmap], layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
 }
 
@@ -7580,7 +7647,8 @@ function renderCompositeCFADMultiInto(targetId, json, filters) {
 
     el.style.display = 'block';
     _lastCompJson = json; _lastCompType = 'cfad_multi';
-    el.innerHTML = '<div id="comp-cfad-chart" style="width:100%;height:820px;border-radius:8px;overflow:hidden;"></div>' + _buildCompToolbar();
+    _registerShadingTargets('shd-cfadm', ['comp-cfad-chart'], cfadColorscale, plotZmin, plotZmax);
+    el.innerHTML = '<div id="comp-cfad-chart" style="width:100%;height:820px;border-radius:8px;overflow:hidden;"></div>' + _buildShadingControlsRow('shd-cfadm', {defaultVmin: plotZmin, defaultVmax: plotZmax}) + _buildCompToolbar();
     Plotly.newPlot('comp-cfad-chart', traces, layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
 }
 
@@ -7718,19 +7786,9 @@ function renderCompositePlanViewInto(targetId, json, filters, pvParams) {
 
     var fontSize = { title:14, axis:12, tick:10, cbar:12, cbarTick:10, hover:13 };
 
-    // Store defaults and update placeholders
-    _compDefaultColorscale = varInfo.colorscale; _compDefaultVmin = varInfo.vmin; _compDefaultVmax = varInfo.vmax;
-    var vminInp = document.getElementById('comp-vmin'), vmaxInp = document.getElementById('comp-vmax');
-    if (vminInp) vminInp.placeholder = varInfo.vmin; if (vmaxInp) vmaxInp.placeholder = varInfo.vmax;
-
-    // Apply user overrides
-    var activeColorscale = _getCompColorscale(varInfo.colorscale);
-    var activeVmin = _getCompVmin(varInfo.vmin);
-    var activeVmax = _getCompVmax(varInfo.vmax);
-
     var heatmap = {
         z: planData, x: xAxis, y: yAxis, type: 'heatmap',
-        colorscale: activeColorscale, zmin: activeVmin, zmax: activeVmax,
+        colorscale: varInfo.colorscale, zmin: varInfo.vmin, zmax: varInfo.vmax,
         colorbar: { title: { text: varInfo.units, font: { color:'#ccc', size:fontSize.cbar } },
                     tickfont: { color:'#ccc', size:fontSize.cbarTick }, thickness:14, len:0.85 },
         hovertemplate: '<b>' + varInfo.display_name + '</b>: %{z:.2f} ' + varInfo.units +
@@ -7818,7 +7876,8 @@ function renderCompositePlanViewInto(targetId, json, filters, pvParams) {
 
     el.style.display = 'block';
     _lastCompJson = json; _lastCompType = 'pv';
-    el.innerHTML = '<div id="comp-pv-chart" style="width:100%;height:620px;border-radius:8px;overflow:hidden;"></div>' + _buildCompToolbar();
+    _registerShadingTargets('shd-pv', ['comp-pv-chart'], varInfo.colorscale, varInfo.vmin, varInfo.vmax);
+    el.innerHTML = '<div id="comp-pv-chart" style="width:100%;height:620px;border-radius:8px;overflow:hidden;"></div>' + _buildShadingControlsRow('shd-pv', {defaultVmin: varInfo.vmin, defaultVmax: varInfo.vmax}) + _buildCompToolbar();
     Plotly.newPlot('comp-pv-chart', [heatmap].concat(pvOverlay).concat(extraTraces), layout,
         { responsive:true, displayModeBar:true, displaylogo:false,
           modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
@@ -8130,21 +8189,27 @@ function _renderDiffAzMean(targetId, diffJson, jsonA, jsonB, filtersA, filtersB)
     _lastCompJson = diffJson; _lastCompType = 'az';
 
     // Create 3 stacked chart containers + toolbar
+    var varInfoA = jsonA.variable;
+    var diffVarInfo = diffJson.variable;
+
     el.innerHTML =
         '<div style="margin-bottom:4px;padding:6px 10px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#60a5fa;">\uD83D\uDD35 Group A</div>' +
         '<div id="comp-diff-az-a" style="width:100%;height:460px;border-radius:8px;overflow:hidden;"></div>' +
         '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#f59e0b;">\uD83D\uDFE0 Group B</div>' +
         '<div id="comp-diff-az-b" style="width:100%;height:460px;border-radius:8px;overflow:hidden;"></div>' +
+        _buildShadingControlsRow('shd-daz-ab', {label: 'Panels A &amp; B', defaultVmin: varInfoA.vmin, defaultVmax: varInfoA.vmax}) +
         '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#ef4444;">\u0394 Difference (A \u2212 B)</div>' +
         '<div id="comp-diff-az-d" style="width:100%;height:460px;border-radius:8px;overflow:hidden;"></div>' +
+        _buildShadingControlsRow('shd-daz-d', {label: 'Difference', defaultVmin: diffVarInfo.vmin, defaultVmax: diffVarInfo.vmax}) +
         _buildCompToolbar();
+
+    _registerShadingTargets('shd-daz-ab', ['comp-diff-az-a', 'comp-diff-az-b'], varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax);
 
     var plotOpts = { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] };
     var plotBg = '#0a1628';
     var isNorm = jsonA.normalized;
     var rLabel = isNorm ? 'R / RMW' : 'Radius (km)';
     var radius = jsonA.radius_rrmw, height_km = jsonA.height_km;
-    var varInfoA = jsonA.variable;
     var covPct = Math.round((jsonA.coverage_min || 0.5) * 100);
     var dtypeLabel = (document.getElementById('comp-dtype') && document.getElementById('comp-dtype').value === 'merge') ? ' (Merge)' : '';
     var fontSize = { title:13, axis:11, tick:10, cbar:11, cbarTick:10, hover:12 };
@@ -8172,13 +8237,9 @@ function _renderDiffAzMean(targetId, diffJson, jsonA, jsonB, filtersA, filtersB)
         Plotly.newPlot(chartId, [hm].concat(ovTraces), layout, plotOpts);
     }
 
-    // Store defaults and apply user overrides for Group A/B panels
-    _compDefaultColorscale = varInfoA.colorscale; _compDefaultVmin = varInfoA.vmin; _compDefaultVmax = varInfoA.vmax;
-    var vminInp = document.getElementById('comp-vmin'), vmaxInp = document.getElementById('comp-vmax');
-    if (vminInp) vminInp.placeholder = varInfoA.vmin; if (vmaxInp) vmaxInp.placeholder = varInfoA.vmax;
-    var activeColorscale = _getCompColorscale(varInfoA.colorscale);
-    var activeVmin = _getCompVmin(varInfoA.vmin);
-    var activeVmax = _getCompVmax(varInfoA.vmax);
+    var activeColorscale = varInfoA.colorscale;
+    var activeVmin = varInfoA.vmin;
+    var activeVmax = varInfoA.vmax;
 
     var meanVmaxA = _computeCompositeMeanVmax(filtersA);
     var vmaxNoteA = meanVmaxA !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxA + ' kt' : '';
@@ -8192,7 +8253,6 @@ function _renderDiffAzMean(targetId, diffJson, jsonA, jsonB, filtersA, filtersB)
                  '<br>Azimuthal Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
     buildAzPlot('comp-diff-az-b', jsonB.azimuthal_mean, titleB, activeColorscale, activeVmin, activeVmax, varInfoA.units, jsonB);
 
-    var diffVarInfo = diffJson.variable;
     var diffVmaxNote = '';
     if (meanVmaxA !== null || meanVmaxB !== null) {
         diffVmaxNote = ' | V\u0305<sub>max</sub>: ';
@@ -8202,6 +8262,8 @@ function _renderDiffAzMean(targetId, diffJson, jsonA, jsonB, filtersA, filtersB)
     }
     var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) + diffVmaxNote +
                  '<br>\u0394 Azimuthal Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
+
+    _registerShadingTargets('shd-daz-d', ['comp-diff-az-d'], _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax);
     buildAzPlot('comp-diff-az-d', diffJson.azimuthal_mean, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, diffVarInfo.units, diffJson);
 }
 
@@ -8210,21 +8272,27 @@ function _renderDiffQuadMean(targetId, diffJson, jsonA, jsonB, filtersA, filters
     el.style.display = 'block';
     _lastCompJson = diffJson; _lastCompType = 'sq';
 
+    var varInfoA = jsonA.variable;
+    var diffVarInfo = diffJson.variable;
+
     el.innerHTML =
         '<div style="margin-bottom:4px;padding:6px 10px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#60a5fa;">\uD83D\uDD35 Group A</div>' +
         '<div id="comp-diff-sq-a" style="width:100%;height:640px;border-radius:8px;overflow:hidden;"></div>' +
         '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#f59e0b;">\uD83D\uDFE0 Group B</div>' +
         '<div id="comp-diff-sq-b" style="width:100%;height:640px;border-radius:8px;overflow:hidden;"></div>' +
+        _buildShadingControlsRow('shd-dsq-ab', {label: 'Panels A &amp; B', defaultVmin: varInfoA.vmin, defaultVmax: varInfoA.vmax}) +
         '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#ef4444;">\u0394 Difference (A \u2212 B)</div>' +
         '<div id="comp-diff-sq-d" style="width:100%;height:640px;border-radius:8px;overflow:hidden;"></div>' +
+        _buildShadingControlsRow('shd-dsq-d', {label: 'Difference', defaultVmin: diffVarInfo.vmin, defaultVmax: diffVarInfo.vmax}) +
         _buildCompToolbar();
+
+    _registerShadingTargets('shd-dsq-ab', ['comp-diff-sq-a', 'comp-diff-sq-b'], varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax);
 
     var plotOpts = { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] };
     var plotBg = '#0a1628';
     var isNorm = jsonA.normalized;
     var rLabel = isNorm ? 'R / RMW' : 'Radius (km)';
     var radius = jsonA.radius_rrmw, height_km = jsonA.height_km;
-    var varInfoA = jsonA.variable;
     var covPct = Math.round((jsonA.coverage_min || 0.5) * 100);
     var dtypeLabel = (document.getElementById('comp-dtype') && document.getElementById('comp-dtype').value === 'merge') ? ' (Merge)' : '';
     var fontSize = { title:12, axis:10, tick:9, cbar:10, cbarTick:9, hover:11, panel:11 };
@@ -8300,13 +8368,9 @@ function _renderDiffQuadMean(targetId, diffJson, jsonA, jsonB, filtersA, filters
         Plotly.newPlot(chartId, traces.concat(ovTraces), layout, plotOpts);
     }
 
-    // Store defaults and apply user overrides for Group A/B panels
-    _compDefaultColorscale = varInfoA.colorscale; _compDefaultVmin = varInfoA.vmin; _compDefaultVmax = varInfoA.vmax;
-    var vminInp = document.getElementById('comp-vmin'), vmaxInp = document.getElementById('comp-vmax');
-    if (vminInp) vminInp.placeholder = varInfoA.vmin; if (vmaxInp) vmaxInp.placeholder = varInfoA.vmax;
-    var activeColorscale = _getCompColorscale(varInfoA.colorscale);
-    var activeVmin = _getCompVmin(varInfoA.vmin);
-    var activeVmax = _getCompVmax(varInfoA.vmax);
+    var activeColorscale = varInfoA.colorscale;
+    var activeVmin = varInfoA.vmin;
+    var activeVmax = varInfoA.vmax;
 
     // Group A
     var meanVmaxA = _computeCompositeMeanVmax(filtersA);
@@ -8323,7 +8387,6 @@ function _renderDiffQuadMean(targetId, diffJson, jsonA, jsonB, filtersA, filters
     buildQuadPlot('comp-diff-sq-b', jsonB.quadrant_means, titleB, activeColorscale, activeVmin, activeVmax, varInfoA.units, jsonB);
 
     // Difference
-    var diffVarInfo = diffJson.variable;
     var diffVmaxNote = '';
     if (meanVmaxA !== null || meanVmaxB !== null) {
         diffVmaxNote = ' | V\u0305<sub>max</sub>: ';
@@ -8333,6 +8396,8 @@ function _renderDiffQuadMean(targetId, diffJson, jsonA, jsonB, filtersA, filters
     }
     var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) + diffVmaxNote +
                  '<br>\u0394 Shear-Relative Quadrant Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
+
+    _registerShadingTargets('shd-dsq-d', ['comp-diff-sq-d'], _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax);
     buildQuadPlot('comp-diff-sq-d', diffJson.quadrant_means, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, diffVarInfo.units, diffJson);
 }
 
@@ -8435,19 +8500,25 @@ function _renderDiffPlanView(targetId, diffJson, jsonA, jsonB, filtersA, filters
     el.style.display = 'block';
     _lastCompJson = diffJson; _lastCompType = 'pv';
 
+    var varInfoA = jsonA.variable;
+    var diffVarInfo = diffJson.variable;
+
     // Create 3 stacked chart containers + toolbar
     el.innerHTML =
         '<div style="margin-bottom:4px;padding:6px 10px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#60a5fa;">\uD83D\uDD35 Group A</div>' +
         '<div id="comp-diff-pv-a" style="width:100%;height:520px;border-radius:8px;overflow:hidden;"></div>' +
         '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#f59e0b;">\uD83D\uDFE0 Group B</div>' +
         '<div id="comp-diff-pv-b" style="width:100%;height:520px;border-radius:8px;overflow:hidden;"></div>' +
+        _buildShadingControlsRow('shd-dpv-ab', {label: 'Panels A &amp; B', defaultVmin: varInfoA.vmin, defaultVmax: varInfoA.vmax}) +
         '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#ef4444;">\u0394 Difference (A \u2212 B)</div>' +
         '<div id="comp-diff-pv-d" style="width:100%;height:520px;border-radius:8px;overflow:hidden;"></div>' +
+        _buildShadingControlsRow('shd-dpv-d', {label: 'Difference', defaultVmin: diffVarInfo.vmin, defaultVmax: diffVarInfo.vmax}) +
         _buildCompToolbar();
+
+    _registerShadingTargets('shd-dpv-ab', ['comp-diff-pv-a', 'comp-diff-pv-b'], varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax);
 
     var plotOpts = { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] };
     var plotBg = '#0a1628';
-    var varInfoA = jsonA.variable;
     var levelKm = jsonA.level_km;
     var xAxis = jsonA.x_axis, yAxis = jsonA.y_axis;
     var xLabel = jsonA.x_label, yLabel = jsonA.y_label;
@@ -8500,13 +8571,9 @@ function _renderDiffPlanView(targetId, diffJson, jsonA, jsonB, filtersA, filters
         Plotly.newPlot(chartId, [hm].concat(ovTraces).concat(rmwCircleTrace()), layout, plotOpts);
     }
 
-    // Store defaults and apply user overrides for Group A/B panels
-    _compDefaultColorscale = varInfoA.colorscale; _compDefaultVmin = varInfoA.vmin; _compDefaultVmax = varInfoA.vmax;
-    var vminInp = document.getElementById('comp-vmin'), vmaxInp = document.getElementById('comp-vmax');
-    if (vminInp) vminInp.placeholder = varInfoA.vmin; if (vmaxInp) vmaxInp.placeholder = varInfoA.vmax;
-    var activeColorscale = _getCompColorscale(varInfoA.colorscale);
-    var activeVmin = _getCompVmin(varInfoA.vmin);
-    var activeVmax = _getCompVmax(varInfoA.vmax);
+    var activeColorscale = varInfoA.colorscale;
+    var activeVmin = varInfoA.vmin;
+    var activeVmax = varInfoA.vmax;
 
     // ── Group A plot ──
     var meanVmaxA = _computeCompositeMeanVmax(filtersA);
@@ -8523,7 +8590,6 @@ function _renderDiffPlanView(targetId, diffJson, jsonA, jsonB, filtersA, filters
     buildPvPlot('comp-diff-pv-b', jsonB.plan_view, titleB, activeColorscale, activeVmin, activeVmax, varInfoA.units, jsonB);
 
     // ── Difference plot ──
-    var diffVarInfo = diffJson.variable;
     var diffVmaxNote = '';
     if (meanVmaxA !== null || meanVmaxB !== null) {
         diffVmaxNote = ' | V\u0305<sub>max</sub>: ';
@@ -8533,6 +8599,8 @@ function _renderDiffPlanView(targetId, diffJson, jsonA, jsonB, filtersA, filters
     }
     var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) + diffVmaxNote +
                  '<br>\u0394 Plan View @ ' + levelKm + ' km: ' + varInfoA.display_name + dtypeLabel + normLabel + shearLabel;
+
+    _registerShadingTargets('shd-dpv-d', ['comp-diff-pv-d'], _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax);
     buildPvPlot('comp-diff-pv-d', diffJson.plan_view, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, diffVarInfo.units, diffJson);
 }
 
@@ -8726,7 +8794,12 @@ function _renderDiffCFAD(targetId, jsonA, jsonB, filtersA, filtersB) {
     el.style.display = 'block';
     jsonA._isDiff = true; jsonA.case_list_b = jsonB.case_list; jsonA._nA = jsonA.n_cases; jsonA._nB = jsonB.n_cases;
     _lastCompJson = jsonA; _lastCompType = 'cfad_diff';
-    el.innerHTML = panelHtml + _buildCompToolbar();
+    el.innerHTML = panelHtml +
+        _buildShadingControlsRow('shd-dcfad-ab', {label: 'Panels A &amp; B', defaultVmin: plotZmin, defaultVmax: plotZmax}) +
+        _buildShadingControlsRow('shd-dcfad-d', {label: 'Difference', defaultVmin: 'min', defaultVmax: 'max'}) +
+        _buildCompToolbar();
+
+    _registerShadingTargets('shd-dcfad-ab', ['comp-diff-cfad-a', 'comp-diff-cfad-b'], cfadColorscale, plotZmin, plotZmax);
 
     // Render A
     var dataA = useLog ? _cfadApplyLog(jsonA.cfad) : jsonA.cfad;
@@ -8782,6 +8855,8 @@ function _renderDiffCFAD(targetId, jsonA, jsonB, filtersA, filtersB) {
         '<br>\u0394 CFAD: ' + varInfo.display_name + binNote + radialNote + quadNote + (useLog ? ' (signed log)' : '');
     var layD = JSON.parse(JSON.stringify(layA));
     layD.title.text = titleD;
+
+    _registerShadingTargets('shd-dcfad-d', ['comp-diff-cfad-diff'], _DIFF_COLORSCALE, diffZmin, diffZmax);
     Plotly.newPlot('comp-diff-cfad-diff', [trD], layD, {responsive:true,displayModeBar:true,displaylogo:false,modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines']});
 }
 
@@ -8872,8 +8947,12 @@ function _renderDiffCFADMulti(targetId, jsonA, jsonB, filtersA, filtersB) {
     el.innerHTML =
         '<div id="comp-diff-cfadm-a" style="width:100%;height:720px;border-radius:8px;overflow:hidden;margin-bottom:8px;"></div>' +
         '<div id="comp-diff-cfadm-b" style="width:100%;height:720px;border-radius:8px;overflow:hidden;margin-bottom:8px;"></div>' +
+        _buildShadingControlsRow('shd-dcfadm-ab', {label: 'Panels A &amp; B', defaultVmin: plotZmin, defaultVmax: plotZmax}) +
         '<div id="comp-diff-cfadm-diff" style="width:100%;height:720px;border-radius:8px;overflow:hidden;margin-bottom:8px;"></div>' +
+        _buildShadingControlsRow('shd-dcfadm-d', {label: 'Difference', defaultVmin: 'min', defaultVmax: 'max'}) +
         _buildCompToolbar();
+
+    _registerShadingTargets('shd-dcfadm-ab', ['comp-diff-cfadm-a', 'comp-diff-cfadm-b'], cfadColorscale, plotZmin, plotZmax);
 
     // Helper: build 2x2 subplot for a set of 4 quadrant CFADs
     // diffSignedLog: if true, apply signed log transform to data and use custom ticks
@@ -8984,6 +9063,8 @@ function _renderDiffCFADMulti(targetId, jsonA, jsonB, filtersA, filtersB) {
         var slTicks = _cfadSignedLogTicks(diffDZmax);
         cbarDiff.tickvals = slTicks.vals; cbarDiff.ticktext = slTicks.text;
     }
+
+    _registerShadingTargets('shd-dcfadm-d', ['comp-diff-cfadm-diff'], _DIFF_COLORSCALE, diffDZmin, diffDZmax);
     build2x2('comp-diff-cfadm-diff', diffMulti,
         _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) + '<br>\u0394 4-Quadrant CFAD: ' + varInfo.display_name + binNote + radialNote + (diffSignedLog ? ' (signed log)' : ''),
         _DIFF_COLORSCALE, diffDZmin, diffDZmax, cbarDiff, false, true, diffSignedLog);
