@@ -1264,3 +1264,208 @@ footer a:hover { text-decoration: underline; }
     .plot-modal-box { width: 100vw; height: 100vh; border-radius: 0; }
     .leaflet-popup-content { min-width: 180px; max-width: 240px; font-size: 12px; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   Mobile & Tablet Responsive Enhancements
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Nav text: full vs short labels ──────────────────────── */
+.nav-short { display: none; }
+.nav-full { display: inline; }
+
+/* ── Nav bar: wrap links and normalise sizes ─────────────── */
+@media (max-width: 768px) {
+    .topbar-inner {
+        flex-wrap: wrap;
+        height: auto;
+        padding: 8px 14px;
+        gap: 6px;
+    }
+    .topbar-brand { flex: 1 1 auto; min-width: 0; }
+    .topbar-nav {
+        flex-wrap: wrap;
+        gap: 3px 6px;
+        order: 3;            /* push nav below brand row */
+        width: 100%;
+        padding-bottom: 4px;
+        justify-content: center;
+    }
+    .topbar-nav a {
+        font-size: 0.68rem;
+        padding: 4px 8px;
+        white-space: nowrap;
+    }
+    /* Shorten "Real-Time TDR" to "RT TDR" on narrow screens */
+    .nav-full { display: none !important; }
+    .nav-short { display: inline !important; }
+}
+@media (max-width: 480px) {
+    .topbar-logo { font-size: 1.05rem; }
+    .topbar-divider { display: none; }
+    .topbar-subtitle { display: none; }
+    .topbar-nav a { font-size: 0.6rem; padding: 3px 5px; }
+}
+
+/* ── Real-Time section header: tighter on mobile ─────────── */
+@media (max-width: 768px) {
+    .rt-header { padding: 16px 16px 10px; }
+    .rt-header-title { font-size: 1.15rem; }
+    .rt-header-desc { font-size: 0.82rem; }
+    .rt-toolbar { padding: 8px 12px; gap: 6px; }
+    .rt-meta-grid { grid-template-columns: 1fr 1fr; gap: 4px; }
+}
+@media (max-width: 480px) {
+    .rt-header-title { font-size: 1rem; }
+}
+
+/* ── Plotly charts: prevent horizontal overflow ──────────── */
+@media (max-width: 768px) {
+    /* Force all Plotly containers to respect parent width */
+    .js-plotly-plot, .plot-container, .plotly {
+        max-width: 100% !important;
+    }
+    /* Reduce fixed chart heights in composite results */
+    [id^="comp-az-chart"],
+    [id^="comp-anom-chart"],
+    [id^="comp-cfad-chart"],
+    [id^="comp-pv-chart"] {
+        height: 400px !important;
+    }
+    [id^="comp-sq-chart"] {
+        height: 560px !important;
+    }
+    /* Diff-mode chart panels */
+    [id^="comp-diff-az-"],
+    [id^="comp-diff-anom-"],
+    [id^="comp-diff-cfad-"],
+    [id^="comp-diff-pv-"] {
+        height: 360px !important;
+    }
+    [id^="comp-diff-sq-"],
+    [id^="comp-diff-cfadm-"] {
+        height: 520px !important;
+    }
+}
+
+/* ── Wizard overlay: full-width on mobile ────────────────── */
+@media (max-width: 768px) {
+    .wizard-overlay.active { padding: 8px; }
+    .wizard-box { border-radius: 8px; }
+    .wizard-body { padding: 12px; }
+}
+
+/* ── Wizard filter rows: stack vertically on narrow ──────── */
+@media (max-width: 600px) {
+    .wizard-filter-row {
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+    .wizard-filter-row .wf-label {
+        flex: 0 0 100%;
+        margin-bottom: 2px;
+    }
+    .wizard-filter-row input[type="number"] {
+        flex: 1;
+        min-width: 0;
+    }
+    .wizard-filter-row select {
+        flex: 1;
+        min-width: 0;
+    }
+    .wizard-filter-columns {
+        flex-direction: column !important;
+    }
+}
+
+/* ── Shading controls: wrap gracefully ───────────────────── */
+@media (max-width: 768px) {
+    .comp-shading-toolbar {
+        padding: 6px 10px;
+    }
+    .cst-row {
+        gap: 4px;
+    }
+    .cst-select {
+        max-width: 110px;
+        font-size: 10px;
+    }
+    .cst-input {
+        width: 50px;
+        font-size: 10px;
+    }
+    .cst-label {
+        font-size: 9px;
+    }
+}
+
+/* ── Wizard generate bar: wrap buttons on mobile ─────────── */
+@media (max-width: 768px) {
+    .wizard-generate-bar {
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 10px 12px;
+    }
+    .wizard-generate-btn {
+        font-size: 12px;
+        padding: 8px 16px;
+    }
+    .wizard-generate-summary {
+        flex-basis: 100%;
+        text-align: center;
+    }
+    /* Composite action buttons row */
+    .wizard-toolbar {
+        gap: 4px;
+    }
+    .wizard-tool-btn {
+        font-size: 9px;
+        padding: 4px 7px;
+    }
+}
+
+/* ── Composite wizard Step 4 button grid ─────────────────── */
+@media (max-width: 600px) {
+    .wizard-output-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* ── Environmental overlay: stack on mobile ──────────────── */
+@media (max-width: 768px) {
+    .env-scalars-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+    .env-comp-scalars-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+}
+
+/* ── Side panel Plotly in focus mode: full-width ─────────── */
+@media (max-width: 768px) {
+    #display-area .js-plotly-plot {
+        max-width: 100% !important;
+    }
+}
+
+/* ── Plotly modebar: scale down on mobile ─────────────────── */
+@media (max-width: 768px) {
+    .modebar-container {
+        transform: scale(0.85);
+        transform-origin: top right;
+    }
+}
+
+/* ── Touch targets: ensure min tap size ──────────────────── */
+@media (max-width: 768px) {
+    .wizard-generate-btn,
+    .wizard-tool-btn,
+    .cst-reset,
+    .cs-btn,
+    .generate-btn {
+        min-height: 36px;
+    }
+    .cst-select,
+    .cst-input {
+        min-height: 32px;
+    }
+}
