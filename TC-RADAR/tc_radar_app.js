@@ -5228,7 +5228,16 @@ function initCompositePanel() {
             wfRow('Tilt', prefix + '-tilt', 0, 200, 5, 0, 200, 'km') +
             wfRow('Year', prefix + '-year', 1997, 2024, 1, 1997, 2024, '') +
             wfRow('Shear Mag', prefix + '-shrmag', 0, 100, 2, 0, 100, 'kt') +
-            wfRow('Shear Dir', prefix + '-shrdir', 0, 360, 5, 0, 360, '\u00b0');
+            wfRow('Shear Dir', prefix + '-shrdir', 0, 360, 5, 0, 360, '\u00b0') +
+            '<div class="wizard-filter-row">' +
+                '<span class="wf-label">Min DTL</span>' +
+                '<input type="number" id="' + prefix + '-dtl-min" value="0" min="0" max="9999" step="10">' +
+                '<span class="wf-sep">km</span>' +
+                '<select id="' + prefix + '-dtl-win" style="width:62px;font-size:11px;padding:2px 4px;border:1px solid rgba(255,255,255,0.15);border-radius:4px;background:rgba(255,255,255,0.06);color:#e2e8f0;">' +
+                    '<option value="12h">0\u201312 h</option>' +
+                    '<option value="24h" selected>0\u201324 h</option>' +
+                '</select>' +
+            '</div>';
     }
 
     overlay.innerHTML =
@@ -5917,11 +5926,21 @@ function _wizardWireFilters() {
         inp.addEventListener('change', _debouncedCompositeCount);
         inp.addEventListener('input', _debouncedCompositeCount);
     });
+    // Group A selects (e.g. DTL window dropdown)
+    var groupASelects = document.querySelectorAll('.wizard-group-col.group-a select');
+    groupASelects.forEach(function(sel) {
+        sel.addEventListener('change', _debouncedCompositeCount);
+    });
     // Group B
     var groupBInputs = document.querySelectorAll('.wizard-group-col.group-b input[type="number"]');
     groupBInputs.forEach(function(inp) {
         inp.addEventListener('change', _debouncedGroupBCount);
         inp.addEventListener('input', _debouncedGroupBCount);
+    });
+    // Group B selects
+    var groupBSelects = document.querySelectorAll('.wizard-group-col.group-b select');
+    groupBSelects.forEach(function(sel) {
+        sel.addEventListener('change', _debouncedGroupBCount);
     });
 }
 
@@ -6038,6 +6057,8 @@ function _getCompositeFilters() {
         max_shear_mag:   parseFloat(document.getElementById('comp-shrmag-max').value) || 100,
         min_shear_dir:   parseFloat(document.getElementById('comp-shrdir-min').value) || 0,
         max_shear_dir:   parseFloat(document.getElementById('comp-shrdir-max').value) || 360,
+        min_dtl:         parseFloat(document.getElementById('comp-dtl-min').value) || 0,
+        dtl_window:      document.getElementById('comp-dtl-win').value || '24h',
     };
 }
 
@@ -6092,6 +6113,8 @@ function _compositeFilterSummary(filters, nCases) {
         parts.push('Shr ' + filters.min_shear_mag + '\u2013' + filters.max_shear_mag + ' kt');
     if (filters.min_shear_dir > 0 || filters.max_shear_dir < 360)
         parts.push('Dir ' + filters.min_shear_dir + '\u2013' + filters.max_shear_dir + '\u00b0');
+    if (filters.min_dtl > 0)
+        parts.push('DTL \u2265 ' + filters.min_dtl + ' km (' + (filters.dtl_window || '24h') + ')');
     var summary = parts.length > 0 ? parts.join(' | ') : 'All cases';
     return 'Composite (N=' + nCases + ') | ' + summary;
 }
@@ -6124,6 +6147,11 @@ function _computeCompositeMeanVmax(filters) {
             var sd = c.sddc !== undefined ? c.sddc : null;
             if (sd === null) return;
             if (sd < filters.min_shear_dir || sd > filters.max_shear_dir) return;
+        }
+        if (filters.min_dtl > 0) {
+            var dtlKey = filters.dtl_window === '12h' ? 'dtl_min_12h' : 'dtl_min_24h';
+            var dtlVal = c[dtlKey];
+            if (dtlVal == null || dtlVal < filters.min_dtl) return;
         }
         sum += v; count++;
     });
@@ -7608,6 +7636,8 @@ function _getCompGroupBFilters() {
         max_shear_mag:   parseFloat(document.getElementById('compb-shrmag-max').value) || 100,
         min_shear_dir:   parseFloat(document.getElementById('compb-shrdir-min').value) || 0,
         max_shear_dir:   parseFloat(document.getElementById('compb-shrdir-max').value) || 360,
+        min_dtl:         parseFloat(document.getElementById('compb-dtl-min').value) || 0,
+        dtl_window:      document.getElementById('compb-dtl-win').value || '24h',
     };
 }
 
