@@ -5971,7 +5971,7 @@ function _wizardGenerateSelected() {
         if (isDiff) generateCompDiffCFAD(); else generateCompositeCFAD();
     }
     if (document.getElementById('wiz-chk-anom') && document.getElementById('wiz-chk-anom').checked) {
-        generateCompositeAnomaly();
+        if (isDiff) generateCompDiffAnomaly(); else generateCompositeAnomaly();
     }
     if (document.getElementById('wiz-chk-vpsc') && document.getElementById('wiz-chk-vpsc').checked) {
         generateCompositeVPScatter();
@@ -6872,8 +6872,6 @@ function generateCompositeAzMean() {
 // ── Composite Anomaly & VP Scatter ──────────────────────────────────────
 
 function generateCompositeAnomaly() {
-    // For composites, we show a note that anomaly composites require
-    // the climatology to be precomputed and the merge data type.
     var resultEl = document.getElementById('comp-result-anom');
     var dataType = document.getElementById('comp-dtype').value;
     if (dataType !== 'merge') {
@@ -6884,30 +6882,163 @@ function generateCompositeAnomaly() {
 
     var filters = _getCompositeFilters();
     var variable = document.getElementById('comp-var').value;
-    var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
 
     resultEl.style.display = 'block';
-    resultEl.innerHTML = _hurricaneLoadingHTML('Computing composite anomaly (this computes individual anomalies then averages)\u2026', true);
+    resultEl.innerHTML = _hurricaneLoadingHTML('Computing composite Z-score anomaly (per-case anomaly \u2192 average)\u2026', true);
 
-    // Use composite/azimuthal_mean but with hybrid coordinate
-    // For now, show a placeholder that explains the feature
     var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) +
-             '&data_type=merge&coverage_min=' + coverage;
+             '&data_type=merge';
 
-    // Note: In a full implementation, we would add a /composite/anomaly_azimuthal_mean endpoint.
-    // For now, we fetch the standard composite and overlay the anomaly context.
-    _fetchCompositeStream(API_BASE + '/composite/azimuthal_mean?' + qs + '&max_r_rmw=8.0&dr_rmw=0.25', 'Computing anomaly composite')
+    _fetchCompositeStream(API_BASE + '/composite/anomaly_azimuthal_mean?' + qs, 'Computing composite anomaly')
         .then(function(json) {
-            _showCompStatus('success', '\u2713 Composite computed: ' + json.n_cases + ' cases');
+            _showCompStatus('success', '\u2713 Composite anomaly computed: ' + json.n_cases + ' cases');
             _updateBadgeFromResult(json.n_cases);
-            // Render using the standard composite renderer for now
-            // The anomaly normalization will be applied server-side when the
-            // /composite/anomaly_azimuthal_mean endpoint is fully implemented
-            renderCompositeAzMeanInto('comp-result-anom', json, filters);
+            renderCompositeAnomalyInto('comp-result-anom', json, filters);
         })
         .catch(function(err) {
             resultEl.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + (err.message || String(err)) + '</div>';
         });
+}
+
+function generateCompDiffAnomaly() {
+    var resultEl = document.getElementById('comp-result-anom');
+    var dataType = document.getElementById('comp-dtype').value;
+    if (dataType !== 'merge') {
+        resultEl.style.display = 'block';
+        resultEl.innerHTML = '<div class="explorer-status" style="color:#fbbf24;padding:12px;font-size:12px;">\u26A0\uFE0F Anomaly composites are only available for merged analyses. Switch data type to "Merge".</div>';
+        return;
+    }
+
+    var filtersA = _getCompositeFilters();
+    var filtersB = _getCompGroupBFilters();
+    var variable = document.getElementById('comp-var').value;
+
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = _hurricaneLoadingHTML('Computing difference anomaly composite (A\u2212B)\u2026', true);
+
+    var baseQS = '&variable=' + encodeURIComponent(variable) + '&data_type=merge';
+    var urlA = API_BASE + '/composite/anomaly_azimuthal_mean?' + _compositeQueryString(filtersA) + baseQS;
+    var urlB = API_BASE + '/composite/anomaly_azimuthal_mean?' + _compositeQueryString(filtersB) + baseQS;
+
+    var jsonA;
+    _fetchCompositeStream(urlA, 'Group A anomaly').then(function(result) {
+        jsonA = result;
+        _showCompStatus('loading', 'Group A done (' + jsonA.n_cases + ' cases). Computing Group B\u2026');
+        return _fetchCompositeStream(urlB, 'Group B anomaly');
+    }).then(function(jsonB) {
+        var diffData = _subtractArrays2D(jsonA.anomaly, jsonB.anomaly);
+        var symRange = _symmetricRange(diffData);
+
+        var diffJson = {
+            anomaly: diffData,
+            r_h_axis: jsonA.r_h_axis,
+            n_inner: jsonA.n_inner,
+            height_km: jsonA.height_km,
+            n_cases: jsonA.n_cases,
+            case_list: jsonA.case_list,
+            case_list_b: jsonB.case_list,
+            _isDiff: true,
+            _nA: jsonA.n_cases,
+            _nB: jsonB.n_cases,
+            _filtersA: filtersA,
+            _filtersB: filtersB,
+            variable: {
+                key: jsonA.variable.key,
+                display_name: '\u0394 ' + jsonA.variable.display_name,
+                units: jsonA.variable.units,
+                anomaly_units: '\u0394\u03c3',
+                vmin: -symRange,
+                vmax: symRange,
+                colorscale: _DIFF_COLORSCALE,
+            },
+        };
+        _showCompStatus('success', '\u2713 Difference anomaly: ' + jsonA.n_cases + ' (A) \u2212 ' + jsonB.n_cases + ' (B)');
+        _updateBadgeFromResult(jsonA.n_cases);
+        renderCompositeAnomalyInto('comp-result-anom', diffJson, filtersA);
+    }).catch(function(err) {
+        resultEl.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + (err.message || String(err)) + '</div>';
+    });
+}
+
+function renderCompositeAnomalyInto(targetId, json, filters) {
+    var el = document.getElementById(targetId); if (!el) return;
+
+    if (!json.anomaly) {
+        el.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F Anomaly data unavailable.</div>';
+        return;
+    }
+
+    var anomData = json.anomaly, rHAxis = json.r_h_axis, nInner = json.n_inner;
+    var height_km = json.height_km, varInfo = json.variable;
+    var isDiff = !!json._isDiff;
+
+    var fontSize = { title:14, axis:12, tick:10, cbar:12, cbarTick:10 };
+
+    var xIdxArr = []; for (var i = 0; i < rHAxis.length; i++) xIdxArr.push(i);
+    var ticks = _buildHybridXAxis(rHAxis, nInner);
+
+    var zmin = varInfo.vmin != null ? varInfo.vmin : -3;
+    var zmax = varInfo.vmax != null ? varInfo.vmax : 3;
+    var cbarTitle = isDiff ? '\u0394\u03c3' : '\u03c3';
+    var anomColorscale = varInfo.colorscale || [
+        [0.0, 'rgb(5,48,97)'], [0.1, 'rgb(33,102,172)'],
+        [0.2, 'rgb(67,147,195)'], [0.3, 'rgb(146,197,222)'],
+        [0.4, 'rgb(209,229,240)'], [0.5, 'rgb(247,247,247)'],
+        [0.6, 'rgb(253,219,199)'], [0.7, 'rgb(244,165,130)'],
+        [0.8, 'rgb(214,96,77)'], [0.9, 'rgb(178,24,43)'],
+        [1.0, 'rgb(103,0,31)']
+    ];
+
+    var heatmap = {
+        z: anomData, x: xIdxArr, y: height_km, type: 'heatmap',
+        colorscale: anomColorscale, zmin: zmin, zmax: zmax, zmid: 0,
+        colorbar: {
+            title: { text: cbarTitle, font: { color: '#ccc', size: fontSize.cbar } },
+            tickfont: { color: '#ccc', size: fontSize.cbarTick },
+            thickness: 14, len: 0.85,
+        },
+        hoverongaps: false,
+        hovertemplate: '<b>Z-score</b>: %{z:.2f}\u03c3<br>R\u2095: %{x}<br>Height: %{y:.1f} km<extra></extra>'
+    };
+
+    var dtypeLabel = ' (Merge)';
+    var meanVmax = _computeCompositeMeanVmax(filters);
+    var vmaxNote = meanVmax !== null ? ' | Mean V<sub>max</sub>=' + meanVmax + ' kt' : '';
+    var nLabel;
+    if (isDiff) {
+        nLabel = 'Composite \u0394Anomaly (N=' + json._nA + ' \u2212 ' + json._nB + ')';
+    } else {
+        nLabel = _compositeFilterSummary(filters, json.n_cases);
+    }
+    var title = nLabel + vmaxNote +
+                '<br>Z-score Anomaly: ' + (isDiff ? '\u0394 ' : '') + varInfo.display_name + dtypeLabel;
+
+    var shapes = [{
+        type: 'line', xref: 'x', yref: 'paper',
+        x0: nInner, x1: nInner, y0: 0, y1: 1,
+        line: { color: 'rgba(255,255,255,0.5)', width: 1.5, dash: 'dash' }
+    }];
+
+    var plotBg = '#0a1628';
+    var layout = {
+        title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' },
+        paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+        xaxis: { title: { text: 'R\u2095 (RMW + km)', font: { color: '#aaa', size: fontSize.axis } },
+                 tickvals: ticks.tickvals, ticktext: ticks.ticktext,
+                 tickfont: { color: '#aaa', size: fontSize.tick },
+                 gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
+        yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } },
+                 tickfont: { color: '#aaa', size: fontSize.tick },
+                 gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
+        margin: { l: 55, r: 24, t: 156, b: 46 },
+        shapes: shapes, showlegend: false,
+        annotations: [_fischerCitation]
+    };
+
+    el.style.display = 'block';
+    _lastCompJson = json; _lastCompType = 'anom';
+    el.innerHTML = '<div id="comp-anom-chart" style="width:100%;height:560px;border-radius:8px;overflow:hidden;"></div>' + _buildCompToolbar();
+    Plotly.newPlot('comp-anom-chart', [heatmap], layout, { responsive: true, displayModeBar: true, displaylogo: false });
 }
 
 function generateCompositeVPScatter() {
