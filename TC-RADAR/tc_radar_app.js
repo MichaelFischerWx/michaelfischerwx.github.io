@@ -6954,7 +6954,7 @@ function generateCompDiffAnomaly() {
         };
         _showCompStatus('success', '\u2713 Difference anomaly: ' + jsonA.n_cases + ' (A) \u2212 ' + jsonB.n_cases + ' (B)');
         _updateBadgeFromResult(jsonA.n_cases);
-        renderCompositeAnomalyInto('comp-result-anom', diffJson, filtersA);
+        _renderDiffAnomaly('comp-result-anom', diffJson, jsonA, jsonB, filtersA, filtersB);
     }).catch(function(err) {
         resultEl.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + (err.message || String(err)) + '</div>';
     });
@@ -7039,6 +7039,87 @@ function renderCompositeAnomalyInto(targetId, json, filters) {
     _lastCompJson = json; _lastCompType = 'anom';
     el.innerHTML = '<div id="comp-anom-chart" style="width:100%;height:560px;border-radius:8px;overflow:hidden;"></div>' + _buildCompToolbar();
     Plotly.newPlot('comp-anom-chart', [heatmap], layout, { responsive: true, displayModeBar: true, displaylogo: false });
+}
+
+function _renderDiffAnomaly(targetId, diffJson, jsonA, jsonB, filtersA, filtersB) {
+    var el = document.getElementById(targetId); if (!el) return;
+    el.style.display = 'block';
+    _lastCompJson = diffJson; _lastCompType = 'anom';
+
+    // Create 3 stacked chart containers + toolbar
+    el.innerHTML =
+        '<div style="margin-bottom:4px;padding:6px 10px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#60a5fa;">\uD83D\uDD35 Group A</div>' +
+        '<div id="comp-diff-anom-a" style="width:100%;height:460px;border-radius:8px;overflow:hidden;"></div>' +
+        '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#f59e0b;">\uD83D\uDFE0 Group B</div>' +
+        '<div id="comp-diff-anom-b" style="width:100%;height:460px;border-radius:8px;overflow:hidden;"></div>' +
+        '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#ef4444;">\u0394 Difference (A \u2212 B)</div>' +
+        '<div id="comp-diff-anom-d" style="width:100%;height:460px;border-radius:8px;overflow:hidden;"></div>' +
+        _buildCompToolbar();
+
+    var plotOpts = { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] };
+    var plotBg = '#0a1628';
+    var rHAxis = jsonA.r_h_axis, nInner = jsonA.n_inner, height_km = jsonA.height_km;
+    var xIdxArr = []; for (var i = 0; i < rHAxis.length; i++) xIdxArr.push(i);
+    var ticks = _buildHybridXAxis(rHAxis, nInner);
+    var fontSize = { title:13, axis:11, tick:10, cbar:11, cbarTick:10, hover:12 };
+    var rmwShape = [{ type:'line', xref:'x', yref:'paper', x0:nInner, x1:nInner, y0:0, y1:1, line:{ color:'rgba(255,255,255,0.5)', width:1.5, dash:'dash' } }];
+
+    // RdBu_r for individual group anomalies
+    var anomColorscale = jsonA.variable.colorscale || [
+        [0.0,'rgb(5,48,97)'],[0.1,'rgb(33,102,172)'],[0.2,'rgb(67,147,195)'],[0.3,'rgb(146,197,222)'],
+        [0.4,'rgb(209,229,240)'],[0.5,'rgb(247,247,247)'],[0.6,'rgb(253,219,199)'],
+        [0.7,'rgb(244,165,130)'],[0.8,'rgb(214,96,77)'],[0.9,'rgb(178,24,43)'],[1.0,'rgb(103,0,31)']
+    ];
+
+    // Helper to build one anomaly heatmap panel
+    function buildAnomPlot(chartId, anomData, titleText, colorscale, zmin, zmax, cbarLabel) {
+        var hm = {
+            z: anomData, x: xIdxArr, y: height_km, type: 'heatmap',
+            colorscale: colorscale, zmin: zmin, zmax: zmax, zmid: 0,
+            colorbar: { title:{text:cbarLabel,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:14, len:0.85 },
+            hovertemplate: '<b>Z-score</b>: %{z:.2f}\u03c3<br>R\u2095: %{x}<br>Height: %{y:.1f} km<extra></extra>',
+            hoverongaps: false
+        };
+        var layout = {
+            title: { text:titleText, font:{color:'#e5e7eb',size:fontSize.title}, y:0.97, x:0.5, xanchor:'center' },
+            paper_bgcolor:plotBg, plot_bgcolor:plotBg,
+            xaxis: { title:{text:'R\u2095 (RMW + km)',font:{color:'#aaa',size:fontSize.axis}},
+                     tickvals:ticks.tickvals, ticktext:ticks.ticktext,
+                     tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
+            yaxis: { title:{text:'Height (km)',font:{color:'#aaa',size:fontSize.axis}}, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
+            margin:{ l:55, r:24, t:116, b:42 }, shapes:rmwShape,
+            hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
+            showlegend:false, annotations:[_fischerCitation]
+        };
+        Plotly.newPlot(chartId, [hm], layout, plotOpts);
+    }
+
+    // Group A
+    var meanVmaxA = _computeCompositeMeanVmax(filtersA);
+    var vmaxNoteA = meanVmaxA !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxA + ' kt' : '';
+    var titleA = _compositeFilterSummary(filtersA, jsonA.n_cases) + vmaxNoteA +
+                 '<br>Z-score Anomaly: ' + jsonA.variable.display_name + ' (Merge)';
+    buildAnomPlot('comp-diff-anom-a', jsonA.anomaly, titleA, anomColorscale, -3, 3, '\u03c3');
+
+    // Group B
+    var meanVmaxB = _computeCompositeMeanVmax(filtersB);
+    var vmaxNoteB = meanVmaxB !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxB + ' kt' : '';
+    var titleB = _compositeFilterSummary(filtersB, jsonB.n_cases) + vmaxNoteB +
+                 '<br>Z-score Anomaly: ' + jsonB.variable.display_name + ' (Merge)';
+    buildAnomPlot('comp-diff-anom-b', jsonB.anomaly, titleB, anomColorscale, -3, 3, '\u03c3');
+
+    // Difference
+    var diffVarInfo = diffJson.variable;
+    var diffVmaxNote = '';
+    if (meanVmaxA !== null || meanVmaxB !== null) {
+        diffVmaxNote = ' | V\u0305<sub>max</sub>: ';
+        if (meanVmaxA !== null) diffVmaxNote += '<span style="color:#60a5fa;">A=' + meanVmaxA + '</span>';
+        if (meanVmaxA !== null && meanVmaxB !== null) diffVmaxNote += ', ';
+        if (meanVmaxB !== null) diffVmaxNote += '<span style="color:#f59e0b;">B=' + meanVmaxB + '</span> kt';
+    }
+    var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) + diffVmaxNote +
+                 '<br>\u0394 Z-score Anomaly: ' + jsonA.variable.display_name + ' (Merge)';
+    buildAnomPlot('comp-diff-anom-d', diffJson.anomaly, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, '\u0394\u03c3');
 }
 
 function generateCompositeVPScatter() {
