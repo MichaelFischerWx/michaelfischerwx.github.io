@@ -592,12 +592,12 @@
     flex: 1;
 }
 
-/* Leaflet image overlay for IR — smooth bilinear for zoomed-in quality */
+/* Leaflet image overlay for IR — crisp nearest-neighbor for sharp pixels.
+   Combined with server-side NEAREST upscale (4x for 8km, 3x for 4km),
+   this preserves clean pixel boundaries at all zoom levels. */
 .ir-overlay-image {
-    image-rendering: auto;
-    /* Use high-quality resampling when browser scales the image */
-    image-rendering: smooth;
-    image-rendering: -webkit-optimize-contrast;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;  /* Firefox fallback */
 }
 
 /* ══════════════════════════════════════════════════════════════
