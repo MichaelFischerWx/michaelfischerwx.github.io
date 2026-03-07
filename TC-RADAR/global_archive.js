@@ -739,6 +739,8 @@ function loadHURSAT(storm) {
     irFrames = [];
     irMeta = null;
     irFrameIdx = 0;
+    irBatchActive = false;
+    irPrefetchActive = 0;
     stopIRPlayback();
     removeIROverlay();
 
@@ -791,10 +793,14 @@ function loadHURSAT(storm) {
             toggleBtn.classList.add('active');
             document.getElementById('ir-map-controls').style.display = '';
 
-            // Show loading state for first frame (tarball download)
+            // Show loading state for first frame
             var loadingEl = document.getElementById('ir-frame-loading');
             if (loadingEl) loadingEl.style.display = 'flex';
-            setIRLoadingText('Downloading satellite archive...\nThis may take up to 60 seconds');
+            if (meta.source === 'hursat') {
+                setIRLoadingText('Downloading satellite archive...\nThis may take up to 60 seconds');
+            } else {
+                setIRLoadingText('Loading satellite imagery...');
+            }
 
             // Load first frame — this triggers the tarball download on the server
             irFrameIdx = 0;
@@ -1025,8 +1031,11 @@ function loadIRFrame(idx) {
 
     // Show context-specific loading message
     var cached = Object.keys(irFrames).length;
-    if (cached === 0) {
-        setIRLoadingText('Downloading satellite archive... This may take up to 60 seconds');
+    var source = irMeta.source || 'hursat';
+    if (cached === 0 && source === 'hursat') {
+        setIRLoadingText('Downloading satellite archive...\nThis may take up to 60 seconds');
+    } else if (cached === 0) {
+        setIRLoadingText('Loading satellite imagery...');
     } else {
         setIRLoadingText('Loading frame ' + (idx + 1) + '...');
     }
@@ -1110,6 +1119,7 @@ function fetchIRFrameSingle(idx, callback) {
 
 function prefetchIRFrames(currentIdx) {
     if (!irMeta) return;
+    if (irBatchActive) return;  // Don't overlap batch requests
     var total = irMeta.n_frames;
 
     // Build list of frames to prefetch (ahead of current position, wrapping)
@@ -1129,14 +1139,69 @@ function prefetchIRFrames(currentIdx) {
         }
     }
 
-    // Launch batch fetches (limit concurrency)
-    toFetch.forEach(function (idx) {
-        if (irPrefetchActive >= IR_PREFETCH_BATCH) return;
-        irPrefetchActive++;
-        fetchIRFrameSingle(idx, function () {
-            irPrefetchActive--;
+    if (toFetch.length === 0) return;
+
+    // Use batch endpoint: fetch up to 10 frames at once server-side
+    var batchSize = Math.min(toFetch.length, 10);
+    var batch = toFetch.slice(0, batchSize);
+
+    fetchIRBatch(batch);
+}
+
+var irBatchActive = false;
+
+function fetchIRBatch(indices) {
+    if (!irMeta || !selectedStorm || indices.length === 0) return;
+    irBatchActive = true;
+
+    var batchUrl = API_BASE + '/global/ir/batch?sid=' + encodeURIComponent(selectedStorm.sid) +
+        '&indices=' + indices.join(',');
+
+    fetch(batchUrl)
+        .then(function (r) {
+            if (!r.ok) throw new Error('Batch fetch failed (HTTP ' + r.status + ')');
+            return r.json();
+        })
+        .then(function (data) {
+            irBatchActive = false;
+            var frames = data.frames || {};
+            var loaded = 0;
+            Object.keys(frames).forEach(function (idxStr) {
+                var idx = parseInt(idxStr, 10);
+                var frameData = frames[idxStr];
+                if (frameData && frameData.frame) {
+                    irFrames[idx] = frameData;
+                    loaded++;
+                }
+            });
+            if (loaded > 0) {
+                updateIRCacheStatus();
+                // If the current frame was in this batch and hasn't been displayed yet, show it
+                if (irFrames[irFrameIdx] && !irOverlayLayer) {
+                    displayIROnMap(irFrames[irFrameIdx]);
+                    updateIRMeta(irFrameIdx);
+                    var loadingEl = document.getElementById('ir-frame-loading');
+                    if (loadingEl) loadingEl.style.display = 'none';
+                }
+            }
+            // Continue prefetching from current position
+            if (loaded > 0) {
+                prefetchIRFrames(irFrameIdx);
+            }
+        })
+        .catch(function (err) {
+            irBatchActive = false;
+            console.warn('Batch fetch failed:', err);
+            // Fall back to individual fetches
+            indices.forEach(function (idx) {
+                if (irPrefetchActive >= IR_PREFETCH_BATCH) return;
+                irPrefetchActive++;
+                fetchIRFrameSingle(idx, function () {
+                    irPrefetchActive--;
+                    updateIRCacheStatus();
+                });
+            });
         });
-    });
 }
 
 function updateIRMeta(idx) {
