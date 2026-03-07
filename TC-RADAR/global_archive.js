@@ -35,12 +35,14 @@ var irTimer = null;
 var irSpeed = 750;           // ms per frame
 var irOverlayLayer = null;   // L.imageOverlay on detail map
 var irPositionMarker = null; // L.circleMarker showing current storm center
+var trackAnnotationMarkers = []; // Genesis, LMI, dissipation markers (hidden during IR)
 var irOverlayVisible = false;
 var irOpacity = 0.8;
 var irOpacityLevels = [0.8, 0.6, 0.4, 1.0];
 var irOpacityIdx = 0;
 var irFailedFrames = {};     // Track frames that permanently failed
 var irFollowStorm = true;    // Lock map view to follow storm center
+var irFollowZoomSet = false; // True after first fitBounds sets the zoom level
 
 // Climatology state
 var climRendered = false;
@@ -755,24 +757,28 @@ function renderDetailMap(track, storm) {
     var validPts = track.filter(function (p) { return p.la && p.lo; });
     if (validPts.length > 0) {
         // Genesis marker
+        trackAnnotationMarkers = [];
         var gen = validPts[0];
-        L.circleMarker([gen.la, gen.lo], {
+        var genM = L.circleMarker([gen.la, gen.lo], {
             radius: 6, color: '#fff', fillColor: '#60a5fa', fillOpacity: 1, weight: 2
         }).bindTooltip('Genesis: ' + (gen.t || '').substring(0, 10), { className: 'track-tooltip' }).addTo(detailMap);
+        trackAnnotationMarkers.push(genM);
 
         // LMI marker
         var lmiPt = validPts.reduce(function (max, p) { return (p.w || 0) > (max.w || 0) ? p : max; }, validPts[0]);
         if (lmiPt) {
-            L.circleMarker([lmiPt.la, lmiPt.lo], {
+            var lmiM = L.circleMarker([lmiPt.la, lmiPt.lo], {
                 radius: 8, color: '#fff', fillColor: getIntensityColor(lmiPt.w), fillOpacity: 1, weight: 2
             }).bindTooltip('Peak: ' + (lmiPt.w || '?') + ' kt @ ' + (lmiPt.t || '').substring(0, 10), { className: 'track-tooltip' }).addTo(detailMap);
+            trackAnnotationMarkers.push(lmiM);
         }
 
         // End marker
         var end = validPts[validPts.length - 1];
-        L.circleMarker([end.la, end.lo], {
+        var endM = L.circleMarker([end.la, end.lo], {
             radius: 5, color: '#fff', fillColor: '#6b7280', fillOpacity: 1, weight: 2
         }).bindTooltip('Dissipation: ' + (end.t || '').substring(0, 10), { className: 'track-tooltip' }).addTo(detailMap);
+        trackAnnotationMarkers.push(endM);
 
         // Fit bounds
         var lats = validPts.map(function (p) { return p.la; });
@@ -794,6 +800,7 @@ function loadHURSAT(storm) {
     irFrameIdx = 0;
     irPrefetchActive = 0;
     irFailedFrames = {};
+    irFollowZoomSet = false;
     stopIRPlayback();
     removeIROverlay();
 
@@ -841,6 +848,8 @@ function loadHURSAT(storm) {
 
             // Auto-show IR overlay
             irOverlayVisible = true;
+            // Hide genesis/LMI/dissipation markers so they don't obscure IR
+            trackAnnotationMarkers.forEach(function (m) { if (detailMap) detailMap.removeLayer(m); });
             var toggleBtn = document.getElementById('ir-toggle-btn');
             toggleBtn.textContent = 'Hide IR';
             toggleBtn.classList.add('active');
@@ -897,6 +906,8 @@ window.toggleIROverlay = function () {
         toggleBtn.textContent = 'Hide IR';
         toggleBtn.classList.add('active');
         controls.style.display = '';
+        // Hide track annotation markers so they don't obscure IR
+        trackAnnotationMarkers.forEach(function (m) { if (detailMap) detailMap.removeLayer(m); });
         if (irOverlayLayer && detailMap) {
             irOverlayLayer.addTo(detailMap);
             irOverlayLayer.setOpacity(irOpacity);
@@ -920,6 +931,8 @@ window.toggleIROverlay = function () {
         if (irPositionMarker && detailMap) {
             detailMap.removeLayer(irPositionMarker);
         }
+        // Restore track annotation markers
+        trackAnnotationMarkers.forEach(function (m) { if (detailMap) m.addTo(detailMap); });
         // Remove intensity chart time marker
         updateIntensityMarker(null);
     }
@@ -936,6 +949,7 @@ window.cycleIROpacity = function () {
 
 window.toggleIRFollow = function () {
     irFollowStorm = !irFollowStorm;
+    irFollowZoomSet = false; // Reset so next frame establishes zoom
     var btn = document.getElementById('ir-follow-btn');
     if (btn) {
         btn.classList.toggle('active', irFollowStorm);
@@ -946,6 +960,7 @@ window.toggleIRFollow = function () {
         var frameBounds = irOverlayLayer.getBounds();
         if (frameBounds) {
             detailMap.fitBounds(frameBounds.pad(0.15), { animate: true, duration: 0.3, maxZoom: 7 });
+            irFollowZoomSet = true;
         }
     }
 };
@@ -1005,13 +1020,22 @@ function displayIROnMap(data) {
 
     // Pan/zoom map based on follow mode
     if (irFollowStorm) {
-        // Lock view to storm center — fit exactly to IR domain with slight padding
-        var padded = imageBounds.pad(0.15);
-        detailMap.fitBounds(padded, {
-            animate: irPlaying,
-            duration: irPlaying ? 0.3 : 0,
-            maxZoom: 7
-        });
+        if (!irFollowZoomSet) {
+            // First frame: fitBounds to establish correct zoom level
+            var padded = imageBounds.pad(0.15);
+            detailMap.fitBounds(padded, {
+                animate: false,
+                maxZoom: 7
+            });
+            irFollowZoomSet = true;
+        } else {
+            // Subsequent frames: panTo center at existing zoom (no zoom jitter)
+            var center = imageBounds.getCenter();
+            detailMap.panTo(center, {
+                animate: irPlaying,
+                duration: irPlaying ? 0.3 : 0
+            });
+        }
     } else if (!detailMap.getBounds().contains(imageBounds)) {
         // Free-pan mode: only refit when IR drifts off-screen
         var padded = imageBounds.pad(0.3);
