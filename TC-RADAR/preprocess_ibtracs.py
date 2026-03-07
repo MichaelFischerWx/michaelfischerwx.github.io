@@ -70,14 +70,29 @@ def compute_ace(group):
     """
     Compute Accumulated Cyclone Energy for a storm.
     ACE = sum(vmax^2) / 10^4  for 6-hourly SYNOPTIC points (00, 06, 12, 18 UTC)
-    where vmax >= 34 kt.
+    where vmax >= 34 kt AND the system is tropical or subtropical (not ET).
 
-    IBTrACS includes 3-hourly intermediate fixes; using all points would
-    approximately double the real ACE.
+    Key filters to match official NHC methodology:
+    1. Synoptic 6-hourly times only (00, 06, 12, 18 UTC with minute == 0)
+    2. Wind >= 34 kt (tropical storm strength)
+    3. Exclude extratropical (ET) and disturbance (DS) phases via NATURE column
+       — Official ACE only counts tropical (TS) and subtropical (SS) phases
     """
-    # Filter to synoptic times only (00, 06, 12, 18 UTC)
-    synoptic = group[group["ISO_TIME"].dt.hour.isin([0, 6, 12, 18])]
-    winds = synoptic["WIND"].dropna()
+    # Filter to exact synoptic times (hour in {0,6,12,18} AND minute == 0)
+    # This avoids counting non-synoptic fixes (e.g., landfall at 18:30)
+    synoptic = group[
+        group["ISO_TIME"].dt.hour.isin([0, 6, 12, 18])
+        & (group["ISO_TIME"].dt.minute == 0)
+    ]
+
+    # Exclude extratropical and disturbance phases
+    # NATURE column: TS=tropical, SS=subtropical, ET=extratropical, DS=disturbance
+    if "NATURE" in synoptic.columns:
+        tropical = synoptic[synoptic["NATURE"].isin(["TS", "SS", "NR", "MX"])]
+    else:
+        tropical = synoptic  # Fallback if NATURE not available
+
+    winds = tropical["WIND"].dropna()
     ts_winds = winds[winds >= 34]
     if len(ts_winds) == 0:
         return 0.0
@@ -111,10 +126,15 @@ def load_ibtracs(csv_path):
     )
 
     # Strip whitespace from string columns (IBTrACS CSV has leading spaces)
-    for col in ["SID", "NAME", "BASIN"]:
+    for col in ["SID", "NAME", "BASIN", "NATURE"]:
         if col in df.columns:
             df[col] = df[col].astype(str).str.strip()
             df[col] = df[col].replace({"nan": np.nan, "": np.nan})
+
+    # Report NATURE distribution for ACE verification
+    if "NATURE" in df.columns:
+        nature_counts = df["NATURE"].value_counts()
+        print(f"Storm nature distribution:\n{nature_counts.to_string()}")
 
     # Parse numeric columns
     for col in ["LAT", "LON", "WMO_WIND", "WMO_PRES", "USA_WIND", "USA_PRES"]:
