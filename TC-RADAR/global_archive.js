@@ -870,8 +870,15 @@ window.cycleIROpacity = function () {
 };
 
 function displayIROnMap(data) {
-    if (!detailMap || !irOverlayVisible) return;
-    if (!data || !data.frame) return;
+    if (!detailMap || !irOverlayVisible) {
+        console.log('displayIROnMap: skipped (map=' + !!detailMap + ', visible=' + irOverlayVisible + ')');
+        return;
+    }
+    if (!data || !data.frame) {
+        console.warn('displayIROnMap: no frame data', data);
+        return;
+    }
+    console.log('displayIROnMap: rendering frame, bounds=', data.bounds, 'frame length=', data.frame.length);
 
     var bounds = data.bounds;
     if (!bounds) {
@@ -1022,14 +1029,14 @@ function fetchIRFrameSingle(idx, callback) {
             '&frame_idx=' + idx +
             '&lat=' + fi.lat + '&lon=' + fi.lon;
     } else {
-        // HURSAT: use either unified or legacy endpoint
-        frameUrl = API_BASE + '/global/ir/frame?sid=' + encodeURIComponent(selectedStorm.sid) +
+        // HURSAT: use legacy endpoint directly (most reliable)
+        frameUrl = API_BASE + '/global/hursat/frame?sid=' + encodeURIComponent(selectedStorm.sid) +
             '&frame_idx=' + idx;
     }
 
     fetch(frameUrl)
         .then(function (r) {
-            if (!r.ok) throw new Error('Frame not available');
+            if (!r.ok) throw new Error('Frame not available (HTTP ' + r.status + ')');
             return r.json();
         })
         .then(function (data) {
@@ -1037,19 +1044,23 @@ function fetchIRFrameSingle(idx, callback) {
             if (callback) callback(data);
         })
         .catch(function (err) {
-            console.warn('Frame ' + idx + ' load failed:', err);
-            // Fallback to legacy HURSAT endpoint if unified fails
-            if (source !== 'hursat') {
-                fetch(API_BASE + '/global/hursat/frame?sid=' + encodeURIComponent(selectedStorm.sid) + '&frame_idx=' + idx)
-                    .then(function (r) { return r.ok ? r.json() : null; })
-                    .then(function (data) {
-                        if (data) irFrames[idx] = data;
-                        if (callback) callback(data);
-                    })
-                    .catch(function () { if (callback) callback(null); });
+            console.warn('Frame ' + idx + ' load failed from ' + source + ':', err);
+            // Fallback: try the other endpoint
+            var fallbackUrl;
+            if (source === 'hursat') {
+                // Try unified endpoint as fallback
+                fallbackUrl = API_BASE + '/global/ir/frame?sid=' + encodeURIComponent(selectedStorm.sid) + '&frame_idx=' + idx;
             } else {
-                if (callback) callback(null);
+                // Try legacy HURSAT endpoint as fallback
+                fallbackUrl = API_BASE + '/global/hursat/frame?sid=' + encodeURIComponent(selectedStorm.sid) + '&frame_idx=' + idx;
             }
+            fetch(fallbackUrl)
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (data) {
+                    if (data) irFrames[idx] = data;
+                    if (callback) callback(data);
+                })
+                .catch(function () { if (callback) callback(null); });
         });
 }
 
