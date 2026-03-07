@@ -1678,6 +1678,7 @@ function renderBasinPie() {
 // ══════════════════════════════════════════════════════════════
 
 var aceModalBasins = ['ALL'];   // Active basins in ACE modal
+var aceSeasonMap = null;        // Leaflet map for season track overview
 
 window.openACEModal = function () {
     var modal = document.getElementById('ace-modal');
@@ -1699,6 +1700,11 @@ window.openACEModal = function () {
 window.closeACEModal = function () {
     document.getElementById('ace-modal').style.display = 'none';
     document.body.style.overflow = '';
+    // Destroy season map to free memory
+    if (aceSeasonMap) {
+        aceSeasonMap.remove();
+        aceSeasonMap = null;
+    }
 };
 
 window.toggleACEBasin = function (btn) {
@@ -1833,6 +1839,9 @@ function renderACEYearDetail(year) {
     document.getElementById('ace-year-title').textContent =
         year + ' Season — ' + yearStorms.length + ' storms, ACE: ' + totalACE.toFixed(1);
 
+    // Render season track map
+    renderACESeasonMap(yearStorms);
+
     // Bar chart of storm ACE
     var stormNames = yearStorms.map(function (s) {
         return (s.name || 'UNNAMED') + ' (' + s.basin + ')';
@@ -1919,6 +1928,125 @@ window.aceJumpToStorm = function (sid) {
         viewStormDetail();
     }
 };
+
+// ── Season Track Map ─────────────────────────────────────────
+
+function renderACESeasonMap(yearStorms) {
+    // Destroy previous instance
+    if (aceSeasonMap) {
+        aceSeasonMap.remove();
+        aceSeasonMap = null;
+    }
+
+    var mapEl = document.getElementById('ace-season-map');
+    if (!mapEl) return;
+
+    // Collect storms that have track data
+    var stormsWithTracks = yearStorms.filter(function (s) { return allTracks && allTracks[s.sid]; });
+    if (stormsWithTracks.length === 0) {
+        mapEl.style.display = 'none';
+        return;
+    }
+    mapEl.style.display = '';
+
+    // Initialize map
+    aceSeasonMap = L.map('ace-season-map', {
+        center: [20, -60],
+        zoom: 3,
+        zoomControl: true,
+        worldCopyJump: true
+    });
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; CARTO',
+        subdomains: 'abcd',
+        maxZoom: 12
+    }).addTo(aceSeasonMap);
+
+    var allLats = [];
+    var allLons = [];
+
+    // Compute median ACE for label filtering (reduce clutter in busy seasons)
+    var aceValues = stormsWithTracks.map(function (s) { return s.ace || 0; }).sort(function (a, b) { return a - b; });
+    var medianACE = aceValues.length > 0 ? aceValues[Math.floor(aceValues.length / 2)] : 0;
+    var labelThreshold = stormsWithTracks.length > 20 ? medianACE : -1;
+
+    stormsWithTracks.forEach(function (storm) {
+        var track = allTracks[storm.sid];
+        if (!track || track.length < 2) return;
+
+        var validPts = track.filter(function (p) { return p.la && p.lo; });
+        if (validPts.length < 2) return;
+
+        // Draw intensity-colored polyline segments
+        var segmentCoords = [];
+        for (var i = 1; i < validPts.length; i++) {
+            var p0 = validPts[i - 1];
+            var p1 = validPts[i];
+            var color = getIntensityColor(p1.w);
+            var seg = L.polyline(
+                [[p0.la, p0.lo], [p1.la, p1.lo]],
+                { color: color, weight: 2.5, opacity: 0.85 }
+            );
+            seg._stormSid = storm.sid;
+            seg.addTo(aceSeasonMap);
+
+            // Tooltip on hover
+            seg.bindTooltip(
+                '<b style="color:' + getIntensityColor(storm.peak_wind_kt) + '">' +
+                (storm.name || 'UNNAMED') + '</b><br>' +
+                getIntensityCategory(storm.peak_wind_kt) + ' — ' + (storm.peak_wind_kt || '?') + ' kt' +
+                (storm.ace ? '<br>ACE: ' + storm.ace.toFixed(1) : ''),
+                { sticky: true, className: 'track-tooltip', direction: 'top', offset: [0, -8] }
+            );
+
+            // Click to jump to storm detail
+            seg.on('click', (function (sid) {
+                return function () { aceJumpToStorm(sid); };
+            })(storm.sid));
+
+            // Highlight on hover
+            seg.on('mouseover', function () { this.setStyle({ weight: 5, opacity: 1 }); });
+            seg.on('mouseout', function () { this.setStyle({ weight: 2.5, opacity: 0.85 }); });
+        }
+
+        // Collect bounds
+        validPts.forEach(function (p) {
+            allLats.push(p.la);
+            allLons.push(p.lo);
+        });
+
+        // Add storm name label at LMI point (or midpoint)
+        if ((storm.ace || 0) > labelThreshold) {
+            var lmiPt = validPts.reduce(function (max, p) {
+                return (p.w || 0) > (max.w || 0) ? p : max;
+            }, validPts[0]);
+
+            var labelColor = getIntensityColor(storm.peak_wind_kt);
+            var icon = L.divIcon({
+                className: 'ace-track-label',
+                html: '<span style="color:' + labelColor + '">' + (storm.name || 'UNNAMED') + '</span>',
+                iconSize: [0, 0],
+                iconAnchor: [-5, 6]
+            });
+            L.marker([lmiPt.la, lmiPt.lo], { icon: icon, interactive: false }).addTo(aceSeasonMap);
+        }
+
+        // Genesis dot
+        var gen = validPts[0];
+        L.circleMarker([gen.la, gen.lo], {
+            radius: 3, color: '#fff', fillColor: getIntensityColor(gen.w), fillOpacity: 0.9, weight: 1
+        }).addTo(aceSeasonMap);
+    });
+
+    // Fit map bounds
+    if (allLats.length > 0) {
+        aceSeasonMap.fitBounds([
+            [Math.min.apply(null, allLats) - 3, Math.min.apply(null, allLons) - 5],
+            [Math.max.apply(null, allLats) + 3, Math.max.apply(null, allLons) + 5]
+        ]);
+    }
+}
 
 // ══════════════════════════════════════════════════════════════
 //  INTENSITY DISTRIBUTION MODAL

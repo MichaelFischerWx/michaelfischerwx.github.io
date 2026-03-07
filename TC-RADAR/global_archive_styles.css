@@ -817,6 +817,28 @@
     color: var(--cyan);
 }
 
+/* Season track map inside ACE year detail */
+#ace-season-map {
+    height: 380px;
+    border-radius: 8px;
+    margin-bottom: 14px;
+    background: #0a1628;
+    border: 1px solid rgba(255,255,255,0.06);
+}
+.ace-track-label {
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    white-space: nowrap;
+}
+.ace-track-label span {
+    font-size: 10px;
+    font-weight: 600;
+    font-family: 'DM Sans', sans-serif;
+    text-shadow: 0 0 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.7);
+    pointer-events: none;
+}
+
 /* ══════════════════════════════════════════════════════════════
    RESPONSIVE
    ══════════════════════════════════════════════════════════════ */
