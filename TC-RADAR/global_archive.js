@@ -937,6 +937,11 @@ function renderACEChart(minYear, maxYear) {
     });
 
     Plotly.newPlot('clim-ace-chart', traces, layout, PLOTLY_CONFIG);
+
+    // Click handler: open ACE drill-down modal
+    document.getElementById('clim-ace-chart').on('plotly_click', function () {
+        openACEModal();
+    });
 }
 
 function renderFrequencyChart(minYear, maxYear) {
@@ -1073,6 +1078,253 @@ function renderBasinPie() {
 }
 
 // ══════════════════════════════════════════════════════════════
+//  ACE DRILL-DOWN MODAL
+// ══════════════════════════════════════════════════════════════
+
+var aceModalBasins = ['ALL'];   // Active basins in ACE modal
+
+window.openACEModal = function () {
+    var modal = document.getElementById('ace-modal');
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    // Reset basin chips
+    aceModalBasins = ['ALL'];
+    document.querySelectorAll('#ace-basin-chips .basin-chip').forEach(function (c) {
+        c.classList.toggle('active', c.getAttribute('data-basin') === 'ALL');
+    });
+
+    // Hide year detail initially
+    document.getElementById('ace-year-detail').style.display = 'none';
+
+    renderACEDrillDownChart();
+};
+
+window.closeACEModal = function () {
+    document.getElementById('ace-modal').style.display = 'none';
+    document.body.style.overflow = '';
+};
+
+window.toggleACEBasin = function (btn) {
+    var basin = btn.getAttribute('data-basin');
+
+    if (basin === 'ALL') {
+        document.querySelectorAll('#ace-basin-chips .basin-chip').forEach(function (c) { c.classList.remove('active'); });
+        btn.classList.add('active');
+        aceModalBasins = ['ALL'];
+    } else {
+        document.querySelector('#ace-basin-chips .basin-chip[data-basin="ALL"]').classList.remove('active');
+        btn.classList.toggle('active');
+
+        aceModalBasins = [];
+        document.querySelectorAll('#ace-basin-chips .basin-chip.active').forEach(function (c) {
+            var b = c.getAttribute('data-basin');
+            if (b !== 'ALL') aceModalBasins.push(b);
+        });
+        if (aceModalBasins.length === 0) {
+            document.querySelector('#ace-basin-chips .basin-chip[data-basin="ALL"]').classList.add('active');
+            aceModalBasins = ['ALL'];
+        }
+    }
+
+    renderACEDrillDownChart();
+    document.getElementById('ace-year-detail').style.display = 'none';
+};
+
+function renderACEDrillDownChart() {
+    var years = allStorms.map(function (s) { return s.year; }).filter(function (y) { return y > 0; });
+    var minYear = Math.max(Math.min.apply(null, years), 1950);
+    var maxYear = Math.max.apply(null, years);
+    var yearRange = [];
+    for (var y = minYear; y <= maxYear; y++) yearRange.push(y);
+
+    var basins = aceModalBasins[0] === 'ALL' ? Object.keys(BASIN_NAMES) : aceModalBasins;
+    var traces = [];
+
+    basins.forEach(function (basin) {
+        var aceByYear = yearRange.map(function (yr) {
+            var ace = 0;
+            allStorms.forEach(function (s) {
+                if (s.year === yr && s.basin === basin) ace += (s.ace || 0);
+            });
+            return Math.round(ace * 10) / 10;
+        });
+
+        traces.push({
+            x: yearRange,
+            y: aceByYear,
+            type: 'scatter',
+            mode: 'lines',
+            name: BASIN_NAMES[basin] || basin,
+            line: { color: BASIN_COLORS[basin] || '#6b7280', width: 2 },
+            hovertemplate: '<b>' + (BASIN_NAMES[basin] || basin) + ' %{x}</b><br>ACE: %{y:.1f}<extra></extra>'
+        });
+    });
+
+    // Also add total ACE as a thicker dashed line if showing all basins
+    if (aceModalBasins[0] === 'ALL') {
+        var totalACE = yearRange.map(function (yr) {
+            var ace = 0;
+            allStorms.forEach(function (s) {
+                if (s.year === yr) ace += (s.ace || 0);
+            });
+            return Math.round(ace * 10) / 10;
+        });
+        traces.push({
+            x: yearRange,
+            y: totalACE,
+            type: 'scatter',
+            mode: 'lines',
+            name: 'Global Total',
+            line: { color: '#e2e8f0', width: 2.5, dash: 'dot' },
+            hovertemplate: '<b>Global %{x}</b><br>Total ACE: %{y:.1f}<extra></extra>'
+        });
+    }
+
+    var layout = Object.assign({}, PLOTLY_LAYOUT_BASE, {
+        xaxis: {
+            title: { text: 'Year', font: { size: 11, color: '#8b9ec2' } },
+            tickfont: { size: 9, color: '#8b9ec2' },
+            gridcolor: 'rgba(255,255,255,0.04)',
+            dtick: 10
+        },
+        yaxis: {
+            title: { text: 'ACE (10⁴ kt²)', font: { size: 11, color: '#8b9ec2' } },
+            tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' },
+            gridcolor: 'rgba(255,255,255,0.04)'
+        },
+        showlegend: true,
+        legend: {
+            orientation: 'h', x: 0, y: 1.15,
+            font: { size: 10, color: '#8b9ec2' }
+        },
+        margin: { l: 55, r: 10, t: 35, b: 45 },
+        hovermode: 'x unified'
+    });
+
+    Plotly.newPlot('ace-drilldown-chart', traces, layout, PLOTLY_CONFIG);
+
+    // Click handler for year drill-down
+    var chartEl = document.getElementById('ace-drilldown-chart');
+    chartEl.removeAllListeners && chartEl.removeAllListeners('plotly_click');
+    chartEl.on('plotly_click', function (data) {
+        if (data.points && data.points.length > 0) {
+            var clickedYear = data.points[0].x;
+            renderACEYearDetail(clickedYear);
+        }
+    });
+}
+
+function renderACEYearDetail(year) {
+    var detailDiv = document.getElementById('ace-year-detail');
+    detailDiv.style.display = '';
+
+    // Scroll to it
+    detailDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    var basins = aceModalBasins[0] === 'ALL' ? Object.keys(BASIN_NAMES) : aceModalBasins;
+
+    // Get storms for this year matching basin filter
+    var yearStorms = allStorms.filter(function (s) {
+        return s.year === year && (aceModalBasins[0] === 'ALL' || aceModalBasins.indexOf(s.basin) !== -1);
+    });
+
+    // Sort by ACE descending
+    yearStorms.sort(function (a, b) { return (b.ace || 0) - (a.ace || 0); });
+
+    var totalACE = yearStorms.reduce(function (sum, s) { return sum + (s.ace || 0); }, 0);
+
+    document.getElementById('ace-year-title').textContent =
+        year + ' Season — ' + yearStorms.length + ' storms, ACE: ' + totalACE.toFixed(1);
+
+    // Bar chart of storm ACE
+    var stormNames = yearStorms.map(function (s) {
+        return (s.name || 'UNNAMED') + ' (' + s.basin + ')';
+    });
+    var stormACE = yearStorms.map(function (s) { return Math.round((s.ace || 0) * 10) / 10; });
+    var stormColors = yearStorms.map(function (s) { return getIntensityColor(s.peak_wind_kt); });
+
+    var trace = {
+        y: stormNames,
+        x: stormACE,
+        type: 'bar',
+        orientation: 'h',
+        marker: { color: stormColors },
+        hovertemplate: '<b>%{y}</b><br>ACE: %{x:.1f}<extra></extra>',
+        texttemplate: '%{x:.1f}',
+        textposition: 'outside',
+        textfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' }
+    };
+
+    var chartHeight = Math.max(250, yearStorms.length * 26 + 60);
+
+    var layout = Object.assign({}, PLOTLY_LAYOUT_BASE, {
+        xaxis: {
+            title: { text: 'ACE (10⁴ kt²)', font: { size: 11, color: '#8b9ec2' } },
+            tickfont: { size: 9, color: '#8b9ec2', family: 'JetBrains Mono' },
+            gridcolor: 'rgba(255,255,255,0.04)'
+        },
+        yaxis: {
+            tickfont: { size: 10, color: '#e2e8f0' },
+            autorange: 'reversed'
+        },
+        showlegend: false,
+        margin: { l: 160, r: 50, t: 10, b: 40 },
+        height: chartHeight
+    });
+
+    Plotly.newPlot('ace-year-chart', [trace], layout, PLOTLY_CONFIG);
+
+    // Click handler to jump to storm detail
+    document.getElementById('ace-year-chart').on('plotly_click', function (data) {
+        if (data.points && data.points.length > 0) {
+            var idx = data.points[0].pointIndex;
+            var storm = yearStorms[idx];
+            if (storm) {
+                closeACEModal();
+                selectedStorm = storm;
+                selectStorm(storm);
+                viewStormDetail();
+            }
+        }
+    });
+
+    // Build table
+    var maxACE = Math.max.apply(null, stormACE) || 1;
+    var html = '<table><thead><tr>' +
+        '<th>Storm</th><th>Basin</th><th>Peak Wind</th><th>Min Pres</th><th>ACE</th><th style="width:30%;">Contribution</th>' +
+        '</tr></thead><tbody>';
+
+    yearStorms.forEach(function (s) {
+        var pct = totalACE > 0 ? ((s.ace || 0) / totalACE * 100) : 0;
+        var barWidth = maxACE > 0 ? ((s.ace || 0) / maxACE * 100) : 0;
+        var color = getIntensityColor(s.peak_wind_kt);
+        html += '<tr>' +
+            '<td><span class="ace-storm-name" style="color:' + color + ';" onclick="aceJumpToStorm(\'' + s.sid + '\')">' +
+            (s.name || 'UNNAMED') + '</span></td>' +
+            '<td>' + s.basin + '</td>' +
+            '<td class="mono">' + (s.peak_wind_kt || '—') + ' kt</td>' +
+            '<td class="mono">' + (s.min_pres_hpa || '—') + ' hPa</td>' +
+            '<td class="mono">' + (s.ace || 0).toFixed(1) + '</td>' +
+            '<td class="ace-bar-cell"><span class="ace-bar" style="width:' + barWidth + '%;background:' + color + ';"></span> ' +
+            '<span style="font-size:0.72rem;color:var(--text-dim);">' + pct.toFixed(1) + '%</span></td>' +
+            '</tr>';
+    });
+    html += '</tbody></table>';
+    document.getElementById('ace-year-table').innerHTML = html;
+}
+
+window.aceJumpToStorm = function (sid) {
+    var storm = allStorms.find(function (s) { return s.sid === sid; });
+    if (storm) {
+        closeACEModal();
+        selectedStorm = storm;
+        selectStorm(storm);
+        viewStormDetail();
+    }
+};
+
+// ══════════════════════════════════════════════════════════════
 //  UTILITIES
 // ══════════════════════════════════════════════════════════════
 
@@ -1092,6 +1344,16 @@ function showToast(message) {
 
 document.addEventListener('DOMContentLoaded', function () {
     loadData();
+
+    // Close ACE modal on Escape
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            var modal = document.getElementById('ace-modal');
+            if (modal && modal.style.display !== 'none') {
+                closeACEModal();
+            }
+        }
+    });
 });
 
 })();
