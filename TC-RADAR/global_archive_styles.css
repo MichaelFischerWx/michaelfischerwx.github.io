@@ -509,6 +509,49 @@
     min-width: 42px;
     text-align: center;
 }
+.ir-follow-btn {
+    font-size: 0.85rem;
+    padding: 2px 7px;
+    line-height: 1;
+    opacity: 0.5;
+    transition: opacity 0.15s;
+}
+.ir-follow-btn.active {
+    opacity: 1;
+    background: rgba(0, 180, 255, 0.25);
+    border-color: rgba(0, 180, 255, 0.6);
+}
+
+/* IR brightness temperature colorbar */
+.ir-colorbar-wrap {
+    margin-top: 4px;
+}
+.ir-colorbar {
+    height: 10px;
+    border-radius: 3px;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: linear-gradient(to right,
+        rgb(8, 8, 8) 0%,
+        rgb(40, 40, 40) 15%,
+        rgb(90, 90, 90) 35%,
+        rgb(20, 90, 200) 45%,
+        rgb(0, 180, 255) 55%,
+        rgb(0, 255, 180) 65%,
+        rgb(255, 255, 0) 72%,
+        rgb(255, 140, 0) 80%,
+        rgb(255, 40, 40) 88%,
+        rgb(200, 0, 200) 94%,
+        rgb(255, 255, 255) 100%
+    );
+}
+.ir-colorbar-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.6rem;
+    color: rgba(180, 195, 220, 0.7);
+    padding-top: 1px;
+    line-height: 1;
+}
 
 /* Loading spinner overlay on map */
 .ir-map-loading {

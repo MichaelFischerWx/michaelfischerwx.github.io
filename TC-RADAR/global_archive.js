@@ -40,6 +40,7 @@ var irOpacity = 0.8;
 var irOpacityLevels = [0.8, 0.6, 0.4, 1.0];
 var irOpacityIdx = 0;
 var irFailedFrames = {};     // Track frames that permanently failed
+var irFollowStorm = true;    // Lock map view to follow storm center
 
 // Climatology state
 var climRendered = false;
@@ -935,6 +936,22 @@ window.cycleIROpacity = function () {
     }
 };
 
+window.toggleIRFollow = function () {
+    irFollowStorm = !irFollowStorm;
+    var btn = document.getElementById('ir-follow-btn');
+    if (btn) {
+        btn.classList.toggle('active', irFollowStorm);
+        btn.title = irFollowStorm ? 'View locked to storm center (click to unlock)' : 'Free pan mode (click to lock on storm)';
+    }
+    // If just enabled, immediately snap to current frame
+    if (irFollowStorm && irOverlayLayer && detailMap) {
+        var frameBounds = irOverlayLayer.getBounds();
+        if (frameBounds) {
+            detailMap.fitBounds(frameBounds.pad(0.15), { animate: true, duration: 0.3, maxZoom: 7 });
+        }
+    }
+};
+
 function displayIROnMap(data) {
     if (!detailMap || !irOverlayVisible) {
         console.log('displayIROnMap: skipped (map=' + !!detailMap + ', visible=' + irOverlayVisible + ')');
@@ -988,11 +1005,18 @@ function displayIROnMap(data) {
         className: 'ir-overlay-image'
     }).addTo(detailMap);
 
-    // Pan/zoom map to follow the IR frame
-    var center = imageBounds.getCenter();
-    var padded = imageBounds.pad(0.3);  // 30% padding around IR for context
-    if (!detailMap.getBounds().contains(imageBounds)) {
-        // IR frame partially or fully off-screen — fit to show it
+    // Pan/zoom map based on follow mode
+    if (irFollowStorm) {
+        // Lock view to storm center — fit exactly to IR domain with slight padding
+        var padded = imageBounds.pad(0.15);
+        detailMap.fitBounds(padded, {
+            animate: irPlaying,
+            duration: irPlaying ? 0.3 : 0,
+            maxZoom: 7
+        });
+    } else if (!detailMap.getBounds().contains(imageBounds)) {
+        // Free-pan mode: only refit when IR drifts off-screen
+        var padded = imageBounds.pad(0.3);
         detailMap.fitBounds(padded, { animate: true, duration: 0.4, maxZoom: 7 });
     }
 
