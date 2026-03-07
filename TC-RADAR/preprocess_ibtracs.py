@@ -66,13 +66,19 @@ def get_category(wind_kt):
     return "TD"
 
 
-def compute_ace(winds):
+def compute_ace(group):
     """
     Compute Accumulated Cyclone Energy for a storm.
-    ACE = sum(vmax^2) / 10^4  for 6-hourly points where vmax >= 34 kt.
+    ACE = sum(vmax^2) / 10^4  for 6-hourly SYNOPTIC points (00, 06, 12, 18 UTC)
+    where vmax >= 34 kt.
+
+    IBTrACS includes 3-hourly intermediate fixes; using all points would
+    approximately double the real ACE.
     """
-    valid = winds.dropna()
-    ts_winds = valid[valid >= 34]
+    # Filter to synoptic times only (00, 06, 12, 18 UTC)
+    synoptic = group[group["ISO_TIME"].dt.hour.isin([0, 6, 12, 18])]
+    winds = synoptic["WIND"].dropna()
+    ts_winds = winds[winds >= 34]
     if len(ts_winds) == 0:
         return 0.0
     return float(np.sum(ts_winds.values ** 2) / 1e4)
@@ -111,8 +117,16 @@ def load_ibtracs(csv_path):
             df[col] = df[col].replace({"nan": np.nan, "": np.nan})
 
     # Parse numeric columns
-    for col in ["LAT", "LON", "WMO_WIND", "WMO_PRES"]:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+    for col in ["LAT", "LON", "WMO_WIND", "WMO_PRES", "USA_WIND", "USA_PRES"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # Prefer USA_WIND (1-minute sustained, NHC/JTWC) over WMO_WIND (varies by agency)
+    # Fall back to WMO_WIND where USA_WIND is not available
+    df["WIND"] = df["USA_WIND"].fillna(df["WMO_WIND"])
+    df["PRES"] = df["USA_PRES"].fillna(df["WMO_PRES"]) if "USA_PRES" in df.columns else df["WMO_PRES"]
+    print(f"Wind source: USA_WIND available for {df['USA_WIND'].notna().sum():,} / {len(df):,} points "
+          f"({df['USA_WIND'].notna().mean()*100:.1f}%), rest from WMO_WIND")
 
     # Parse datetime
     df["ISO_TIME"] = pd.to_datetime(df["ISO_TIME"], errors="coerce")
@@ -141,8 +155,8 @@ def build_storms_json(df):
         basin = group["BASIN"].dropna().iloc[0] if not group["BASIN"].dropna().empty else "UN"
         year = int(group["YEAR"].dropna().iloc[0]) if not group["YEAR"].dropna().empty else 0
 
-        peak_wind = group["WMO_WIND"].max()
-        min_pres = group["WMO_PRES"].min()
+        peak_wind = group["WIND"].max()
+        min_pres = group["PRES"].min()
 
         # Genesis location (first valid point)
         first = group.dropna(subset=["LAT", "LON"]).iloc[0] if not group.dropna(subset=["LAT", "LON"]).empty else None
@@ -151,7 +165,7 @@ def build_storms_json(df):
 
         # Lifetime maximum intensity (LMI) location
         if not np.isnan(peak_wind):
-            lmi_row = group.loc[group["WMO_WIND"].idxmax()]
+            lmi_row = group.loc[group["WIND"].idxmax()]
             lmi_lat = round(float(lmi_row["LAT"]), 1) if not np.isnan(lmi_row["LAT"]) else genesis_lat
             lmi_lon = round(float(lmi_row["LON"]), 1) if not np.isnan(lmi_row["LON"]) else genesis_lon
         else:
@@ -162,8 +176,8 @@ def build_storms_json(df):
         start_date = group["ISO_TIME"].min().strftime("%Y-%m-%d") if pd.notna(group["ISO_TIME"].min()) else None
         end_date = group["ISO_TIME"].max().strftime("%Y-%m-%d") if pd.notna(group["ISO_TIME"].max()) else None
 
-        # ACE
-        ace = compute_ace(group["WMO_WIND"])
+        # ACE (synoptic 6-hourly points only)
+        ace = compute_ace(group)
 
         # HURSAT availability
         hursat = HURSAT_START_YEAR <= year <= HURSAT_END_YEAR
@@ -214,10 +228,10 @@ def build_tracks_json(df):
                 pt["la"] = round(float(row["LAT"]), 1)
             if not np.isnan(row["LON"]):
                 pt["lo"] = round(float(row["LON"]), 1)
-            if not np.isnan(row["WMO_WIND"]):
-                pt["w"] = int(row["WMO_WIND"])
-            if not np.isnan(row["WMO_PRES"]):
-                pt["p"] = int(row["WMO_PRES"])
+            if not np.isnan(row["WIND"]):
+                pt["w"] = int(row["WIND"])
+            if not np.isnan(row["PRES"]):
+                pt["p"] = int(row["PRES"])
             points.append(pt)
         tracks[sid] = points
 
