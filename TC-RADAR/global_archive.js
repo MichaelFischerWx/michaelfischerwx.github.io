@@ -649,6 +649,9 @@ function renderIntensityTimeline(track, storm) {
         margin: { l: 55, r: 55, t: 10, b: 45 }
     });
 
+    // Store base shapes for later (IR time marker is appended dynamically)
+    window._timelineBaseShapes = shapes.slice();
+
     Plotly.newPlot('timeline-chart', [windTrace, presTrace], layout, PLOTLY_CONFIG);
 
     // Click handler to sync IR
@@ -658,6 +661,54 @@ function renderIntensityTimeline(track, storm) {
             syncIRToTime(clickedTime);
         }
     });
+}
+
+/**
+ * Update the vertical time marker on the intensity chart to match the
+ * current IR frame time. Only visible when IR overlay is active.
+ * Throttled to avoid expensive Plotly.relayout calls during fast animation.
+ */
+var _intensityMarkerTimer = null;
+var _lastMarkerDt = null;
+
+function updateIntensityMarker(dtStr) {
+    // Skip if nothing changed
+    if (dtStr === _lastMarkerDt) return;
+    _lastMarkerDt = dtStr;
+
+    // Throttle: during animation, delay updates slightly so we don't call
+    // Plotly.relayout on every single frame tick (expensive)
+    if (_intensityMarkerTimer) clearTimeout(_intensityMarkerTimer);
+    _intensityMarkerTimer = setTimeout(function () {
+        _applyIntensityMarker(dtStr);
+    }, irPlaying ? 200 : 0);  // immediate when paused, 200ms throttle when playing
+}
+
+function _applyIntensityMarker(dtStr) {
+    var chartEl = document.getElementById('timeline-chart');
+    if (!chartEl || !chartEl.layout) return;
+
+    var baseShapes = window._timelineBaseShapes || [];
+
+    if (!dtStr || !irOverlayVisible) {
+        // Remove marker — restore base shapes only
+        Plotly.relayout(chartEl, { shapes: baseShapes });
+        return;
+    }
+
+    // Add a vertical line at the IR frame time
+    var markerLine = {
+        type: 'line',
+        xref: 'x',
+        yref: 'paper',
+        x0: dtStr,
+        x1: dtStr,
+        y0: 0,
+        y1: 1,
+        line: { color: 'rgba(255,200,50,0.7)', width: 2, dash: 'solid' }
+    };
+
+    Plotly.relayout(chartEl, { shapes: baseShapes.concat([markerLine]) });
 }
 
 function renderDetailMap(track, storm) {
@@ -742,6 +793,7 @@ function loadHURSAT(storm) {
     irFrameIdx = 0;
     irBatchActive = false;
     irPrefetchActive = 0;
+    irPrefetchFrontier = 0;
     irFailedFrames = {};
     stopIRPlayback();
     removeIROverlay();
@@ -826,6 +878,11 @@ function removeIROverlay() {
     if (irPositionMarker && detailMap) {
         try { detailMap.removeLayer(irPositionMarker); } catch (e) {}
     }
+    // Clear intensity chart marker
+    _lastMarkerDt = null;
+    if (typeof updateIntensityMarker === 'function') {
+        updateIntensityMarker(null);
+    }
     irPositionMarker = null;
     irOverlayVisible = false;
 }
@@ -864,6 +921,8 @@ window.toggleIROverlay = function () {
         if (irPositionMarker && detailMap) {
             detailMap.removeLayer(irPositionMarker);
         }
+        // Remove intensity chart time marker
+        updateIntensityMarker(null);
     }
 };
 
@@ -1135,35 +1194,51 @@ function fetchIRFrameSingle(idx, callback) {
         });
 }
 
+// Track the highest frame index we've queued for prefetch so the chain
+// continues through ALL frames, not just ±15 from the displayed frame.
+var irPrefetchFrontier = 0;
+
 function prefetchIRFrames(currentIdx) {
     if (!irMeta) return;
     if (irBatchActive) return;  // Don't overlap batch requests
     var total = irMeta.n_frames;
 
-    // Build list of frames to prefetch (ahead of current position, wrapping)
+    // Advance the frontier to at least the current display position
+    if (currentIdx > irPrefetchFrontier) {
+        irPrefetchFrontier = currentIdx;
+    }
+
+    // Build list: scan forward from the frontier, wrapping around,
+    // until we find up to 10 uncached frames.
     var toFetch = [];
-    for (var i = 1; i <= IR_PREFETCH_AHEAD; i++) {
-        var nextIdx = (currentIdx + i) % total;
-        if (!irFrames[nextIdx] && toFetch.indexOf(nextIdx) === -1) {
-            toFetch.push(nextIdx);
+    var scanned = 0;
+    var scanIdx = irPrefetchFrontier;
+    while (toFetch.length < 10 && scanned < total) {
+        scanIdx = (scanIdx + 1) % total;
+        scanned++;
+        if (!irFrames[scanIdx] && !irFailedFrames[scanIdx]) {
+            toFetch.push(scanIdx);
         }
     }
 
-    // Also prefetch a few behind (for rewinding)
+    // Also prefetch a few behind current display (for rewinding)
     for (var j = 1; j <= 3; j++) {
         var prevIdx = (currentIdx - j + total) % total;
-        if (!irFrames[prevIdx] && toFetch.indexOf(prevIdx) === -1) {
+        if (!irFrames[prevIdx] && !irFailedFrames[prevIdx] && toFetch.indexOf(prevIdx) === -1) {
             toFetch.push(prevIdx);
         }
     }
 
     if (toFetch.length === 0) return;
 
-    // Use batch endpoint: fetch up to 10 frames at once server-side
-    var batchSize = Math.min(toFetch.length, 10);
-    var batch = toFetch.slice(0, batchSize);
+    // Update frontier to the highest index we're about to fetch
+    for (var k = 0; k < toFetch.length; k++) {
+        if (toFetch[k] > irPrefetchFrontier) {
+            irPrefetchFrontier = toFetch[k];
+        }
+    }
 
-    fetchIRBatch(batch);
+    fetchIRBatch(toFetch);
 }
 
 var irBatchActive = false;
@@ -1202,15 +1277,13 @@ function fetchIRBatch(indices) {
                     if (loadingEl) loadingEl.style.display = 'none';
                 }
             }
-            // Continue prefetching from current position
-            if (loaded > 0) {
-                prefetchIRFrames(irFrameIdx);
-            }
+            // Continue prefetching — chain never stops until all frames are cached
+            prefetchIRFrames(irFrameIdx);
         })
         .catch(function (err) {
             irBatchActive = false;
             console.warn('Batch fetch failed:', err);
-            // Fall back to individual fetches
+            // Fall back to individual fetches for this batch
             indices.forEach(function (idx) {
                 if (irPrefetchActive >= IR_PREFETCH_BATCH) return;
                 irPrefetchActive++;
@@ -1219,6 +1292,8 @@ function fetchIRBatch(indices) {
                     updateIRCacheStatus();
                 });
             });
+            // Continue chain after a short delay to not hammer the server
+            setTimeout(function () { prefetchIRFrames(irFrameIdx); }, 3000);
         });
 }
 
@@ -1226,8 +1301,9 @@ function updateIRMeta(idx) {
     var datetimeEl = document.getElementById('ir-datetime');
     var frameInfoEl = document.getElementById('ir-frame-info');
 
+    var dtText = '';
     if (irMeta && irMeta.frames && irMeta.frames[idx]) {
-        var dtText = irMeta.frames[idx].datetime || '';
+        dtText = irMeta.frames[idx].datetime || '';
         var sat = irMeta.frames[idx].satellite || '';
         if (datetimeEl) datetimeEl.textContent = dtText + (sat ? '  [' + sat + ']' : '');
         // Log NC file for HURSAT debugging
@@ -1241,6 +1317,9 @@ function updateIRMeta(idx) {
     }
     var slider = document.getElementById('ir-slider');
     if (slider) slider.value = idx;
+
+    // Sync intensity chart marker to current IR time
+    updateIntensityMarker(dtText);
 
     // Update cache status
     updateIRCacheStatus();
