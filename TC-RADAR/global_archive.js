@@ -1446,8 +1446,10 @@ function renderClimatology() {
 
     renderACEChart(minYear, maxYear);
     renderFrequencyChart(minYear, maxYear);
-    renderIntensityHistogram();
+    renderIntensityOverview();
+    renderIntensityChangeOverview();
     renderBasinPie();
+    renderLMILatOverview();
 }
 
 function renderACEChart(minYear, maxYear) {
@@ -1550,53 +1552,82 @@ function renderFrequencyChart(minYear, maxYear) {
     Plotly.newPlot('clim-freq-chart', traces, layout, PLOTLY_CONFIG);
 }
 
-function renderIntensityHistogram() {
-    var winds = allStorms
-        .map(function (s) { return s.peak_wind_kt; })
-        .filter(function (w) { return w != null && w > 0; });
-
-    // Color bins by Saffir-Simpson
-    var binEdges = [0, 34, 64, 83, 96, 113, 137, 200];
-    var binColors = ['#60a5fa', '#34d399', '#fbbf24', '#fb923c', '#f87171', '#ef4444', '#dc2626'];
-    var binLabels = ['TD', 'TS', 'Cat 1', 'Cat 2', 'Cat 3', 'Cat 4', 'Cat 5'];
-
+function renderIntensityOverview() {
+    // Box plots of peak wind by basin — overview for main panel
+    var basins = Object.keys(BASIN_NAMES);
     var traces = [];
-    for (var i = 0; i < binEdges.length - 1; i++) {
-        var lo = binEdges[i];
-        var hi = binEdges[i + 1];
-        var binWinds = winds.filter(function (w) { return w >= lo && w < hi; });
+    basins.forEach(function (basin) {
+        var winds = allStorms
+            .filter(function (s) { return s.basin === basin && s.peak_wind_kt != null && s.peak_wind_kt > 0; })
+            .map(function (s) { return s.peak_wind_kt; });
+        if (winds.length === 0) return;
         traces.push({
-            x: binWinds,
-            type: 'histogram',
-            name: binLabels[i],
-            marker: { color: binColors[i] },
-            xbins: { start: lo, end: hi, size: 5 },
-            hovertemplate: binLabels[i] + '<br>%{x} kt: %{y} storms<extra></extra>'
+            y: winds, name: basin, type: 'box',
+            marker: { color: BASIN_COLORS[basin] },
+            boxmean: 'sd',
+            hovertemplate: '<b>' + basin + '</b><br>%{y} kt<extra></extra>'
         });
-    }
-
-    var layout = Object.assign({}, PLOTLY_LAYOUT_BASE, {
-        barmode: 'stack',
-        xaxis: {
-            title: { text: 'Peak Wind Speed (kt)', font: { size: 11, color: '#8b9ec2' } },
-            tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' },
-            gridcolor: 'rgba(255,255,255,0.04)',
-            range: [0, 200]
-        },
-        yaxis: {
-            title: { text: 'Number of Storms', font: { size: 11, color: '#8b9ec2' } },
-            tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' },
-            gridcolor: 'rgba(255,255,255,0.04)'
-        },
-        showlegend: true,
-        legend: {
-            orientation: 'h', x: 0, y: 1.12,
-            font: { size: 10, color: '#8b9ec2' }
-        },
-        margin: { l: 50, r: 10, t: 30, b: 45 }
     });
-
+    var layout = Object.assign({}, PLOTLY_LAYOUT_BASE, {
+        yaxis: { title: { text: 'Peak Wind (kt)', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' } },
+        xaxis: { tickfont: { size: 10, color: '#8b9ec2' } },
+        showlegend: false,
+        margin: { l: 50, r: 10, t: 10, b: 30 }
+    });
     Plotly.newPlot('clim-hist-chart', traces, layout, PLOTLY_CONFIG);
+}
+
+function renderIntensityChangeOverview() {
+    // Stacked histogram of max 24-h wind increases by basin
+    var basins = Object.keys(BASIN_NAMES);
+    var traces = [];
+    basins.forEach(function (basin) {
+        var vals = allStorms
+            .filter(function (s) { return s.basin === basin && s.ri_24h != null; })
+            .map(function (s) { return s.ri_24h; });
+        if (vals.length === 0) return;
+        traces.push({
+            x: vals, type: 'histogram', name: basin,
+            marker: { color: BASIN_COLORS[basin], opacity: 0.7 },
+            xbins: { size: 5 },
+            hovertemplate: basin + '<br>%{x} kt: %{y} storms<extra></extra>'
+        });
+    });
+    var layout = Object.assign({}, PLOTLY_LAYOUT_BASE, {
+        barmode: 'overlay',
+        xaxis: { title: { text: 'Max 24-h Increase (kt)', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' } },
+        yaxis: { title: { text: 'Storms', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' } },
+        shapes: [{ type: 'line', x0: 30, x1: 30, y0: 0, y1: 1, yref: 'paper', line: { color: '#f87171', width: 1.5, dash: 'dash' } }],
+        showlegend: true,
+        legend: { orientation: 'h', x: 0, y: 1.12, font: { size: 9, color: '#8b9ec2' } },
+        margin: { l: 45, r: 10, t: 30, b: 45 }
+    });
+    Plotly.newPlot('clim-ri-chart', traces, layout, PLOTLY_CONFIG);
+}
+
+function renderLMILatOverview() {
+    // Box plots of LMI latitude by basin
+    var basins = Object.keys(BASIN_NAMES);
+    var traces = [];
+    basins.forEach(function (basin) {
+        var lats = allStorms
+            .filter(function (s) { return s.basin === basin && s.lmi_lat != null; })
+            .map(function (s) { return Math.abs(s.lmi_lat); }); // Use absolute for SH comparison
+        if (lats.length === 0) return;
+        traces.push({
+            y: lats, name: basin, type: 'box',
+            marker: { color: BASIN_COLORS[basin] },
+            boxmean: true,
+            hovertemplate: '<b>' + basin + '</b><br>|Lat|: %{y:.1f}&deg;<extra></extra>'
+        });
+    });
+    var layout = Object.assign({}, PLOTLY_LAYOUT_BASE, {
+        yaxis: { title: { text: '|Latitude| of LMI (\u00B0)', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' } },
+        xaxis: { tickfont: { size: 10, color: '#8b9ec2' } },
+        showlegend: false,
+        margin: { l: 50, r: 10, t: 10, b: 30 }
+    });
+    Plotly.newPlot('clim-lmi-chart', traces, layout, PLOTLY_CONFIG);
 }
 
 function renderBasinPie() {
@@ -1883,6 +1914,399 @@ window.aceJumpToStorm = function (sid) {
         viewStormDetail();
     }
 };
+
+// ══════════════════════════════════════════════════════════════
+//  INTENSITY DISTRIBUTION MODAL
+// ══════════════════════════════════════════════════════════════
+
+var intensityModalBasins = ['ALL'];
+
+window.openIntensityModal = function () {
+    document.getElementById('intensity-modal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    intensityModalBasins = ['ALL'];
+    _resetBasinChips('intensity-basin-chips', 'ALL');
+    renderIntensityModalCharts();
+};
+window.closeIntensityModal = function () {
+    document.getElementById('intensity-modal').style.display = 'none';
+    document.body.style.overflow = '';
+};
+window.toggleIntensityBasin = function (btn) {
+    intensityModalBasins = _toggleBasinChip(btn, 'intensity-basin-chips');
+    renderIntensityModalCharts();
+};
+
+function renderIntensityModalCharts() {
+    var basins = intensityModalBasins[0] === 'ALL' ? Object.keys(BASIN_NAMES) : intensityModalBasins;
+
+    // CDF chart
+    var cdfTraces = [];
+    basins.forEach(function (basin) {
+        var winds = allStorms
+            .filter(function (s) { return s.basin === basin && s.peak_wind_kt != null && s.peak_wind_kt > 0; })
+            .map(function (s) { return s.peak_wind_kt; })
+            .sort(function (a, b) { return a - b; });
+        if (winds.length === 0) return;
+        var cdf = winds.map(function (_, i) { return (i + 1) / winds.length; });
+        cdfTraces.push({
+            x: winds, y: cdf, type: 'scatter', mode: 'lines',
+            name: BASIN_NAMES[basin],
+            line: { color: BASIN_COLORS[basin], width: 2 },
+            hovertemplate: '<b>' + basin + '</b><br>%{x:.0f} kt: %{y:.1%} cumulative<extra></extra>'
+        });
+    });
+    // Add SS category reference lines
+    var ssShapes = [64, 83, 96, 113, 137].map(function (kt) {
+        return { type: 'line', x0: kt, x1: kt, y0: 0, y1: 1, line: { color: 'rgba(255,255,255,0.15)', width: 1, dash: 'dot' } };
+    });
+    var cdfLayout = Object.assign({}, PLOTLY_LAYOUT_BASE, {
+        xaxis: { title: { text: 'Peak Wind Speed (kt)', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' } },
+        yaxis: { title: { text: 'Cumulative Probability', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' }, range: [0, 1] },
+        shapes: ssShapes,
+        showlegend: true, legend: { orientation: 'h', x: 0, y: 1.15, font: { size: 10, color: '#8b9ec2' } },
+        margin: { l: 55, r: 10, t: 35, b: 45 }, hovermode: 'closest'
+    });
+    Plotly.newPlot('intensity-cdf-chart', cdfTraces, cdfLayout, PLOTLY_CONFIG);
+
+    // Box plots
+    var boxTraces = [];
+    basins.forEach(function (basin) {
+        var winds = allStorms
+            .filter(function (s) { return s.basin === basin && s.peak_wind_kt != null && s.peak_wind_kt > 0; })
+            .map(function (s) { return s.peak_wind_kt; });
+        if (winds.length === 0) return;
+        boxTraces.push({ y: winds, name: basin, type: 'box', marker: { color: BASIN_COLORS[basin] }, boxmean: 'sd' });
+    });
+    var boxLayout = Object.assign({}, PLOTLY_LAYOUT_BASE, {
+        yaxis: { title: { text: 'Peak Wind (kt)', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' } },
+        showlegend: false, margin: { l: 55, r: 10, t: 10, b: 30 }
+    });
+    Plotly.newPlot('intensity-box-chart', boxTraces, boxLayout, PLOTLY_CONFIG);
+
+    // Stats table
+    var html = '<table><thead><tr><th>Basin</th><th>Count</th><th>Mean</th><th>Median</th><th>P90</th><th>P99</th><th>Max</th></tr></thead><tbody>';
+    basins.forEach(function (basin) {
+        var winds = allStorms
+            .filter(function (s) { return s.basin === basin && s.peak_wind_kt != null && s.peak_wind_kt > 0; })
+            .map(function (s) { return s.peak_wind_kt; })
+            .sort(function (a, b) { return a - b; });
+        if (winds.length === 0) return;
+        var mean = winds.reduce(function (a, b) { return a + b; }, 0) / winds.length;
+        var med = winds[Math.floor(winds.length * 0.5)];
+        var p90 = winds[Math.floor(winds.length * 0.9)];
+        var p99 = winds[Math.floor(winds.length * 0.99)];
+        html += '<tr><td style="color:' + BASIN_COLORS[basin] + '">' + BASIN_NAMES[basin] + '</td>' +
+            '<td class="mono">' + winds.length + '</td><td class="mono">' + mean.toFixed(0) + '</td>' +
+            '<td class="mono">' + med + '</td><td class="mono">' + p90 + '</td>' +
+            '<td class="mono">' + p99 + '</td><td class="mono">' + Math.max.apply(null, winds) + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    document.getElementById('intensity-stats-table').innerHTML = html;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  24-H INTENSITY CHANGE MODAL
+// ══════════════════════════════════════════════════════════════
+
+var riModalBasins = ['ALL'];
+
+window.openIntensityChangeModal = function () {
+    document.getElementById('intensity-change-modal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    riModalBasins = ['ALL'];
+    _resetBasinChips('ri-basin-chips', 'ALL');
+    renderRIModalCharts();
+};
+window.closeIntensityChangeModal = function () {
+    document.getElementById('intensity-change-modal').style.display = 'none';
+    document.body.style.overflow = '';
+};
+window.toggleRIBasin = function (btn) {
+    riModalBasins = _toggleBasinChip(btn, 'ri-basin-chips');
+    renderRIModalCharts();
+};
+
+function renderRIModalCharts() {
+    var basins = riModalBasins[0] === 'ALL' ? Object.keys(BASIN_NAMES) : riModalBasins;
+
+    // Histogram of max 24-h wind increase
+    var histTraces = [];
+    basins.forEach(function (basin) {
+        var vals = allStorms
+            .filter(function (s) { return s.basin === basin && s.ri_24h != null; })
+            .map(function (s) { return s.ri_24h; });
+        if (vals.length === 0) return;
+        histTraces.push({
+            x: vals, type: 'histogram', name: BASIN_NAMES[basin],
+            marker: { color: BASIN_COLORS[basin], opacity: 0.65 },
+            xbins: { size: 5 },
+            hovertemplate: '<b>' + basin + '</b><br>%{x} kt/24h: %{y} storms<extra></extra>'
+        });
+    });
+    var riShapes = [
+        { type: 'line', x0: 30, x1: 30, y0: 0, y1: 1, yref: 'paper', line: { color: '#fbbf24', width: 1.5, dash: 'dash' } },
+        { type: 'line', x0: 35, x1: 35, y0: 0, y1: 1, yref: 'paper', line: { color: '#f87171', width: 1.5, dash: 'dash' } },
+        { type: 'line', x0: 50, x1: 50, y0: 0, y1: 1, yref: 'paper', line: { color: '#dc2626', width: 1.5, dash: 'dash' } },
+        { type: 'line', x0: 65, x1: 65, y0: 0, y1: 1, yref: 'paper', line: { color: '#a855f7', width: 1.5, dash: 'dash' } }
+    ];
+    var riAnnotations = [
+        { x: 30, y: 1.02, yref: 'paper', xanchor: 'center', text: '30kt', showarrow: false, font: { size: 9, color: '#fbbf24' } },
+        { x: 35, y: 1.06, yref: 'paper', xanchor: 'center', text: '35kt', showarrow: false, font: { size: 9, color: '#f87171' } },
+        { x: 50, y: 1.02, yref: 'paper', xanchor: 'center', text: '50kt', showarrow: false, font: { size: 9, color: '#dc2626' } },
+        { x: 65, y: 1.06, yref: 'paper', xanchor: 'center', text: '65kt', showarrow: false, font: { size: 9, color: '#a855f7' } }
+    ];
+    var histLayout = Object.assign({}, PLOTLY_LAYOUT_BASE, {
+        barmode: 'overlay',
+        xaxis: { title: { text: 'Max 24-h Wind Increase (kt)', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' }, range: [-20, 120] },
+        yaxis: { title: { text: 'Number of Storms', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' } },
+        shapes: riShapes, annotations: riAnnotations,
+        showlegend: true, legend: { orientation: 'h', x: 0, y: 1.18, font: { size: 10, color: '#8b9ec2' } },
+        margin: { l: 55, r: 10, t: 45, b: 45 }
+    });
+    Plotly.newPlot('ri-hist-chart', histTraces, histLayout, PLOTLY_CONFIG);
+
+    // Exceedance CDF (1 - CDF): probability of exceeding threshold
+    var cdfTraces = [];
+    basins.forEach(function (basin) {
+        var vals = allStorms
+            .filter(function (s) { return s.basin === basin && s.ri_24h != null; })
+            .map(function (s) { return s.ri_24h; })
+            .sort(function (a, b) { return a - b; });
+        if (vals.length === 0) return;
+        var exceed = vals.map(function (_, i) { return 1 - (i / vals.length); });
+        cdfTraces.push({
+            x: vals, y: exceed, type: 'scatter', mode: 'lines',
+            name: BASIN_NAMES[basin],
+            line: { color: BASIN_COLORS[basin], width: 2 },
+            hovertemplate: '<b>' + basin + '</b><br>%{x} kt/24h: %{y:.1%} exceed<extra></extra>'
+        });
+    });
+    var cdfLayout = Object.assign({}, PLOTLY_LAYOUT_BASE, {
+        xaxis: { title: { text: 'Intensity Change Threshold (kt/24h)', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' }, range: [0, 100] },
+        yaxis: { title: { text: 'Exceedance Probability', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' }, range: [0, 1] },
+        shapes: riShapes, showlegend: true,
+        legend: { orientation: 'h', x: 0, y: 1.15, font: { size: 10, color: '#8b9ec2' } },
+        margin: { l: 55, r: 10, t: 35, b: 45 }, hovermode: 'closest'
+    });
+    Plotly.newPlot('ri-cdf-chart', cdfTraces, cdfLayout, PLOTLY_CONFIG);
+
+    // Stats table
+    var html = '<table><thead><tr><th>Basin</th><th>Total</th><th>\u226530kt</th><th>\u226535kt</th><th>\u226550kt</th><th>% RI (\u226530)</th><th>Mean</th><th>Max</th></tr></thead><tbody>';
+    basins.forEach(function (basin) {
+        var all = allStorms.filter(function (s) { return s.basin === basin && s.ri_24h != null; });
+        if (all.length === 0) return;
+        var ri30 = all.filter(function (s) { return s.ri_24h >= 30; }).length;
+        var ri35 = all.filter(function (s) { return s.ri_24h >= 35; }).length;
+        var ri50 = all.filter(function (s) { return s.ri_24h >= 50; }).length;
+        var mean = all.reduce(function (sum, s) { return sum + s.ri_24h; }, 0) / all.length;
+        var maxVal = Math.max.apply(null, all.map(function (s) { return s.ri_24h; }));
+        var pct = (ri30 / all.length * 100).toFixed(1);
+        html += '<tr><td style="color:' + BASIN_COLORS[basin] + '">' + BASIN_NAMES[basin] + '</td>' +
+            '<td class="mono">' + all.length + '</td><td class="mono">' + ri30 + '</td>' +
+            '<td class="mono">' + ri35 + '</td><td class="mono">' + ri50 + '</td>' +
+            '<td class="mono">' + pct + '%</td><td class="mono">' + mean.toFixed(1) + '</td>' +
+            '<td class="mono">' + maxVal + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    document.getElementById('ri-stats-table').innerHTML = html;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  SEASONAL CYCLE MODAL
+// ══════════════════════════════════════════════════════════════
+
+var seasonalModalBasins = ['ALL'];
+
+window.openSeasonalModal = function () {
+    document.getElementById('seasonal-modal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    seasonalModalBasins = ['ALL'];
+    _resetBasinChips('seasonal-basin-chips', 'ALL');
+    renderSeasonalModalChart();
+};
+window.closeSeasonalModal = function () {
+    document.getElementById('seasonal-modal').style.display = 'none';
+    document.body.style.overflow = '';
+};
+window.toggleSeasonalBasin = function (btn) {
+    seasonalModalBasins = _toggleBasinChip(btn, 'seasonal-basin-chips');
+    renderSeasonalModalChart();
+};
+
+function renderSeasonalModalChart() {
+    var basins = seasonalModalBasins[0] === 'ALL' ? Object.keys(BASIN_NAMES) : seasonalModalBasins;
+    var monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    // Count storms per month per basin (use start_date month)
+    // Compute mean storms per month = total / number of years in dataset
+    var years = allStorms.map(function (s) { return s.year; }).filter(function (y) { return y >= 1950; });
+    var nYears = Math.max(1, new Set(years).size);
+
+    var traces = [];
+    basins.forEach(function (basin) {
+        var monthlyCounts = new Array(12).fill(0);
+        allStorms.forEach(function (s) {
+            if (s.basin !== basin || !s.start_date || s.year < 1950) return;
+            var m = parseInt(s.start_date.substring(5, 7), 10) - 1;
+            if (m >= 0 && m < 12) monthlyCounts[m]++;
+        });
+        var avgPerMonth = monthlyCounts.map(function (c) { return Math.round(c / nYears * 10) / 10; });
+        traces.push({
+            x: monthNames, y: avgPerMonth, type: 'scatter', mode: 'lines+markers',
+            name: BASIN_NAMES[basin],
+            line: { color: BASIN_COLORS[basin], width: 2.5 },
+            marker: { size: 5, color: BASIN_COLORS[basin] },
+            hovertemplate: '<b>' + basin + ' %{x}</b><br>%{y:.1f} storms/yr<extra></extra>'
+        });
+    });
+
+    var layout = Object.assign({}, PLOTLY_LAYOUT_BASE, {
+        xaxis: { tickfont: { size: 11, color: '#8b9ec2' }, gridcolor: 'rgba(255,255,255,0.04)' },
+        yaxis: { title: { text: 'Mean Storms per Month', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' } },
+        showlegend: true, legend: { orientation: 'h', x: 0, y: 1.15, font: { size: 10, color: '#8b9ec2' } },
+        margin: { l: 55, r: 10, t: 35, b: 40 }, hovermode: 'x unified'
+    });
+    Plotly.newPlot('seasonal-chart', traces, layout, PLOTLY_CONFIG);
+
+    // Stats: peak month and season length per basin
+    var html = '<table><thead><tr><th>Basin</th><th>Peak Month</th><th>Peak Rate</th><th>Annual Total</th><th>Active Months (>0.5/yr)</th></tr></thead><tbody>';
+    basins.forEach(function (basin) {
+        var monthlyCounts = new Array(12).fill(0);
+        var totalCount = 0;
+        allStorms.forEach(function (s) {
+            if (s.basin !== basin || !s.start_date || s.year < 1950) return;
+            var m = parseInt(s.start_date.substring(5, 7), 10) - 1;
+            if (m >= 0 && m < 12) { monthlyCounts[m]++; totalCount++; }
+        });
+        var avgPerMonth = monthlyCounts.map(function (c) { return c / nYears; });
+        var peakIdx = avgPerMonth.indexOf(Math.max.apply(null, avgPerMonth));
+        var activeMonths = avgPerMonth.filter(function (v) { return v >= 0.5; }).length;
+        html += '<tr><td style="color:' + BASIN_COLORS[basin] + '">' + BASIN_NAMES[basin] + '</td>' +
+            '<td>' + monthNames[peakIdx] + '</td>' +
+            '<td class="mono">' + avgPerMonth[peakIdx].toFixed(1) + '/yr</td>' +
+            '<td class="mono">' + (totalCount / nYears).toFixed(1) + '/yr</td>' +
+            '<td class="mono">' + activeMonths + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    document.getElementById('seasonal-stats-table').innerHTML = html;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  LMI LATITUDE MODAL
+// ══════════════════════════════════════════════════════════════
+
+var lmiModalBasins = ['ALL'];
+
+window.openLMILatModal = function () {
+    document.getElementById('lmi-modal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    lmiModalBasins = ['ALL'];
+    _resetBasinChips('lmi-basin-chips', 'ALL');
+    renderLMIModalCharts();
+};
+window.closeLMILatModal = function () {
+    document.getElementById('lmi-modal').style.display = 'none';
+    document.body.style.overflow = '';
+};
+window.toggleLMIBasin = function (btn) {
+    lmiModalBasins = _toggleBasinChip(btn, 'lmi-basin-chips');
+    renderLMIModalCharts();
+};
+
+function renderLMIModalCharts() {
+    var basins = lmiModalBasins[0] === 'ALL' ? Object.keys(BASIN_NAMES) : lmiModalBasins;
+
+    // Scatter: LMI latitude vs peak wind
+    var scatterTraces = [];
+    basins.forEach(function (basin) {
+        var storms = allStorms.filter(function (s) {
+            return s.basin === basin && s.lmi_lat != null && s.peak_wind_kt != null && s.peak_wind_kt > 0;
+        });
+        if (storms.length === 0) return;
+        scatterTraces.push({
+            x: storms.map(function (s) { return s.peak_wind_kt; }),
+            y: storms.map(function (s) { return s.lmi_lat; }),
+            text: storms.map(function (s) { return (s.name || 'UNNAMED') + ' (' + s.year + ')'; }),
+            type: 'scatter', mode: 'markers',
+            name: BASIN_NAMES[basin],
+            marker: { color: BASIN_COLORS[basin], size: 4, opacity: 0.5 },
+            hovertemplate: '<b>%{text}</b><br>%{x} kt, %{y:.1f}\u00B0<extra>' + basin + '</extra>'
+        });
+    });
+    var scatterLayout = Object.assign({}, PLOTLY_LAYOUT_BASE, {
+        xaxis: { title: { text: 'Peak Wind (kt)', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' } },
+        yaxis: { title: { text: 'LMI Latitude (\u00B0)', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' } },
+        showlegend: true, legend: { orientation: 'h', x: 0, y: 1.15, font: { size: 10, color: '#8b9ec2' } },
+        margin: { l: 55, r: 10, t: 35, b: 45 }, hovermode: 'closest'
+    });
+    Plotly.newPlot('lmi-scatter-chart', scatterTraces, scatterLayout, PLOTLY_CONFIG);
+
+    // Box plots of LMI latitude
+    var boxTraces = [];
+    basins.forEach(function (basin) {
+        var lats = allStorms
+            .filter(function (s) { return s.basin === basin && s.lmi_lat != null; })
+            .map(function (s) { return s.lmi_lat; });
+        if (lats.length === 0) return;
+        boxTraces.push({ y: lats, name: basin, type: 'box', marker: { color: BASIN_COLORS[basin] }, boxmean: true });
+    });
+    var boxLayout = Object.assign({}, PLOTLY_LAYOUT_BASE, {
+        yaxis: { title: { text: 'LMI Latitude (\u00B0)', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' } },
+        showlegend: false, margin: { l: 55, r: 10, t: 10, b: 30 }
+    });
+    Plotly.newPlot('lmi-box-chart', boxTraces, boxLayout, PLOTLY_CONFIG);
+
+    // Stats table
+    var html = '<table><thead><tr><th>Basin</th><th>Count</th><th>Mean Lat</th><th>Median Lat</th><th>Min |Lat|</th><th>Max |Lat|</th></tr></thead><tbody>';
+    basins.forEach(function (basin) {
+        var lats = allStorms
+            .filter(function (s) { return s.basin === basin && s.lmi_lat != null; })
+            .map(function (s) { return s.lmi_lat; })
+            .sort(function (a, b) { return a - b; });
+        if (lats.length === 0) return;
+        var absLats = lats.map(function (l) { return Math.abs(l); });
+        var mean = lats.reduce(function (a, b) { return a + b; }, 0) / lats.length;
+        var med = lats[Math.floor(lats.length * 0.5)];
+        html += '<tr><td style="color:' + BASIN_COLORS[basin] + '">' + BASIN_NAMES[basin] + '</td>' +
+            '<td class="mono">' + lats.length + '</td><td class="mono">' + mean.toFixed(1) + '\u00B0</td>' +
+            '<td class="mono">' + med.toFixed(1) + '\u00B0</td>' +
+            '<td class="mono">' + Math.min.apply(null, absLats).toFixed(1) + '\u00B0</td>' +
+            '<td class="mono">' + Math.max.apply(null, absLats).toFixed(1) + '\u00B0</td></tr>';
+    });
+    html += '</tbody></table>';
+    document.getElementById('lmi-stats-table').innerHTML = html;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  BASIN CHIP HELPERS (shared by all modals)
+// ══════════════════════════════════════════════════════════════
+
+function _resetBasinChips(containerId, activeBasin) {
+    document.querySelectorAll('#' + containerId + ' .basin-chip').forEach(function (c) {
+        c.classList.toggle('active', c.getAttribute('data-basin') === activeBasin);
+    });
+}
+
+function _toggleBasinChip(btn, containerId) {
+    var basin = btn.getAttribute('data-basin');
+    if (basin === 'ALL') {
+        _resetBasinChips(containerId, 'ALL');
+        return ['ALL'];
+    }
+    document.querySelector('#' + containerId + ' .basin-chip[data-basin="ALL"]').classList.remove('active');
+    btn.classList.toggle('active');
+    var selected = [];
+    document.querySelectorAll('#' + containerId + ' .basin-chip.active').forEach(function (c) {
+        var b = c.getAttribute('data-basin');
+        if (b !== 'ALL') selected.push(b);
+    });
+    if (selected.length === 0) {
+        _resetBasinChips(containerId, 'ALL');
+        return ['ALL'];
+    }
+    return selected;
+}
 
 // ══════════════════════════════════════════════════════════════
 //  UTILITIES

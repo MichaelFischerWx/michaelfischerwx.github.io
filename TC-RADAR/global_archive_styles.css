@@ -973,3 +973,45 @@
     border: 1.5px solid rgba(255,255,255,0.2);
     flex-shrink: 0;
 }
+
+/* ── Climatology Stats Tables (shared by all modal drill-downs) ── */
+.clim-stats-table {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    margin-top: 16px;
+    overflow-x: auto;
+}
+.clim-stats-table table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+}
+.clim-stats-table thead tr {
+    border-bottom: 1px solid var(--border);
+}
+.clim-stats-table th {
+    text-align: right;
+    padding: 6px 8px;
+    color: var(--slate);
+    font-weight: 500;
+    white-space: nowrap;
+}
+.clim-stats-table th:first-child {
+    text-align: left;
+}
+.clim-stats-table td {
+    padding: 5px 8px;
+    color: var(--text);
+    text-align: right;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.clim-stats-table td:first-child {
+    text-align: left;
+    font-weight: 500;
+}
+.clim-stats-table .mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+}

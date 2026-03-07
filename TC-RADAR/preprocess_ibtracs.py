@@ -99,6 +99,51 @@ def compute_ace(group):
     return float(np.sum(ts_winds.values ** 2) / 1e4)
 
 
+def compute_24h_intensity_change(group):
+    """
+    Compute maximum 24-hour overwater intensity change for a storm.
+
+    Scans all pairs of track points ~24h apart (21-27h tolerance for
+    irregular cadence) and records:
+      - ri_24h: max wind increase in any 24h window (positive = intensification)
+      - rw_24h: max wind decrease in any 24h window (negative = weakening)
+
+    Only uses points during tropical/subtropical phases (excludes ET/DS).
+    Returns (ri_24h, rw_24h) as integers, or (None, None) if insufficient data.
+    """
+    pts = group.dropna(subset=["ISO_TIME", "WIND"]).sort_values("ISO_TIME")
+
+    # Filter to tropical/subtropical phases only
+    if "NATURE" in pts.columns:
+        pts = pts[pts["NATURE"].isin(["TS", "SS", "NR", "MX"])]
+
+    if len(pts) < 2:
+        return None, None
+
+    times = pts["ISO_TIME"].values  # numpy datetime64
+    winds = pts["WIND"].values.astype(float)
+
+    max_increase = -999.0
+    max_decrease = 999.0
+
+    for i in range(len(times)):
+        for j in range(i + 1, len(times)):
+            dt_hours = (times[j] - times[i]) / np.timedelta64(1, "h")
+            if dt_hours < 21:
+                continue
+            if dt_hours > 27:
+                break  # sorted by time, so all subsequent j will be even further
+            delta = winds[j] - winds[i]
+            if delta > max_increase:
+                max_increase = delta
+            if delta < max_decrease:
+                max_decrease = delta
+
+    ri = round(max_increase) if max_increase > -999.0 else None
+    rw = round(max_decrease) if max_decrease < 999.0 else None
+    return ri, rw
+
+
 def download_ibtracs():
     """Download IBTrACS CSV if not already cached locally."""
     if os.path.exists(IBTRACS_LOCAL):
@@ -199,6 +244,9 @@ def build_storms_json(df):
         # ACE (synoptic 6-hourly points only)
         ace = compute_ace(group)
 
+        # 24-h intensity change (max intensification and weakening)
+        ri_24h, rw_24h = compute_24h_intensity_change(group)
+
         # HURSAT availability
         hursat = HURSAT_START_YEAR <= year <= HURSAT_END_YEAR
 
@@ -217,6 +265,8 @@ def build_storms_json(df):
             "end_date": end_date,
             "num_points": len(group),
             "ace": round(ace, 2),
+            "ri_24h": ri_24h,
+            "rw_24h": rw_24h,
             "hursat": hursat,
             "cat": get_category(peak_wind),
         }
