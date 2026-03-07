@@ -184,15 +184,19 @@ function loadData() {
             if (loadingEl) loadingEl.innerHTML = '<span style="color:#f87171;">Failed to load storm data. Check console.</span>';
         });
 
-    // Load track data (larger file — may take a moment)
+    // Load track data (larger file — may take several seconds)
+    showToast('Loading track data (this may take a moment)...');
     fetch(TRACKS_JSON)
         .then(function (r) { return r.json(); })
         .then(function (data) {
             allTracks = data;
-            console.log('Loaded tracks for ' + Object.keys(data).length + ' storms');
+            var n = Object.keys(data).length;
+            console.log('Loaded tracks for ' + n + ' storms');
+            showToast('Track data ready — ' + n.toLocaleString() + ' storm tracks loaded');
         })
         .catch(function (err) {
             console.warn('Track data not loaded:', err);
+            showToast('Track data failed to load — storm details unavailable');
         });
 }
 

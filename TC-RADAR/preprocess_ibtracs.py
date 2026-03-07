@@ -99,9 +99,16 @@ def load_ibtracs(csv_path):
         csv_path,
         low_memory=False,
         na_values=[" ", "", "MM"],
+        keep_default_na=False,  # Prevent pandas from treating "NA" (North Atlantic) as NaN!
         skiprows=[1],  # skip units row
         dtype={"SID": str, "NAME": str, "BASIN": str},
     )
+
+    # Strip whitespace from string columns (IBTrACS CSV has leading spaces)
+    for col in ["SID", "NAME", "BASIN"]:
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.strip()
+            df[col] = df[col].replace({"nan": np.nan, "": np.nan})
 
     # Parse numeric columns
     for col in ["LAT", "LON", "WMO_WIND", "WMO_PRES"]:
@@ -110,6 +117,10 @@ def load_ibtracs(csv_path):
     # Parse datetime
     df["ISO_TIME"] = pd.to_datetime(df["ISO_TIME"], errors="coerce")
     df["YEAR"] = df["ISO_TIME"].dt.year
+
+    # Report basin distribution for verification
+    basin_counts = df.groupby("BASIN")["SID"].nunique()
+    print(f"Basin distribution:\n{basin_counts.to_string()}")
 
     print(f"Loaded {len(df):,} track points across {df['SID'].nunique():,} storms")
     return df
@@ -181,7 +192,13 @@ def build_storms_json(df):
 
 
 def build_tracks_json(df):
-    """Build per-storm track data JSON (all storms in one dict)."""
+    """Build per-storm track data JSON (all storms in one dict).
+
+    Optimizations for file size:
+    - Omit keys with null values (saves ~30-40% on file size)
+    - Use compact datetime format (drop seconds since IBTrACS is 3/6-hourly)
+    - Round coordinates to 1 decimal (8km precision, matches HURSAT grid)
+    """
     print("Building track data...")
     tracks = {}
 
@@ -189,13 +206,18 @@ def build_tracks_json(df):
         group = group.sort_values("ISO_TIME")
         points = []
         for _, row in group.iterrows():
-            pt = {
-                "t": row["ISO_TIME"].strftime("%Y-%m-%dT%H:%M:%S") if pd.notna(row["ISO_TIME"]) else None,
-                "la": round(float(row["LAT"]), 1) if not np.isnan(row["LAT"]) else None,
-                "lo": round(float(row["LON"]), 1) if not np.isnan(row["LON"]) else None,
-                "w": int(row["WMO_WIND"]) if not np.isnan(row["WMO_WIND"]) else None,
-                "p": int(row["WMO_PRES"]) if not np.isnan(row["WMO_PRES"]) else None,
-            }
+            pt = {}
+            if pd.notna(row["ISO_TIME"]):
+                # Compact datetime: "2005-08-23T18:00" (drop :00 seconds)
+                pt["t"] = row["ISO_TIME"].strftime("%Y-%m-%dT%H:%M")
+            if not np.isnan(row["LAT"]):
+                pt["la"] = round(float(row["LAT"]), 1)
+            if not np.isnan(row["LON"]):
+                pt["lo"] = round(float(row["LON"]), 1)
+            if not np.isnan(row["WMO_WIND"]):
+                pt["w"] = int(row["WMO_WIND"])
+            if not np.isnan(row["WMO_PRES"]):
+                pt["p"] = int(row["WMO_PRES"])
             points.append(pt)
         tracks[sid] = points
 
