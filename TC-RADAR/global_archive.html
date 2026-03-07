@@ -132,8 +132,20 @@
 
                         <label class="filter-label">Min Peak Intensity</label>
                         <div class="intensity-filter">
+                            <div class="intensity-scale">
+                                <span class="scale-tick" style="left:0%;">0</span>
+                                <span class="scale-tick" style="left:18%;">TD</span>
+                                <span class="scale-tick" style="left:35%;">TS</span>
+                                <span class="scale-tick" style="left:45%;">C1</span>
+                                <span class="scale-tick" style="left:52%;">C2</span>
+                                <span class="scale-tick" style="left:61%;">C3</span>
+                                <span class="scale-tick" style="left:74%;">C4</span>
+                                <span class="scale-tick" style="left:100%;">C5</span>
+                            </div>
                             <input type="range" id="filter-wind-min" min="0" max="185" value="0" class="ga-range" oninput="onWindFilterChange()">
-                            <span id="wind-min-label" class="range-label">0 kt (All)</span>
+                            <div class="range-value-row">
+                                <span id="wind-min-label" class="range-label">0 kt (All)</span>
+                            </div>
                         </div>
 
                         <div class="filter-actions">

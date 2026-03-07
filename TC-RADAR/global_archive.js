@@ -118,6 +118,12 @@ var PLOTLY_CONFIG = {
 // ══════════════════════════════════════════════════════════════
 
 window.switchTab = function (tabName) {
+    // If switching to detail without a selected storm, redirect through viewStormDetail
+    if (tabName === 'detail' && !selectedStorm) {
+        showToast('Select a storm first, then click "View Detail"');
+        return;
+    }
+
     // Update buttons
     document.querySelectorAll('.ga-tab').forEach(function (btn) {
         var isTarget = btn.getAttribute('data-tab') === tabName;
@@ -132,8 +138,13 @@ window.switchTab = function (tabName) {
     if (tabName === 'browser' && stormMap) {
         setTimeout(function () { stormMap.invalidateSize(); }, 100);
     }
-    if (tabName === 'detail' && detailMap) {
-        setTimeout(function () { detailMap.invalidateSize(); }, 100);
+    if (tabName === 'detail') {
+        // If we already have a storm loaded but just switched tabs, re-render
+        if (detailMap) {
+            setTimeout(function () { detailMap.invalidateSize(); }, 100);
+        } else if (selectedStorm) {
+            renderStormDetail(selectedStorm);
+        }
     }
     if (tabName === 'climatology' && !climRendered && allStorms.length > 0) {
         renderClimatology();
@@ -451,8 +462,30 @@ window.viewStormDetail = function () {
         return;
     }
 
-    switchTab('detail');
-    renderStormDetail(selectedStorm);
+    // Check if tracks are loaded
+    if (!allTracks || Object.keys(allTracks).length === 0) {
+        showToast('Track data still loading, please wait...');
+        // Retry after a short delay
+        setTimeout(function () {
+            if (selectedStorm) viewStormDetail();
+        }, 1500);
+        return;
+    }
+
+    // Force the tab switch (bypass the guard since we have a storm)
+    document.querySelectorAll('.ga-tab').forEach(function (btn) {
+        var isTarget = btn.getAttribute('data-tab') === 'detail';
+        btn.classList.toggle('active', isTarget);
+        btn.setAttribute('aria-selected', isTarget ? 'true' : 'false');
+    });
+    document.querySelectorAll('.ga-tab-content').forEach(function (panel) {
+        panel.classList.toggle('active', panel.id === 'tab-detail');
+    });
+
+    // Small delay to let the DOM settle before rendering charts/maps
+    setTimeout(function () {
+        renderStormDetail(selectedStorm);
+    }, 50);
 };
 
 function renderStormDetail(storm) {

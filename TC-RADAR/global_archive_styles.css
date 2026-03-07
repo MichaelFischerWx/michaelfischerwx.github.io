@@ -300,6 +300,24 @@
     flex-direction: column;
     gap: 4px;
 }
+.intensity-scale {
+    position: relative;
+    height: 16px;
+    margin: 0 7px;
+}
+.scale-tick {
+    position: absolute;
+    transform: translateX(-50%);
+    font-size: 0.62rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim);
+    letter-spacing: 0;
+}
+.range-value-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
 .range-label {
     font-size: 0.72rem;
     color: var(--text-dim);
