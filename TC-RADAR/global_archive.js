@@ -791,18 +791,17 @@ function loadHURSAT(storm) {
             toggleBtn.classList.add('active');
             document.getElementById('ir-map-controls').style.display = '';
 
-            // Load first frame
+            // Show loading state for first frame (tarball download)
+            var loadingEl = document.getElementById('ir-frame-loading');
+            if (loadingEl) loadingEl.style.display = 'flex';
+            setIRLoadingText('Downloading satellite archive...\nThis may take up to 60 seconds');
+
+            // Load first frame — this triggers the tarball download on the server
             irFrameIdx = 0;
             loadIRFrame(0);
 
-            // Kick off initial batch prefetch
-            for (var i = 1; i <= Math.min(IR_PREFETCH_BATCH, meta.n_frames - 1); i++) {
-                (function(fi) {
-                    fetchIRFrameSingle(fi, function () {
-                        updateIRCacheStatus();
-                    });
-                })(i);
-            }
+            // Don't start prefetching until the first frame succeeds
+            // (prefetch is triggered by loadIRFrame's callback)
         })
         .catch(function (err) {
             console.warn('IR load failed:', err);
@@ -988,15 +987,25 @@ function findTrackPointAtTime(track, dtStr) {
 function updateIRCacheStatus() {
     if (!irMeta) return;
     var cached = irFrames.filter(function (f) { return f; }).length;
+    var total = irMeta.n_frames;
     var sourceLabel = irMeta.source === 'mergir' ? 'MergIR 4km' : 'HURSAT-B1';
-    document.getElementById('ir-status').textContent =
-        irMeta.n_frames + ' frames (' + sourceLabel + ') — ' + cached + ' cached';
+    var statusEl = document.getElementById('ir-status');
+    if (cached < total) {
+        statusEl.textContent = cached + ' / ' + total + ' frames loaded (' + sourceLabel + ')';
+    } else {
+        statusEl.textContent = total + ' frames (' + sourceLabel + ')';
+    }
 }
 
 var irPrefetchQueue = [];    // Frames queued for prefetch
 var irPrefetchActive = 0;    // Number of active prefetch requests
 var IR_PREFETCH_BATCH = 5;   // Concurrent prefetch requests
 var IR_PREFETCH_AHEAD = 15;  // How many frames ahead to prefetch
+
+function setIRLoadingText(msg) {
+    var el = document.getElementById('ir-loading-text');
+    if (el) el.textContent = msg;
+}
 
 function loadIRFrame(idx) {
     if (!irMeta || !selectedStorm) return;
@@ -1007,15 +1016,32 @@ function loadIRFrame(idx) {
     if (irFrames[idx]) {
         displayIROnMap(irFrames[idx]);
         updateIRMeta(idx);
+        if (loadingEl) loadingEl.style.display = 'none';
         prefetchIRFrames(idx);
         return;
     }
 
     if (loadingEl) loadingEl.style.display = 'flex';
 
+    // Show context-specific loading message
+    var cached = Object.keys(irFrames).length;
+    if (cached === 0) {
+        setIRLoadingText('Downloading satellite archive... This may take up to 60 seconds');
+    } else {
+        setIRLoadingText('Loading frame ' + (idx + 1) + '...');
+    }
+
     fetchIRFrameSingle(idx, function (data) {
         if (data && irFrameIdx === idx) {
             displayIROnMap(data);
+        }
+        if (!data && irFrameIdx === idx) {
+            setIRLoadingText('Frame ' + (idx + 1) + ' failed to load');
+            // Hide loading after a brief pause so user sees the message
+            setTimeout(function () {
+                if (loadingEl) loadingEl.style.display = 'none';
+            }, 2000);
+            return;
         }
         updateIRMeta(idx);
         if (loadingEl) loadingEl.style.display = 'none';
@@ -1042,30 +1068,40 @@ function fetchIRFrameSingle(idx, callback) {
             '&frame_idx=' + idx;
     }
 
-    fetch(frameUrl)
+    // Use longer timeout for first frame (tarball download can take 60-120s)
+    var cached = Object.keys(irFrames).length;
+    var timeoutMs = cached === 0 ? 180000 : 60000;  // 3 min first, 1 min after
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, timeoutMs);
+
+    fetch(frameUrl, { signal: controller.signal })
         .then(function (r) {
+            clearTimeout(timer);
             if (!r.ok) throw new Error('Frame not available (HTTP ' + r.status + ')');
             return r.json();
         })
         .then(function (data) {
             irFrames[idx] = data;
+            updateIRCacheStatus();
             if (callback) callback(data);
         })
         .catch(function (err) {
+            clearTimeout(timer);
             console.warn('Frame ' + idx + ' load failed from ' + source + ':', err);
             // Fallback: try the other endpoint
             var fallbackUrl;
             if (source === 'hursat') {
-                // Try unified endpoint as fallback
                 fallbackUrl = API_BASE + '/global/ir/frame?sid=' + encodeURIComponent(selectedStorm.sid) + '&frame_idx=' + idx;
             } else {
-                // Try legacy HURSAT endpoint as fallback
                 fallbackUrl = API_BASE + '/global/hursat/frame?sid=' + encodeURIComponent(selectedStorm.sid) + '&frame_idx=' + idx;
             }
             fetch(fallbackUrl)
                 .then(function (r) { return r.ok ? r.json() : null; })
                 .then(function (data) {
-                    if (data) irFrames[idx] = data;
+                    if (data) {
+                        irFrames[idx] = data;
+                        updateIRCacheStatus();
+                    }
                     if (callback) callback(data);
                 })
                 .catch(function () { if (callback) callback(null); });

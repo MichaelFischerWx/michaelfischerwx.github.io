@@ -517,6 +517,18 @@
     left: 50%;
     transform: translate(-50%, -50%);
     z-index: 810;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+.ir-loading-text {
+    color: var(--text-muted, #8899aa);
+    font-size: 0.82rem;
+    font-family: 'JetBrains Mono', monospace;
+    text-align: center;
+    max-width: 220px;
+    line-height: 1.4;
 }
 
 /* Info elements */
