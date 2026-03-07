@@ -835,7 +835,7 @@ function loadHURSAT(storm) {
             document.getElementById('ir-slider').max = meta.n_frames - 1;
             document.getElementById('ir-slider').value = 0;
 
-            var sourceLabel = meta.source === 'mergir' ? 'MergIR 4km' : 'HURSAT-B1';
+            var sourceLabel = meta.source === 'mergir' ? 'MergIR 4km' : (meta.source === 'gridsat' ? 'GridSat-B1' : 'HURSAT-B1');
             document.getElementById('ir-status').textContent =
                 meta.n_frames + ' frames (' + sourceLabel + ')';
             document.getElementById('ir-source-badge').textContent = sourceLabel;
@@ -963,7 +963,7 @@ function displayIROnMap(data) {
             centerLat = selectedStorm.lmi_lat || 20;
             centerLon = selectedStorm.lmi_lon || -60;
         }
-        var halfDeg = data.source === 'mergir' ? 5.0 : 6.0;
+        var halfDeg = (data.source === 'mergir' || data.source === 'gridsat') ? 5.0 : 6.0;
         bounds = {
             south: centerLat - halfDeg,
             north: centerLat + halfDeg,
@@ -1038,24 +1038,51 @@ function updateIRPositionMarker(data) {
 function findTrackPointAtTime(track, dtStr) {
     if (!track || !track.length || !dtStr) return null;
     var targetMs = new Date(dtStr).getTime();
-    var best = null;
-    var bestDiff = Infinity;
+
+    // Find the two flanking track points for interpolation
+    var before = null, after = null;
+    var beforeMs = -Infinity, afterMs = Infinity;
+
     for (var i = 0; i < track.length; i++) {
         if (!track[i].t || !track[i].la) continue;
-        var diff = Math.abs(new Date(track[i].t).getTime() - targetMs);
-        if (diff < bestDiff) {
-            bestDiff = diff;
-            best = track[i];
+        var ptMs = new Date(track[i].t).getTime();
+
+        if (ptMs <= targetMs && ptMs > beforeMs) {
+            before = track[i];
+            beforeMs = ptMs;
+        }
+        if (ptMs >= targetMs && ptMs < afterMs) {
+            after = track[i];
+            afterMs = ptMs;
         }
     }
-    return best;
+
+    // Exact match or only one side available
+    if (!before && !after) return null;
+    if (!before) return after;
+    if (!after) return before;
+    if (beforeMs === afterMs) return before;
+
+    // Linear interpolation between flanking points
+    var frac = (targetMs - beforeMs) / (afterMs - beforeMs);
+    return {
+        t: dtStr,
+        la: before.la + frac * (after.la - before.la),
+        lo: before.lo + frac * (after.lo - before.lo),
+        w: before.w != null && after.w != null
+            ? Math.round(before.w + frac * (after.w - before.w))
+            : (before.w || after.w),
+        p: before.p != null && after.p != null
+            ? Math.round(before.p + frac * (after.p - before.p))
+            : (before.p || after.p)
+    };
 }
 
 function updateIRCacheStatus() {
     if (!irMeta) return;
     var cached = irFrames.filter(function (f) { return f; }).length;
     var total = irMeta.n_frames;
-    var sourceLabel = irMeta.source === 'mergir' ? 'MergIR 4km' : 'HURSAT-B1';
+    var sourceLabel = irMeta.source === 'mergir' ? 'MergIR 4km' : (irMeta.source === 'gridsat' ? 'GridSat-B1' : 'HURSAT-B1');
     var statusEl = document.getElementById('ir-status');
     if (cached < total) {
         statusEl.textContent = cached + ' / ' + total + ' frames loaded (' + sourceLabel + ')';
@@ -1143,7 +1170,7 @@ function fetchIRFrameSingle(idx, callback) {
     var frameUrl;
     var source = irMeta.source || 'hursat';
 
-    if (source === 'mergir' && irMeta.frames && irMeta.frames[idx]) {
+    if ((source === 'mergir' || source === 'gridsat') && irMeta.frames && irMeta.frames[idx]) {
         var fi = irMeta.frames[idx];
         frameUrl = API_BASE + '/global/ir/frame?sid=' + encodeURIComponent(selectedStorm.sid) +
             '&frame_idx=' + idx +
@@ -1179,6 +1206,7 @@ function fetchIRFrameSingle(idx, callback) {
             if (source === 'hursat') {
                 fallbackUrl = API_BASE + '/global/ir/frame?sid=' + encodeURIComponent(selectedStorm.sid) + '&frame_idx=' + idx;
             } else {
+                // For mergir/gridsat, fall back to HURSAT legacy endpoint
                 fallbackUrl = API_BASE + '/global/hursat/frame?sid=' + encodeURIComponent(selectedStorm.sid) + '&frame_idx=' + idx;
             }
             fetch(fallbackUrl)
