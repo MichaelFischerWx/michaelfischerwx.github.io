@@ -257,12 +257,58 @@ def main():
     size_mb = os.path.getsize(STORMS_JSON) / 1e6
     print(f"Wrote {STORMS_JSON} ({size_mb:.1f} MB, {len(storms):,} storms)")
 
-    # Step 4: Build track data
+    # Step 4: Build track data — split into chunks under 20MB for GitHub web upload
     tracks = build_tracks_json(df)
+
+    # Split tracks into chunks that stay under 20MB each
+    MAX_CHUNK_MB = 20
+    chunk_idx = 0
+    current_chunk = {}
+    current_size = 2  # opening braces
+    chunk_files = []
+
+    sids = list(tracks.keys())
+    for sid in sids:
+        # Estimate size of this entry
+        entry_json = json.dumps({sid: tracks[sid]}, separators=(",", ":"))
+        entry_size = len(entry_json)
+
+        if current_size + entry_size > MAX_CHUNK_MB * 1e6 and current_chunk:
+            # Write current chunk
+            chunk_name = OUTPUT_DIR / f"ibtracs_tracks_{chunk_idx}.json"
+            with open(chunk_name, "w") as f:
+                json.dump(current_chunk, f, separators=(",", ":"))
+            chunk_mb = os.path.getsize(chunk_name) / 1e6
+            chunk_files.append(chunk_name.name)
+            print(f"Wrote {chunk_name} ({chunk_mb:.1f} MB, {len(current_chunk):,} tracks)")
+            chunk_idx += 1
+            current_chunk = {}
+            current_size = 2
+
+        current_chunk[sid] = tracks[sid]
+        current_size += entry_size + 1  # +1 for comma
+
+    # Write final chunk
+    if current_chunk:
+        chunk_name = OUTPUT_DIR / f"ibtracs_tracks_{chunk_idx}.json"
+        with open(chunk_name, "w") as f:
+            json.dump(current_chunk, f, separators=(",", ":"))
+        chunk_mb = os.path.getsize(chunk_name) / 1e6
+        chunk_files.append(chunk_name.name)
+        print(f"Wrote {chunk_name} ({chunk_mb:.1f} MB, {len(current_chunk):,} tracks)")
+
+    # Write manifest so the frontend knows which chunk files to load
+    manifest = {"chunks": chunk_files, "total_tracks": len(tracks)}
+    manifest_path = OUTPUT_DIR / "ibtracs_tracks_manifest.json"
+    with open(manifest_path, "w") as f:
+        json.dump(manifest, f, separators=(",", ":"))
+    print(f"Wrote {manifest_path} ({len(chunk_files)} chunks)")
+
+    # Also write single combined file (for git CLI users)
     with open(TRACKS_JSON, "w") as f:
         json.dump(tracks, f, separators=(",", ":"))
     size_mb = os.path.getsize(TRACKS_JSON) / 1e6
-    print(f"Wrote {TRACKS_JSON} ({size_mb:.1f} MB, {len(tracks):,} storm tracks)")
+    print(f"Wrote {TRACKS_JSON} ({size_mb:.1f} MB, {len(tracks):,} storm tracks) [combined, for reference]")
 
     # Summary
     print("\n── Summary ──────────────────────────────")

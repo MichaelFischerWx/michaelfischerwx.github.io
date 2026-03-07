@@ -9,7 +9,8 @@
 // ── Configuration ────────────────────────────────────────────
 var API_BASE = 'https://tc-radar-api.onrender.com';
 var STORMS_JSON = 'ibtracs_storms.json';
-var TRACKS_JSON = 'ibtracs_tracks.json';
+var TRACKS_MANIFEST = 'ibtracs_tracks_manifest.json';
+var TRACKS_JSON_FALLBACK = 'ibtracs_tracks.json';  // Fallback for single-file mode
 
 // ── State ────────────────────────────────────────────────────
 var allStorms = [];          // Full storm metadata array
@@ -184,19 +185,47 @@ function loadData() {
             if (loadingEl) loadingEl.innerHTML = '<span style="color:#f87171;">Failed to load storm data. Check console.</span>';
         });
 
-    // Load track data (larger file — may take several seconds)
-    showToast('Loading track data (this may take a moment)...');
-    fetch(TRACKS_JSON)
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-            allTracks = data;
-            var n = Object.keys(data).length;
-            console.log('Loaded tracks for ' + n + ' storms');
-            showToast('Track data ready — ' + n.toLocaleString() + ' storm tracks loaded');
+    // Load track data — try chunked manifest first, fall back to single file
+    showToast('Loading track data...');
+    fetch(TRACKS_MANIFEST)
+        .then(function (r) {
+            if (!r.ok) throw new Error('No manifest');
+            return r.json();
         })
-        .catch(function (err) {
-            console.warn('Track data not loaded:', err);
-            showToast('Track data failed to load — storm details unavailable');
+        .then(function (manifest) {
+            // Load chunks in parallel
+            var chunks = manifest.chunks || [];
+            console.log('Loading ' + chunks.length + ' track chunks...');
+            return Promise.all(chunks.map(function (chunkFile) {
+                return fetch(chunkFile).then(function (r) { return r.json(); });
+            }));
+        })
+        .then(function (chunkDataArray) {
+            // Merge all chunks into allTracks
+            chunkDataArray.forEach(function (chunk) {
+                Object.keys(chunk).forEach(function (sid) {
+                    allTracks[sid] = chunk[sid];
+                });
+            });
+            var n = Object.keys(allTracks).length;
+            console.log('Loaded tracks for ' + n + ' storms from chunks');
+            showToast('Track data ready — ' + n.toLocaleString() + ' storm tracks');
+        })
+        .catch(function (manifestErr) {
+            // Fallback: try loading single combined file
+            console.log('Manifest not found, trying single file...');
+            fetch(TRACKS_JSON_FALLBACK)
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    allTracks = data;
+                    var n = Object.keys(data).length;
+                    console.log('Loaded tracks for ' + n + ' storms (single file)');
+                    showToast('Track data ready — ' + n.toLocaleString() + ' storm tracks');
+                })
+                .catch(function (err) {
+                    console.warn('Track data not loaded:', err);
+                    showToast('Track data failed to load — storm details unavailable');
+                });
         });
 }
 
