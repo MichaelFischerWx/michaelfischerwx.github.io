@@ -1313,6 +1313,10 @@ function prefetchIRFrames(currentIdx) {
         irPrefetchActive++;
         fetchIRFrameSingle(idx, function (data) {
             irPrefetchActive--;
+            if (!data) {
+                // Mark as failed so prefetch doesn't retry this frame endlessly
+                irFailedFrames[idx] = true;
+            }
             updateIRCacheStatus();
             // Chain: each completion immediately fills the empty slot
             prefetchIRFrames(irFrameIdx);
