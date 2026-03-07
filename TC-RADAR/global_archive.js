@@ -1117,7 +1117,8 @@ function updateIRCacheStatus() {
 
 var irPrefetchQueue = [];    // Frames queued for prefetch
 var irPrefetchActive = 0;    // Number of active prefetch requests
-var IR_PREFETCH_BATCH = 5;   // Concurrent prefetch requests
+var IR_PREFETCH_BATCH = 5;   // Concurrent prefetch requests (HURSAT)
+var IR_PREFETCH_BATCH_GRIDSAT = 8;  // Higher concurrency for GridSat (small subsets, no auth)
 var IR_PREFETCH_AHEAD = 15;  // How many frames ahead to prefetch
 
 function setIRLoadingText(msg) {
@@ -1260,16 +1261,17 @@ function prefetchIRFrames(currentIdx) {
         irPrefetchFrontier = currentIdx;
     }
 
-    // For HURSAT: use parallel individual fetches (batch endpoint is too slow
-    // because each frame opens a separate NetCDF file on the server).
+    // For HURSAT/GridSat: use parallel individual fetches (each frame is a
+    // separate file on the server — batch endpoint serializes and is slower).
     // For MergIR: use the batch endpoint (efficient server-side concurrency).
-    if (source === 'hursat') {
-        if (irPrefetchActive >= IR_PREFETCH_BATCH) return;  // Already at capacity
+    if (source === 'hursat' || source === 'gridsat') {
+        var maxConcurrent = source === 'gridsat' ? IR_PREFETCH_BATCH_GRIDSAT : IR_PREFETCH_BATCH;
+        if (irPrefetchActive >= maxConcurrent) return;  // Already at capacity
 
         var toFetch = [];
         var scanned = 0;
         var scanIdx = irPrefetchFrontier;
-        var maxIndividual = IR_PREFETCH_BATCH - irPrefetchActive;  // Fill remaining slots
+        var maxIndividual = maxConcurrent - irPrefetchActive;  // Fill remaining slots
         while (toFetch.length < maxIndividual && scanned < total) {
             scanIdx = (scanIdx + 1) % total;
             scanned++;
