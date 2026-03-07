@@ -39,6 +39,7 @@ var irOverlayVisible = false;
 var irOpacity = 0.8;
 var irOpacityLevels = [0.8, 0.6, 0.4, 1.0];
 var irOpacityIdx = 0;
+var irFailedFrames = {};     // Track frames that permanently failed
 
 // Climatology state
 var climRendered = false;
@@ -741,6 +742,7 @@ function loadHURSAT(storm) {
     irFrameIdx = 0;
     irBatchActive = false;
     irPrefetchActive = 0;
+    irFailedFrames = {};
     stopIRPlayback();
     removeIROverlay();
 
@@ -1045,11 +1047,27 @@ function loadIRFrame(idx) {
             displayIROnMap(data);
         }
         if (!data && irFrameIdx === idx) {
-            setIRLoadingText('Frame ' + (idx + 1) + ' failed to load');
-            // Hide loading after a brief pause so user sees the message
+            irFailedFrames[idx] = true;
+            // During playback, auto-skip to next frame
+            if (irPlaying && irMeta) {
+                var nextIdx = (idx + 1) % irMeta.n_frames;
+                // Prevent infinite loop if all frames failed
+                var attempts = 0;
+                while (irFailedFrames[nextIdx] && attempts < irMeta.n_frames) {
+                    nextIdx = (nextIdx + 1) % irMeta.n_frames;
+                    attempts++;
+                }
+                if (attempts < irMeta.n_frames) {
+                    irFrameIdx = nextIdx;
+                    if (loadingEl) loadingEl.style.display = 'none';
+                    loadIRFrame(nextIdx);
+                    return;
+                }
+            }
+            setIRLoadingText('Frame ' + (idx + 1) + ' unavailable');
             setTimeout(function () {
                 if (loadingEl) loadingEl.style.display = 'none';
-            }, 2000);
+            }, 1500);
             return;
         }
         updateIRMeta(idx);
@@ -1212,6 +1230,11 @@ function updateIRMeta(idx) {
         var dtText = irMeta.frames[idx].datetime || '';
         var sat = irMeta.frames[idx].satellite || '';
         if (datetimeEl) datetimeEl.textContent = dtText + (sat ? '  [' + sat + ']' : '');
+        // Log NC file for HURSAT debugging
+        var frameData = irFrames[idx];
+        if (frameData && frameData.nc_file) {
+            console.log('Frame ' + idx + ': ' + dtText + ' → ' + frameData.nc_file);
+        }
     }
     if (frameInfoEl) {
         frameInfoEl.textContent = 'Frame ' + (idx + 1) + ' / ' + (irMeta ? irMeta.n_frames : '?');
@@ -1237,7 +1260,27 @@ function startIRPlayback() {
     document.getElementById('ir-play-btn').innerHTML = '&#9646;&#9646; Pause';
 
     irTimer = setInterval(function () {
-        irFrameIdx = (irFrameIdx + 1) % irMeta.n_frames;
+        var nextIdx = (irFrameIdx + 1) % irMeta.n_frames;
+
+        // If next frame isn't cached and isn't a known failure, loop back to
+        // the earliest cached frame so the user never sees a loading spinner.
+        if (!irFrames[nextIdx] && !irFailedFrames[nextIdx]) {
+            // Find the first cached frame at or after index 0
+            var loopIdx = -1;
+            for (var i = 0; i < irMeta.n_frames; i++) {
+                if (irFrames[i]) { loopIdx = i; break; }
+            }
+            if (loopIdx >= 0 && loopIdx !== irFrameIdx) {
+                irFrameIdx = loopIdx;
+                displayIROnMap(irFrames[loopIdx]);
+                updateIRMeta(loopIdx);
+                // Continue prefetching ahead of where we stopped
+                prefetchIRFrames(nextIdx);
+                return;
+            }
+        }
+
+        irFrameIdx = nextIdx;
         loadIRFrame(irFrameIdx);
     }, irSpeed);
 }
