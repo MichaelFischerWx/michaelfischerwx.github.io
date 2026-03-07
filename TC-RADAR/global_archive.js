@@ -911,15 +911,23 @@ function displayIROnMap(data) {
         [bounds.north, bounds.east]
     );
 
+    // Remove old overlay and create fresh one each frame
+    // (setUrl + setBounds on data URIs can cause stale image rendering)
     if (irOverlayLayer) {
-        irOverlayLayer.setUrl(data.frame);
-        irOverlayLayer.setBounds(imageBounds);
-    } else {
-        irOverlayLayer = L.imageOverlay(data.frame, imageBounds, {
-            opacity: irOpacity,
-            interactive: false,
-            className: 'ir-overlay-image'
-        }).addTo(detailMap);
+        try { detailMap.removeLayer(irOverlayLayer); } catch (e) {}
+    }
+    irOverlayLayer = L.imageOverlay(data.frame, imageBounds, {
+        opacity: irOpacity,
+        interactive: false,
+        className: 'ir-overlay-image'
+    }).addTo(detailMap);
+
+    // Pan/zoom map to follow the IR frame
+    var center = imageBounds.getCenter();
+    var padded = imageBounds.pad(0.3);  // 30% padding around IR for context
+    if (!detailMap.getBounds().contains(imageBounds)) {
+        // IR frame partially or fully off-screen — fit to show it
+        detailMap.fitBounds(padded, { animate: true, duration: 0.4, maxZoom: 7 });
     }
 
     // Update storm position marker
@@ -946,12 +954,12 @@ function updateIRPositionMarker(data) {
             irPositionMarker.setLatLng([lat, lon]);
         } else {
             irPositionMarker = L.circleMarker([lat, lon], {
-                radius: 7,
-                color: '#fff',
-                fillColor: '#ff4444',
-                fillOpacity: 0.9,
-                weight: 2,
-                pane: 'markerPane'  // Ensure it's above the IR overlay
+                radius: 4,
+                color: 'rgba(255,255,255,0.85)',
+                fillColor: 'transparent',
+                fillOpacity: 0,
+                weight: 1.5,
+                pane: 'markerPane'
             }).addTo(detailMap);
             irPositionMarker.bindTooltip('', { className: 'track-tooltip', permanent: false });
         }
