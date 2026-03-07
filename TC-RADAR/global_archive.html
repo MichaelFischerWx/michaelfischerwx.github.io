@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!-- Google Analytics (GA4) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-EFM8GFFKLK"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-EFM8GFFKLK');
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Global Tropical Cyclone Archive — Browse all IBTrACS storms from 1842 to present with satellite imagery, intensity timelines, and climatology.">
+    <meta name="keywords" content="tropical cyclone, hurricane, typhoon, IBTrACS, HURSAT, satellite, climatology, global archive">
+    <meta name="author" content="Dr. Michael Fischer, University of Miami / NOAA HRD">
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Global TC Archive — TC-RADAR">
+    <meta property="og:description" content="Browse all global tropical cyclones with satellite imagery, intensity timelines, and climatology charts.">
+    <meta property="og:url" content="https://michaelfischerwx.github.io/TC_RADAR_web/global_archive.html">
+    <meta property="og:site_name" content="TC-RADAR">
+
+    <title>Global TC Archive — TC-RADAR</title>
+
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="tc_radar_styles.css">
+    <link rel="stylesheet" href="global_archive_styles.css">
+</head>
+<body>
+    <a href="#global-main" class="skip-link" aria-label="Skip to main content">Skip to main content</a>
+
+    <!-- ── Topbar ─────────────────────────────────────────────── -->
+    <header class="topbar" role="banner">
+        <div class="topbar-inner">
+            <div class="topbar-brand">
+                <div class="topbar-logo" role="heading" aria-level="1">TC-RADAR</div>
+                <div class="topbar-divider"></div>
+                <div class="topbar-subtitle">Global TC Archive</div>
+            </div>
+            <div class="topbar-stats">
+                <div class="topbar-stat">
+                    <span class="topbar-stat-val" id="stat-storms">&mdash;</span>
+                    <span class="topbar-stat-label">Storms</span>
+                </div>
+                <div class="topbar-stat">
+                    <span class="topbar-stat-val" id="stat-years">&mdash;</span>
+                    <span class="topbar-stat-label">Coverage</span>
+                </div>
+                <div class="topbar-stat">
+                    <span class="topbar-stat-val" id="stat-basins">&mdash;</span>
+                    <span class="topbar-stat-label">Basins</span>
+                </div>
+                <span class="topbar-version">IBTrACS v04</span>
+            </div>
+            <nav aria-label="Main navigation">
+                <ul class="topbar-nav">
+                    <li><a href="index.html" role="button"><span class="nav-full">Radar Archive</span><span class="nav-short">Archive</span></a></li>
+                    <li><a href="global_archive.html" role="button" class="ga-nav-active"><span class="nav-full">Global Archive</span><span class="nav-short">Global</span></a></li>
+                    <li><a href="index.html#about" role="button">About</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <!-- ── Tab bar ────────────────────────────────────────────── -->
+    <div class="ga-tabs" role="tablist" aria-label="Global archive sections">
+        <button class="ga-tab active" role="tab" aria-selected="true" data-tab="browser" onclick="switchTab('browser')">
+            Storm Browser
+        </button>
+        <button class="ga-tab" role="tab" aria-selected="false" data-tab="detail" onclick="switchTab('detail')">
+            Storm Detail
+        </button>
+        <button class="ga-tab" role="tab" aria-selected="false" data-tab="climatology" onclick="switchTab('climatology')">
+            Climatology
+        </button>
+    </div>
+
+    <!-- ── Main content ───────────────────────────────────────── -->
+    <main id="global-main">
+
+        <!-- TAB 1: STORM BROWSER -->
+        <section id="tab-browser" class="ga-tab-content active" role="tabpanel">
+            <div class="browser-layout">
+                <div class="browser-map-wrap">
+                    <div id="storm-map"></div>
+                    <div class="map-overlay-loading" id="map-loading">
+                        <div class="ga-spinner"></div>
+                        <span>Loading storms...</span>
+                    </div>
+                </div>
+                <aside class="browser-sidebar">
+                    <div class="sidebar-section">
+                        <h3 class="sidebar-title">Filter Storms</h3>
+
+                        <label class="filter-label" for="filter-name">Storm Name</label>
+                        <input type="text" id="filter-name" class="ga-input" placeholder="Search (e.g. Katrina)..." oninput="onFilterChange()">
+
+                        <label class="filter-label">Basin</label>
+                        <div class="basin-chips" id="basin-chips">
+                            <button class="basin-chip active" data-basin="ALL" onclick="toggleBasin(this)">All</button>
+                            <button class="basin-chip" data-basin="NA" onclick="toggleBasin(this)">NA</button>
+                            <button class="basin-chip" data-basin="EP" onclick="toggleBasin(this)">EP</button>
+                            <button class="basin-chip" data-basin="WP" onclick="toggleBasin(this)">WP</button>
+                            <button class="basin-chip" data-basin="NI" onclick="toggleBasin(this)">NI</button>
+                            <button class="basin-chip" data-basin="SI" onclick="toggleBasin(this)">SI</button>
+                            <button class="basin-chip" data-basin="SP" onclick="toggleBasin(this)">SP</button>
+                            <button class="basin-chip" data-basin="SA" onclick="toggleBasin(this)">SA</button>
+                        </div>
+
+                        <div class="filter-row">
+                            <div class="filter-col">
+                                <label class="filter-label" for="filter-year-min">Year From</label>
+                                <input type="number" id="filter-year-min" class="ga-input ga-input-sm" placeholder="1842" oninput="onFilterChange()">
+                            </div>
+                            <div class="filter-col">
+                                <label class="filter-label" for="filter-year-max">Year To</label>
+                                <input type="number" id="filter-year-max" class="ga-input ga-input-sm" placeholder="2024" oninput="onFilterChange()">
+                            </div>
+                        </div>
+
+                        <label class="filter-label">Min Peak Intensity</label>
+                        <div class="intensity-filter">
+                            <input type="range" id="filter-wind-min" min="0" max="185" value="0" class="ga-range" oninput="onWindFilterChange()">
+                            <span id="wind-min-label" class="range-label">0 kt (All)</span>
+                        </div>
+
+                        <div class="filter-actions">
+                            <button class="ga-btn ga-btn-secondary" onclick="resetFilters()">Reset</button>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-section filter-stats-section">
+                        <div class="filter-stats">
+                            <span class="stat-highlight" id="filtered-count">0</span>
+                            <span class="stat-of">of</span>
+                            <span id="total-count">0</span>
+                            <span class="stat-label-inline">storms</span>
+                        </div>
+                    </div>
+
+                    <!-- Selected storm card -->
+                    <div id="storm-card" class="sidebar-section storm-card" style="display:none;">
+                        <div class="storm-card-header">
+                            <h3 id="card-name" class="storm-card-name"></h3>
+                            <span id="card-cat-badge" class="intensity-badge"></span>
+                        </div>
+                        <div class="storm-card-meta">
+                            <div class="card-row"><span class="card-label">Year</span><span id="card-year" class="card-value"></span></div>
+                            <div class="card-row"><span class="card-label">Basin</span><span id="card-basin" class="card-value"></span></div>
+                            <div class="card-row"><span class="card-label">Peak Wind</span><span id="card-wind" class="card-value mono"></span></div>
+                            <div class="card-row"><span class="card-label">Min Pressure</span><span id="card-pres" class="card-value mono"></span></div>
+                            <div class="card-row"><span class="card-label">Duration</span><span id="card-dates" class="card-value"></span></div>
+                            <div class="card-row"><span class="card-label">ACE</span><span id="card-ace" class="card-value mono"></span></div>
+                            <div id="card-hursat-row" class="card-row"><span class="card-label">HURSAT IR</span><span id="card-hursat" class="card-value"></span></div>
+                        </div>
+                        <button class="ga-btn ga-btn-primary" onclick="viewStormDetail()">View Storm Detail</button>
+                    </div>
+                </aside>
+            </div>
+        </section>
+
+        <!-- TAB 2: STORM DETAIL -->
+        <section id="tab-detail" class="ga-tab-content" role="tabpanel">
+            <div class="detail-layout">
+                <div class="detail-header">
+                    <button class="ga-btn ga-btn-ghost" onclick="switchTab('browser')">← Back to Browser</button>
+                    <h2 id="detail-title" class="detail-storm-title"></h2>
+                    <div id="detail-subtitle" class="detail-storm-subtitle"></div>
+                </div>
+
+                <div class="detail-grid">
+                    <!-- Intensity Timeline -->
+                    <div class="detail-panel">
+                        <div class="panel-header">
+                            <h3>Intensity Timeline</h3>
+                        </div>
+                        <div id="timeline-chart" class="chart-container"></div>
+                    </div>
+
+                    <!-- Track Map -->
+                    <div class="detail-panel">
+                        <div class="panel-header">
+                            <h3>Storm Track</h3>
+                        </div>
+                        <div id="detail-map" class="detail-map-container"></div>
+                    </div>
+                </div>
+
+                <!-- IR Animation (shown only for HURSAT-era storms) -->
+                <div id="ir-panel" class="detail-panel ir-panel" style="display:none;">
+                    <div class="panel-header">
+                        <h3>Satellite IR Animation <span class="panel-badge">HURSAT-B1</span></h3>
+                        <span id="ir-status" class="ir-status"></span>
+                    </div>
+                    <div class="ir-content">
+                        <div class="ir-frame-wrap">
+                            <img id="ir-frame-img" class="ir-frame-img" alt="HURSAT IR satellite frame" />
+                            <div id="ir-frame-loading" class="ir-frame-overlay" style="display:none;">
+                                <div class="ga-spinner"></div>
+                            </div>
+                            <div id="ir-frame-unavailable" class="ir-frame-overlay" style="display:none;">
+                                <p>HURSAT-B1 IR imagery is available for storms from 1978–2015.</p>
+                                <p class="ir-future-note">MergIR support for recent storms is coming soon.</p>
+                            </div>
+                        </div>
+                        <div class="ir-controls">
+                            <div class="ir-meta-row">
+                                <span id="ir-datetime" class="ir-datetime"></span>
+                                <span id="ir-frame-info" class="ir-frame-info"></span>
+                            </div>
+                            <div class="ir-playback">
+                                <button id="ir-play-btn" class="ga-btn ga-btn-sm" onclick="toggleIRPlay()">&#9654; Play</button>
+                                <input type="range" id="ir-slider" class="ga-range ir-slider" min="0" max="0" value="0" oninput="seekIRFrame(this.value)">
+                                <select id="ir-speed" class="ga-select-sm" onchange="setIRSpeed(this.value)">
+                                    <option value="1500">0.5x</option>
+                                    <option value="750" selected>1x</option>
+                                    <option value="375">2x</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 3: CLIMATOLOGY -->
+        <section id="tab-climatology" class="ga-tab-content" role="tabpanel">
+            <div class="clim-layout">
+                <div class="clim-header">
+                    <h2>Global Tropical Cyclone Climatology</h2>
+                    <p class="clim-subtitle">IBTrACS v04 &mdash; <span id="clim-year-range"></span></p>
+                </div>
+                <div class="clim-grid">
+                    <div class="clim-panel">
+                        <h3 class="clim-panel-title">Accumulated Cyclone Energy (ACE) by Year</h3>
+                        <div id="clim-ace-chart" class="chart-container chart-tall"></div>
+                    </div>
+                    <div class="clim-panel">
+                        <h3 class="clim-panel-title">Named Storms per Season by Category</h3>
+                        <div id="clim-freq-chart" class="chart-container chart-tall"></div>
+                    </div>
+                    <div class="clim-panel">
+                        <h3 class="clim-panel-title">Peak Intensity Distribution</h3>
+                        <div id="clim-hist-chart" class="chart-container"></div>
+                    </div>
+                    <div class="clim-panel">
+                        <h3 class="clim-panel-title">Storms by Basin</h3>
+                        <div id="clim-basin-chart" class="chart-container"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Toast -->
+    <div id="toast" class="ga-toast" style="display:none;"></div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="global_archive.js"></script>
+</body>
+</html>

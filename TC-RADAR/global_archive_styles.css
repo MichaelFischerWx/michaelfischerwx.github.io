@@ -1,0 +1,701 @@
+/* ══════════════════════════════════════════════════════════════
+   Global TC Archive — Styles
+   Uses CSS variables from tc_radar_styles.css
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Active nav highlight ─────────────────────────────────── */
+.ga-nav-active {
+    color: var(--cyan) !important;
+    background: rgba(0, 212, 255, 0.08) !important;
+}
+
+/* ── Tab bar ──────────────────────────────────────────────── */
+.ga-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 0 24px;
+    background: var(--navy);
+    border-bottom: 1px solid var(--border);
+}
+.ga-tab {
+    padding: 10px 20px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--slate);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.01em;
+}
+.ga-tab:hover {
+    color: var(--text);
+    background: rgba(255,255,255,0.03);
+}
+.ga-tab.active {
+    color: var(--cyan);
+    border-bottom-color: var(--cyan);
+}
+
+/* ── Tab content ──────────────────────────────────────────── */
+.ga-tab-content {
+    display: none;
+}
+.ga-tab-content.active {
+    display: block;
+}
+
+/* ── Common elements ──────────────────────────────────────── */
+.ga-spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid var(--border);
+    border-top-color: var(--cyan);
+    border-radius: 50%;
+    animation: ga-spin 0.8s linear infinite;
+}
+@keyframes ga-spin {
+    to { transform: rotate(360deg); }
+}
+
+.ga-input {
+    width: 100%;
+    padding: 7px 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.82rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+.ga-input:focus {
+    border-color: var(--blue);
+}
+.ga-input-sm {
+    padding: 5px 8px;
+    font-size: 0.78rem;
+}
+.ga-input::placeholder {
+    color: var(--text-dim);
+}
+
+.ga-range {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    background: var(--surface);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+.ga-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--cyan);
+    cursor: pointer;
+    border: 2px solid var(--navy);
+}
+.ga-range::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--cyan);
+    cursor: pointer;
+    border: 2px solid var(--navy);
+}
+
+.ga-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+    width: 100%;
+}
+.ga-btn-primary {
+    background: linear-gradient(135deg, var(--blue) 0%, var(--cyan) 100%);
+    color: white;
+}
+.ga-btn-primary:hover { opacity: 0.9; }
+.ga-btn-secondary {
+    background: var(--surface);
+    color: var(--slate);
+    border: 1px solid var(--border);
+}
+.ga-btn-secondary:hover { color: var(--text); border-color: var(--border-light); }
+.ga-btn-ghost {
+    background: transparent;
+    color: var(--slate);
+    padding: 6px 12px;
+    width: auto;
+}
+.ga-btn-ghost:hover { color: var(--text); }
+.ga-btn-sm {
+    padding: 5px 12px;
+    font-size: 0.78rem;
+    width: auto;
+}
+
+.ga-select-sm {
+    padding: 4px 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.76rem;
+    cursor: pointer;
+}
+
+.mono {
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.panel-badge {
+    font-size: 0.65rem;
+    font-weight: 500;
+    color: var(--cyan);
+    background: rgba(0,212,255,0.1);
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+
+/* ── Toast ────────────────────────────────────────────────── */
+.ga-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 10px 24px;
+    background: var(--surface-raised);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.82rem;
+    font-weight: 500;
+    z-index: 9999;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    animation: ga-toast-in 0.3s ease;
+}
+@keyframes ga-toast-in {
+    from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TAB 1: STORM BROWSER
+   ══════════════════════════════════════════════════════════════ */
+
+.browser-layout {
+    display: flex;
+    height: calc(100vh - 52px - 42px); /* viewport minus topbar minus tabs */
+}
+.browser-map-wrap {
+    flex: 1;
+    position: relative;
+    min-width: 0;
+}
+#storm-map {
+    width: 100%;
+    height: 100%;
+    background: var(--navy);
+}
+.map-overlay-loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    color: var(--slate);
+    font-size: 0.85rem;
+    z-index: 500;
+}
+
+.browser-sidebar {
+    width: 300px;
+    min-width: 300px;
+    background: var(--navy);
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-section {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+}
+.sidebar-title {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--slate);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 12px;
+}
+
+.filter-label {
+    display: block;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    font-weight: 500;
+    margin: 10px 0 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.basin-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+.basin-chip {
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: var(--surface);
+    color: var(--slate);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.basin-chip:hover {
+    border-color: var(--blue);
+    color: var(--text);
+}
+.basin-chip.active {
+    background: var(--blue);
+    color: white;
+    border-color: var(--blue);
+}
+
+.filter-row {
+    display: flex;
+    gap: 8px;
+}
+.filter-col {
+    flex: 1;
+}
+
+.intensity-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.range-label {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.filter-actions {
+    margin-top: 12px;
+}
+
+.filter-stats-section {
+    padding: 12px 16px;
+}
+.filter-stats {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    font-size: 0.82rem;
+}
+.stat-highlight {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--cyan);
+    font-family: 'JetBrains Mono', monospace;
+}
+.stat-of {
+    color: var(--text-dim);
+}
+.stat-label-inline {
+    color: var(--slate);
+}
+
+/* Storm card */
+.storm-card {
+    animation: ga-toast-in 0.2s ease;
+}
+.storm-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+.storm-card-name {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0;
+}
+.storm-card-meta {
+    margin-bottom: 12px;
+}
+.card-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 0.78rem;
+    border-bottom: 1px solid var(--border);
+}
+.card-row:last-child { border-bottom: none; }
+.card-label {
+    color: var(--slate);
+    font-weight: 500;
+}
+.card-value {
+    color: var(--text);
+    font-weight: 600;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TAB 2: STORM DETAIL
+   ══════════════════════════════════════════════════════════════ */
+
+.detail-layout {
+    padding: 16px 24px;
+    max-width: 1600px;
+    margin: 0 auto;
+}
+.detail-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+.detail-storm-title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0;
+}
+.detail-storm-subtitle {
+    font-size: 0.82rem;
+    color: var(--slate);
+}
+
+.detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.detail-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+.panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+}
+.panel-header h3 {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--slate);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 0;
+}
+
+.chart-container {
+    width: 100%;
+    height: 350px;
+}
+.chart-tall {
+    height: 380px;
+}
+
+.detail-map-container {
+    width: 100%;
+    height: 350px;
+    background: var(--navy);
+}
+
+/* ── IR Animation ─────────────────────────────────────────── */
+.ir-panel {
+    margin-bottom: 16px;
+}
+.ir-content {
+    padding: 16px;
+}
+.ir-frame-wrap {
+    position: relative;
+    background: #000;
+    border-radius: var(--radius);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+    max-height: 500px;
+}
+.ir-frame-img {
+    max-width: 100%;
+    max-height: 480px;
+    object-fit: contain;
+    image-rendering: pixelated;
+}
+.ir-frame-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.7);
+    color: var(--slate);
+    font-size: 0.85rem;
+    text-align: center;
+    padding: 24px;
+    gap: 8px;
+}
+.ir-future-note {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    font-style: italic;
+}
+
+.ir-controls {
+    margin-top: 12px;
+}
+.ir-meta-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 0.78rem;
+}
+.ir-datetime {
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+}
+.ir-frame-info {
+    color: var(--slate);
+}
+.ir-status {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+}
+
+.ir-playback {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.ir-slider {
+    flex: 1;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TAB 3: CLIMATOLOGY
+   ══════════════════════════════════════════════════════════════ */
+
+.clim-layout {
+    padding: 16px 24px;
+    max-width: 1600px;
+    margin: 0 auto;
+}
+.clim-header {
+    margin-bottom: 16px;
+}
+.clim-header h2 {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0 0 4px;
+}
+.clim-subtitle {
+    font-size: 0.82rem;
+    color: var(--slate);
+    margin: 0;
+}
+
+.clim-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+.clim-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    padding: 16px;
+}
+.clim-panel-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--slate);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 0 0 8px;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   RESPONSIVE
+   ══════════════════════════════════════════════════════════════ */
+
+@media (max-width: 1024px) {
+    .detail-grid {
+        grid-template-columns: 1fr;
+    }
+    .clim-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .browser-layout {
+        flex-direction: column;
+        height: auto;
+    }
+    .browser-map-wrap {
+        height: 50vh;
+    }
+    .browser-sidebar {
+        width: 100%;
+        min-width: auto;
+        border-left: none;
+        border-top: 1px solid var(--border);
+    }
+    .ga-tabs {
+        padding: 0 12px;
+        overflow-x: auto;
+    }
+    .ga-tab {
+        padding: 8px 14px;
+        white-space: nowrap;
+        font-size: 0.78rem;
+    }
+    .detail-layout,
+    .clim-layout {
+        padding: 12px;
+    }
+    .topbar-stats {
+        display: none;
+    }
+}
+
+/* ── Leaflet overrides for dark theme ─────────────────────── */
+.leaflet-popup-content-wrapper {
+    background: var(--surface-raised);
+    color: var(--text);
+    border-radius: var(--radius);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    border: 1px solid var(--border);
+}
+.leaflet-popup-tip {
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+}
+.leaflet-popup-content {
+    margin: 10px 14px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.82rem;
+    line-height: 1.5;
+}
+.leaflet-popup-close-button {
+    color: var(--slate) !important;
+}
+.leaflet-popup-close-button:hover {
+    color: var(--text) !important;
+}
+
+/* Marker cluster override for dark theme */
+.marker-cluster-small {
+    background-color: rgba(46,125,255,0.3);
+}
+.marker-cluster-small div {
+    background-color: rgba(46,125,255,0.6);
+    color: white;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+}
+.marker-cluster-medium {
+    background-color: rgba(0,212,255,0.3);
+}
+.marker-cluster-medium div {
+    background-color: rgba(0,212,255,0.6);
+    color: white;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+}
+.marker-cluster-large {
+    background-color: rgba(251,191,36,0.3);
+}
+.marker-cluster-large div {
+    background-color: rgba(251,191,36,0.6);
+    color: white;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+}
+
+/* Track polyline tooltip */
+.track-tooltip {
+    background: var(--surface-raised) !important;
+    color: var(--text) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 4px !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 0.78rem !important;
+    padding: 4px 8px !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
+}
+
+/* Intensity legend on map */
+.ga-legend {
+    background: var(--surface-raised);
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+    font-size: 0.72rem;
+    line-height: 1.8;
+    color: var(--text);
+}
+.ga-legend h4 {
+    margin: 0 0 6px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--slate);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.ga-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.ga-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255,255,255,0.2);
+    flex-shrink: 0;
+}
