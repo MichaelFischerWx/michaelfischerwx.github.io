@@ -33,6 +33,12 @@ var irFrames = [];           // Cached frame data
 var irMeta = null;           // HURSAT metadata
 var irTimer = null;
 var irSpeed = 750;           // ms per frame
+var irOverlayLayer = null;   // L.imageOverlay on detail map
+var irPositionMarker = null; // L.circleMarker showing current storm center
+var irOverlayVisible = false;
+var irOpacity = 0.8;
+var irOpacityLevels = [0.8, 0.6, 0.4, 1.0];
+var irOpacityIdx = 0;
 
 // Climatology state
 var climRendered = false;
@@ -543,19 +549,18 @@ function renderStormDetail(storm) {
     renderIntensityTimeline(track, storm);
     renderDetailMap(track, storm);
 
-    // IR panel
-    var irPanel = document.getElementById('ir-panel');
-    if (storm.hursat) {
-        irPanel.style.display = '';
-        document.getElementById('ir-frame-unavailable').style.display = 'none';
-        document.getElementById('ir-status').textContent = 'Checking HURSAT availability...';
+    // IR overlay — show toggle for storms with IR data (HURSAT 1978-2015, MergIR 1998+)
+    var irToggleWrap = document.getElementById('ir-toggle-wrap');
+    var hasIR = storm.hursat || storm.year >= 1998;
+    if (hasIR) {
+        irToggleWrap.style.display = '';
+        document.getElementById('ir-status').textContent = 'Loading...';
         loadHURSAT(storm);
     } else {
-        irPanel.style.display = '';
-        document.getElementById('ir-frame-unavailable').style.display = 'flex';
-        document.getElementById('ir-frame-img').style.display = 'none';
-        document.getElementById('ir-status').textContent = '';
+        irToggleWrap.style.display = 'none';
+        document.getElementById('ir-map-controls').style.display = 'none';
         stopIRPlayback();
+        removeIROverlay();
     }
 }
 
@@ -655,7 +660,9 @@ function renderIntensityTimeline(track, storm) {
 }
 
 function renderDetailMap(track, storm) {
-    // Destroy existing map
+    // Destroy existing map and IR overlay references
+    irOverlayLayer = null;
+    irPositionMarker = null;
     if (detailMap) {
         detailMap.remove();
         detailMap = null;
@@ -733,46 +740,242 @@ function loadHURSAT(storm) {
     irMeta = null;
     irFrameIdx = 0;
     stopIRPlayback();
+    removeIROverlay();
 
-    // Try to load from API
-    fetch(API_BASE + '/global/hursat/meta?sid=' + encodeURIComponent(storm.sid))
+    // Build track data for MergIR (needed for storm-centered subsetting)
+    var track = allTracks[storm.sid] || [];
+    var trackParam = track.length > 0 ? '&track=' + encodeURIComponent(JSON.stringify(track)) : '';
+
+    // Pass storm longitude for satellite viewing angle selection (HURSAT dedup)
+    var lonParam = storm.lmi_lon != null ? '&storm_lon=' + storm.lmi_lon : '';
+
+    // Use unified IR endpoint (auto-selects HURSAT vs MergIR)
+    var metaUrl = API_BASE + '/global/ir/meta?sid=' + encodeURIComponent(storm.sid) + trackParam + lonParam;
+
+    // Fall back to HURSAT-only endpoint if unified fails
+    var fallbackUrl = API_BASE + '/global/hursat/meta?sid=' + encodeURIComponent(storm.sid) + lonParam;
+
+    document.getElementById('ir-status').textContent = 'Checking satellite data...';
+
+    fetch(metaUrl)
         .then(function (r) {
-            if (!r.ok) throw new Error('HURSAT metadata not available');
+            if (!r.ok) throw new Error('IR metadata not available');
             return r.json();
+        })
+        .catch(function () {
+            return fetch(fallbackUrl).then(function (r) {
+                if (!r.ok) throw new Error('HURSAT metadata not available');
+                return r.json();
+            });
         })
         .then(function (meta) {
             if (!meta.available || meta.n_frames === 0) {
-                document.getElementById('ir-status').textContent = 'No HURSAT frames found';
-                document.getElementById('ir-frame-unavailable').style.display = 'flex';
-                document.getElementById('ir-frame-img').style.display = 'none';
+                var reason = meta.reason || 'No satellite frames found';
+                document.getElementById('ir-status').textContent = reason;
+                document.getElementById('ir-toggle-wrap').style.display = 'none';
                 return;
             }
             irMeta = meta;
             document.getElementById('ir-slider').max = meta.n_frames - 1;
             document.getElementById('ir-slider').value = 0;
-            document.getElementById('ir-status').textContent = meta.n_frames + ' frames available — prefetching...';
-            document.getElementById('ir-frame-img').style.display = '';
-            document.getElementById('ir-frame-unavailable').style.display = 'none';
 
-            // Load first frame and start prefetching batch
+            var sourceLabel = meta.source === 'mergir' ? 'MergIR 4km' : 'HURSAT-B1';
+            document.getElementById('ir-status').textContent =
+                meta.n_frames + ' frames (' + sourceLabel + ')';
+            document.getElementById('ir-source-badge').textContent = sourceLabel;
+
+            // Auto-show IR overlay
+            irOverlayVisible = true;
+            var toggleBtn = document.getElementById('ir-toggle-btn');
+            toggleBtn.textContent = 'Hide IR';
+            toggleBtn.classList.add('active');
+            document.getElementById('ir-map-controls').style.display = '';
+
+            // Load first frame
+            irFrameIdx = 0;
             loadIRFrame(0);
-            // Also kick off a wider initial prefetch
+
+            // Kick off initial batch prefetch
             for (var i = 1; i <= Math.min(IR_PREFETCH_BATCH, meta.n_frames - 1); i++) {
                 (function(fi) {
                     fetchIRFrameSingle(fi, function () {
-                        var cached = irFrames.filter(function (f) { return f; }).length;
-                        document.getElementById('ir-status').textContent =
-                            meta.n_frames + ' frames — ' + cached + ' cached';
+                        updateIRCacheStatus();
                     });
                 })(i);
             }
         })
         .catch(function (err) {
-            console.warn('HURSAT load failed:', err);
-            document.getElementById('ir-status').textContent = 'API not connected — deploy to Render to enable';
-            document.getElementById('ir-frame-unavailable').style.display = 'flex';
-            document.getElementById('ir-frame-img').style.display = 'none';
+            console.warn('IR load failed:', err);
+            document.getElementById('ir-status').textContent = 'API not connected';
+            document.getElementById('ir-toggle-wrap').style.display = 'none';
         });
+}
+
+function removeIROverlay() {
+    if (irOverlayLayer && detailMap) {
+        try { detailMap.removeLayer(irOverlayLayer); } catch (e) {}
+    }
+    irOverlayLayer = null;
+    if (irPositionMarker && detailMap) {
+        try { detailMap.removeLayer(irPositionMarker); } catch (e) {}
+    }
+    irPositionMarker = null;
+    irOverlayVisible = false;
+}
+
+window.toggleIROverlay = function () {
+    if (!irMeta) return;
+    irOverlayVisible = !irOverlayVisible;
+
+    var toggleBtn = document.getElementById('ir-toggle-btn');
+    var controls = document.getElementById('ir-map-controls');
+
+    if (irOverlayVisible) {
+        toggleBtn.textContent = 'Hide IR';
+        toggleBtn.classList.add('active');
+        controls.style.display = '';
+        if (irOverlayLayer && detailMap) {
+            irOverlayLayer.addTo(detailMap);
+            irOverlayLayer.setOpacity(irOpacity);
+        }
+        if (irPositionMarker && detailMap) {
+            irPositionMarker.addTo(detailMap);
+        }
+        if (irFrames[irFrameIdx]) {
+            displayIROnMap(irFrames[irFrameIdx]);
+        } else {
+            loadIRFrame(irFrameIdx);
+        }
+    } else {
+        toggleBtn.textContent = 'Show IR';
+        toggleBtn.classList.remove('active');
+        controls.style.display = 'none';
+        stopIRPlayback();
+        if (irOverlayLayer && detailMap) {
+            detailMap.removeLayer(irOverlayLayer);
+        }
+        if (irPositionMarker && detailMap) {
+            detailMap.removeLayer(irPositionMarker);
+        }
+    }
+};
+
+window.cycleIROpacity = function () {
+    irOpacityIdx = (irOpacityIdx + 1) % irOpacityLevels.length;
+    irOpacity = irOpacityLevels[irOpacityIdx];
+    document.getElementById('ir-opacity-label').textContent = Math.round(irOpacity * 100) + '%';
+    if (irOverlayLayer) {
+        irOverlayLayer.setOpacity(irOpacity);
+    }
+};
+
+function displayIROnMap(data) {
+    if (!detailMap || !irOverlayVisible) return;
+    if (!data || !data.frame) return;
+
+    var bounds = data.bounds;
+    if (!bounds) {
+        // Fallback: estimate bounds from storm position
+        var track = allTracks[selectedStorm.sid] || [];
+        var frameMeta = irMeta && irMeta.frames ? irMeta.frames[irFrameIdx] : null;
+        var centerLat, centerLon;
+        if (frameMeta && frameMeta.lat != null) {
+            centerLat = frameMeta.lat;
+            centerLon = frameMeta.lon;
+        } else if (frameMeta && frameMeta.datetime) {
+            var pt = findTrackPointAtTime(track, frameMeta.datetime);
+            centerLat = pt ? pt.la : (selectedStorm.lmi_lat || 20);
+            centerLon = pt ? pt.lo : (selectedStorm.lmi_lon || -60);
+        } else {
+            centerLat = selectedStorm.lmi_lat || 20;
+            centerLon = selectedStorm.lmi_lon || -60;
+        }
+        var halfDeg = data.source === 'mergir' ? 5.0 : 6.0;
+        bounds = {
+            south: centerLat - halfDeg,
+            north: centerLat + halfDeg,
+            west: centerLon - halfDeg,
+            east: centerLon + halfDeg
+        };
+    }
+
+    var imageBounds = L.latLngBounds(
+        [bounds.south, bounds.west],
+        [bounds.north, bounds.east]
+    );
+
+    if (irOverlayLayer) {
+        irOverlayLayer.setUrl(data.frame);
+        irOverlayLayer.setBounds(imageBounds);
+    } else {
+        irOverlayLayer = L.imageOverlay(data.frame, imageBounds, {
+            opacity: irOpacity,
+            interactive: false,
+            className: 'ir-overlay-image'
+        }).addTo(detailMap);
+    }
+
+    // Update storm position marker
+    updateIRPositionMarker(data);
+}
+
+function updateIRPositionMarker(data) {
+    if (!detailMap) return;
+
+    var frameMeta = irMeta && irMeta.frames ? irMeta.frames[irFrameIdx] : null;
+    var lat, lon;
+
+    if (frameMeta && frameMeta.lat != null) {
+        lat = frameMeta.lat;
+        lon = frameMeta.lon;
+    } else if (frameMeta && frameMeta.datetime) {
+        var track = allTracks[selectedStorm.sid] || [];
+        var pt = findTrackPointAtTime(track, frameMeta.datetime);
+        if (pt) { lat = pt.la; lon = pt.lo; }
+    }
+
+    if (lat != null && lon != null) {
+        if (irPositionMarker) {
+            irPositionMarker.setLatLng([lat, lon]);
+        } else {
+            irPositionMarker = L.circleMarker([lat, lon], {
+                radius: 7,
+                color: '#fff',
+                fillColor: '#ff4444',
+                fillOpacity: 0.9,
+                weight: 2,
+                pane: 'markerPane'  // Ensure it's above the IR overlay
+            }).addTo(detailMap);
+            irPositionMarker.bindTooltip('', { className: 'track-tooltip', permanent: false });
+        }
+        var tipText = (frameMeta.datetime || '');
+        if (data && data.satellite) tipText += ' [' + data.satellite + ']';
+        irPositionMarker.setTooltipContent(tipText);
+    }
+}
+
+function findTrackPointAtTime(track, dtStr) {
+    if (!track || !track.length || !dtStr) return null;
+    var targetMs = new Date(dtStr).getTime();
+    var best = null;
+    var bestDiff = Infinity;
+    for (var i = 0; i < track.length; i++) {
+        if (!track[i].t || !track[i].la) continue;
+        var diff = Math.abs(new Date(track[i].t).getTime() - targetMs);
+        if (diff < bestDiff) {
+            bestDiff = diff;
+            best = track[i];
+        }
+    }
+    return best;
+}
+
+function updateIRCacheStatus() {
+    if (!irMeta) return;
+    var cached = irFrames.filter(function (f) { return f; }).length;
+    var sourceLabel = irMeta.source === 'mergir' ? 'MergIR 4km' : 'HURSAT-B1';
+    document.getElementById('ir-status').textContent =
+        irMeta.n_frames + ' frames (' + sourceLabel + ') — ' + cached + ' cached';
 }
 
 var irPrefetchQueue = [];    // Frames queued for prefetch
@@ -783,27 +986,24 @@ var IR_PREFETCH_AHEAD = 15;  // How many frames ahead to prefetch
 function loadIRFrame(idx) {
     if (!irMeta || !selectedStorm) return;
 
-    var frameEl = document.getElementById('ir-frame-img');
     var loadingEl = document.getElementById('ir-frame-loading');
 
     // Check cache
     if (irFrames[idx]) {
-        frameEl.src = irFrames[idx].frame;
+        displayIROnMap(irFrames[idx]);
         updateIRMeta(idx);
-        // Trigger prefetch of upcoming frames
         prefetchIRFrames(idx);
         return;
     }
 
-    loadingEl.style.display = 'flex';
+    if (loadingEl) loadingEl.style.display = 'flex';
 
     fetchIRFrameSingle(idx, function (data) {
         if (data && irFrameIdx === idx) {
-            frameEl.src = data.frame;
+            displayIROnMap(data);
         }
         updateIRMeta(idx);
-        loadingEl.style.display = 'none';
-        // Trigger prefetch of upcoming frames
+        if (loadingEl) loadingEl.style.display = 'none';
         prefetchIRFrames(idx);
     });
 }
@@ -812,7 +1012,22 @@ function fetchIRFrameSingle(idx, callback) {
     if (!irMeta || !selectedStorm) return;
     if (irFrames[idx]) { callback(irFrames[idx]); return; }
 
-    fetch(API_BASE + '/global/hursat/frame?sid=' + encodeURIComponent(selectedStorm.sid) + '&frame_idx=' + idx)
+    // Build URL based on source (MergIR needs lat/lon, use unified endpoint)
+    var frameUrl;
+    var source = irMeta.source || 'hursat';
+
+    if (source === 'mergir' && irMeta.frames && irMeta.frames[idx]) {
+        var fi = irMeta.frames[idx];
+        frameUrl = API_BASE + '/global/ir/frame?sid=' + encodeURIComponent(selectedStorm.sid) +
+            '&frame_idx=' + idx +
+            '&lat=' + fi.lat + '&lon=' + fi.lon;
+    } else {
+        // HURSAT: use either unified or legacy endpoint
+        frameUrl = API_BASE + '/global/ir/frame?sid=' + encodeURIComponent(selectedStorm.sid) +
+            '&frame_idx=' + idx;
+    }
+
+    fetch(frameUrl)
         .then(function (r) {
             if (!r.ok) throw new Error('Frame not available');
             return r.json();
@@ -823,7 +1038,18 @@ function fetchIRFrameSingle(idx, callback) {
         })
         .catch(function (err) {
             console.warn('Frame ' + idx + ' load failed:', err);
-            if (callback) callback(null);
+            // Fallback to legacy HURSAT endpoint if unified fails
+            if (source !== 'hursat') {
+                fetch(API_BASE + '/global/hursat/frame?sid=' + encodeURIComponent(selectedStorm.sid) + '&frame_idx=' + idx)
+                    .then(function (r) { return r.ok ? r.json() : null; })
+                    .then(function (data) {
+                        if (data) irFrames[idx] = data;
+                        if (callback) callback(data);
+                    })
+                    .catch(function () { if (callback) callback(null); });
+            } else {
+                if (callback) callback(null);
+            }
         });
 }
 
@@ -863,17 +1089,18 @@ function updateIRMeta(idx) {
     var frameInfoEl = document.getElementById('ir-frame-info');
 
     if (irMeta && irMeta.frames && irMeta.frames[idx]) {
-        datetimeEl.textContent = irMeta.frames[idx].datetime || '';
+        var dtText = irMeta.frames[idx].datetime || '';
+        var sat = irMeta.frames[idx].satellite || '';
+        if (datetimeEl) datetimeEl.textContent = dtText + (sat ? '  [' + sat + ']' : '');
     }
-    frameInfoEl.textContent = 'Frame ' + (idx + 1) + ' / ' + (irMeta ? irMeta.n_frames : '?');
-    document.getElementById('ir-slider').value = idx;
+    if (frameInfoEl) {
+        frameInfoEl.textContent = 'Frame ' + (idx + 1) + ' / ' + (irMeta ? irMeta.n_frames : '?');
+    }
+    var slider = document.getElementById('ir-slider');
+    if (slider) slider.value = idx;
 
     // Update cache status
-    if (irMeta) {
-        var cached = irFrames.filter(function (f) { return f; }).length;
-        document.getElementById('ir-status').textContent =
-            irMeta.n_frames + ' frames — ' + cached + ' cached';
-    }
+    updateIRCacheStatus();
 }
 
 window.toggleIRPlay = function () {
