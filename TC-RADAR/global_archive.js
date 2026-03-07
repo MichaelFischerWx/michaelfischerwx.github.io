@@ -792,9 +792,7 @@ function loadHURSAT(storm) {
     irFrames = [];
     irMeta = null;
     irFrameIdx = 0;
-    irBatchActive = false;
     irPrefetchActive = 0;
-    irPrefetchFrontier = 0;
     irFailedFrames = {};
     stopIRPlayback();
     removeIROverlay();
@@ -1117,8 +1115,9 @@ function updateIRCacheStatus() {
 
 var irPrefetchQueue = [];    // Frames queued for prefetch
 var irPrefetchActive = 0;    // Number of active prefetch requests
-var IR_PREFETCH_BATCH = 5;   // Concurrent prefetch requests (HURSAT)
-var IR_PREFETCH_BATCH_GRIDSAT = 8;  // Higher concurrency for GridSat (small subsets, no auth)
+var IR_PREFETCH_BATCH = 5;        // Concurrent prefetch requests (HURSAT)
+var IR_PREFETCH_BATCH_GRIDSAT = 8; // Higher concurrency for GridSat (small subsets, no auth)
+var IR_PREFETCH_BATCH_MERGIR = 6;  // MergIR (Earthdata auth, 4km subsets)
 var IR_PREFETCH_AHEAD = 15;  // How many frames ahead to prefetch
 
 function setIRLoadingText(msg) {
@@ -1247,153 +1246,57 @@ function fetchIRFrameSingle(idx, callback) {
         });
 }
 
-// Track the highest frame index we've queued for prefetch so the chain
-// continues through ALL frames, not just ±15 from the displayed frame.
-var irPrefetchFrontier = 0;
-
 function prefetchIRFrames(currentIdx) {
     if (!irMeta) return;
     var total = irMeta.n_frames;
     var source = irMeta.source || 'hursat';
 
-    // Advance the frontier to at least the current display position
-    if (currentIdx > irPrefetchFrontier) {
-        irPrefetchFrontier = currentIdx;
-    }
+    // All sources use parallel individual fetches with self-replenishing chains.
+    // Each completed fetch triggers another prefetchIRFrames() call, keeping
+    // all slots filled until every frame is cached.
+    var maxConcurrent;
+    if (source === 'gridsat') maxConcurrent = IR_PREFETCH_BATCH_GRIDSAT;
+    else if (source === 'mergir') maxConcurrent = IR_PREFETCH_BATCH_MERGIR;
+    else maxConcurrent = IR_PREFETCH_BATCH;
 
-    // For HURSAT/GridSat: use parallel individual fetches (each frame is a
-    // separate file on the server — batch endpoint serializes and is slower).
-    // For MergIR: use the batch endpoint (efficient server-side concurrency).
-    if (source === 'hursat' || source === 'gridsat') {
-        var maxConcurrent = source === 'gridsat' ? IR_PREFETCH_BATCH_GRIDSAT : IR_PREFETCH_BATCH;
-        if (irPrefetchActive >= maxConcurrent) return;  // Already at capacity
+    if (irPrefetchActive >= maxConcurrent) return;
 
-        var toFetch = [];
-        var scanned = 0;
-        var scanIdx = irPrefetchFrontier;
-        var maxIndividual = maxConcurrent - irPrefetchActive;  // Fill remaining slots
-        while (toFetch.length < maxIndividual && scanned < total) {
-            scanIdx = (scanIdx + 1) % total;
-            scanned++;
-            if (!irFrames[scanIdx] && !irFailedFrames[scanIdx]) {
-                toFetch.push(scanIdx);
-            }
-        }
-        // Also prefetch a few behind current display (for rewinding)
-        for (var j = 1; j <= 3; j++) {
-            var prevIdx = (currentIdx - j + total) % total;
-            if (!irFrames[prevIdx] && !irFailedFrames[prevIdx] && toFetch.indexOf(prevIdx) === -1 && toFetch.length < maxIndividual + 3) {
-                toFetch.push(prevIdx);
-            }
-        }
-        if (toFetch.length === 0) return;
-        for (var k = 0; k < toFetch.length; k++) {
-            if (toFetch[k] > irPrefetchFrontier) irPrefetchFrontier = toFetch[k];
-        }
-        // Fire individual fetches in parallel
-        toFetch.forEach(function (idx) {
-            irPrefetchActive++;
-            fetchIRFrameSingle(idx, function (data) {
-                irPrefetchActive--;
-                updateIRCacheStatus();
-                // Continue the chain after each individual fetch completes
-                prefetchIRFrames(irFrameIdx);
-            });
-        });
-        return;
-    }
-
-    // MergIR path: use batch endpoint
-    if (irBatchActive) return;  // Don't overlap batch requests
-
-    // Build list: scan forward from the frontier, wrapping around,
-    // until we find up to 10 uncached frames.
+    // Scan forward from current display position, wrapping around the full
+    // loop, to find uncached frames. Always prioritizes frames the user
+    // is about to see. No frontier needed — the scan itself skips cached frames.
     var toFetch = [];
-    var scanned = 0;
-    var scanIdx = irPrefetchFrontier;
-    while (toFetch.length < 10 && scanned < total) {
-        scanIdx = (scanIdx + 1) % total;
-        scanned++;
-        if (!irFrames[scanIdx] && !irFailedFrames[scanIdx]) {
-            toFetch.push(scanIdx);
+    var slots = maxConcurrent - irPrefetchActive;
+    for (var i = 0; i < total && toFetch.length < slots; i++) {
+        var idx = (currentIdx + 1 + i) % total;
+        if (!irFrames[idx] && !irFailedFrames[idx]) {
+            toFetch.push(idx);
         }
     }
 
     // Also prefetch a few behind current display (for rewinding)
     for (var j = 1; j <= 3; j++) {
         var prevIdx = (currentIdx - j + total) % total;
-        if (!irFrames[prevIdx] && !irFailedFrames[prevIdx] && toFetch.indexOf(prevIdx) === -1) {
+        if (!irFrames[prevIdx] && !irFailedFrames[prevIdx] &&
+            toFetch.indexOf(prevIdx) === -1 && toFetch.length < slots + 3) {
             toFetch.push(prevIdx);
         }
     }
 
     if (toFetch.length === 0) return;
 
-    // Update frontier to the highest index we're about to fetch
-    for (var k = 0; k < toFetch.length; k++) {
-        if (toFetch[k] > irPrefetchFrontier) {
-            irPrefetchFrontier = toFetch[k];
-        }
-    }
-
-    fetchIRBatch(toFetch);
-}
-
-var irBatchActive = false;
-
-function fetchIRBatch(indices) {
-    if (!irMeta || !selectedStorm || indices.length === 0) return;
-    irBatchActive = true;
-
-    var batchUrl = API_BASE + '/global/ir/batch?sid=' + encodeURIComponent(selectedStorm.sid) +
-        '&indices=' + indices.join(',');
-
-    fetch(batchUrl)
-        .then(function (r) {
-            if (!r.ok) throw new Error('Batch fetch failed (HTTP ' + r.status + ')');
-            return r.json();
-        })
-        .then(function (data) {
-            irBatchActive = false;
-            var frames = data.frames || {};
-            var loaded = 0;
-            Object.keys(frames).forEach(function (idxStr) {
-                var idx = parseInt(idxStr, 10);
-                var frameData = frames[idxStr];
-                if (frameData && frameData.frame) {
-                    irFrames[idx] = frameData;
-                    loaded++;
-                }
-            });
-            if (loaded > 0) {
-                updateIRCacheStatus();
-                // If the current frame was in this batch and hasn't been displayed yet, show it
-                if (irFrames[irFrameIdx] && !irOverlayLayer) {
-                    displayIROnMap(irFrames[irFrameIdx]);
-                    updateIRMeta(irFrameIdx);
-                    var loadingEl = document.getElementById('ir-frame-loading');
-                    if (loadingEl) loadingEl.style.display = 'none';
-                }
-            }
-            // Continue prefetching — chain never stops until all frames are cached
+    // Fire individual fetches in parallel — self-replenishing chain
+    toFetch.forEach(function (idx) {
+        irPrefetchActive++;
+        fetchIRFrameSingle(idx, function (data) {
+            irPrefetchActive--;
+            updateIRCacheStatus();
+            // Chain: each completion immediately fills the empty slot
             prefetchIRFrames(irFrameIdx);
-        })
-        .catch(function (err) {
-            irBatchActive = false;
-            console.warn('Batch fetch failed:', err);
-            // Fall back to individual fetches for this batch
-            indices.forEach(function (idx) {
-                if (irPrefetchActive >= IR_PREFETCH_BATCH) return;
-                irPrefetchActive++;
-                fetchIRFrameSingle(idx, function () {
-                    irPrefetchActive--;
-                    updateIRCacheStatus();
-                });
-            });
-            // Continue chain after a short delay to not hammer the server
-            setTimeout(function () { prefetchIRFrames(irFrameIdx); }, 3000);
         });
+    });
 }
+
+/* fetchIRBatch removed — all sources now use individual parallel fetches via prefetchIRFrames */
 
 function updateIRMeta(idx) {
     var datetimeEl = document.getElementById('ir-datetime');
