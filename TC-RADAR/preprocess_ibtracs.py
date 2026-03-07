@@ -103,10 +103,13 @@ def compute_24h_intensity_change(group):
     """
     Compute maximum 24-hour overwater intensity change for a storm.
 
-    Scans all pairs of track points ~24h apart (21-27h tolerance for
-    irregular cadence) and records:
-      - ri_24h: max wind increase in any 24h window (positive = intensification)
-      - rw_24h: max wind decrease in any 24h window (negative = weakening)
+    Uses ONLY synoptic 6-hourly fixes (00, 06, 12, 18 UTC with minute=0)
+    to match official methodology. IBTrACS winds are in 5-kt increments
+    at synoptic times; non-synoptic fixes (3-hourly, landfall) can have
+    interpolated values that produce spurious non-5kt deltas.
+
+    Compares each synoptic point to the point exactly 24h later (if it
+    exists), giving exactly 4 possible windows per day.
 
     Only uses points during tropical/subtropical phases (excludes ET/DS).
     Returns (ri_24h, rw_24h) as integers, or (None, None) if insufficient data.
@@ -123,24 +126,36 @@ def compute_24h_intensity_change(group):
     times = pts["ISO_TIME"].values  # numpy datetime64
     winds = pts["WIND"].values.astype(float)
 
-    max_increase = -999.0
-    max_decrease = 999.0
-
+    # Filter to synoptic 6-hourly points (00, 06, 12, 18 UTC with minute=0)
+    from datetime import datetime as _dt, timedelta as _td
+    valid = []
     for i in range(len(times)):
-        for j in range(i + 1, len(times)):
-            dt_hours = (times[j] - times[i]) / np.timedelta64(1, "h")
-            if dt_hours < 21:
-                continue
-            if dt_hours > 27:
-                break  # sorted by time, so all subsequent j will be even further
-            delta = winds[j] - winds[i]
-            if delta > max_increase:
-                max_increase = delta
-            if delta < max_decrease:
-                max_decrease = delta
+        t = pd.Timestamp(times[i])
+        if t.minute == 0 and t.hour in (0, 6, 12, 18):
+            valid.append((t.to_pydatetime(), int(winds[i])))
 
-    ri = round(max_increase) if max_increase > -999.0 else None
-    rw = round(max_decrease) if max_decrease < 999.0 else None
+    if len(valid) < 2:
+        return None, None
+
+    # Build lookup by datetime for O(1) 24h-ahead matching
+    time_map = {dt: w for dt, w in valid}
+
+    max_increase = None
+    max_decrease = None
+
+    for dt, w in valid:
+        dt_24 = dt + _td(hours=24)
+        w_24 = time_map.get(dt_24)
+        if w_24 is None:
+            continue
+        delta = w_24 - w
+        if max_increase is None or delta > max_increase:
+            max_increase = delta
+        if max_decrease is None or delta < max_decrease:
+            max_decrease = delta
+
+    ri = int(max_increase) if max_increase is not None else None
+    rw = int(max_decrease) if max_decrease is not None else None
     return ri, rw
 
 

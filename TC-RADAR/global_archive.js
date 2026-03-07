@@ -1578,26 +1578,31 @@ function renderIntensityOverview() {
 }
 
 function renderIntensityChangeOverview() {
-    // Stacked histogram of max 24-h wind increases by basin
-    var basins = Object.keys(BASIN_NAMES);
-    var traces = [];
-    basins.forEach(function (basin) {
-        var vals = allStorms
-            .filter(function (s) { return s.basin === basin && s.ri_24h != null; })
-            .map(function (s) { return s.ri_24h; });
-        if (vals.length === 0) return;
-        traces.push({
-            x: vals, type: 'histogram', name: basin,
-            marker: { color: BASIN_COLORS[basin], opacity: 0.7 },
+    // Two overlaid histograms: ri_24h (max 24h intensification) and rw_24h (max 24h weakening)
+    var riVals = allStorms.filter(function (s) { return s.ri_24h != null; }).map(function (s) { return s.ri_24h; });
+    var rwVals = allStorms.filter(function (s) { return s.rw_24h != null; }).map(function (s) { return s.rw_24h; });
+    var traces = [
+        {
+            x: riVals, type: 'histogram', name: 'Intensification',
+            marker: { color: '#60a5fa', opacity: 0.7 },
             xbins: { size: 5 },
-            hovertemplate: basin + '<br>%{x} kt: %{y} storms<extra></extra>'
-        });
-    });
+            hovertemplate: 'RI: %{x} kt/24h<br>%{y} storms<extra></extra>'
+        },
+        {
+            x: rwVals, type: 'histogram', name: 'Weakening',
+            marker: { color: '#f87171', opacity: 0.7 },
+            xbins: { size: 5 },
+            hovertemplate: 'RW: %{x} kt/24h<br>%{y} storms<extra></extra>'
+        }
+    ];
     var layout = Object.assign({}, PLOTLY_LAYOUT_BASE, {
         barmode: 'overlay',
-        xaxis: { title: { text: 'Max 24-h Increase (kt)', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' } },
+        xaxis: { title: { text: 'Max 24-h Wind Change (kt)', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' } },
         yaxis: { title: { text: 'Storms', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' } },
-        shapes: [{ type: 'line', x0: 30, x1: 30, y0: 0, y1: 1, yref: 'paper', line: { color: '#f87171', width: 1.5, dash: 'dash' } }],
+        shapes: [
+            { type: 'line', x0: 30, x1: 30, y0: 0, y1: 1, yref: 'paper', line: { color: '#fbbf24', width: 1.5, dash: 'dash' } },
+            { type: 'line', x0: -30, x1: -30, y0: 0, y1: 1, yref: 'paper', line: { color: '#fbbf24', width: 1.5, dash: 'dash' } }
+        ],
         showlegend: true,
         legend: { orientation: 'h', x: 0, y: 1.12, font: { size: 9, color: '#8b9ec2' } },
         margin: { l: 45, r: 10, t: 30, b: 45 }
@@ -2030,15 +2035,19 @@ window.toggleRIBasin = function (btn) {
 function renderRIModalCharts() {
     var basins = riModalBasins[0] === 'ALL' ? Object.keys(BASIN_NAMES) : riModalBasins;
 
-    // Histogram of max 24-h wind increase
+    // Histogram of max 24-h wind changes (both intensification and weakening)
     var histTraces = [];
     basins.forEach(function (basin) {
-        var vals = allStorms
+        var riVals = allStorms
             .filter(function (s) { return s.basin === basin && s.ri_24h != null; })
             .map(function (s) { return s.ri_24h; });
-        if (vals.length === 0) return;
+        var rwVals = allStorms
+            .filter(function (s) { return s.basin === basin && s.rw_24h != null; })
+            .map(function (s) { return s.rw_24h; });
+        var combined = riVals.concat(rwVals);
+        if (combined.length === 0) return;
         histTraces.push({
-            x: vals, type: 'histogram', name: BASIN_NAMES[basin],
+            x: combined, type: 'histogram', name: BASIN_NAMES[basin],
             marker: { color: BASIN_COLORS[basin], opacity: 0.65 },
             xbins: { size: 5 },
             hovertemplate: '<b>' + basin + '</b><br>%{x} kt/24h: %{y} storms<extra></extra>'
@@ -2048,17 +2057,21 @@ function renderRIModalCharts() {
         { type: 'line', x0: 30, x1: 30, y0: 0, y1: 1, yref: 'paper', line: { color: '#fbbf24', width: 1.5, dash: 'dash' } },
         { type: 'line', x0: 35, x1: 35, y0: 0, y1: 1, yref: 'paper', line: { color: '#f87171', width: 1.5, dash: 'dash' } },
         { type: 'line', x0: 50, x1: 50, y0: 0, y1: 1, yref: 'paper', line: { color: '#dc2626', width: 1.5, dash: 'dash' } },
-        { type: 'line', x0: 65, x1: 65, y0: 0, y1: 1, yref: 'paper', line: { color: '#a855f7', width: 1.5, dash: 'dash' } }
+        { type: 'line', x0: 65, x1: 65, y0: 0, y1: 1, yref: 'paper', line: { color: '#a855f7', width: 1.5, dash: 'dash' } },
+        { type: 'line', x0: -30, x1: -30, y0: 0, y1: 1, yref: 'paper', line: { color: '#fbbf24', width: 1.5, dash: 'dash' } },
+        { type: 'line', x0: -35, x1: -35, y0: 0, y1: 1, yref: 'paper', line: { color: '#f87171', width: 1.5, dash: 'dash' } }
     ];
     var riAnnotations = [
         { x: 30, y: 1.02, yref: 'paper', xanchor: 'center', text: '30kt', showarrow: false, font: { size: 9, color: '#fbbf24' } },
         { x: 35, y: 1.06, yref: 'paper', xanchor: 'center', text: '35kt', showarrow: false, font: { size: 9, color: '#f87171' } },
         { x: 50, y: 1.02, yref: 'paper', xanchor: 'center', text: '50kt', showarrow: false, font: { size: 9, color: '#dc2626' } },
-        { x: 65, y: 1.06, yref: 'paper', xanchor: 'center', text: '65kt', showarrow: false, font: { size: 9, color: '#a855f7' } }
+        { x: 65, y: 1.06, yref: 'paper', xanchor: 'center', text: '65kt', showarrow: false, font: { size: 9, color: '#a855f7' } },
+        { x: -30, y: 1.02, yref: 'paper', xanchor: 'center', text: '-30kt', showarrow: false, font: { size: 9, color: '#fbbf24' } },
+        { x: -35, y: 1.06, yref: 'paper', xanchor: 'center', text: '-35kt', showarrow: false, font: { size: 9, color: '#f87171' } }
     ];
     var histLayout = Object.assign({}, PLOTLY_LAYOUT_BASE, {
         barmode: 'overlay',
-        xaxis: { title: { text: 'Max 24-h Wind Increase (kt)', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' }, range: [-20, 120] },
+        xaxis: { title: { text: 'Max 24-h Wind Change (kt)', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' }, range: [-170, 120] },
         yaxis: { title: { text: 'Number of Storms', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' } },
         shapes: riShapes, annotations: riAnnotations,
         showlegend: true, legend: { orientation: 'h', x: 0, y: 1.18, font: { size: 10, color: '#8b9ec2' } },
@@ -2066,7 +2079,7 @@ function renderRIModalCharts() {
     });
     Plotly.newPlot('ri-hist-chart', histTraces, histLayout, PLOTLY_CONFIG);
 
-    // Exceedance CDF (1 - CDF): probability of exceeding threshold
+    // Exceedance CDF (1 - CDF): probability of exceeding RI threshold
     var cdfTraces = [];
     basins.forEach(function (basin) {
         var vals = allStorms
@@ -2083,30 +2096,38 @@ function renderRIModalCharts() {
         });
     });
     var cdfLayout = Object.assign({}, PLOTLY_LAYOUT_BASE, {
-        xaxis: { title: { text: 'Intensity Change Threshold (kt/24h)', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' }, range: [0, 100] },
+        xaxis: { title: { text: 'Intensification Threshold (kt/24h)', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' }, range: [0, 100] },
         yaxis: { title: { text: 'Exceedance Probability', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' }, range: [0, 1] },
-        shapes: riShapes, showlegend: true,
+        shapes: [
+            { type: 'line', x0: 30, x1: 30, y0: 0, y1: 1, yref: 'paper', line: { color: '#fbbf24', width: 1.5, dash: 'dash' } },
+            { type: 'line', x0: 35, x1: 35, y0: 0, y1: 1, yref: 'paper', line: { color: '#f87171', width: 1.5, dash: 'dash' } },
+            { type: 'line', x0: 50, x1: 50, y0: 0, y1: 1, yref: 'paper', line: { color: '#dc2626', width: 1.5, dash: 'dash' } },
+            { type: 'line', x0: 65, x1: 65, y0: 0, y1: 1, yref: 'paper', line: { color: '#a855f7', width: 1.5, dash: 'dash' } }
+        ],
+        showlegend: true,
         legend: { orientation: 'h', x: 0, y: 1.15, font: { size: 10, color: '#8b9ec2' } },
         margin: { l: 55, r: 10, t: 35, b: 45 }, hovermode: 'closest'
     });
     Plotly.newPlot('ri-cdf-chart', cdfTraces, cdfLayout, PLOTLY_CONFIG);
 
-    // Stats table
-    var html = '<table><thead><tr><th>Basin</th><th>Total</th><th>\u226530kt</th><th>\u226535kt</th><th>\u226550kt</th><th>% RI (\u226530)</th><th>Mean</th><th>Max</th></tr></thead><tbody>';
+    // Stats table — includes both RI and RW stats
+    var html = '<table><thead><tr><th>Basin</th><th>Storms</th><th>RI\u226530</th><th>RI\u226535</th><th>RI\u226550</th><th>% RI</th><th>Max RI</th><th>RW\u2264-30</th><th>Max RW</th></tr></thead><tbody>';
     basins.forEach(function (basin) {
-        var all = allStorms.filter(function (s) { return s.basin === basin && s.ri_24h != null; });
-        if (all.length === 0) return;
-        var ri30 = all.filter(function (s) { return s.ri_24h >= 30; }).length;
-        var ri35 = all.filter(function (s) { return s.ri_24h >= 35; }).length;
-        var ri50 = all.filter(function (s) { return s.ri_24h >= 50; }).length;
-        var mean = all.reduce(function (sum, s) { return sum + s.ri_24h; }, 0) / all.length;
-        var maxVal = Math.max.apply(null, all.map(function (s) { return s.ri_24h; }));
-        var pct = (ri30 / all.length * 100).toFixed(1);
+        var riAll = allStorms.filter(function (s) { return s.basin === basin && s.ri_24h != null; });
+        var rwAll = allStorms.filter(function (s) { return s.basin === basin && s.rw_24h != null; });
+        if (riAll.length === 0) return;
+        var ri30 = riAll.filter(function (s) { return s.ri_24h >= 30; }).length;
+        var ri35 = riAll.filter(function (s) { return s.ri_24h >= 35; }).length;
+        var ri50 = riAll.filter(function (s) { return s.ri_24h >= 50; }).length;
+        var maxRI = Math.max.apply(null, riAll.map(function (s) { return s.ri_24h; }));
+        var rw30 = rwAll.filter(function (s) { return s.rw_24h <= -30; }).length;
+        var maxRW = rwAll.length > 0 ? Math.min.apply(null, rwAll.map(function (s) { return s.rw_24h; })) : 'N/A';
+        var pct = (ri30 / riAll.length * 100).toFixed(1);
         html += '<tr><td style="color:' + BASIN_COLORS[basin] + '">' + BASIN_NAMES[basin] + '</td>' +
-            '<td class="mono">' + all.length + '</td><td class="mono">' + ri30 + '</td>' +
+            '<td class="mono">' + riAll.length + '</td><td class="mono">' + ri30 + '</td>' +
             '<td class="mono">' + ri35 + '</td><td class="mono">' + ri50 + '</td>' +
-            '<td class="mono">' + pct + '%</td><td class="mono">' + mean.toFixed(1) + '</td>' +
-            '<td class="mono">' + maxVal + '</td></tr>';
+            '<td class="mono">' + pct + '%</td><td class="mono">+' + maxRI + '</td>' +
+            '<td class="mono">' + rw30 + '</td><td class="mono">' + maxRW + '</td></tr>';
     });
     html += '</tbody></table>';
     document.getElementById('ri-stats-table').innerHTML = html;
