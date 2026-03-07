@@ -549,9 +549,12 @@
     flex: 1;
 }
 
-/* Leaflet image overlay for IR */
+/* Leaflet image overlay for IR — smooth bilinear for zoomed-in quality */
 .ir-overlay-image {
     image-rendering: auto;
+    /* Use high-quality resampling when browser scales the image */
+    image-rendering: smooth;
+    image-rendering: -webkit-optimize-contrast;
 }
 
 /* ══════════════════════════════════════════════════════════════

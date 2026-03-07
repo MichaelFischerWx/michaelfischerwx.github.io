@@ -1200,13 +1200,57 @@ var irPrefetchFrontier = 0;
 
 function prefetchIRFrames(currentIdx) {
     if (!irMeta) return;
-    if (irBatchActive) return;  // Don't overlap batch requests
     var total = irMeta.n_frames;
+    var source = irMeta.source || 'hursat';
 
     // Advance the frontier to at least the current display position
     if (currentIdx > irPrefetchFrontier) {
         irPrefetchFrontier = currentIdx;
     }
+
+    // For HURSAT: use parallel individual fetches (batch endpoint is too slow
+    // because each frame opens a separate NetCDF file on the server).
+    // For MergIR: use the batch endpoint (efficient server-side concurrency).
+    if (source === 'hursat') {
+        if (irPrefetchActive >= IR_PREFETCH_BATCH) return;  // Already at capacity
+
+        var toFetch = [];
+        var scanned = 0;
+        var scanIdx = irPrefetchFrontier;
+        var maxIndividual = IR_PREFETCH_BATCH - irPrefetchActive;  // Fill remaining slots
+        while (toFetch.length < maxIndividual && scanned < total) {
+            scanIdx = (scanIdx + 1) % total;
+            scanned++;
+            if (!irFrames[scanIdx] && !irFailedFrames[scanIdx]) {
+                toFetch.push(scanIdx);
+            }
+        }
+        // Also prefetch a few behind current display (for rewinding)
+        for (var j = 1; j <= 3; j++) {
+            var prevIdx = (currentIdx - j + total) % total;
+            if (!irFrames[prevIdx] && !irFailedFrames[prevIdx] && toFetch.indexOf(prevIdx) === -1 && toFetch.length < maxIndividual + 3) {
+                toFetch.push(prevIdx);
+            }
+        }
+        if (toFetch.length === 0) return;
+        for (var k = 0; k < toFetch.length; k++) {
+            if (toFetch[k] > irPrefetchFrontier) irPrefetchFrontier = toFetch[k];
+        }
+        // Fire individual fetches in parallel
+        toFetch.forEach(function (idx) {
+            irPrefetchActive++;
+            fetchIRFrameSingle(idx, function (data) {
+                irPrefetchActive--;
+                updateIRCacheStatus();
+                // Continue the chain after each individual fetch completes
+                prefetchIRFrames(irFrameIdx);
+            });
+        });
+        return;
+    }
+
+    // MergIR path: use batch endpoint
+    if (irBatchActive) return;  // Don't overlap batch requests
 
     // Build list: scan forward from the frontier, wrapping around,
     // until we find up to 10 uncached frames.
