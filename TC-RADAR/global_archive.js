@@ -1123,7 +1123,7 @@ function _handleIRMouseMove(e) {
         return;
     }
 
-    var tbC = tbK - 273;
+    var tbC = (tbK - 273.15).toFixed(1);
     var latStr = Math.abs(lat).toFixed(1) + (lat >= 0 ? '°N' : '°S');
     var lngStr = Math.abs(lng).toFixed(1) + (lng >= 0 ? '°E' : '°W');
     var html = '<span class="ir-tb-val">' + tbK + ' K</span>' +
