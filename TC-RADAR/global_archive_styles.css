@@ -662,6 +662,15 @@
    ══════════════════════════════════════════════════════════════ */
 
 
+/* CRITICAL: Force Leaflet containers to create their own stacking context.
+   Without this, Leaflet sets marker z-indices based on latitude (can reach millions),
+   and since .leaflet-container has position:relative but z-index:auto by default,
+   those marker z-indices compete in the ROOT stacking context — above our modals.
+   Setting z-index:0 contains all internal z-indices within the map. */
+.leaflet-container {
+    z-index: 0 !important;
+}
+
 .ace-modal-overlay {
     position: fixed;
     inset: 0;
@@ -1239,6 +1248,10 @@
     white-space: nowrap;
 }
 .analog-weight-row input[type="range"] {
+    position: relative;    /* override global position:absolute from tc_radar_styles */
+    pointer-events: auto;  /* override global pointer-events:none */
+    -webkit-appearance: auto;
+    appearance: auto;
     flex: 1;
     accent-color: var(--blue);
     height: 4px;
