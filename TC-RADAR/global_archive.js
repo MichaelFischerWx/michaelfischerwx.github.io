@@ -26,6 +26,12 @@ var detailTrackLayer = null; // L.layerGroup for detail track
 var activeBasins = ['ALL'];  // Active basin filter
 var filterDebounce = null;   // Debounce timer
 
+// F-Deck state
+var fdeckVisible = false;       // Whether f-deck traces are currently shown
+var fdeckData = null;           // Cached parsed f-deck data for current storm
+var fdeckLoaded = false;        // Whether f-deck data has been fetched for current storm
+var fdeckTraceCount = 0;        // Number of f-deck traces currently on the chart
+
 // IR animation state
 var irPlaying = false;
 var irFrameIdx = 0;
@@ -556,6 +562,22 @@ function renderStormDetail(storm) {
     renderIntensityTimeline(track, storm);
     renderDetailMap(track, storm);
 
+    // F-Deck toggle — show for storms with an ATCF ID (NHC-monitored)
+    var fdeckToggleWrap = document.getElementById('fdeck-toggle-wrap');
+    fdeckVisible = false;
+    fdeckData = null;
+    fdeckLoaded = false;
+    fdeckTraceCount = 0;
+    var hasNHCFDeck = storm.atcf_id && (storm.basin === 'NA' || storm.basin === 'EP');
+    if (hasNHCFDeck) {
+        fdeckToggleWrap.style.display = '';
+        document.getElementById('fdeck-toggle-btn').textContent = 'Show F-Deck';
+        document.getElementById('fdeck-toggle-btn').classList.remove('active');
+        document.getElementById('fdeck-status').textContent = '';
+    } else {
+        fdeckToggleWrap.style.display = 'none';
+    }
+
     // IR overlay — show toggle for storms with IR data (HURSAT 1978-2015, MergIR 1998+)
     var irToggleWrap = document.getElementById('ir-toggle-wrap');
     var hasIR = storm.hursat || storm.year >= 1998;
@@ -716,6 +738,143 @@ function _applyIntensityMarker(dtStr) {
 
     Plotly.relayout(chartEl, { shapes: baseShapes.concat([markerLine]) });
 }
+
+
+// ── NHC F-Deck Intensity Fixes ──────────────────────────────
+
+// F-Deck fix type visual config
+var FDECK_STYLES = {
+    DVTS: { name: 'Subjective Dvorak', color: '#ff9f43', symbol: 'diamond', size: 8 },
+    DVTO: { name: 'Objective Dvorak',  color: '#feca57', symbol: 'circle',  size: 7 },
+    AIRC: { name: 'Aircraft Recon',    color: '#ff6b6b', symbol: 'triangle-up', size: 9 }
+};
+
+window.toggleFDeck = function () {
+    if (!selectedStorm || !selectedStorm.atcf_id) return;
+
+    if (!fdeckLoaded) {
+        // First time — fetch data
+        var btn = document.getElementById('fdeck-toggle-btn');
+        var status = document.getElementById('fdeck-status');
+        btn.textContent = 'Loading...';
+        btn.disabled = true;
+        status.textContent = '';
+
+        var url = API_BASE + '/global/fdeck?atcf_id=' + encodeURIComponent(selectedStorm.atcf_id);
+        fetch(url)
+            .then(function (resp) {
+                if (!resp.ok) throw new Error('F-deck not available (' + resp.status + ')');
+                return resp.json();
+            })
+            .then(function (data) {
+                fdeckData = data.fixes;
+                fdeckLoaded = true;
+                fdeckVisible = true;
+                btn.textContent = 'Hide F-Deck';
+                btn.classList.add('active');
+                btn.disabled = false;
+
+                // Show counts
+                var total = (data.counts.DVTS || 0) + (data.counts.DVTO || 0) + (data.counts.AIRC || 0);
+                status.textContent = total + ' fixes';
+
+                addFDeckTraces();
+            })
+            .catch(function (err) {
+                btn.textContent = 'Show F-Deck';
+                btn.disabled = false;
+                status.textContent = 'Not available';
+                status.style.color = '#f87171';
+                console.warn('F-deck fetch failed:', err);
+            });
+        return;
+    }
+
+    // Toggle visibility of existing traces
+    fdeckVisible = !fdeckVisible;
+    var btn = document.getElementById('fdeck-toggle-btn');
+
+    if (fdeckVisible) {
+        btn.textContent = 'Hide F-Deck';
+        btn.classList.add('active');
+        addFDeckTraces();
+    } else {
+        btn.textContent = 'Show F-Deck';
+        btn.classList.remove('active');
+        removeFDeckTraces();
+    }
+};
+
+function addFDeckTraces() {
+    var chartEl = document.getElementById('timeline-chart');
+    if (!chartEl || !chartEl.data || !fdeckData) return;
+
+    // Remove any existing f-deck traces first
+    removeFDeckTraces();
+
+    var newTraces = [];
+    var fixTypes = ['DVTS', 'DVTO', 'AIRC'];
+
+    fixTypes.forEach(function (ft) {
+        var fixes = fdeckData[ft];
+        if (!fixes || fixes.length === 0) return;
+
+        var style = FDECK_STYLES[ft];
+        var times = [];
+        var winds = [];
+        var hovers = [];
+
+        fixes.forEach(function (f) {
+            times.push(f.time);
+            winds.push(f.wind_kt);
+            var hoverText = '<b>' + style.name + '</b><br>' +
+                f.time + '<br>' +
+                'Wind: ' + f.wind_kt + ' kt';
+            if (f.ci !== undefined) {
+                hoverText += '<br>CI#: ' + f.ci.toFixed(1);
+            }
+            hoverText += '<br>(' + f.lat.toFixed(1) + '°, ' + f.lon.toFixed(1) + '°)';
+            hovers.push(hoverText);
+        });
+
+        newTraces.push({
+            x: times,
+            y: winds,
+            type: 'scatter',
+            mode: 'markers',
+            name: style.name,
+            marker: {
+                color: style.color,
+                symbol: style.symbol,
+                size: style.size,
+                line: { color: 'rgba(255,255,255,0.5)', width: 1 }
+            },
+            hovertemplate: '%{text}<extra></extra>',
+            text: hovers,
+            yaxis: 'y'
+        });
+    });
+
+    if (newTraces.length > 0) {
+        Plotly.addTraces(chartEl, newTraces);
+        fdeckTraceCount = newTraces.length;
+    }
+}
+
+function removeFDeckTraces() {
+    var chartEl = document.getElementById('timeline-chart');
+    if (!chartEl || !chartEl.data || fdeckTraceCount === 0) return;
+
+    // F-deck traces are always the last N traces added
+    var totalTraces = chartEl.data.length;
+    var indices = [];
+    for (var i = totalTraces - fdeckTraceCount; i < totalTraces; i++) {
+        indices.push(i);
+    }
+    Plotly.deleteTraces(chartEl, indices);
+    fdeckTraceCount = 0;
+}
+
 
 function renderDetailMap(track, storm) {
     // Destroy existing map and IR overlay references
