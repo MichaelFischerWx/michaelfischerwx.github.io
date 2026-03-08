@@ -661,10 +661,18 @@
    ACE DRILL-DOWN MODAL
    ══════════════════════════════════════════════════════════════ */
 
-/* Cap Leaflet control z-index so controls don't bleed through modals */
+/* Cap Leaflet z-indices so map elements don't bleed through modals */
 .leaflet-top, .leaflet-bottom,
 .leaflet-control-container {
     z-index: 800 !important;
+}
+.leaflet-pane,
+.leaflet-map-pane,
+.leaflet-marker-pane,
+.leaflet-overlay-pane,
+.leaflet-shadow-pane,
+.leaflet-popup-pane {
+    z-index: 400 !important;
 }
 
 .ace-modal-overlay {

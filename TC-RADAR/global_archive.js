@@ -1201,8 +1201,8 @@ window.openAnalogFinder = function () {
     document.getElementById('analog-modal-title').textContent =
         'Analogs for ' + selectedStorm.name + ' (' + selectedStorm.year + ')';
     document.getElementById('analog-modal').style.display = 'flex';
-    // Hide Leaflet controls so they don't bleed through the modal
-    document.querySelectorAll('.leaflet-control-container').forEach(function (el) {
+    // Hide ALL Leaflet map containers so markers/controls don't bleed through
+    document.querySelectorAll('.leaflet-container').forEach(function (el) {
         el.style.visibility = 'hidden';
     });
     updateAnalogResults();
@@ -1210,8 +1210,8 @@ window.openAnalogFinder = function () {
 
 window.closeAnalogFinder = function () {
     document.getElementById('analog-modal').style.display = 'none';
-    // Restore Leaflet controls
-    document.querySelectorAll('.leaflet-control-container').forEach(function (el) {
+    // Restore all Leaflet map containers
+    document.querySelectorAll('.leaflet-container').forEach(function (el) {
         el.style.visibility = '';
     });
 };
