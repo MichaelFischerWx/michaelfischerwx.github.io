@@ -661,18 +661,13 @@
    ACE DRILL-DOWN MODAL
    ══════════════════════════════════════════════════════════════ */
 
-/* Cap Leaflet z-indices so map elements don't bleed through modals */
-.leaflet-top, .leaflet-bottom,
-.leaflet-control-container {
-    z-index: 800 !important;
-}
-.leaflet-pane,
-.leaflet-map-pane,
-.leaflet-marker-pane,
-.leaflet-overlay-pane,
-.leaflet-shadow-pane,
-.leaflet-popup-pane {
-    z-index: 400 !important;
+/* When a modal is open, completely hide ALL Leaflet map containers to prevent
+   markers, controls, and tile layers from bleeding through modal overlays.
+   Uses visibility:hidden on the container itself (not children) to collapse
+   the entire compositing subtree while preserving layout. */
+body.modal-open .leaflet-container {
+    visibility: hidden !important;
+    pointer-events: none !important;
 }
 
 .ace-modal-overlay {

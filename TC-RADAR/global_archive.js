@@ -1201,19 +1201,13 @@ window.openAnalogFinder = function () {
     document.getElementById('analog-modal-title').textContent =
         'Analogs for ' + selectedStorm.name + ' (' + selectedStorm.year + ')';
     document.getElementById('analog-modal').style.display = 'flex';
-    // Hide ALL Leaflet map containers so markers/controls don't bleed through
-    document.querySelectorAll('.leaflet-container').forEach(function (el) {
-        el.style.visibility = 'hidden';
-    });
+    document.body.classList.add('modal-open');
     updateAnalogResults();
 };
 
 window.closeAnalogFinder = function () {
     document.getElementById('analog-modal').style.display = 'none';
-    // Restore all Leaflet map containers
-    document.querySelectorAll('.leaflet-container').forEach(function (el) {
-        el.style.visibility = '';
-    });
+    document.body.classList.remove('modal-open');
 };
 
 window.toggleAnalogBasin = function (btn) {
@@ -2500,6 +2494,7 @@ window.openACEModal = function () {
     var modal = document.getElementById('ace-modal');
     modal.style.display = 'flex';
     document.body.style.overflow = 'hidden';
+    document.body.classList.add('modal-open');
 
     // Reset basin chips
     aceModalBasins = ['ALL'];
@@ -2516,6 +2511,7 @@ window.openACEModal = function () {
 window.closeACEModal = function () {
     document.getElementById('ace-modal').style.display = 'none';
     document.body.style.overflow = '';
+    document.body.classList.remove('modal-open');
     // Destroy season map to free memory
     if (aceSeasonMap) {
         aceSeasonMap.remove();
@@ -2873,6 +2869,7 @@ var intensityModalBasins = ['ALL'];
 window.openIntensityModal = function () {
     document.getElementById('intensity-modal').style.display = 'flex';
     document.body.style.overflow = 'hidden';
+    document.body.classList.add('modal-open');
     intensityModalBasins = ['ALL'];
     _resetBasinChips('intensity-basin-chips', 'ALL');
     renderIntensityModalCharts();
@@ -2880,6 +2877,7 @@ window.openIntensityModal = function () {
 window.closeIntensityModal = function () {
     document.getElementById('intensity-modal').style.display = 'none';
     document.body.style.overflow = '';
+    document.body.classList.remove('modal-open');
 };
 window.toggleIntensityBasin = function (btn) {
     intensityModalBasins = _toggleBasinChip(btn, 'intensity-basin-chips');
@@ -2963,6 +2961,7 @@ var riModalBasins = ['ALL'];
 window.openIntensityChangeModal = function () {
     document.getElementById('intensity-change-modal').style.display = 'flex';
     document.body.style.overflow = 'hidden';
+    document.body.classList.add('modal-open');
     riModalBasins = ['ALL'];
     _resetBasinChips('ri-basin-chips', 'ALL');
     renderRIModalCharts();
@@ -2970,6 +2969,7 @@ window.openIntensityChangeModal = function () {
 window.closeIntensityChangeModal = function () {
     document.getElementById('intensity-change-modal').style.display = 'none';
     document.body.style.overflow = '';
+    document.body.classList.remove('modal-open');
 };
 window.toggleRIBasin = function (btn) {
     riModalBasins = _toggleBasinChip(btn, 'ri-basin-chips');
@@ -3086,6 +3086,7 @@ var seasonalModalBasins = ['ALL'];
 window.openSeasonalModal = function () {
     document.getElementById('seasonal-modal').style.display = 'flex';
     document.body.style.overflow = 'hidden';
+    document.body.classList.add('modal-open');
     seasonalModalBasins = ['ALL'];
     _resetBasinChips('seasonal-basin-chips', 'ALL');
     renderSeasonalModalChart();
@@ -3093,6 +3094,7 @@ window.openSeasonalModal = function () {
 window.closeSeasonalModal = function () {
     document.getElementById('seasonal-modal').style.display = 'none';
     document.body.style.overflow = '';
+    document.body.classList.remove('modal-open');
 };
 window.toggleSeasonalBasin = function (btn) {
     seasonalModalBasins = _toggleBasinChip(btn, 'seasonal-basin-chips');
@@ -3166,6 +3168,7 @@ var lmiModalBasins = ['ALL'];
 window.openLMILatModal = function () {
     document.getElementById('lmi-modal').style.display = 'flex';
     document.body.style.overflow = 'hidden';
+    document.body.classList.add('modal-open');
     lmiModalBasins = ['ALL'];
     _resetBasinChips('lmi-basin-chips', 'ALL');
     renderLMIModalCharts();
@@ -3173,6 +3176,7 @@ window.openLMILatModal = function () {
 window.closeLMILatModal = function () {
     document.getElementById('lmi-modal').style.display = 'none';
     document.body.style.overflow = '';
+    document.body.classList.remove('modal-open');
 };
 window.toggleLMIBasin = function (btn) {
     lmiModalBasins = _toggleBasinChip(btn, 'lmi-basin-chips');
@@ -3294,12 +3298,23 @@ function showToast(message) {
 document.addEventListener('DOMContentLoaded', function () {
     loadData();
 
-    // Close ACE modal on Escape
+    // Close any open modal on Escape
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
-            var modal = document.getElementById('ace-modal');
-            if (modal && modal.style.display !== 'none') {
-                closeACEModal();
+            var modals = [
+                { id: 'analog-modal', close: closeAnalogFinder },
+                { id: 'ace-modal', close: closeACEModal },
+                { id: 'intensity-modal', close: closeIntensityModal },
+                { id: 'intensity-change-modal', close: closeIntensityChangeModal },
+                { id: 'seasonal-modal', close: closeSeasonalModal },
+                { id: 'lmi-modal', close: closeLMILatModal }
+            ];
+            for (var i = 0; i < modals.length; i++) {
+                var el = document.getElementById(modals[i].id);
+                if (el && el.style.display !== 'none') {
+                    modals[i].close();
+                    break;
+                }
             }
         }
     });
