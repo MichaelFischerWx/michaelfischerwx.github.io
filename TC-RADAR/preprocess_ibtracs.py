@@ -182,11 +182,11 @@ def load_ibtracs(csv_path):
         na_values=[" ", "", "MM"],
         keep_default_na=False,  # Prevent pandas from treating "NA" (North Atlantic) as NaN!
         skiprows=[1],  # skip units row
-        dtype={"SID": str, "NAME": str, "BASIN": str},
+        dtype={"SID": str, "NAME": str, "BASIN": str, "USA_ATCF_ID": str},
     )
 
     # Strip whitespace from string columns (IBTrACS CSV has leading spaces)
-    for col in ["SID", "NAME", "BASIN", "NATURE"]:
+    for col in ["SID", "NAME", "BASIN", "NATURE", "USA_ATCF_ID"]:
         if col in df.columns:
             df[col] = df[col].astype(str).str.strip()
             df[col] = df[col].replace({"nan": np.nan, "": np.nan})
@@ -265,6 +265,13 @@ def build_storms_json(df):
         # HURSAT availability
         hursat = HURSAT_START_YEAR <= year <= HURSAT_END_YEAR
 
+        # ATCF ID (e.g., "AL122024") — used for NHC f-deck lookups
+        atcf_id = None
+        if "USA_ATCF_ID" in group.columns:
+            atcf_vals = group["USA_ATCF_ID"].dropna().unique()
+            if len(atcf_vals) > 0:
+                atcf_id = str(atcf_vals[0]).strip()
+
         storm = {
             "sid": sid,
             "name": name,
@@ -285,6 +292,8 @@ def build_storms_json(df):
             "hursat": hursat,
             "cat": get_category(peak_wind),
         }
+        if atcf_id:
+            storm["atcf_id"] = atcf_id
         storms.append(storm)
 
     return storms
@@ -317,6 +326,12 @@ def build_tracks_json(df):
                 pt["w"] = int(row["WIND"])
             if not np.isnan(row["PRES"]):
                 pt["p"] = int(row["PRES"])
+            # Storm nature: TS=tropical, SS=subtropical, ET=extratropical,
+            # DS=disturbance, NR=not reported, MX=mixed
+            if "NATURE" in row.index and pd.notna(row["NATURE"]) and str(row["NATURE"]).strip():
+                nat = str(row["NATURE"]).strip()
+                if nat not in ("nan", ""):
+                    pt["n"] = nat
             points.append(pt)
         tracks[sid] = points
 

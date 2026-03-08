@@ -988,9 +988,9 @@ function renderCompareTimeline() {
         // Find reference point for alignment
         var refTime = null;
         if (compareAlign === 'genesis') {
-            for (var i = 0; i < track.length; i++) {
-                if (track[i].t) { refTime = new Date(track[i].t).getTime(); break; }
-            }
+            // Use genesis definition: first tropical/subtropical point w/ TD+ wind
+            var genPt = _trackGenesisPoint(track);
+            if (genPt && genPt.t) refTime = new Date(genPt.t).getTime();
         } else if (compareAlign === 'lmi') {
             var maxW = -1;
             for (var i = 0; i < track.length; i++) {
@@ -1118,8 +1118,9 @@ function renderCompareMap() {
             allLons.push(p0.lo, p1.lo);
         }
 
-        // Genesis marker
-        var first = track.find(function (p) { return p.la && p.lo; });
+        // Genesis marker (TD+ genesis, not first disturbance fix)
+        var genCoords = _trackGenesis(track);
+        var first = genCoords ? { la: genCoords[0], lo: genCoords[1] } : null;
         if (first) {
             L.circleMarker([first.la, first.lo], {
                 radius: 5, color: color, fillColor: color,
@@ -1389,10 +1390,70 @@ function _renderAnalogTable() {
 
 // ── Analog helper functions ─────────────────────────────────
 
+/**
+ * Genesis = first track point classified as a tropical or subtropical cyclone
+ * with a closed circulation, per standard TC community genesis definitions.
+ *
+ * Priority:
+ * 1. First point with NATURE = TS/SS (tropical/subtropical) AND wind >= 25 kt
+ * 2. First point with NATURE = TS/SS (if wind data missing but nature exists)
+ * 3. First point with wind >= 25 kt (if nature field not yet in track data)
+ * 4. First valid coordinate (ultimate fallback for sparse records)
+ */
 function _trackGenesis(track) {
     if (!track) return null;
+    var hasNature = track.some(function (p) { return p.n; });
+    if (hasNature) {
+        // Best: nature is tropical/subtropical AND has TD+ wind
+        for (var i = 0; i < track.length; i++) {
+            var p = track[i];
+            if (p.la != null && p.lo != null && (p.n === 'TS' || p.n === 'SS') && p.w != null && p.w >= 25) {
+                return [p.la, p.lo];
+            }
+        }
+        // Nature-only fallback (no wind data at genesis point)
+        for (var i = 0; i < track.length; i++) {
+            var p = track[i];
+            if (p.la != null && p.lo != null && (p.n === 'TS' || p.n === 'SS')) {
+                return [p.la, p.lo];
+            }
+        }
+    }
+    // Wind-only fallback (nature field not yet in track data)
+    for (var i = 0; i < track.length; i++) {
+        if (track[i].la != null && track[i].lo != null && track[i].w != null && track[i].w >= 25) {
+            return [track[i].la, track[i].lo];
+        }
+    }
+    // Ultimate fallback: first valid coordinate
     for (var i = 0; i < track.length; i++) {
         if (track[i].la != null && track[i].lo != null) return [track[i].la, track[i].lo];
+    }
+    return null;
+}
+
+/**
+ * Same logic as _trackGenesis but returns the full track point object
+ * (with t, la, lo, w, p, n fields) instead of just [lat, lon].
+ */
+function _trackGenesisPoint(track) {
+    if (!track) return null;
+    var hasNature = track.some(function (p) { return p.n; });
+    if (hasNature) {
+        for (var i = 0; i < track.length; i++) {
+            var p = track[i];
+            if (p.la != null && p.lo != null && (p.n === 'TS' || p.n === 'SS') && p.w != null && p.w >= 25) return p;
+        }
+        for (var i = 0; i < track.length; i++) {
+            var p = track[i];
+            if (p.la != null && p.lo != null && (p.n === 'TS' || p.n === 'SS')) return p;
+        }
+    }
+    for (var i = 0; i < track.length; i++) {
+        if (track[i].la != null && track[i].lo != null && track[i].w != null && track[i].w >= 25) return track[i];
+    }
+    for (var i = 0; i < track.length; i++) {
+        if (track[i].la != null && track[i].lo != null) return track[i];
     }
     return null;
 }
@@ -1473,9 +1534,10 @@ function renderDetailMap(track, storm) {
     // Add markers at key points
     var validPts = track.filter(function (p) { return p.la && p.lo; });
     if (validPts.length > 0) {
-        // Genesis marker
+        // Genesis marker (first tropical/subtropical point w/ TD+ intensity)
         trackAnnotationMarkers = [];
-        var gen = validPts[0];
+        var genPt = _trackGenesisPoint(track);
+        var gen = genPt || validPts[0]; // fallback to first point if no genesis found
         var genM = L.circleMarker([gen.la, gen.lo], {
             radius: 6, color: '#fff', fillColor: '#60a5fa', fillOpacity: 1, weight: 2
         }).bindTooltip('Genesis: ' + (gen.t || '').substring(0, 10), { className: 'track-tooltip' }).addTo(detailMap);
