@@ -742,11 +742,14 @@ function _applyIntensityMarker(dtStr) {
 
 // ── NHC F-Deck Intensity Fixes ──────────────────────────────
 
-// F-Deck fix type visual config
+// F-Deck fix type visual config — each category gets a distinct marker
 var FDECK_STYLES = {
-    DVTS: { name: 'Subjective Dvorak', color: '#ff9f43', symbol: 'diamond', size: 8 },
-    DVTO: { name: 'Objective Dvorak',  color: '#feca57', symbol: 'circle',  size: 7 },
-    AIRC: { name: 'Aircraft Recon',    color: '#ff6b6b', symbol: 'triangle-up', size: 9 }
+    DVTS:       { name: 'Subjective Dvorak', color: '#ff9f43', symbol: 'diamond',      size: 8 },
+    DVTO:       { name: 'Objective Dvorak',  color: '#feca57', symbol: 'circle',        size: 7 },
+    SFMR:       { name: 'SFMR',             color: '#ff6b6b', symbol: 'triangle-up',   size: 8 },
+    FL_WIND:    { name: 'Flight-Level',      color: '#ee5a24', symbol: 'triangle-down', size: 8 },
+    DROPSONDE:  { name: 'Dropsonde',         color: '#f8b739', symbol: 'square',        size: 7 },
+    AIRC_OTHER: { name: 'Aircraft (Other)',  color: '#e17055', symbol: 'cross',         size: 7 }
 };
 
 window.toggleFDeck = function () {
@@ -775,7 +778,8 @@ window.toggleFDeck = function () {
                 btn.disabled = false;
 
                 // Show counts
-                var total = (data.counts.DVTS || 0) + (data.counts.DVTO || 0) + (data.counts.AIRC || 0);
+                var total = 0;
+                Object.keys(data.counts).forEach(function (k) { total += data.counts[k] || 0; });
                 status.textContent = total + ' fixes';
 
                 addFDeckTraces();
@@ -813,7 +817,7 @@ function addFDeckTraces() {
     removeFDeckTraces();
 
     var newTraces = [];
-    var fixTypes = ['DVTS', 'DVTO', 'AIRC'];
+    var fixTypes = ['DVTS', 'DVTO', 'SFMR', 'FL_WIND', 'DROPSONDE', 'AIRC_OTHER'];
 
     fixTypes.forEach(function (ft) {
         var fixes = fdeckData[ft];
@@ -832,6 +836,12 @@ function addFDeckTraces() {
                 'Wind: ' + f.wind_kt + ' kt';
             if (f.ci !== undefined) {
                 hoverText += '<br>CI#: ' + f.ci.toFixed(1);
+            }
+            if (f.agency) {
+                hoverText += '<br>Agency: ' + f.agency;
+            }
+            if (f.level) {
+                hoverText += '<br>Level: ' + f.level;
             }
             hoverText += '<br>(' + f.lat.toFixed(1) + '°, ' + f.lon.toFixed(1) + '°)';
             hovers.push(hoverText);
