@@ -665,12 +665,13 @@
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.75);
-    z-index: 10000;
+    z-index: 100000;
     display: flex;
     align-items: center;
     justify-content: center;
     animation: ace-fade-in 0.2s ease;
     backdrop-filter: blur(4px);
+    isolation: isolate;
 }
 @keyframes ace-fade-in {
     from { opacity: 0; }

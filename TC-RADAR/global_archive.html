@@ -282,15 +282,7 @@
             <div class="compare-layout">
                 <div class="compare-header">
                     <h2>Storm Comparison</h2>
-                    <div class="compare-controls">
-                        <div class="compare-align-group">
-                            <span class="compare-align-label">Align by:</span>
-                            <button class="ga-btn ga-btn-xs compare-align active" data-align="absolute" onclick="setCompareAlign('absolute')">Date</button>
-                            <button class="ga-btn ga-btn-xs compare-align" data-align="genesis" onclick="setCompareAlign('genesis')">Genesis</button>
-                            <button class="ga-btn ga-btn-xs compare-align" data-align="lmi" onclick="setCompareAlign('lmi')">LMI</button>
-                        </div>
-                        <button class="ga-btn ga-btn-sm ga-btn-ghost" onclick="clearCompare()">Clear All</button>
-                    </div>
+                    <button class="ga-btn ga-btn-sm ga-btn-ghost" onclick="clearCompare()">Clear All</button>
                 </div>
                 <div id="compare-chips" class="compare-chips"></div>
                 <div id="compare-empty" class="compare-empty">
@@ -299,7 +291,15 @@
                 </div>
                 <div id="compare-content" class="detail-grid" style="display:none;">
                     <div class="detail-panel">
-                        <div class="panel-header"><h3>Intensity Comparison</h3></div>
+                        <div class="panel-header">
+                            <h3>Intensity Comparison</h3>
+                            <div class="compare-align-group">
+                                <span class="compare-align-label">Align:</span>
+                                <button class="ga-btn ga-btn-xs compare-align" data-align="absolute" onclick="setCompareAlign('absolute')">Date</button>
+                                <button class="ga-btn ga-btn-xs compare-align active" data-align="genesis" onclick="setCompareAlign('genesis')">Genesis</button>
+                                <button class="ga-btn ga-btn-xs compare-align" data-align="lmi" onclick="setCompareAlign('lmi')">LMI</button>
+                            </div>
+                        </div>
                         <div id="compare-timeline" class="chart-container"></div>
                     </div>
                     <div class="detail-panel detail-map-panel">

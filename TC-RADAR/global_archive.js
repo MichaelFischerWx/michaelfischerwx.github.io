@@ -896,7 +896,7 @@ function removeFDeckTraces() {
 
 var compareStorms = [];
 var compareMap = null;
-var compareAlign = 'absolute';
+var compareAlign = 'genesis';
 var COMPARE_COLORS = [
     '#00d4ff', '#ff6b6b', '#34d399', '#fbbf24',
     '#a78bfa', '#fb923c', '#f472b6', '#38bdf8'
@@ -1345,10 +1345,23 @@ function _renderAnalogTable() {
         return;
     }
 
+    // Reference storm row
+    var ref = analogReference;
     var html = '<table><thead><tr>' +
         '<th></th><th>#</th><th>Name</th><th>Year</th><th>Basin</th>' +
         '<th>Peak</th><th>RI 24h</th><th>ACE</th><th>Score</th>' +
-        '</tr></thead><tbody>';
+        '</tr></thead><tbody>' +
+        '<tr style="background:rgba(46,125,255,0.1);border-bottom:2px solid var(--blue);">' +
+        '<td style="text-align:center;font-size:0.7rem;color:#00d4ff;">REF</td>' +
+        '<td></td>' +
+        '<td style="color:' + getIntensityColor(ref.peak_wind_kt) + ';font-family:DM Sans;font-weight:700">' + (ref.name || 'UNNAMED') + '</td>' +
+        '<td>' + ref.year + '</td>' +
+        '<td>' + (ref.basin || '-') + '</td>' +
+        '<td style="font-weight:700">' + (ref.peak_wind_kt || '-') + '</td>' +
+        '<td style="font-weight:700">' + (ref.ri_24h != null ? '+' + ref.ri_24h : '-') + '</td>' +
+        '<td style="font-weight:700">' + (ref.ace || 0).toFixed(1) + '</td>' +
+        '<td style="color:#00d4ff;">—</td>' +
+        '</tr>';
 
     analogResults.forEach(function (r, i) {
         var s = r.storm;
