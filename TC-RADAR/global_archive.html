@@ -448,8 +448,27 @@
                         <button class="basin-chip" data-basin="SA" onclick="toggleRIBasin(this)">SA</button>
                     </div>
                 </div>
+                <div class="ace-basin-selector" style="margin-top:4px;">
+                    <span class="ace-basin-label">Period:</span>
+                    <div class="ace-basin-chips" id="ri-period-chips">
+                        <button class="basin-chip" data-period="all" onclick="toggleRIPeriod(this)">All Years</button>
+                        <button class="basin-chip" data-period="satellite" onclick="toggleRIPeriod(this)">Satellite (1966+)</button>
+                        <button class="basin-chip active" data-period="modern" onclick="toggleRIPeriod(this)">Modern (1980+)</button>
+                        <button class="basin-chip" data-period="30yr" onclick="toggleRIPeriod(this)">1991–2020</button>
+                        <button class="basin-chip" data-period="custom" onclick="toggleRIPeriod(this)">Custom</button>
+                    </div>
+                    <span id="ri-custom-range" style="display:none;margin-left:8px;align-items:center;gap:4px;">
+                        <input id="ri-year-start" type="number" min="1850" max="2025" value="1980" step="1"
+                               style="width:60px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:2px 4px;font-size:0.8rem;font-family:'JetBrains Mono',monospace;"
+                               onchange="applyRICustomPeriod()">
+                        <span style="color:var(--text-dim);font-size:0.8rem;">–</span>
+                        <input id="ri-year-end" type="number" min="1850" max="2025" value="2025" step="1"
+                               style="width:60px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:2px 4px;font-size:0.8rem;font-family:'JetBrains Mono',monospace;"
+                               onchange="applyRICustomPeriod()">
+                    </span>
+                </div>
                 <div class="ace-chart-wrap">
-                    <h3 class="ace-section-title">All Overwater 24-h Intensity Change Episodes <span style="font-size:0.75rem;color:var(--text-dim);font-weight:400;">(dashed lines = RI/RW thresholds)</span></h3>
+                    <h3 class="ace-section-title">All Overwater 24-h Intensity Change Episodes <span id="ri-episode-count" style="font-size:0.75rem;color:var(--text-dim);font-weight:400;"></span> <span style="font-size:0.75rem;color:var(--text-dim);font-weight:400;">(dashed lines = RI/RW thresholds)</span></h3>
                     <div id="ri-hist-chart" class="chart-container chart-tall"></div>
                 </div>
                 <div class="ace-chart-wrap">

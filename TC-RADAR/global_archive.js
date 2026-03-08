@@ -3097,6 +3097,39 @@ function renderIntensityModalCharts() {
 // ══════════════════════════════════════════════════════════════
 
 var riModalBasins = ['ALL'];
+var riModalPeriod = 'modern'; // 'all', 'satellite', 'modern', '30yr', 'custom'
+
+// Period definitions: [startYear, endYear]
+var RI_PERIODS = {
+    'all':       [0, 9999],
+    'satellite': [1966, 9999],
+    'modern':    [1980, 9999],
+    '30yr':      [1991, 2020],
+    'custom':    [1980, 2025]   // updated dynamically from inputs
+};
+
+// Helper: extract change values from intensityChangeData for a basin, filtered by period
+function _riFilteredVals(basin) {
+    if (!intensityChangeData || !intensityChangeData.basins || !intensityChangeData.basins[basin]) return [];
+    var range = RI_PERIODS[riModalPeriod] || RI_PERIODS['modern'];
+    var raw = intensityChangeData.basins[basin];
+    // New format: each entry is [change, year]
+    if (raw.length > 0 && Array.isArray(raw[0])) {
+        var out = [];
+        for (var i = 0; i < raw.length; i++) {
+            var yr = raw[i][1];
+            if (yr >= range[0] && yr <= range[1]) out.push(raw[i][0]);
+        }
+        return out;
+    }
+    // Legacy format: plain numbers (no year filtering possible)
+    return raw;
+}
+
+function _showCustomRange(show) {
+    var el = document.getElementById('ri-custom-range');
+    if (el) el.style.display = show ? 'inline-flex' : 'none';
+}
 
 window.openIntensityChangeModal = function () {
     document.getElementById('intensity-change-modal').style.display = 'flex';
@@ -3104,7 +3137,12 @@ window.openIntensityChangeModal = function () {
     document.body.classList.add('modal-open');
     _hideBackgroundElements();
     riModalBasins = ['ALL'];
+    riModalPeriod = 'modern';
     _resetBasinChips('ri-basin-chips', 'ALL');
+    // Reset period chips
+    var chips = document.querySelectorAll('#ri-period-chips .basin-chip');
+    chips.forEach(function (c) { c.classList.toggle('active', c.getAttribute('data-period') === 'modern'); });
+    _showCustomRange(false);
     renderRIModalCharts();
 };
 window.closeIntensityChangeModal = function () {
@@ -3117,29 +3155,62 @@ window.toggleRIBasin = function (btn) {
     riModalBasins = _toggleBasinChip(btn, 'ri-basin-chips');
     renderRIModalCharts();
 };
+window.toggleRIPeriod = function (btn) {
+    var chips = document.querySelectorAll('#ri-period-chips .basin-chip');
+    chips.forEach(function (c) { c.classList.remove('active'); });
+    btn.classList.add('active');
+    riModalPeriod = btn.getAttribute('data-period');
+    _showCustomRange(riModalPeriod === 'custom');
+    if (riModalPeriod === 'custom') {
+        // Read current input values
+        var y1 = parseInt(document.getElementById('ri-year-start').value) || 1980;
+        var y2 = parseInt(document.getElementById('ri-year-end').value) || 2025;
+        RI_PERIODS['custom'] = [y1, y2];
+    }
+    renderRIModalCharts();
+};
+window.applyRICustomPeriod = function () {
+    var y1 = parseInt(document.getElementById('ri-year-start').value) || 1980;
+    var y2 = parseInt(document.getElementById('ri-year-end').value) || 2025;
+    RI_PERIODS['custom'] = [Math.min(y1, y2), Math.max(y1, y2)];
+    if (riModalPeriod === 'custom') renderRIModalCharts();
+};
 
 function renderRIModalCharts() {
     var basins = riModalBasins[0] === 'ALL' ? Object.keys(BASIN_NAMES) : riModalBasins;
 
-    // ── Histogram: all overwater 24-h intensity change episodes ──
+    // ── Histogram: all overwater 24-h intensity change episodes (pre-binned for percentiles) ──
+    var BIN_SIZE = 5;
     var histTraces = [];
     basins.forEach(function (basin) {
-        // Use precomputed episode data if available, fall back to per-storm extremes
-        var vals;
-        if (intensityChangeData && intensityChangeData.basins && intensityChangeData.basins[basin]) {
-            vals = intensityChangeData.basins[basin];
-        } else {
-            // Fallback: combine ri_24h and rw_24h from per-storm data
-            var ri = allStorms.filter(function (s) { return s.basin === basin && s.ri_24h != null; }).map(function (s) { return s.ri_24h; });
-            var rw = allStorms.filter(function (s) { return s.basin === basin && s.rw_24h != null; }).map(function (s) { return s.rw_24h; });
-            vals = ri.concat(rw);
-        }
+        var vals = _riFilteredVals(basin);
         if (vals.length === 0) return;
+        // Sort and bin manually so we can compute percentiles
+        var sorted = vals.slice().sort(function (a, b) { return a - b; });
+        var n = sorted.length;
+        var binCounts = {};
+        vals.forEach(function (v) {
+            var b = Math.floor(v / BIN_SIZE) * BIN_SIZE;
+            binCounts[b] = (binCounts[b] || 0) + 1;
+        });
+        // Build cumulative percentile at each bin's upper edge
+        var binKeys = Object.keys(binCounts).map(Number).sort(function (a, b) { return a - b; });
+        var cumul = 0;
+        var binX = [], binY = [], binCustom = [];
+        binKeys.forEach(function (b) {
+            cumul += binCounts[b];
+            var pctUpper = (cumul / n * 100).toFixed(1);
+            var pctLower = ((cumul - binCounts[b]) / n * 100).toFixed(1);
+            binX.push(b + BIN_SIZE / 2); // bin center
+            binY.push(binCounts[b]);
+            binCustom.push([b + ' to ' + (b + BIN_SIZE) + ' kt/24h', pctLower + '–' + pctUpper + ' pctl']);
+        });
         histTraces.push({
-            x: vals, type: 'histogram', name: BASIN_NAMES[basin],
+            x: binX, y: binY, customdata: binCustom,
+            type: 'bar', name: BASIN_NAMES[basin],
             marker: { color: BASIN_COLORS[basin], opacity: 0.65 },
-            xbins: { size: 5 },
-            hovertemplate: '<b>' + basin + '</b><br>%{x} kt/24h: %{y} episodes<extra></extra>'
+            width: BIN_SIZE * 0.95,
+            hovertemplate: '<b>' + basin + '</b><br>%{customdata[0]}<br>%{y} episodes (%{customdata[1]})<extra></extra>'
         });
     });
     var riShapes = [
@@ -3158,30 +3229,29 @@ function renderRIModalCharts() {
         { x: -30, y: 1.02, yref: 'paper', xanchor: 'center', text: '-30kt', showarrow: false, font: { size: 9, color: '#fbbf24' } },
         { x: -35, y: 1.06, yref: 'paper', xanchor: 'center', text: '-35kt', showarrow: false, font: { size: 9, color: '#f87171' } }
     ];
-    // Episode count for subtitle
+    // Episode count + period — update HTML subtitle
     var totalEpisodes = 0;
     histTraces.forEach(function (t) { totalEpisodes += t.x.length; });
+    var periodRange = RI_PERIODS[riModalPeriod] || RI_PERIODS['modern'];
+    var yrMin = periodRange[0] || (intensityChangeData ? intensityChangeData.year_min : '?');
+    var yrMax = periodRange[1] < 9000 ? periodRange[1] : (intensityChangeData ? intensityChangeData.year_max : '?');
+    var epEl = document.getElementById('ri-episode-count');
+    if (epEl) epEl.textContent = '(' + totalEpisodes.toLocaleString() + ' episodes, ' + yrMin + '–' + yrMax + ')';
     var histLayout = Object.assign({}, PLOTLY_LAYOUT_BASE, {
         barmode: 'overlay',
-        title: { text: 'DISTRIBUTION OF OVERWATER 24-H INTENSITY CHANGE (' + totalEpisodes.toLocaleString() + ' EPISODES)', font: { size: 12, color: '#8b9ec2' }, x: 0.01, xanchor: 'left' },
         xaxis: { title: { text: '24-h Wind Change (kt)', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' } },
         yaxis: { title: { text: 'Number of 24-h Episodes', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' } },
         shapes: riShapes, annotations: riAnnotations,
-        showlegend: true, legend: { orientation: 'h', x: 0, y: 1.18, font: { size: 10, color: '#8b9ec2' } },
-        margin: { l: 55, r: 10, t: 55, b: 45 }
+        showlegend: true, legend: { orientation: 'h', x: 0, y: 1.08, font: { size: 10, color: '#8b9ec2' } },
+        margin: { l: 55, r: 10, t: 35, b: 45 }
     });
     Plotly.newPlot('ri-hist-chart', histTraces, histLayout, PLOTLY_CONFIG);
 
     // ── Exceedance CDF: probability of exceeding RI threshold (per-episode) ──
     var cdfTraces = [];
     basins.forEach(function (basin) {
-        var vals;
-        if (intensityChangeData && intensityChangeData.basins && intensityChangeData.basins[basin]) {
-            // Use only positive (intensification) episodes for the exceedance curve
-            vals = intensityChangeData.basins[basin].filter(function (v) { return v > 0; }).sort(function (a, b) { return a - b; });
-        } else {
-            vals = allStorms.filter(function (s) { return s.basin === basin && s.ri_24h != null; }).map(function (s) { return s.ri_24h; }).sort(function (a, b) { return a - b; });
-        }
+        // Use only positive (intensification) episodes for the exceedance curve
+        var vals = _riFilteredVals(basin).filter(function (v) { return v > 0; }).sort(function (a, b) { return a - b; });
         if (vals.length === 0) return;
         var exceed = vals.map(function (_, i) { return 1 - (i / vals.length); });
         cdfTraces.push({
@@ -3192,7 +3262,6 @@ function renderRIModalCharts() {
         });
     });
     var cdfLayout = Object.assign({}, PLOTLY_LAYOUT_BASE, {
-        title: { text: 'EXCEEDANCE PROBABILITY (INTENSIFICATION EPISODES)', font: { size: 12, color: '#8b9ec2' }, x: 0.01, xanchor: 'left' },
         xaxis: { title: { text: 'Intensification Threshold (kt/24h)', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' }, range: [0, 100] },
         yaxis: { title: { text: 'Exceedance Probability', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' }, range: [0, 1] },
         shapes: [
@@ -3202,24 +3271,19 @@ function renderRIModalCharts() {
             { type: 'line', x0: 65, x1: 65, y0: 0, y1: 1, yref: 'paper', line: { color: '#a855f7', width: 1.5, dash: 'dash' } }
         ],
         showlegend: true,
-        legend: { orientation: 'h', x: 0, y: 1.15, font: { size: 10, color: '#8b9ec2' } },
-        margin: { l: 55, r: 10, t: 45, b: 45 }, hovermode: 'closest'
+        legend: { orientation: 'h', x: 0, y: 1.08, font: { size: 10, color: '#8b9ec2' } },
+        margin: { l: 55, r: 10, t: 30, b: 45 }, hovermode: 'closest'
     });
     Plotly.newPlot('ri-cdf-chart', cdfTraces, cdfLayout, PLOTLY_CONFIG);
 
-    // Stats table — episode-based statistics from precomputed data
+    // Stats table — episode-based statistics, filtered by period
+    var range = RI_PERIODS[riModalPeriod] || RI_PERIODS['modern'];
+    var periodLabel = riModalPeriod === 'all' ? 'All Years' : riModalPeriod === 'satellite' ? '1966–Present' : riModalPeriod === '30yr' ? '1991–2020' : '1980–Present';
+    var plEl = document.getElementById('ri-period-label');
+    if (plEl) plEl.textContent = '';  // period shown in chips, no extra label needed
     var html = '<table><thead><tr><th>Basin</th><th>Episodes</th><th>Mean</th><th>\u226530kt</th><th>\u226535kt</th><th>\u226550kt</th><th>% RI\u226530</th><th>Max RI</th><th>\u2264-30kt</th><th>Max RW</th></tr></thead><tbody>';
     basins.forEach(function (basin) {
-        var vals;
-        if (intensityChangeData && intensityChangeData.basins && intensityChangeData.basins[basin]) {
-            vals = intensityChangeData.basins[basin];
-        } else {
-            // Fallback to per-storm extremes
-            var riAll = allStorms.filter(function (s) { return s.basin === basin && s.ri_24h != null; });
-            var rwAll = allStorms.filter(function (s) { return s.basin === basin && s.rw_24h != null; });
-            if (riAll.length === 0) return;
-            vals = riAll.map(function (s) { return s.ri_24h; }).concat(rwAll.map(function (s) { return s.rw_24h; }));
-        }
+        var vals = _riFilteredVals(basin);
         if (vals.length === 0) return;
         var mean = vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
         var ri30 = vals.filter(function (v) { return v >= 30; }).length;
