@@ -486,11 +486,32 @@ window.onWindFilterChange = function () {
     onFilterChange();
 };
 
+window.onAceFilterChange = function () {
+    var val = parseFloat(document.getElementById('filter-ace-min').value) || 0;
+    document.getElementById('ace-min-label').textContent = val === 0 ? '0 (All)' : '\u2265 ' + val.toFixed(0);
+    onFilterChange();
+};
+
+window.onRIFilterChange = function () {
+    var val = parseInt(document.getElementById('filter-ri-min').value) || 0;
+    document.getElementById('ri-min-label').textContent = val === 0 ? '0 kt (All)' : '\u2265 ' + val + ' kt/24h';
+    onFilterChange();
+};
+
+window.onRWFilterChange = function () {
+    var val = parseInt(document.getElementById('filter-rw-max').value) || 0;
+    document.getElementById('rw-max-label').textContent = val === 0 ? '0 kt (All)' : '\u2264 ' + val + ' kt/24h';
+    onFilterChange();
+};
+
 function applyFilters() {
     var nameQuery = (document.getElementById('filter-name').value || '').trim().toUpperCase();
     var yearMin = parseInt(document.getElementById('filter-year-min').value) || 0;
     var yearMax = parseInt(document.getElementById('filter-year-max').value) || 9999;
     var windMin = parseInt(document.getElementById('filter-wind-min').value) || 0;
+    var aceMin = parseFloat(document.getElementById('filter-ace-min').value) || 0;
+    var riMin = parseInt(document.getElementById('filter-ri-min').value) || 0;
+    var rwMax = parseInt(document.getElementById('filter-rw-max').value) || 0;
 
     filteredStorms = allStorms.filter(function (s) {
         // Name filter
@@ -501,8 +522,26 @@ function applyFilters() {
         if (s.year < yearMin || s.year > yearMax) return false;
         // Intensity filter
         if ((s.peak_wind_kt || 0) < windMin) return false;
+        // ACE filter
+        if (aceMin > 0 && (s.ace || 0) < aceMin) return false;
+        // RI filter (only when threshold > 0)
+        if (riMin > 0 && (s.ri_24h == null || s.ri_24h < riMin)) return false;
+        // RW filter (only when threshold < 0)
+        if (rwMax < 0 && (s.rw_24h == null || s.rw_24h > rwMax)) return false;
         return true;
     });
+
+    // Sort
+    var sortBy = document.getElementById('sort-by').value;
+    var comparators = {
+        'year-desc': function (a, b) { return (b.year || 0) - (a.year || 0); },
+        'year-asc':  function (a, b) { return (a.year || 0) - (b.year || 0); },
+        'wind-desc': function (a, b) { return (b.peak_wind_kt || 0) - (a.peak_wind_kt || 0); },
+        'ri-desc':   function (a, b) { return (b.ri_24h || 0) - (a.ri_24h || 0); },
+        'rw-desc':   function (a, b) { return (a.rw_24h || 0) - (b.rw_24h || 0); },
+        'ace-desc':  function (a, b) { return (b.ace || 0) - (a.ace || 0); }
+    };
+    if (comparators[sortBy]) filteredStorms.sort(comparators[sortBy]);
 
     renderMarkers(filteredStorms);
 }
@@ -513,6 +552,13 @@ window.resetFilters = function () {
     document.getElementById('filter-year-max').value = '';
     document.getElementById('filter-wind-min').value = 0;
     document.getElementById('wind-min-label').textContent = '0 kt (All)';
+    document.getElementById('filter-ace-min').value = 0;
+    document.getElementById('ace-min-label').textContent = '0 (All)';
+    document.getElementById('filter-ri-min').value = 0;
+    document.getElementById('ri-min-label').textContent = '0 kt (All)';
+    document.getElementById('filter-rw-max').value = 0;
+    document.getElementById('rw-max-label').textContent = '0 kt (All)';
+    document.getElementById('sort-by').value = 'year-desc';
 
     document.querySelectorAll('.basin-chip').forEach(function (c) { c.classList.remove('active'); });
     document.querySelector('.basin-chip[data-basin="ALL"]').classList.add('active');

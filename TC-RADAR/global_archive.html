@@ -151,6 +151,40 @@
                             </div>
                         </div>
 
+                        <label class="filter-label" for="filter-ace-min">Min ACE</label>
+                        <div class="intensity-filter">
+                            <input type="range" id="filter-ace-min" min="0" max="200" value="0" step="1" class="ga-range" oninput="onAceFilterChange()">
+                            <div class="range-value-row">
+                                <span id="ace-min-label" class="range-label">0 (All)</span>
+                            </div>
+                        </div>
+
+                        <label class="filter-label" for="filter-ri-min">Min 24-h Intensification</label>
+                        <div class="intensity-filter">
+                            <input type="range" id="filter-ri-min" min="0" max="100" value="0" step="5" class="ga-range" oninput="onRIFilterChange()">
+                            <div class="range-value-row">
+                                <span id="ri-min-label" class="range-label">0 kt (All)</span>
+                            </div>
+                        </div>
+
+                        <label class="filter-label" for="filter-rw-max">Max 24-h Weakening</label>
+                        <div class="intensity-filter">
+                            <input type="range" id="filter-rw-max" min="-100" max="0" value="0" step="5" class="ga-range" oninput="onRWFilterChange()">
+                            <div class="range-value-row">
+                                <span id="rw-max-label" class="range-label">0 kt (All)</span>
+                            </div>
+                        </div>
+
+                        <label class="filter-label" for="sort-by">Sort By</label>
+                        <select id="sort-by" class="ga-select" onchange="onFilterChange()">
+                            <option value="year-desc">Year (newest first)</option>
+                            <option value="year-asc">Year (oldest first)</option>
+                            <option value="wind-desc">Peak Intensity (strongest)</option>
+                            <option value="ri-desc">Max 24-h Intensification</option>
+                            <option value="rw-desc">Max 24-h Weakening</option>
+                            <option value="ace-desc">ACE (highest)</option>
+                        </select>
+
                         <div class="filter-actions">
                             <button class="ga-btn ga-btn-secondary" onclick="resetFilters()">Reset</button>
                         </div>
