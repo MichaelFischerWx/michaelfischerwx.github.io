@@ -3393,6 +3393,24 @@ function renderSeasonalModalChart() {
 // ══════════════════════════════════════════════════════════════
 
 var lmiModalBasins = ['ALL'];
+var lmiModalPeriod = 'modern';
+
+// Shared period definitions (same as RI modal)
+var LMI_PERIODS = {
+    'all':       [0, 9999],
+    'satellite': [1966, 9999],
+    'modern':    [1980, 9999],
+    '30yr':      [1991, 2020],
+    'custom':    [1980, 2025]
+};
+
+// Helper: filter allStorms by basin + LMI period
+function _lmiFilteredStorms(basin) {
+    var range = LMI_PERIODS[lmiModalPeriod] || LMI_PERIODS['modern'];
+    return allStorms.filter(function (s) {
+        return s.basin === basin && s.year >= range[0] && s.year <= range[1];
+    });
+}
 
 window.openLMILatModal = function () {
     document.getElementById('lmi-modal').style.display = 'flex';
@@ -3400,7 +3418,12 @@ window.openLMILatModal = function () {
     document.body.classList.add('modal-open');
     _hideBackgroundElements();
     lmiModalBasins = ['ALL'];
+    lmiModalPeriod = 'modern';
     _resetBasinChips('lmi-basin-chips', 'ALL');
+    var chips = document.querySelectorAll('#lmi-period-chips .basin-chip');
+    chips.forEach(function (c) { c.classList.toggle('active', c.getAttribute('data-period') === 'modern'); });
+    var cr = document.getElementById('lmi-custom-range');
+    if (cr) cr.style.display = 'none';
     renderLMIModalCharts();
 };
 window.closeLMILatModal = function () {
@@ -3413,17 +3436,44 @@ window.toggleLMIBasin = function (btn) {
     lmiModalBasins = _toggleBasinChip(btn, 'lmi-basin-chips');
     renderLMIModalCharts();
 };
+window.toggleLMIPeriod = function (btn) {
+    var chips = document.querySelectorAll('#lmi-period-chips .basin-chip');
+    chips.forEach(function (c) { c.classList.remove('active'); });
+    btn.classList.add('active');
+    lmiModalPeriod = btn.getAttribute('data-period');
+    var cr = document.getElementById('lmi-custom-range');
+    if (cr) cr.style.display = lmiModalPeriod === 'custom' ? 'inline-flex' : 'none';
+    if (lmiModalPeriod === 'custom') {
+        var y1 = parseInt(document.getElementById('lmi-year-start').value) || 1980;
+        var y2 = parseInt(document.getElementById('lmi-year-end').value) || 2025;
+        LMI_PERIODS['custom'] = [Math.min(y1, y2), Math.max(y1, y2)];
+    }
+    renderLMIModalCharts();
+};
+window.applyLMICustomPeriod = function () {
+    var y1 = parseInt(document.getElementById('lmi-year-start').value) || 1980;
+    var y2 = parseInt(document.getElementById('lmi-year-end').value) || 2025;
+    LMI_PERIODS['custom'] = [Math.min(y1, y2), Math.max(y1, y2)];
+    if (lmiModalPeriod === 'custom') renderLMIModalCharts();
+};
 
 function renderLMIModalCharts() {
     var basins = lmiModalBasins[0] === 'ALL' ? Object.keys(BASIN_NAMES) : lmiModalBasins;
 
+    // Period label
+    var range = LMI_PERIODS[lmiModalPeriod] || LMI_PERIODS['modern'];
+    var yrMin = range[0] || 1842;
+    var yrMax = range[1] < 9000 ? range[1] : 2025;
+    var totalStorms = 0;
+
     // Scatter: LMI latitude vs peak wind
     var scatterTraces = [];
     basins.forEach(function (basin) {
-        var storms = allStorms.filter(function (s) {
-            return s.basin === basin && s.lmi_lat != null && s.peak_wind_kt != null && s.peak_wind_kt > 0;
+        var storms = _lmiFilteredStorms(basin).filter(function (s) {
+            return s.lmi_lat != null && s.peak_wind_kt != null && s.peak_wind_kt > 0;
         });
         if (storms.length === 0) return;
+        totalStorms += storms.length;
         scatterTraces.push({
             x: storms.map(function (s) { return s.peak_wind_kt; }),
             y: storms.map(function (s) { return s.lmi_lat; }),
@@ -3434,10 +3484,14 @@ function renderLMIModalCharts() {
             hovertemplate: '<b>%{text}</b><br>%{x} kt, %{y:.1f}\u00B0<extra>' + basin + '</extra>'
         });
     });
+    // Update period info in header
+    var piEl = document.getElementById('lmi-period-info');
+    if (piEl) piEl.textContent = '(' + totalStorms.toLocaleString() + ' storms, ' + yrMin + '–' + yrMax + ')';
+
     var scatterLayout = Object.assign({}, PLOTLY_LAYOUT_BASE, {
         xaxis: { title: { text: 'Peak Wind (kt)', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' } },
         yaxis: { title: { text: 'LMI Latitude (\u00B0)', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' } },
-        showlegend: true, legend: { orientation: 'h', x: 0, y: 1.15, font: { size: 10, color: '#8b9ec2' } },
+        showlegend: true, legend: { orientation: 'h', x: 0, y: 1.08, font: { size: 10, color: '#8b9ec2' } },
         margin: { l: 55, r: 10, t: 35, b: 45 }, hovermode: 'closest'
     });
     Plotly.newPlot('lmi-scatter-chart', scatterTraces, scatterLayout, PLOTLY_CONFIG);
@@ -3445,8 +3499,8 @@ function renderLMIModalCharts() {
     // Box plots of LMI latitude
     var boxTraces = [];
     basins.forEach(function (basin) {
-        var lats = allStorms
-            .filter(function (s) { return s.basin === basin && s.lmi_lat != null; })
+        var lats = _lmiFilteredStorms(basin)
+            .filter(function (s) { return s.lmi_lat != null; })
             .map(function (s) { return s.lmi_lat; });
         if (lats.length === 0) return;
         boxTraces.push({ y: lats, name: basin, type: 'box', marker: { color: BASIN_COLORS[basin] }, boxmean: true });
@@ -3460,8 +3514,8 @@ function renderLMIModalCharts() {
     // Stats table
     var html = '<table><thead><tr><th>Basin</th><th>Count</th><th>Mean Lat</th><th>Median Lat</th><th>Min |Lat|</th><th>Max |Lat|</th></tr></thead><tbody>';
     basins.forEach(function (basin) {
-        var lats = allStorms
-            .filter(function (s) { return s.basin === basin && s.lmi_lat != null; })
+        var lats = _lmiFilteredStorms(basin)
+            .filter(function (s) { return s.lmi_lat != null; })
             .map(function (s) { return s.lmi_lat; })
             .sort(function (a, b) { return a - b; });
         if (lats.length === 0) return;
@@ -3469,7 +3523,7 @@ function renderLMIModalCharts() {
         var mean = lats.reduce(function (a, b) { return a + b; }, 0) / lats.length;
         var med = lats[Math.floor(lats.length * 0.5)];
         html += '<tr><td style="color:' + BASIN_COLORS[basin] + '">' + BASIN_NAMES[basin] + '</td>' +
-            '<td class="mono">' + lats.length + '</td><td class="mono">' + mean.toFixed(1) + '\u00B0</td>' +
+            '<td class="mono">' + lats.length.toLocaleString() + '</td><td class="mono">' + mean.toFixed(1) + '\u00B0</td>' +
             '<td class="mono">' + med.toFixed(1) + '\u00B0</td>' +
             '<td class="mono">' + Math.min.apply(null, absLats).toFixed(1) + '\u00B0</td>' +
             '<td class="mono">' + Math.max.apply(null, absLats).toFixed(1) + '\u00B0</td></tr>';

@@ -531,8 +531,27 @@
                         <button class="basin-chip" data-basin="SA" onclick="toggleLMIBasin(this)">SA</button>
                     </div>
                 </div>
+                <div class="ace-basin-selector" style="margin-top:4px;">
+                    <span class="ace-basin-label">Period:</span>
+                    <div class="ace-basin-chips" id="lmi-period-chips">
+                        <button class="basin-chip" data-period="all" onclick="toggleLMIPeriod(this)">All Years</button>
+                        <button class="basin-chip" data-period="satellite" onclick="toggleLMIPeriod(this)">Satellite (1966+)</button>
+                        <button class="basin-chip active" data-period="modern" onclick="toggleLMIPeriod(this)">Modern (1980+)</button>
+                        <button class="basin-chip" data-period="30yr" onclick="toggleLMIPeriod(this)">1991–2020</button>
+                        <button class="basin-chip" data-period="custom" onclick="toggleLMIPeriod(this)">Custom</button>
+                    </div>
+                    <span id="lmi-custom-range" style="display:none;align-items:center;gap:4px;margin-left:8px;">
+                        <input id="lmi-year-start" type="number" min="1850" max="2025" value="1980" step="1"
+                               style="width:60px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:2px 4px;font-size:0.8rem;font-family:'JetBrains Mono',monospace;"
+                               onchange="applyLMICustomPeriod()">
+                        <span style="color:var(--text-dim);font-size:0.8rem;">–</span>
+                        <input id="lmi-year-end" type="number" min="1850" max="2025" value="2025" step="1"
+                               style="width:60px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:2px 4px;font-size:0.8rem;font-family:'JetBrains Mono',monospace;"
+                               onchange="applyLMICustomPeriod()">
+                    </span>
+                </div>
                 <div class="ace-chart-wrap">
-                    <h3 class="ace-section-title">LMI Latitude vs Peak Wind</h3>
+                    <h3 class="ace-section-title">LMI Latitude vs Peak Wind <span id="lmi-period-info" style="font-size:0.75rem;color:var(--text-dim);font-weight:400;"></span></h3>
                     <div id="lmi-scatter-chart" class="chart-container chart-tall"></div>
                 </div>
                 <div class="ace-chart-wrap">
