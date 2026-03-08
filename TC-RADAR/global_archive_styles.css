@@ -661,12 +661,18 @@
    ACE DRILL-DOWN MODAL
    ══════════════════════════════════════════════════════════════ */
 
-/* When a modal is open, completely hide ALL Leaflet map containers to prevent
-   markers, controls, and tile layers from bleeding through modal overlays.
-   Uses visibility:hidden on the container itself (not children) to collapse
-   the entire compositing subtree while preserving layout. */
+/* When a modal is open, hide ALL Leaflet map internals.
+   Using opacity:0 because children cannot override parent opacity
+   (unlike visibility:hidden which children CAN override with visibility:visible).
+   Also cap z-index on map containers to stay below modals. */
 body.modal-open .leaflet-container {
-    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+body.modal-open #storm-map,
+body.modal-open #detail-map,
+body.modal-open #compare-map {
+    opacity: 0 !important;
     pointer-events: none !important;
 }
 

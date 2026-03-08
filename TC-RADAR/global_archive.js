@@ -369,7 +369,10 @@ function selectStorm(storm) {
     document.getElementById('card-basin').textContent = BASIN_NAMES[storm.basin] || storm.basin;
     document.getElementById('card-wind').textContent = storm.peak_wind_kt ? storm.peak_wind_kt + ' kt' : 'N/A';
     document.getElementById('card-pres').textContent = storm.min_pres_hpa ? storm.min_pres_hpa + ' hPa' : 'N/A';
-    document.getElementById('card-dates').textContent = (storm.start_date || '?') + ' → ' + (storm.end_date || '?');
+    var dateStr = (storm.start_date || '?') + ' → ' + (storm.end_date || '?');
+    var tcDur = _tcDuration(allTracks[storm.sid] || []);
+    if (tcDur) dateStr += ' (' + tcDur + ' as TC)';
+    document.getElementById('card-dates').textContent = dateStr;
     document.getElementById('card-ace').textContent = (storm.ace || 0).toFixed(1);
 
     var hursatEl = document.getElementById('card-hursat');
@@ -1107,12 +1110,16 @@ function renderCompareMap() {
 
         var color = COMPARE_COLORS[idx % COMPARE_COLORS.length];
 
-        // Draw track segments
+        // Draw track segments — non-TC phases (disturbance, ET) shown thinner/dashed
         for (var i = 1; i < track.length; i++) {
             var p0 = track[i - 1], p1 = track[i];
             if (!p0.la || !p0.lo || !p1.la || !p1.lo) continue;
+            var isTCPhase = _isTCNature(p1.n);
             L.polyline([[p0.la, p0.lo], [p1.la, p1.lo]], {
-                color: color, weight: 3, opacity: 0.85
+                color: color,
+                weight: isTCPhase ? 3 : 1.5,
+                opacity: isTCPhase ? 0.85 : 0.35,
+                dashArray: isTCPhase ? null : '6,4'
             }).addTo(compareMap);
             allLats.push(p0.la, p1.la);
             allLons.push(p0.lo, p1.lo);
@@ -1162,8 +1169,9 @@ function renderCompareTable() {
     compareStorms.forEach(function (s, idx) {
         var c = COMPARE_COLORS[idx % COMPARE_COLORS.length];
         var track = allTracks[s.sid] || [];
-        var duration = '';
-        if (s.start_date && s.end_date) {
+        var duration = _tcDuration(track);
+        if (!duration && s.start_date && s.end_date) {
+            // Fallback if no nature data: use total track span
             var days = Math.round((new Date(s.end_date) - new Date(s.start_date)) / 86400000);
             duration = days + 'd';
         }
@@ -1203,13 +1211,40 @@ window.openAnalogFinder = function () {
         'Analogs for ' + selectedStorm.name + ' (' + selectedStorm.year + ')';
     document.getElementById('analog-modal').style.display = 'flex';
     document.body.classList.add('modal-open');
+    _hideBackgroundElements();
     updateAnalogResults();
 };
 
 window.closeAnalogFinder = function () {
     document.getElementById('analog-modal').style.display = 'none';
     document.body.classList.remove('modal-open');
+    _showBackgroundElements();
 };
+
+// Helper: hide background elements that might bleed through modals
+function _hideBackgroundElements() {
+    // Hide Leaflet maps, range sliders, and Plotly toolbars
+    ['storm-map', 'detail-map', 'compare-map'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    });
+    document.querySelectorAll('.ga-range, .ir-slider').forEach(function (el) {
+        el.style.display = 'none';
+    });
+}
+function _showBackgroundElements() {
+    ['storm-map', 'detail-map', 'compare-map'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.style.display = '';
+    });
+    document.querySelectorAll('.ga-range, .ir-slider').forEach(function (el) {
+        el.style.display = '';
+    });
+    // Leaflet needs a nudge after being hidden
+    if (stormMap) stormMap.invalidateSize();
+    if (detailMap) detailMap.invalidateSize();
+    if (compareMap) compareMap.invalidateSize();
+}
 
 window.toggleAnalogBasin = function (btn) {
     var mode = btn.getAttribute('data-basin');
@@ -1467,6 +1502,29 @@ function _trackLMI(track) {
     return best && best.la != null ? [best.la, best.lo] : null;
 }
 
+/**
+ * Compute TC-only duration: time span where NATURE is TS or SS.
+ * Returns string like "5d" or "3.5d", or '' if no nature data.
+ */
+function _tcDuration(track) {
+    if (!track || !track.some(function (p) { return p.n; })) return '';
+    var tcPoints = track.filter(function (p) {
+        return p.t && (p.n === 'TS' || p.n === 'SS');
+    });
+    if (tcPoints.length < 2) return tcPoints.length === 1 ? '<1d' : '';
+    var first = new Date(tcPoints[0].t).getTime();
+    var last = new Date(tcPoints[tcPoints.length - 1].t).getTime();
+    var days = (last - first) / 86400000;
+    return days < 1 ? '<1d' : (days % 1 > 0.2 ? days.toFixed(1) + 'd' : Math.round(days) + 'd');
+}
+
+/** Returns true if nature code indicates a TC phase (tropical or subtropical). */
+function _isTCNature(n) {
+    // If no nature data, assume TC (backward compat with pre-nature track data)
+    if (!n) return true;
+    return n === 'TS' || n === 'SS';
+}
+
 function _stormDOY(storm) {
     if (!storm.start_date) return null;
     var d = new Date(storm.start_date);
@@ -1518,16 +1576,21 @@ function renderDetailMap(track, storm) {
         maxZoom: 12
     }).addTo(detailMap);
 
-    // Draw track
+    // Draw track — TC phases (TS/SS) get thick solid lines,
+    // non-TC phases (DS=disturbance, ET=extratropical) get thin dashed lines
     for (var i = 1; i < track.length; i++) {
         var p0 = track[i - 1];
         var p1 = track[i];
         if (!p0.la || !p0.lo || !p1.la || !p1.lo) continue;
 
-        var color = getIntensityColor(p1.w);
+        var isTCPhase = _isTCNature(p1.n);
+        var color = isTCPhase ? getIntensityColor(p1.w) : '#6b7280';
+        var weight = isTCPhase ? 3.5 : 1.5;
+        var opacity = isTCPhase ? 0.9 : 0.5;
+        var dashArray = isTCPhase ? null : '6,4';
         L.polyline(
             [[p0.la, p0.lo], [p1.la, p1.lo]],
-            { color: color, weight: 3.5, opacity: 0.9 }
+            { color: color, weight: weight, opacity: opacity, dashArray: dashArray }
         ).addTo(detailMap);
     }
 
@@ -2857,10 +2920,11 @@ function renderACESeasonMap(yearStorms) {
         for (var i = 1; i < validPts.length; i++) {
             var p0 = validPts[i - 1];
             var p1 = validPts[i];
-            var color = getIntensityColor(p1.w);
+            var isTCPhase = _isTCNature(p1.n);
+            var color = isTCPhase ? getIntensityColor(p1.w) : '#6b7280';
             var seg = L.polyline(
                 [[p0.la, p0.lo], [p1.la, p1.lo]],
-                { color: color, weight: 2.5, opacity: 0.85 }
+                { color: color, weight: isTCPhase ? 2.5 : 1, opacity: isTCPhase ? 0.85 : 0.35, dashArray: isTCPhase ? null : '4,3' }
             );
             seg._stormSid = storm.sid;
             seg.addTo(aceSeasonMap);
