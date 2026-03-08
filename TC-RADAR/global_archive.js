@@ -25,6 +25,9 @@ var trackLayer = null;       // L.layerGroup for browser track
 var detailTrackLayer = null; // L.layerGroup for detail track
 var activeBasins = ['ALL'];  // Active basin filter
 var filterDebounce = null;   // Debounce timer
+var mapViewMode = 'cluster'; // 'cluster' or 'tracks'
+var trackViewLayer = null;   // L.layerGroup for track-view polylines
+var trackCanvasRenderer = null; // L.canvas renderer (created after map init)
 
 // Overwater 24-h intensity change episodes (loaded from intensity_changes.json)
 var intensityChangeData = null;
@@ -299,6 +302,10 @@ function initBrowserMap() {
 
     trackLayer = L.layerGroup().addTo(stormMap);
 
+    // Canvas renderer + layer for track view (not added to map until toggled)
+    trackCanvasRenderer = L.canvas({ padding: 0.5 });
+    trackViewLayer = L.layerGroup();
+
     // Add legend
     var legend = L.control({ position: 'bottomright' });
     legend.onAdd = function () {
@@ -365,6 +372,134 @@ function renderMarkers(storms) {
 
     document.getElementById('filtered-count').textContent = storms.length.toLocaleString();
 }
+
+// ── Track view rendering ─────────────────────────────────────
+
+function renderTracks(storms) {
+    if (!trackViewLayer) return;
+    trackViewLayer.clearLayers();
+
+    var showMarkers = storms.length <= 3000;
+
+    storms.forEach(function (s) {
+        var track = allTracks[s.sid];
+        if (!track || track.length < 2) return;
+
+        // Collect valid points
+        var pts = [];
+        for (var i = 0; i < track.length; i++) {
+            var p = track[i];
+            if (p.la != null && p.lo != null) pts.push(p);
+        }
+        if (pts.length < 2) return;
+
+        var peakColor = getIntensityColor(s.peak_wind_kt);
+
+        // Walk points and batch consecutive same-phase segments into polylines
+        var runCoords = [[pts[0].la, pts[0].lo]];
+        var runIsTC = _isTCNature(pts[0].n);
+
+        for (var j = 1; j < pts.length; j++) {
+            var p = pts[j];
+            var isTC = _isTCNature(p.n);
+
+            if (isTC !== runIsTC) {
+                // Phase changed — flush current run
+                if (runCoords.length >= 2) {
+                    _addTrackPolyline(runCoords, runIsTC, peakColor, s);
+                }
+                // Start new run (include overlap point for continuity)
+                runCoords = [[pts[j - 1].la, pts[j - 1].lo]];
+                runIsTC = isTC;
+            }
+            runCoords.push([p.la, p.lo]);
+        }
+        // Flush final run
+        if (runCoords.length >= 2) {
+            _addTrackPolyline(runCoords, runIsTC, peakColor, s);
+        }
+
+        // Genesis marker
+        if (showMarkers) {
+            var gen = _trackGenesisPoint(track);
+            if (gen) {
+                L.circleMarker([gen.la, gen.lo], {
+                    renderer: trackCanvasRenderer,
+                    radius: 3, color: '#fff', weight: 1,
+                    fillColor: '#60a5fa', fillOpacity: 0.9, opacity: 0.8
+                }).bindTooltip((s.name || 'UNNAMED') + ' ' + s.year + ' genesis', { className: 'ga-tooltip' })
+                 .on('click', function () { selectStorm(s); })
+                 .addTo(trackViewLayer);
+            }
+
+            // LMI marker
+            var lmiPt = null, lmiW = -1;
+            for (var k = 0; k < pts.length; k++) {
+                if (pts[k].w != null && pts[k].w > lmiW) { lmiW = pts[k].w; lmiPt = pts[k]; }
+            }
+            if (lmiPt && lmiW > 0) {
+                L.circleMarker([lmiPt.la, lmiPt.lo], {
+                    renderer: trackCanvasRenderer,
+                    radius: 4, color: '#fff', weight: 1.5,
+                    fillColor: getIntensityColor(lmiW), fillOpacity: 0.9, opacity: 0.9
+                }).bindTooltip((s.name || 'UNNAMED') + ' ' + s.year + ' LMI: ' + lmiW + ' kt', { className: 'ga-tooltip' })
+                 .on('click', function () { selectStorm(s); })
+                 .addTo(trackViewLayer);
+            }
+        }
+    });
+
+    document.getElementById('filtered-count').textContent = storms.length.toLocaleString();
+}
+
+function _addTrackPolyline(coords, isTC, peakColor, storm) {
+    var opts = {
+        renderer: trackCanvasRenderer,
+        interactive: true
+    };
+    if (isTC) {
+        opts.color = peakColor;
+        opts.weight = 1.8;
+        opts.opacity = 0.6;
+    } else {
+        opts.color = '#6b7280';
+        opts.weight = 0.8;
+        opts.opacity = 0.25;
+        opts.dashArray = '4,3';
+    }
+    var line = L.polyline(coords, opts);
+    var cat = getIntensityCategory(storm.peak_wind_kt);
+    line.bindTooltip(
+        (storm.name || 'UNNAMED') + ' (' + storm.year + ') ' + cat + ' · ' +
+        (storm.peak_wind_kt || '?') + ' kt · ACE ' + (storm.ace || 0).toFixed(1),
+        { sticky: true, className: 'ga-tooltip' }
+    );
+    line.on('click', function () { selectStorm(storm); });
+    line.on('mouseover', function () {
+        if (isTC) this.setStyle({ weight: 3.5, opacity: 1 });
+    });
+    line.on('mouseout', function () {
+        if (isTC) this.setStyle({ weight: 1.8, opacity: 0.6 });
+    });
+    line.addTo(trackViewLayer);
+}
+
+window.setMapView = function (mode) {
+    mapViewMode = mode;
+    // Update toggle buttons
+    document.querySelectorAll('.view-toggle-btn').forEach(function (btn) {
+        btn.classList.toggle('active', btn.getAttribute('data-view') === mode);
+    });
+    if (mode === 'cluster') {
+        if (trackViewLayer) stormMap.removeLayer(trackViewLayer);
+        stormMap.addLayer(markerCluster);
+        renderMarkers(filteredStorms);
+    } else {
+        stormMap.removeLayer(markerCluster);
+        stormMap.addLayer(trackViewLayer);
+        renderTracks(filteredStorms);
+    }
+};
 
 // ── Storm selection ──────────────────────────────────────────
 
@@ -543,7 +678,11 @@ function applyFilters() {
     };
     if (comparators[sortBy]) filteredStorms.sort(comparators[sortBy]);
 
-    renderMarkers(filteredStorms);
+    if (mapViewMode === 'tracks') {
+        renderTracks(filteredStorms);
+    } else {
+        renderMarkers(filteredStorms);
+    }
 }
 
 window.resetFilters = function () {
@@ -565,7 +704,11 @@ window.resetFilters = function () {
     activeBasins = ['ALL'];
 
     filteredStorms = allStorms.slice();
-    renderMarkers(filteredStorms);
+    if (mapViewMode === 'tracks') {
+        renderTracks(filteredStorms);
+    } else {
+        renderMarkers(filteredStorms);
+    }
 
     // Hide storm card
     document.getElementById('storm-card').style.display = 'none';
