@@ -43,6 +43,9 @@ var irOpacityIdx = 0;
 var irFailedFrames = {};     // Track frames that permanently failed
 var irFollowStorm = true;    // Lock map view to follow storm center
 var irFollowZoomSet = false; // True after first fitBounds sets the zoom level
+var irCurrentTbGrid = null;  // Downsampled Tb grid for current frame (for hover)
+var irCurrentBounds = null;  // L.latLngBounds for current IR overlay
+var irTbTooltip = null;      // L.popup for Tb hover display
 
 // Climatology state
 var climRendered = false;
@@ -893,6 +896,12 @@ function removeIROverlay() {
     }
     irPositionMarker = null;
     irOverlayVisible = false;
+    // Clear Tb hover state
+    irCurrentTbGrid = null;
+    irCurrentBounds = null;
+    if (irTbTooltip && detailMap) {
+        try { detailMap.closePopup(irTbTooltip); } catch (e) {}
+    }
 }
 
 window.toggleIROverlay = function () {
@@ -933,6 +942,10 @@ window.toggleIROverlay = function () {
         }
         // Restore track annotation markers
         trackAnnotationMarkers.forEach(function (m) { if (detailMap) m.addTo(detailMap); });
+        // Close Tb hover tooltip
+        if (irTbTooltip && detailMap) {
+            try { detailMap.closePopup(irTbTooltip); } catch (e) {}
+        }
         // Remove intensity chart time marker
         updateIntensityMarker(null);
     }
@@ -1018,6 +1031,25 @@ function displayIROnMap(data) {
         className: 'ir-overlay-image'
     }).addTo(detailMap);
 
+    // Store Tb grid and bounds for hover display
+    irCurrentTbGrid = data.tb_grid || null;
+    irCurrentBounds = imageBounds;
+
+    // Set up mousemove handler (once) for Tb hover
+    if (!detailMap._irHoverAttached) {
+        irTbTooltip = L.popup({
+            closeButton: false, autoPan: false, autoClose: false,
+            className: 'ir-tb-tooltip', offset: [12, -12]
+        });
+        detailMap.on('mousemove', _handleIRMouseMove);
+        detailMap.on('mouseout', function () {
+            if (irTbTooltip && detailMap.hasLayer(irTbTooltip)) {
+                detailMap.closePopup(irTbTooltip);
+            }
+        });
+        detailMap._irHoverAttached = true;
+    }
+
     // Pan/zoom map based on follow mode
     if (irFollowStorm) {
         if (!irFollowZoomSet) {
@@ -1044,6 +1076,62 @@ function displayIROnMap(data) {
 
     // Update storm position marker
     updateIRPositionMarker(data);
+}
+
+var _irHoverThrottled = false;
+function _handleIRMouseMove(e) {
+    if (_irHoverThrottled) return;
+    _irHoverThrottled = true;
+    setTimeout(function () { _irHoverThrottled = false; }, 50); // ~20 Hz
+
+    if (!irOverlayVisible || !irCurrentTbGrid || !irCurrentBounds || !detailMap) {
+        if (irTbTooltip && detailMap && detailMap.hasLayer(irTbTooltip)) {
+            detailMap.closePopup(irTbTooltip);
+        }
+        return;
+    }
+
+    var lat = e.latlng.lat;
+    var lng = e.latlng.lng;
+    var b = irCurrentBounds;
+
+    // Check if cursor is within IR image bounds
+    if (lat < b.getSouth() || lat > b.getNorth() ||
+        lng < b.getWest() || lng > b.getEast()) {
+        if (irTbTooltip && detailMap.hasLayer(irTbTooltip)) {
+            detailMap.closePopup(irTbTooltip);
+        }
+        return;
+    }
+
+    // Map lat/lon to grid indices (grid is north-at-top, row 0 = north)
+    var grid = irCurrentTbGrid;
+    var nRows = grid.length;
+    var nCols = grid[0] ? grid[0].length : 0;
+    if (nRows === 0 || nCols === 0) return;
+
+    var fracY = (b.getNorth() - lat) / (b.getNorth() - b.getSouth());
+    var fracX = (lng - b.getWest()) / (b.getEast() - b.getWest());
+    var row = Math.min(Math.floor(fracY * nRows), nRows - 1);
+    var col = Math.min(Math.floor(fracX * nCols), nCols - 1);
+
+    var tbK = grid[row] ? grid[row][col] : null;
+    if (tbK == null) {
+        if (irTbTooltip && detailMap.hasLayer(irTbTooltip)) {
+            detailMap.closePopup(irTbTooltip);
+        }
+        return;
+    }
+
+    var tbC = tbK - 273;
+    var html = '<span class="ir-tb-val">' + tbK + ' K</span>' +
+               '<span class="ir-tb-sep"> / </span>' +
+               '<span class="ir-tb-val">' + tbC + ' °C</span>';
+
+    irTbTooltip.setLatLng(e.latlng).setContent(html);
+    if (!detailMap.hasLayer(irTbTooltip)) {
+        irTbTooltip.openOn(detailMap);
+    }
 }
 
 function updateIRPositionMarker(data) {
