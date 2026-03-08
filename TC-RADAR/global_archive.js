@@ -1201,11 +1201,19 @@ window.openAnalogFinder = function () {
     document.getElementById('analog-modal-title').textContent =
         'Analogs for ' + selectedStorm.name + ' (' + selectedStorm.year + ')';
     document.getElementById('analog-modal').style.display = 'flex';
+    // Hide Leaflet controls so they don't bleed through the modal
+    document.querySelectorAll('.leaflet-control-container').forEach(function (el) {
+        el.style.visibility = 'hidden';
+    });
     updateAnalogResults();
 };
 
 window.closeAnalogFinder = function () {
     document.getElementById('analog-modal').style.display = 'none';
+    // Restore Leaflet controls
+    document.querySelectorAll('.leaflet-control-container').forEach(function (el) {
+        el.style.visibility = '';
+    });
 };
 
 window.toggleAnalogBasin = function (btn) {
