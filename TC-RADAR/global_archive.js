@@ -1124,9 +1124,13 @@ function _handleIRMouseMove(e) {
     }
 
     var tbC = tbK - 273;
+    var latStr = Math.abs(lat).toFixed(1) + (lat >= 0 ? '°N' : '°S');
+    var lngStr = Math.abs(lng).toFixed(1) + (lng >= 0 ? '°E' : '°W');
     var html = '<span class="ir-tb-val">' + tbK + ' K</span>' +
                '<span class="ir-tb-sep"> / </span>' +
-               '<span class="ir-tb-val">' + tbC + ' °C</span>';
+               '<span class="ir-tb-val">' + tbC + ' °C</span>' +
+               '<span class="ir-tb-sep"> &nbsp; </span>' +
+               '<span class="ir-tb-coord">' + latStr + ', ' + lngStr + '</span>';
 
     irTbTooltip.setLatLng(e.latlng).setContent(html);
     if (!detailMap.hasLayer(irTbTooltip)) {

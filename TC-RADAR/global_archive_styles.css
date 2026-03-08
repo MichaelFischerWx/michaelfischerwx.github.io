@@ -870,6 +870,10 @@
     color: var(--slate);
     margin: 0 1px;
 }
+.ir-tb-coord {
+    color: var(--slate);
+    font-size: 0.72rem;
+}
 
 /* ══════════════════════════════════════════════════════════════
    RESPONSIVE
