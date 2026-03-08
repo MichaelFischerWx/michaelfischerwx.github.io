@@ -661,20 +661,6 @@
    ACE DRILL-DOWN MODAL
    ══════════════════════════════════════════════════════════════ */
 
-/* When a modal is open, hide ALL Leaflet map internals.
-   Using opacity:0 because children cannot override parent opacity
-   (unlike visibility:hidden which children CAN override with visibility:visible).
-   Also cap z-index on map containers to stay below modals. */
-body.modal-open .leaflet-container {
-    opacity: 0 !important;
-    pointer-events: none !important;
-}
-body.modal-open #storm-map,
-body.modal-open #detail-map,
-body.modal-open #compare-map {
-    opacity: 0 !important;
-    pointer-events: none !important;
-}
 
 .ace-modal-overlay {
     position: fixed;
@@ -685,8 +671,6 @@ body.modal-open #compare-map {
     align-items: center;
     justify-content: center;
     animation: ace-fade-in 0.2s ease;
-    backdrop-filter: blur(4px);
-    isolation: isolate;
 }
 @keyframes ace-fade-in {
     from { opacity: 0; }
