@@ -169,6 +169,12 @@ window.switchTab = function (tabName) {
     if (tabName === 'climatology' && !climRendered && allStorms.length > 0) {
         renderClimatology();
     }
+    if (tabName === 'compare') {
+        renderCompareView();
+        if (compareMap) {
+            setTimeout(function () { compareMap.invalidateSize(); }, 100);
+        }
+    }
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -885,6 +891,530 @@ function removeFDeckTraces() {
     fdeckTraceCount = 0;
 }
 
+
+// ── Storm Comparison Mode ───────────────────────────────────
+
+var compareStorms = [];
+var compareMap = null;
+var compareAlign = 'absolute';
+var COMPARE_COLORS = [
+    '#00d4ff', '#ff6b6b', '#34d399', '#fbbf24',
+    '#a78bfa', '#fb923c', '#f472b6', '#38bdf8'
+];
+var COMPARE_MAX = 8;
+
+window.addCurrentToCompare = function () {
+    if (!selectedStorm) return;
+    addToCompare(selectedStorm);
+};
+
+function addToCompare(storm) {
+    if (compareStorms.length >= COMPARE_MAX) {
+        showToast('Maximum ' + COMPARE_MAX + ' storms for comparison');
+        return;
+    }
+    if (compareStorms.some(function (s) { return s.sid === storm.sid; })) {
+        showToast(storm.name + ' already in comparison');
+        return;
+    }
+    compareStorms.push(storm);
+    showToast(storm.name + ' (' + storm.year + ') added to comparison');
+    renderCompareView();
+}
+
+window.removeFromCompare = function (sid) {
+    compareStorms = compareStorms.filter(function (s) { return s.sid !== sid; });
+    renderCompareView();
+};
+
+window.clearCompare = function () {
+    compareStorms = [];
+    renderCompareView();
+};
+
+window.setCompareAlign = function (mode) {
+    compareAlign = mode;
+    document.querySelectorAll('.compare-align').forEach(function (b) {
+        b.classList.toggle('active', b.getAttribute('data-align') === mode);
+    });
+    if (compareStorms.length > 0) renderCompareTimeline();
+};
+
+function renderCompareView() {
+    var chips = document.getElementById('compare-chips');
+    var empty = document.getElementById('compare-empty');
+    var content = document.getElementById('compare-content');
+    var tableWrap = document.getElementById('compare-table-wrap');
+
+    // Render chips
+    chips.innerHTML = compareStorms.map(function (s, i) {
+        var c = COMPARE_COLORS[i % COMPARE_COLORS.length];
+        return '<span class="compare-chip">' +
+            '<span class="compare-chip-dot" style="background:' + c + '"></span>' +
+            s.name + ' ' + s.year +
+            '<span class="compare-chip-remove" onclick="removeFromCompare(\'' + s.sid + '\')">&times;</span>' +
+            '</span>';
+    }).join('');
+
+    if (compareStorms.length === 0) {
+        empty.style.display = '';
+        content.style.display = 'none';
+        tableWrap.style.display = 'none';
+        return;
+    }
+
+    empty.style.display = 'none';
+    content.style.display = '';
+    tableWrap.style.display = '';
+
+    renderCompareTimeline();
+    renderCompareMap();
+    renderCompareTable();
+}
+
+function renderCompareTimeline() {
+    var traces = [];
+    var maxWind = 0;
+
+    compareStorms.forEach(function (storm, idx) {
+        var track = allTracks[storm.sid];
+        if (!track || track.length === 0) return;
+
+        var color = COMPARE_COLORS[idx % COMPARE_COLORS.length];
+        var times = [];
+        var winds = [];
+        var pres = [];
+
+        // Find reference point for alignment
+        var refTime = null;
+        if (compareAlign === 'genesis') {
+            for (var i = 0; i < track.length; i++) {
+                if (track[i].t) { refTime = new Date(track[i].t).getTime(); break; }
+            }
+        } else if (compareAlign === 'lmi') {
+            var maxW = -1;
+            for (var i = 0; i < track.length; i++) {
+                if (track[i].w && track[i].w > maxW) {
+                    maxW = track[i].w;
+                    refTime = new Date(track[i].t).getTime();
+                }
+            }
+        }
+
+        track.forEach(function (pt) {
+            if (!pt.t) return;
+            if (compareAlign === 'absolute') {
+                times.push(pt.t);
+            } else {
+                // Hours relative to reference point
+                var h = (new Date(pt.t).getTime() - refTime) / 3600000;
+                times.push(Math.round(h * 10) / 10);
+            }
+            winds.push(pt.w);
+            pres.push(pt.p);
+            if (pt.w && pt.w > maxWind) maxWind = pt.w;
+        });
+
+        traces.push({
+            x: times, y: winds,
+            type: 'scatter', mode: 'lines+markers',
+            name: storm.name + ' ' + storm.year + ' (wind)',
+            line: { color: color, width: 2.5 },
+            marker: { color: color, size: 5 },
+            hovertemplate: '<b>' + storm.name + ' ' + storm.year + '</b><br>%{x}<br>Wind: %{y} kt<extra></extra>',
+            yaxis: 'y'
+        });
+
+        // Pressure trace (thinner, dashed)
+        if (compareStorms.length <= 3) {
+            traces.push({
+                x: times, y: pres,
+                type: 'scatter', mode: 'lines',
+                name: storm.name + ' ' + storm.year + ' (pres)',
+                line: { color: color, width: 1, dash: 'dot' },
+                hovertemplate: '<b>' + storm.name + ' ' + storm.year + '</b><br>Pressure: %{y} hPa<extra></extra>',
+                yaxis: 'y2',
+                showlegend: false
+            });
+        }
+    });
+
+    var xTitle = compareAlign === 'absolute' ? 'Date/Time' :
+                 compareAlign === 'genesis' ? 'Hours from Genesis' : 'Hours from LMI';
+
+    var shapes = [
+        { type: 'rect', xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 0,   y1: 34,  fillcolor: 'rgba(96,165,250,0.06)', line: { width: 0 } },
+        { type: 'rect', xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 34,  y1: 64,  fillcolor: 'rgba(52,211,153,0.06)', line: { width: 0 } },
+        { type: 'rect', xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 64,  y1: 83,  fillcolor: 'rgba(251,191,36,0.06)', line: { width: 0 } },
+        { type: 'rect', xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 83,  y1: 96,  fillcolor: 'rgba(251,146,60,0.06)', line: { width: 0 } },
+        { type: 'rect', xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 96,  y1: 113, fillcolor: 'rgba(248,113,113,0.06)', line: { width: 0 } },
+        { type: 'rect', xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 113, y1: 137, fillcolor: 'rgba(239,68,68,0.06)', line: { width: 0 } },
+        { type: 'rect', xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 137, y1: 200, fillcolor: 'rgba(220,38,38,0.06)', line: { width: 0 } }
+    ];
+
+    var layout = Object.assign({}, PLOTLY_LAYOUT_BASE, {
+        xaxis: {
+            title: { text: xTitle, font: { size: 11, color: '#8b9ec2' } },
+            tickfont: { size: 10, color: '#8b9ec2' },
+            gridcolor: 'rgba(255,255,255,0.04)'
+        },
+        yaxis: {
+            title: { text: 'Max Wind (kt)', font: { size: 11, color: '#00d4ff' } },
+            tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' },
+            gridcolor: 'rgba(255,255,255,0.04)',
+            range: [0, Math.min(maxWind + 20, 200)]
+        },
+        yaxis2: {
+            title: { text: 'Pressure (hPa)', font: { size: 11, color: '#a78bfa' } },
+            tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' },
+            overlaying: 'y', side: 'right',
+            autorange: 'reversed', gridcolor: 'transparent'
+        },
+        shapes: shapes,
+        showlegend: true,
+        legend: {
+            x: 0.01, y: 0.99,
+            bgcolor: 'rgba(15,33,64,0.8)',
+            bordercolor: 'rgba(255,255,255,0.08)',
+            borderwidth: 1,
+            font: { size: 10, color: '#e2e8f0' }
+        },
+        margin: { l: 55, r: 55, t: 10, b: 45 }
+    });
+
+    Plotly.newPlot('compare-timeline', traces, layout, PLOTLY_CONFIG);
+}
+
+function renderCompareMap() {
+    if (compareMap) {
+        compareMap.remove();
+        compareMap = null;
+    }
+
+    compareMap = L.map('compare-map', {
+        center: [20, -60], zoom: 3,
+        zoomControl: true, worldCopyJump: true
+    });
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; CARTO', subdomains: 'abcd', maxZoom: 12
+    }).addTo(compareMap);
+
+    var allLats = [], allLons = [];
+
+    compareStorms.forEach(function (storm, idx) {
+        var track = allTracks[storm.sid];
+        if (!track || track.length < 2) return;
+
+        var color = COMPARE_COLORS[idx % COMPARE_COLORS.length];
+
+        // Draw track segments
+        for (var i = 1; i < track.length; i++) {
+            var p0 = track[i - 1], p1 = track[i];
+            if (!p0.la || !p0.lo || !p1.la || !p1.lo) continue;
+            L.polyline([[p0.la, p0.lo], [p1.la, p1.lo]], {
+                color: color, weight: 3, opacity: 0.85
+            }).addTo(compareMap);
+            allLats.push(p0.la, p1.la);
+            allLons.push(p0.lo, p1.lo);
+        }
+
+        // Genesis marker
+        var first = track.find(function (p) { return p.la && p.lo; });
+        if (first) {
+            L.circleMarker([first.la, first.lo], {
+                radius: 5, color: color, fillColor: color,
+                fillOpacity: 0.8, weight: 2
+            }).bindTooltip(storm.name + ' ' + storm.year + ' (genesis)', {
+                className: 'track-tooltip'
+            }).addTo(compareMap);
+        }
+
+        // LMI marker
+        var lmiPt = track.reduce(function (best, pt) {
+            return (pt.w && (!best || pt.w > best.w)) ? pt : best;
+        }, null);
+        if (lmiPt && lmiPt.la && lmiPt.lo) {
+            L.circleMarker([lmiPt.la, lmiPt.lo], {
+                radius: 7, color: '#fff', fillColor: color,
+                fillOpacity: 1, weight: 2
+            }).bindTooltip(storm.name + ' ' + storm.year + ' LMI: ' + (lmiPt.w || '?') + ' kt', {
+                className: 'track-tooltip'
+            }).addTo(compareMap);
+        }
+    });
+
+    // Fit bounds
+    if (allLats.length > 0) {
+        compareMap.fitBounds([
+            [Math.min.apply(null, allLats) - 3, Math.min.apply(null, allLons) - 5],
+            [Math.max.apply(null, allLats) + 3, Math.max.apply(null, allLons) + 5]
+        ]);
+    }
+}
+
+function renderCompareTable() {
+    var html = '<table><thead><tr>' +
+        '<th></th><th>Name</th><th>Year</th><th>Basin</th>' +
+        '<th>Peak Wind</th><th>Min Pres</th><th>ACE</th><th>RI 24h</th><th>Duration</th>' +
+        '</tr></thead><tbody>';
+
+    compareStorms.forEach(function (s, idx) {
+        var c = COMPARE_COLORS[idx % COMPARE_COLORS.length];
+        var track = allTracks[s.sid] || [];
+        var duration = '';
+        if (s.start_date && s.end_date) {
+            var days = Math.round((new Date(s.end_date) - new Date(s.start_date)) / 86400000);
+            duration = days + 'd';
+        }
+        html += '<tr>' +
+            '<td><span class="compare-chip-dot" style="background:' + c + '"></span></td>' +
+            '<td style="font-family:DM Sans;font-weight:600;color:' + c + '">' + s.name + '</td>' +
+            '<td>' + s.year + '</td>' +
+            '<td>' + (s.basin || '-') + '</td>' +
+            '<td>' + (s.peak_wind_kt || '-') + ' kt</td>' +
+            '<td>' + (s.min_pres_hpa || '-') + '</td>' +
+            '<td>' + (s.ace || 0).toFixed(1) + '</td>' +
+            '<td>' + (s.ri_24h != null ? '+' + s.ri_24h + ' kt' : '-') + '</td>' +
+            '<td>' + duration + '</td>' +
+            '</tr>';
+    });
+
+    html += '</tbody></table>';
+    document.getElementById('compare-table').innerHTML = html;
+}
+
+
+// ── Analog Storm Finder ─────────────────────────────────────
+
+var analogReference = null;      // The storm being matched against
+var analogResults = [];          // Computed results (top 20)
+var analogChecked = {};          // SID → boolean for checkboxes
+var analogBasinMode = 'same';    // 'same' or 'ALL'
+
+window.openAnalogFinder = function () {
+    if (!selectedStorm) {
+        showToast('Select a storm first');
+        return;
+    }
+    analogReference = selectedStorm;
+    analogChecked = {};
+    document.getElementById('analog-modal-title').textContent =
+        'Analogs for ' + selectedStorm.name + ' (' + selectedStorm.year + ')';
+    document.getElementById('analog-modal').style.display = 'flex';
+    updateAnalogResults();
+};
+
+window.closeAnalogFinder = function () {
+    document.getElementById('analog-modal').style.display = 'none';
+};
+
+window.toggleAnalogBasin = function (btn) {
+    var mode = btn.getAttribute('data-basin');
+    analogBasinMode = mode;
+    document.querySelectorAll('.analog-basin-filter .basin-chip').forEach(function (b) {
+        b.classList.toggle('active', b.getAttribute('data-basin') === mode);
+    });
+    updateAnalogResults();
+};
+
+window.toggleAnalogCheck = function (sid) {
+    analogChecked[sid] = !analogChecked[sid];
+    var count = Object.keys(analogChecked).filter(function (k) { return analogChecked[k]; }).length;
+    document.getElementById('analog-selected-count').textContent = count + ' selected';
+};
+
+window.compareSelectedAnalogs = function () {
+    // Add reference storm + checked analogs to comparison
+    compareStorms = [];
+    addToCompare(analogReference);
+    analogResults.forEach(function (r) {
+        if (analogChecked[r.storm.sid]) {
+            addToCompare(r.storm);
+        }
+    });
+    closeAnalogFinder();
+    switchTab('compare');
+};
+
+window.updateAnalogResults = function () {
+    if (!analogReference) return;
+
+    // Read weights from sliders
+    var weights = {
+        peak:    parseInt(document.getElementById('aw-peak').value),
+        ri:      parseInt(document.getElementById('aw-ri').value),
+        genesis: parseInt(document.getElementById('aw-genesis').value),
+        track:   parseInt(document.getElementById('aw-track').value),
+        season:  parseInt(document.getElementById('aw-season').value),
+        ace:     parseInt(document.getElementById('aw-ace').value)
+    };
+
+    // Update displayed values
+    document.getElementById('aw-peak-val').textContent = weights.peak;
+    document.getElementById('aw-ri-val').textContent = weights.ri;
+    document.getElementById('aw-genesis-val').textContent = weights.genesis;
+    document.getElementById('aw-track-val').textContent = weights.track;
+    document.getElementById('aw-season-val').textContent = weights.season;
+    document.getElementById('aw-ace-val').textContent = weights.ace;
+
+    var totalWeight = weights.peak + weights.ri + weights.genesis + weights.track + weights.season + weights.ace;
+    if (totalWeight === 0) totalWeight = 1;
+
+    var ref = analogReference;
+    var refTrack = allTracks[ref.sid] || [];
+    var refGenesis = _trackGenesis(refTrack);
+    var refLMI = _trackLMI(refTrack);
+    var refDOY = _stormDOY(ref);
+
+    // Score all storms
+    var scored = [];
+    for (var i = 0; i < allStorms.length; i++) {
+        var s = allStorms[i];
+        if (s.sid === ref.sid) continue;
+        if (analogBasinMode === 'same' && s.basin !== ref.basin) continue;
+
+        var score = 0;
+
+        // Peak intensity (0-1)
+        if (weights.peak > 0 && ref.peak_wind_kt != null && s.peak_wind_kt != null) {
+            score += weights.peak * (1 - Math.min(Math.abs(ref.peak_wind_kt - s.peak_wind_kt) / 100, 1));
+        }
+
+        // RI rate
+        if (weights.ri > 0 && ref.ri_24h != null && s.ri_24h != null) {
+            score += weights.ri * (1 - Math.min(Math.abs(ref.ri_24h - s.ri_24h) / 60, 1));
+        }
+
+        // Genesis location (haversine)
+        if (weights.genesis > 0 && refGenesis) {
+            var sGenesis = _trackGenesis(allTracks[s.sid] || []);
+            if (sGenesis) {
+                var dist = _haversineKm(refGenesis[0], refGenesis[1], sGenesis[0], sGenesis[1]);
+                score += weights.genesis * (1 - Math.min(dist / 3000, 1));
+            }
+        }
+
+        // Track shape (genesis→LMI bearing + distance)
+        if (weights.track > 0 && refGenesis && refLMI) {
+            var sTrack = allTracks[s.sid] || [];
+            var sGenesis = _trackGenesis(sTrack);
+            var sLMI = _trackLMI(sTrack);
+            if (sGenesis && sLMI) {
+                var refBearing = _bearing(refGenesis[0], refGenesis[1], refLMI[0], refLMI[1]);
+                var sBearing = _bearing(sGenesis[0], sGenesis[1], sLMI[0], sLMI[1]);
+                var bearingDiff = Math.abs(refBearing - sBearing);
+                if (bearingDiff > 180) bearingDiff = 360 - bearingDiff;
+                var refDist = _haversineKm(refGenesis[0], refGenesis[1], refLMI[0], refLMI[1]);
+                var sDist = _haversineKm(sGenesis[0], sGenesis[1], sLMI[0], sLMI[1]);
+                var distScore = 1 - Math.min(Math.abs(refDist - sDist) / 2000, 1);
+                var bearingScore = 1 - bearingDiff / 180;
+                score += weights.track * (bearingScore * 0.5 + distScore * 0.5);
+            }
+        }
+
+        // Time of year (circular DOY)
+        if (weights.season > 0 && refDOY != null) {
+            var sDOY = _stormDOY(s);
+            if (sDOY != null) {
+                var doyDiff = Math.abs(refDOY - sDOY);
+                if (doyDiff > 182) doyDiff = 365 - doyDiff;
+                score += weights.season * (1 - doyDiff / 182);
+            }
+        }
+
+        // ACE
+        if (weights.ace > 0 && ref.ace != null && s.ace != null) {
+            score += weights.ace * (1 - Math.min(Math.abs(ref.ace - s.ace) / 50, 1));
+        }
+
+        scored.push({ storm: s, score: score / totalWeight });
+    }
+
+    // Sort and take top 20
+    scored.sort(function (a, b) { return b.score - a.score; });
+    analogResults = scored.slice(0, 20);
+
+    // Render results table
+    _renderAnalogTable();
+};
+
+function _renderAnalogTable() {
+    var container = document.getElementById('analog-results');
+    if (analogResults.length === 0) {
+        container.innerHTML = '<p style="color:#8b9ec2;text-align:center;padding:20px;">No matching storms found.</p>';
+        return;
+    }
+
+    var html = '<table><thead><tr>' +
+        '<th></th><th>#</th><th>Name</th><th>Year</th><th>Basin</th>' +
+        '<th>Peak</th><th>RI 24h</th><th>ACE</th><th>Score</th>' +
+        '</tr></thead><tbody>';
+
+    analogResults.forEach(function (r, i) {
+        var s = r.storm;
+        var checked = analogChecked[s.sid] ? ' checked' : '';
+        var pct = Math.round(r.score * 100);
+        var barW = Math.max(pct * 0.8, 2);
+        html += '<tr>' +
+            '<td><input type="checkbox" onchange="toggleAnalogCheck(\'' + s.sid + '\')"' + checked + '></td>' +
+            '<td>' + (i + 1) + '</td>' +
+            '<td style="color:' + getIntensityColor(s.peak_wind_kt) + ';font-family:DM Sans;font-weight:600">' + (s.name || 'UNNAMED') + '</td>' +
+            '<td>' + s.year + '</td>' +
+            '<td>' + (s.basin || '-') + '</td>' +
+            '<td>' + (s.peak_wind_kt || '-') + '</td>' +
+            '<td>' + (s.ri_24h != null ? '+' + s.ri_24h : '-') + '</td>' +
+            '<td>' + (s.ace || 0).toFixed(1) + '</td>' +
+            '<td>' + pct + '%<span class="analog-score-bar" style="width:' + barW + 'px"></span></td>' +
+            '</tr>';
+    });
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+// ── Analog helper functions ─────────────────────────────────
+
+function _trackGenesis(track) {
+    if (!track) return null;
+    for (var i = 0; i < track.length; i++) {
+        if (track[i].la != null && track[i].lo != null) return [track[i].la, track[i].lo];
+    }
+    return null;
+}
+
+function _trackLMI(track) {
+    if (!track) return null;
+    var best = null;
+    for (var i = 0; i < track.length; i++) {
+        if (track[i].w && (!best || track[i].w > best.w)) best = track[i];
+    }
+    return best && best.la != null ? [best.la, best.lo] : null;
+}
+
+function _stormDOY(storm) {
+    if (!storm.start_date) return null;
+    var d = new Date(storm.start_date);
+    var start = new Date(d.getFullYear(), 0, 0);
+    return Math.floor((d - start) / 86400000);
+}
+
+function _haversineKm(lat1, lon1, lat2, lon2) {
+    var R = 6371;
+    var dLat = (lat2 - lat1) * Math.PI / 180;
+    var dLon = (lon2 - lon1) * Math.PI / 180;
+    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function _bearing(lat1, lon1, lat2, lon2) {
+    var dLon = (lon2 - lon1) * Math.PI / 180;
+    var y = Math.sin(dLon) * Math.cos(lat2 * Math.PI / 180);
+    var x = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180) -
+            Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos(dLon);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
 
 function renderDetailMap(track, storm) {
     // Destroy existing map and IR overlay references

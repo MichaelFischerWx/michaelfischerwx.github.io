@@ -85,6 +85,9 @@
         <button class="ga-tab" role="tab" aria-selected="false" data-tab="climatology" onclick="switchTab('climatology')">
             Climatology
         </button>
+        <button class="ga-tab" role="tab" aria-selected="false" data-tab="compare" onclick="switchTab('compare')">
+            Compare
+        </button>
     </div>
 
     <!-- ── Main content ───────────────────────────────────────── -->
@@ -187,7 +190,13 @@
         <section id="tab-detail" class="ga-tab-content" role="tabpanel">
             <div class="detail-layout">
                 <div class="detail-header">
-                    <button class="ga-btn ga-btn-ghost" onclick="switchTab('browser')">← Back to Browser</button>
+                    <div class="detail-header-top">
+                        <button class="ga-btn ga-btn-ghost" onclick="switchTab('browser')">← Back to Browser</button>
+                        <div class="detail-header-actions">
+                            <button class="ga-btn ga-btn-sm ga-btn-accent" onclick="openAnalogFinder()">Find Analogs</button>
+                            <button class="ga-btn ga-btn-sm" onclick="addCurrentToCompare()">+ Compare</button>
+                        </div>
+                    </div>
                     <h2 id="detail-title" class="detail-storm-title"></h2>
                     <div id="detail-subtitle" class="detail-storm-subtitle"></div>
                 </div>
@@ -268,7 +277,46 @@
             </div>
         </section>
 
-        <!-- TAB 3: CLIMATOLOGY -->
+        <!-- TAB 3: STORM COMPARISON -->
+        <section id="tab-compare" class="ga-tab-content" role="tabpanel">
+            <div class="compare-layout">
+                <div class="compare-header">
+                    <h2>Storm Comparison</h2>
+                    <div class="compare-controls">
+                        <div class="compare-align-group">
+                            <span class="compare-align-label">Align by:</span>
+                            <button class="ga-btn ga-btn-xs compare-align active" data-align="absolute" onclick="setCompareAlign('absolute')">Date</button>
+                            <button class="ga-btn ga-btn-xs compare-align" data-align="genesis" onclick="setCompareAlign('genesis')">Genesis</button>
+                            <button class="ga-btn ga-btn-xs compare-align" data-align="lmi" onclick="setCompareAlign('lmi')">LMI</button>
+                        </div>
+                        <button class="ga-btn ga-btn-sm ga-btn-ghost" onclick="clearCompare()">Clear All</button>
+                    </div>
+                </div>
+                <div id="compare-chips" class="compare-chips"></div>
+                <div id="compare-empty" class="compare-empty">
+                    <p>No storms selected for comparison.</p>
+                    <p class="compare-empty-hint">Use <strong>+ Compare</strong> from the Storm Detail view or <strong>Find Analogs</strong> to add storms.</p>
+                </div>
+                <div id="compare-content" class="detail-grid" style="display:none;">
+                    <div class="detail-panel">
+                        <div class="panel-header"><h3>Intensity Comparison</h3></div>
+                        <div id="compare-timeline" class="chart-container"></div>
+                    </div>
+                    <div class="detail-panel detail-map-panel">
+                        <div class="panel-header"><h3>Track Comparison</h3></div>
+                        <div id="compare-map" class="detail-map-container"></div>
+                    </div>
+                </div>
+                <div id="compare-table-wrap" style="display:none;">
+                    <div class="detail-panel" style="margin-top:16px;">
+                        <div class="panel-header"><h3>Summary</h3></div>
+                        <div id="compare-table" class="compare-stats-table"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 4: CLIMATOLOGY -->
         <section id="tab-climatology" class="ga-tab-content" role="tabpanel">
             <div class="clim-layout">
                 <div class="clim-header">
@@ -473,6 +521,66 @@
                     <div id="lmi-box-chart" class="chart-container"></div>
                 </div>
                 <div id="lmi-stats-table" class="clim-stats-table"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Analog Finder Modal -->
+    <div id="analog-modal" class="ace-modal-overlay" style="display:none;" onclick="if(event.target===this)closeAnalogFinder()">
+        <div class="ace-modal-content" style="max-width:900px;">
+            <div class="ace-modal-header">
+                <h2 id="analog-modal-title">Find Analogs</h2>
+                <button class="ace-modal-close" onclick="closeAnalogFinder()">&times;</button>
+            </div>
+            <div class="ace-modal-body">
+                <!-- Weight sliders -->
+                <div class="analog-weights">
+                    <div class="analog-weight-row">
+                        <label>Peak Intensity</label>
+                        <input type="range" min="0" max="5" step="1" value="3" id="aw-peak" oninput="updateAnalogResults()">
+                        <span class="aw-val" id="aw-peak-val">3</span>
+                    </div>
+                    <div class="analog-weight-row">
+                        <label>RI Rate (24h)</label>
+                        <input type="range" min="0" max="5" step="1" value="3" id="aw-ri" oninput="updateAnalogResults()">
+                        <span class="aw-val" id="aw-ri-val">3</span>
+                    </div>
+                    <div class="analog-weight-row">
+                        <label>Genesis Location</label>
+                        <input type="range" min="0" max="5" step="1" value="2" id="aw-genesis" oninput="updateAnalogResults()">
+                        <span class="aw-val" id="aw-genesis-val">2</span>
+                    </div>
+                    <div class="analog-weight-row">
+                        <label>Track Shape</label>
+                        <input type="range" min="0" max="5" step="1" value="2" id="aw-track" oninput="updateAnalogResults()">
+                        <span class="aw-val" id="aw-track-val">2</span>
+                    </div>
+                    <div class="analog-weight-row">
+                        <label>Time of Year</label>
+                        <input type="range" min="0" max="5" step="1" value="1" id="aw-season" oninput="updateAnalogResults()">
+                        <span class="aw-val" id="aw-season-val">1</span>
+                    </div>
+                    <div class="analog-weight-row">
+                        <label>ACE / Duration</label>
+                        <input type="range" min="0" max="5" step="1" value="1" id="aw-ace" oninput="updateAnalogResults()">
+                        <span class="aw-val" id="aw-ace-val">1</span>
+                    </div>
+                </div>
+                <!-- Basin filter -->
+                <div class="analog-basin-filter">
+                    <span class="analog-filter-label">Basin:</span>
+                    <button class="basin-chip active" data-basin="same" onclick="toggleAnalogBasin(this)">Same Basin</button>
+                    <button class="basin-chip" data-basin="ALL" onclick="toggleAnalogBasin(this)">All Basins</button>
+                </div>
+                <!-- Results -->
+                <div id="analog-results" class="analog-results">
+                    <p style="color:#8b9ec2;text-align:center;padding:20px;">Select a storm first, then open this modal.</p>
+                </div>
+                <!-- Footer -->
+                <div class="analog-footer">
+                    <span id="analog-selected-count">0 selected</span>
+                    <button class="ga-btn ga-btn-sm ga-btn-accent" onclick="compareSelectedAnalogs()">Compare Selected</button>
+                </div>
             </div>
         </div>
     </div>
