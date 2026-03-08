@@ -1139,10 +1139,10 @@ function updateIRCacheStatus() {
 
 var irPrefetchQueue = [];    // Frames queued for prefetch
 var irPrefetchActive = 0;    // Number of active prefetch requests
-var IR_PREFETCH_BATCH = 5;        // Concurrent prefetch requests (HURSAT)
-var IR_PREFETCH_BATCH_GRIDSAT = 8; // Higher concurrency for GridSat (small subsets, no auth)
-var IR_PREFETCH_BATCH_MERGIR = 6;  // MergIR (Earthdata auth, 4km subsets)
-var IR_PREFETCH_AHEAD = 15;  // How many frames ahead to prefetch
+var IR_PREFETCH_BATCH = 6;         // Concurrent prefetch requests (HURSAT)
+var IR_PREFETCH_BATCH_GRIDSAT = 10; // Higher concurrency for GridSat (small subsets, no auth)
+var IR_PREFETCH_BATCH_MERGIR = 8;  // MergIR (Earthdata auth, 4km subsets)
+var IR_PREFETCH_AHEAD = 20;  // How many frames ahead to prefetch
 
 function setIRLoadingText(msg) {
     var el = document.getElementById('ir-loading-text');
