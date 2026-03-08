@@ -1221,29 +1221,25 @@ window.closeAnalogFinder = function () {
     _showBackgroundElements();
 };
 
-// Helper: hide background elements that might bleed through modals
+// Hide EVERYTHING behind modals — the only truly bulletproof fix for
+// elements bleeding through fixed-position overlays.
 function _hideBackgroundElements() {
-    // Hide Leaflet maps, range sliders, and Plotly toolbars
-    ['storm-map', 'detail-map', 'compare-map'].forEach(function (id) {
-        var el = document.getElementById(id);
-        if (el) el.style.display = 'none';
-    });
-    document.querySelectorAll('.ga-range, .ir-slider').forEach(function (el) {
-        el.style.display = 'none';
-    });
+    var main = document.getElementById('global-main');
+    if (main) main.style.display = 'none';
+    var tabs = document.querySelector('.ga-tabs');
+    if (tabs) tabs.style.display = 'none';
 }
 function _showBackgroundElements() {
-    ['storm-map', 'detail-map', 'compare-map'].forEach(function (id) {
-        var el = document.getElementById(id);
-        if (el) el.style.display = '';
-    });
-    document.querySelectorAll('.ga-range, .ir-slider').forEach(function (el) {
-        el.style.display = '';
-    });
-    // Leaflet needs a nudge after being hidden
-    if (stormMap) stormMap.invalidateSize();
-    if (detailMap) detailMap.invalidateSize();
-    if (compareMap) compareMap.invalidateSize();
+    var main = document.getElementById('global-main');
+    if (main) main.style.display = '';
+    var tabs = document.querySelector('.ga-tabs');
+    if (tabs) tabs.style.display = '';
+    // Leaflet maps need a size refresh after being re-shown
+    setTimeout(function () {
+        if (stormMap) stormMap.invalidateSize();
+        if (detailMap) detailMap.invalidateSize();
+        if (compareMap) compareMap.invalidateSize();
+    }, 50);
 }
 
 window.toggleAnalogBasin = function (btn) {
@@ -2620,6 +2616,7 @@ window.openACEModal = function () {
     modal.style.display = 'flex';
     document.body.style.overflow = 'hidden';
     document.body.classList.add('modal-open');
+    _hideBackgroundElements();
 
     // Reset basin chips
     aceModalBasins = ['ALL'];
@@ -2637,6 +2634,7 @@ window.closeACEModal = function () {
     document.getElementById('ace-modal').style.display = 'none';
     document.body.style.overflow = '';
     document.body.classList.remove('modal-open');
+    _showBackgroundElements();
     // Destroy season map to free memory
     if (aceSeasonMap) {
         aceSeasonMap.remove();
@@ -2996,6 +2994,7 @@ window.openIntensityModal = function () {
     document.getElementById('intensity-modal').style.display = 'flex';
     document.body.style.overflow = 'hidden';
     document.body.classList.add('modal-open');
+    _hideBackgroundElements();
     intensityModalBasins = ['ALL'];
     _resetBasinChips('intensity-basin-chips', 'ALL');
     renderIntensityModalCharts();
@@ -3004,6 +3003,7 @@ window.closeIntensityModal = function () {
     document.getElementById('intensity-modal').style.display = 'none';
     document.body.style.overflow = '';
     document.body.classList.remove('modal-open');
+    _showBackgroundElements();
 };
 window.toggleIntensityBasin = function (btn) {
     intensityModalBasins = _toggleBasinChip(btn, 'intensity-basin-chips');
@@ -3088,6 +3088,7 @@ window.openIntensityChangeModal = function () {
     document.getElementById('intensity-change-modal').style.display = 'flex';
     document.body.style.overflow = 'hidden';
     document.body.classList.add('modal-open');
+    _hideBackgroundElements();
     riModalBasins = ['ALL'];
     _resetBasinChips('ri-basin-chips', 'ALL');
     renderRIModalCharts();
@@ -3096,6 +3097,7 @@ window.closeIntensityChangeModal = function () {
     document.getElementById('intensity-change-modal').style.display = 'none';
     document.body.style.overflow = '';
     document.body.classList.remove('modal-open');
+    _showBackgroundElements();
 };
 window.toggleRIBasin = function (btn) {
     riModalBasins = _toggleBasinChip(btn, 'ri-basin-chips');
@@ -3213,6 +3215,7 @@ window.openSeasonalModal = function () {
     document.getElementById('seasonal-modal').style.display = 'flex';
     document.body.style.overflow = 'hidden';
     document.body.classList.add('modal-open');
+    _hideBackgroundElements();
     seasonalModalBasins = ['ALL'];
     _resetBasinChips('seasonal-basin-chips', 'ALL');
     renderSeasonalModalChart();
@@ -3221,6 +3224,7 @@ window.closeSeasonalModal = function () {
     document.getElementById('seasonal-modal').style.display = 'none';
     document.body.style.overflow = '';
     document.body.classList.remove('modal-open');
+    _showBackgroundElements();
 };
 window.toggleSeasonalBasin = function (btn) {
     seasonalModalBasins = _toggleBasinChip(btn, 'seasonal-basin-chips');
@@ -3295,6 +3299,7 @@ window.openLMILatModal = function () {
     document.getElementById('lmi-modal').style.display = 'flex';
     document.body.style.overflow = 'hidden';
     document.body.classList.add('modal-open');
+    _hideBackgroundElements();
     lmiModalBasins = ['ALL'];
     _resetBasinChips('lmi-basin-chips', 'ALL');
     renderLMIModalCharts();
@@ -3303,6 +3308,7 @@ window.closeLMILatModal = function () {
     document.getElementById('lmi-modal').style.display = 'none';
     document.body.style.overflow = '';
     document.body.classList.remove('modal-open');
+    _showBackgroundElements();
 };
 window.toggleLMIBasin = function (btn) {
     lmiModalBasins = _toggleBasinChip(btn, 'lmi-basin-chips');
