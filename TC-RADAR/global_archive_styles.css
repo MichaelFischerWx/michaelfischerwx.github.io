@@ -113,21 +113,28 @@
 .ga-range {
     -webkit-appearance: none;
     appearance: none;
+    position: relative;       /* override global position:absolute from tc_radar_styles */
+    pointer-events: auto;     /* override global pointer-events:none */
+    transform: none;          /* override global translateY(-50%) */
+    top: auto;                /* override global top:50% */
     width: 100%;
     height: 4px;
     background: var(--surface);
     border-radius: 2px;
     outline: none;
     cursor: pointer;
+    margin: 6px 0;
 }
 .ga-range::-webkit-slider-thumb {
     -webkit-appearance: none;
+    pointer-events: auto;
     width: 14px;
     height: 14px;
     border-radius: 50%;
     background: var(--cyan);
     cursor: pointer;
     border: 2px solid var(--navy);
+    margin-top: -5px;
 }
 .ga-range::-moz-range-thumb {
     width: 14px;
