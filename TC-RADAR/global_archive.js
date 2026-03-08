@@ -26,6 +26,9 @@ var detailTrackLayer = null; // L.layerGroup for detail track
 var activeBasins = ['ALL'];  // Active basin filter
 var filterDebounce = null;   // Debounce timer
 
+// Overwater 24-h intensity change episodes (loaded from intensity_changes.json)
+var intensityChangeData = null;
+
 // F-Deck state
 var fdeckVisible = false;       // Whether f-deck traces are currently shown
 var fdeckData = null;           // Cached parsed f-deck data for current storm
@@ -251,6 +254,17 @@ function loadData() {
                     console.warn('Track data not loaded:', err);
                     showToast('Track data failed to load — storm details unavailable');
                 });
+        });
+
+    // Load precomputed overwater 24-h intensity change episodes
+    fetch('intensity_changes.json')
+        .then(function (r) { if (!r.ok) throw new Error('Not found'); return r.json(); })
+        .then(function (data) {
+            intensityChangeData = data;
+            console.log('Loaded intensity change data: ' + (data.total_episodes || 0) + ' episodes');
+        })
+        .catch(function (err) {
+            console.warn('Intensity change data not loaded:', err);
         });
 }
 
@@ -3107,22 +3121,25 @@ window.toggleRIBasin = function (btn) {
 function renderRIModalCharts() {
     var basins = riModalBasins[0] === 'ALL' ? Object.keys(BASIN_NAMES) : riModalBasins;
 
-    // Histogram of max 24-h wind changes (both intensification and weakening)
+    // ── Histogram: all overwater 24-h intensity change episodes ──
     var histTraces = [];
     basins.forEach(function (basin) {
-        var riVals = allStorms
-            .filter(function (s) { return s.basin === basin && s.ri_24h != null; })
-            .map(function (s) { return s.ri_24h; });
-        var rwVals = allStorms
-            .filter(function (s) { return s.basin === basin && s.rw_24h != null; })
-            .map(function (s) { return s.rw_24h; });
-        var combined = riVals.concat(rwVals);
-        if (combined.length === 0) return;
+        // Use precomputed episode data if available, fall back to per-storm extremes
+        var vals;
+        if (intensityChangeData && intensityChangeData.basins && intensityChangeData.basins[basin]) {
+            vals = intensityChangeData.basins[basin];
+        } else {
+            // Fallback: combine ri_24h and rw_24h from per-storm data
+            var ri = allStorms.filter(function (s) { return s.basin === basin && s.ri_24h != null; }).map(function (s) { return s.ri_24h; });
+            var rw = allStorms.filter(function (s) { return s.basin === basin && s.rw_24h != null; }).map(function (s) { return s.rw_24h; });
+            vals = ri.concat(rw);
+        }
+        if (vals.length === 0) return;
         histTraces.push({
-            x: combined, type: 'histogram', name: BASIN_NAMES[basin],
+            x: vals, type: 'histogram', name: BASIN_NAMES[basin],
             marker: { color: BASIN_COLORS[basin], opacity: 0.65 },
             xbins: { size: 5 },
-            hovertemplate: '<b>' + basin + '</b><br>%{x} kt/24h: %{y} storms<extra></extra>'
+            hovertemplate: '<b>' + basin + '</b><br>%{x} kt/24h: %{y} episodes<extra></extra>'
         });
     });
     var riShapes = [
@@ -3141,23 +3158,30 @@ function renderRIModalCharts() {
         { x: -30, y: 1.02, yref: 'paper', xanchor: 'center', text: '-30kt', showarrow: false, font: { size: 9, color: '#fbbf24' } },
         { x: -35, y: 1.06, yref: 'paper', xanchor: 'center', text: '-35kt', showarrow: false, font: { size: 9, color: '#f87171' } }
     ];
+    // Episode count for subtitle
+    var totalEpisodes = 0;
+    histTraces.forEach(function (t) { totalEpisodes += t.x.length; });
     var histLayout = Object.assign({}, PLOTLY_LAYOUT_BASE, {
         barmode: 'overlay',
-        xaxis: { title: { text: 'Max 24-h Wind Change (kt)', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' }, range: [-170, 120] },
-        yaxis: { title: { text: 'Number of Storms', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' } },
+        title: { text: 'DISTRIBUTION OF OVERWATER 24-H INTENSITY CHANGE (' + totalEpisodes.toLocaleString() + ' EPISODES)', font: { size: 12, color: '#8b9ec2' }, x: 0.01, xanchor: 'left' },
+        xaxis: { title: { text: '24-h Wind Change (kt)', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' } },
+        yaxis: { title: { text: 'Number of 24-h Episodes', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' } },
         shapes: riShapes, annotations: riAnnotations,
         showlegend: true, legend: { orientation: 'h', x: 0, y: 1.18, font: { size: 10, color: '#8b9ec2' } },
-        margin: { l: 55, r: 10, t: 45, b: 45 }
+        margin: { l: 55, r: 10, t: 55, b: 45 }
     });
     Plotly.newPlot('ri-hist-chart', histTraces, histLayout, PLOTLY_CONFIG);
 
-    // Exceedance CDF (1 - CDF): probability of exceeding RI threshold
+    // ── Exceedance CDF: probability of exceeding RI threshold (per-episode) ──
     var cdfTraces = [];
     basins.forEach(function (basin) {
-        var vals = allStorms
-            .filter(function (s) { return s.basin === basin && s.ri_24h != null; })
-            .map(function (s) { return s.ri_24h; })
-            .sort(function (a, b) { return a - b; });
+        var vals;
+        if (intensityChangeData && intensityChangeData.basins && intensityChangeData.basins[basin]) {
+            // Use only positive (intensification) episodes for the exceedance curve
+            vals = intensityChangeData.basins[basin].filter(function (v) { return v > 0; }).sort(function (a, b) { return a - b; });
+        } else {
+            vals = allStorms.filter(function (s) { return s.basin === basin && s.ri_24h != null; }).map(function (s) { return s.ri_24h; }).sort(function (a, b) { return a - b; });
+        }
         if (vals.length === 0) return;
         var exceed = vals.map(function (_, i) { return 1 - (i / vals.length); });
         cdfTraces.push({
@@ -3168,6 +3192,7 @@ function renderRIModalCharts() {
         });
     });
     var cdfLayout = Object.assign({}, PLOTLY_LAYOUT_BASE, {
+        title: { text: 'EXCEEDANCE PROBABILITY (INTENSIFICATION EPISODES)', font: { size: 12, color: '#8b9ec2' }, x: 0.01, xanchor: 'left' },
         xaxis: { title: { text: 'Intensification Threshold (kt/24h)', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' }, range: [0, 100] },
         yaxis: { title: { text: 'Exceedance Probability', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' }, range: [0, 1] },
         shapes: [
@@ -3178,28 +3203,38 @@ function renderRIModalCharts() {
         ],
         showlegend: true,
         legend: { orientation: 'h', x: 0, y: 1.15, font: { size: 10, color: '#8b9ec2' } },
-        margin: { l: 55, r: 10, t: 35, b: 45 }, hovermode: 'closest'
+        margin: { l: 55, r: 10, t: 45, b: 45 }, hovermode: 'closest'
     });
     Plotly.newPlot('ri-cdf-chart', cdfTraces, cdfLayout, PLOTLY_CONFIG);
 
-    // Stats table — includes both RI and RW stats
-    var html = '<table><thead><tr><th>Basin</th><th>Storms</th><th>RI\u226530</th><th>RI\u226535</th><th>RI\u226550</th><th>% RI</th><th>Max RI</th><th>RW\u2264-30</th><th>Max RW</th></tr></thead><tbody>';
+    // Stats table — episode-based statistics from precomputed data
+    var html = '<table><thead><tr><th>Basin</th><th>Episodes</th><th>Mean</th><th>\u226530kt</th><th>\u226535kt</th><th>\u226550kt</th><th>% RI\u226530</th><th>Max RI</th><th>\u2264-30kt</th><th>Max RW</th></tr></thead><tbody>';
     basins.forEach(function (basin) {
-        var riAll = allStorms.filter(function (s) { return s.basin === basin && s.ri_24h != null; });
-        var rwAll = allStorms.filter(function (s) { return s.basin === basin && s.rw_24h != null; });
-        if (riAll.length === 0) return;
-        var ri30 = riAll.filter(function (s) { return s.ri_24h >= 30; }).length;
-        var ri35 = riAll.filter(function (s) { return s.ri_24h >= 35; }).length;
-        var ri50 = riAll.filter(function (s) { return s.ri_24h >= 50; }).length;
-        var maxRI = Math.max.apply(null, riAll.map(function (s) { return s.ri_24h; }));
-        var rw30 = rwAll.filter(function (s) { return s.rw_24h <= -30; }).length;
-        var maxRW = rwAll.length > 0 ? Math.min.apply(null, rwAll.map(function (s) { return s.rw_24h; })) : 'N/A';
-        var pct = (ri30 / riAll.length * 100).toFixed(1);
+        var vals;
+        if (intensityChangeData && intensityChangeData.basins && intensityChangeData.basins[basin]) {
+            vals = intensityChangeData.basins[basin];
+        } else {
+            // Fallback to per-storm extremes
+            var riAll = allStorms.filter(function (s) { return s.basin === basin && s.ri_24h != null; });
+            var rwAll = allStorms.filter(function (s) { return s.basin === basin && s.rw_24h != null; });
+            if (riAll.length === 0) return;
+            vals = riAll.map(function (s) { return s.ri_24h; }).concat(rwAll.map(function (s) { return s.rw_24h; }));
+        }
+        if (vals.length === 0) return;
+        var mean = vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
+        var ri30 = vals.filter(function (v) { return v >= 30; }).length;
+        var ri35 = vals.filter(function (v) { return v >= 35; }).length;
+        var ri50 = vals.filter(function (v) { return v >= 50; }).length;
+        var maxRI = Math.max.apply(null, vals);
+        var rw30 = vals.filter(function (v) { return v <= -30; }).length;
+        var maxRW = Math.min.apply(null, vals);
+        var pct = (ri30 / vals.length * 100).toFixed(1);
         html += '<tr><td style="color:' + BASIN_COLORS[basin] + '">' + BASIN_NAMES[basin] + '</td>' +
-            '<td class="mono">' + riAll.length + '</td><td class="mono">' + ri30 + '</td>' +
-            '<td class="mono">' + ri35 + '</td><td class="mono">' + ri50 + '</td>' +
+            '<td class="mono">' + vals.length.toLocaleString() + '</td><td class="mono">' + mean.toFixed(1) + '</td>' +
+            '<td class="mono">' + ri30.toLocaleString() + '</td>' +
+            '<td class="mono">' + ri35.toLocaleString() + '</td><td class="mono">' + ri50.toLocaleString() + '</td>' +
             '<td class="mono">' + pct + '%</td><td class="mono">+' + maxRI + '</td>' +
-            '<td class="mono">' + rw30 + '</td><td class="mono">' + maxRW + '</td></tr>';
+            '<td class="mono">' + rw30.toLocaleString() + '</td><td class="mono">' + maxRW + '</td></tr>';
     });
     html += '</tbody></table>';
     document.getElementById('ri-stats-table').innerHTML = html;
