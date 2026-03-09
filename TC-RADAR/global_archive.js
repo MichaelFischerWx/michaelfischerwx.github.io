@@ -393,30 +393,32 @@ function renderTracks(storms) {
         }
         if (pts.length < 2) return;
 
-        var peakColor = getIntensityColor(s.peak_wind_kt);
-
-        // Walk points and batch consecutive same-phase segments into polylines
+        // Walk points and batch consecutive same-color segments into polylines
+        // Each segment is colored by the LOCAL intensity at that point
+        var segColor = _isTCNature(pts[0].n) ? getIntensityColor(pts[0].w) : '#6b7280';
+        var segIsTC = _isTCNature(pts[0].n);
         var runCoords = [[pts[0].la, pts[0].lo]];
-        var runIsTC = _isTCNature(pts[0].n);
 
         for (var j = 1; j < pts.length; j++) {
             var p = pts[j];
             var isTC = _isTCNature(p.n);
+            var ptColor = isTC ? getIntensityColor(p.w) : '#6b7280';
 
-            if (isTC !== runIsTC) {
-                // Phase changed — flush current run
+            if (ptColor !== segColor || isTC !== segIsTC) {
+                // Color or phase changed — flush current run
                 if (runCoords.length >= 2) {
-                    _addTrackPolyline(runCoords, runIsTC, peakColor, s);
+                    _addTrackPolyline(runCoords, segIsTC, segColor, s);
                 }
                 // Start new run (include overlap point for continuity)
                 runCoords = [[pts[j - 1].la, pts[j - 1].lo]];
-                runIsTC = isTC;
+                segColor = ptColor;
+                segIsTC = isTC;
             }
             runCoords.push([p.la, p.lo]);
         }
         // Flush final run
         if (runCoords.length >= 2) {
-            _addTrackPolyline(runCoords, runIsTC, peakColor, s);
+            _addTrackPolyline(runCoords, segIsTC, segColor, s);
         }
 
         // Genesis marker
@@ -452,13 +454,13 @@ function renderTracks(storms) {
     document.getElementById('filtered-count').textContent = storms.length.toLocaleString();
 }
 
-function _addTrackPolyline(coords, isTC, peakColor, storm) {
+function _addTrackPolyline(coords, isTC, segColor, storm) {
     var opts = {
         renderer: trackCanvasRenderer,
         interactive: true
     };
     if (isTC) {
-        opts.color = peakColor;
+        opts.color = segColor;
         opts.weight = 1.8;
         opts.opacity = 0.6;
     } else {
