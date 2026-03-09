@@ -3315,6 +3315,14 @@ function _riFilteredVals(basin) {
     return raw;
 }
 
+// Helper: return [change, year] pairs for a basin (no period filter — used for trend analysis)
+function _riAllPairs(basin) {
+    if (!intensityChangeData || !intensityChangeData.basins || !intensityChangeData.basins[basin]) return [];
+    var raw = intensityChangeData.basins[basin];
+    if (raw.length > 0 && Array.isArray(raw[0])) return raw;
+    return [];
+}
+
 function _showCustomRange(show) {
     var el = document.getElementById('ri-custom-range');
     if (el) el.style.display = show ? 'inline-flex' : 'none';
@@ -3491,6 +3499,140 @@ function renderRIModalCharts() {
     });
     html += '</tbody></table>';
     document.getElementById('ri-stats-table').innerHTML = html;
+
+    // ── RI Frequency Trend: % of episodes exceeding thresholds by 5-yr bins ──
+    var BIN_YRS = 5;
+    var RI_THRESHOLDS = [
+        { val: 30, label: 'RI \u2265 30 kt', color: '#fbbf24' },
+        { val: 35, label: 'RI \u2265 35 kt', color: '#f87171' },
+        { val: 50, label: 'RI \u2265 50 kt', color: '#dc2626' },
+        { val: 65, label: 'RI \u2265 65 kt', color: '#a855f7' }
+    ];
+    // Collect all [change, year] pairs for active basins (always use full satellite era for trend)
+    var allPairs = [];
+    basins.forEach(function (basin) {
+        var pairs = _riAllPairs(basin);
+        for (var i = 0; i < pairs.length; i++) {
+            if (pairs[i][1] >= 1966) allPairs.push(pairs[i]); // satellite era only
+        }
+    });
+
+    // Group by 5-yr bin
+    var binMap = {};
+    allPairs.forEach(function (p) {
+        var yr = p[1];
+        var binStart = Math.floor(yr / BIN_YRS) * BIN_YRS;
+        if (!binMap[binStart]) binMap[binStart] = { total: 0, pos: 0, ri30: 0, ri35: 0, ri50: 0, ri65: 0 };
+        binMap[binStart].total++;
+        if (p[0] > 0) binMap[binStart].pos++;
+        if (p[0] >= 30) binMap[binStart].ri30++;
+        if (p[0] >= 35) binMap[binStart].ri35++;
+        if (p[0] >= 50) binMap[binStart].ri50++;
+        if (p[0] >= 65) binMap[binStart].ri65++;
+    });
+
+    var trendBins = Object.keys(binMap).map(Number).sort(function (a, b) { return a - b; });
+    // Drop bins with very few episodes (< 50) as they produce noisy rates
+    trendBins = trendBins.filter(function (b) { return binMap[b].total >= 50; });
+
+    var trendTraces = RI_THRESHOLDS.map(function (th) {
+        var key = 'ri' + th.val;
+        return {
+            x: trendBins.map(function (b) { return b + Math.floor(BIN_YRS / 2); }), // bin midpoint
+            y: trendBins.map(function (b) { return binMap[b][key] / binMap[b].total * 100; }),
+            customdata: trendBins.map(function (b) { return [binMap[b][key], binMap[b].total, b + '–' + (b + BIN_YRS - 1)]; }),
+            type: 'scatter', mode: 'lines+markers',
+            name: th.label,
+            line: { color: th.color, width: 2 },
+            marker: { size: 5, color: th.color },
+            hovertemplate: '<b>' + th.label + '</b><br>%{customdata[2]}<br>%{y:.1f}% (%{customdata[0]} of %{customdata[1]})<extra></extra>'
+        };
+    });
+
+    var trendLayout = Object.assign({}, PLOTLY_LAYOUT_BASE, {
+        xaxis: { title: { text: 'Year', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' } },
+        yaxis: { title: { text: '% of 24-h Episodes Exceeding Threshold', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' }, rangemode: 'tozero' },
+        showlegend: true, legend: { orientation: 'h', x: 0, y: 1.08, font: { size: 10, color: '#8b9ec2' } },
+        margin: { l: 55, r: 10, t: 30, b: 45 }, hovermode: 'x unified'
+    });
+    Plotly.newPlot('ri-trend-chart', trendTraces, trendLayout, PLOTLY_CONFIG);
+
+    // ── Exceedance CDF by Era: overlay curves for different periods ──
+    var ERA_DEFS = [
+        { label: '1966–1979', range: [1966, 1979], color: '#94a3b8', dash: 'dot' },
+        { label: '1980–1994', range: [1980, 1994], color: '#60a5fa', dash: 'dash' },
+        { label: '1995–2009', range: [1995, 2009], color: '#34d399', dash: 'dashdot' },
+        { label: '2010–2025', range: [2010, 2025], color: '#fbbf24', dash: 'solid' }
+    ];
+
+    var eraCdfTraces = [];
+    ERA_DEFS.forEach(function (era) {
+        // Gather positive (intensification) episodes for this era across active basins
+        var eraVals = [];
+        basins.forEach(function (basin) {
+            var pairs = _riAllPairs(basin);
+            for (var i = 0; i < pairs.length; i++) {
+                if (pairs[i][1] >= era.range[0] && pairs[i][1] <= era.range[1] && pairs[i][0] > 0) {
+                    eraVals.push(pairs[i][0]);
+                }
+            }
+        });
+        if (eraVals.length < 20) return; // skip eras with too few samples
+        eraVals.sort(function (a, b) { return a - b; });
+        var n = eraVals.length;
+        eraCdfTraces.push({
+            x: eraVals,
+            y: eraVals.map(function (_, i) { return 1 - (i / n); }),
+            type: 'scatter', mode: 'lines',
+            name: era.label + ' (n=' + n.toLocaleString() + ')',
+            line: { color: era.color, width: 2.5, dash: era.dash },
+            hovertemplate: '<b>' + era.label + '</b><br>%{x} kt/24h: %{y:.1%} exceed<extra></extra>'
+        });
+    });
+
+    var eraCdfShapes = [
+        { type: 'line', x0: 30, x1: 30, y0: 0, y1: 1, yref: 'paper', line: { color: '#fbbf24', width: 1, dash: 'dash' } },
+        { type: 'line', x0: 50, x1: 50, y0: 0, y1: 1, yref: 'paper', line: { color: '#dc2626', width: 1, dash: 'dash' } }
+    ];
+
+    var eraCdfLayout = Object.assign({}, PLOTLY_LAYOUT_BASE, {
+        xaxis: { title: { text: 'Intensification Threshold (kt/24h)', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' }, range: [0, 100] },
+        yaxis: { title: { text: 'Exceedance Probability', font: { size: 11, color: '#8b9ec2' } }, gridcolor: 'rgba(255,255,255,0.04)', tickfont: { size: 10, color: '#8b9ec2', family: 'JetBrains Mono' }, range: [0, 0.5] },
+        shapes: eraCdfShapes,
+        showlegend: true, legend: { orientation: 'h', x: 0, y: 1.08, font: { size: 10, color: '#8b9ec2' } },
+        margin: { l: 55, r: 10, t: 30, b: 45 }, hovermode: 'closest'
+    });
+    Plotly.newPlot('ri-era-cdf-chart', eraCdfTraces, eraCdfLayout, PLOTLY_CONFIG);
+
+    // ── Era comparison stats table ──
+    var eraHtml = '<table><thead><tr><th>Era</th><th>Episodes</th><th>Mean \u0394V</th><th>% \u226530</th><th>% \u226535</th><th>% \u226550</th><th>% \u226565</th><th>Max RI</th></tr></thead><tbody>';
+    ERA_DEFS.forEach(function (era) {
+        var eraVals = [];
+        basins.forEach(function (basin) {
+            var pairs = _riAllPairs(basin);
+            for (var i = 0; i < pairs.length; i++) {
+                if (pairs[i][1] >= era.range[0] && pairs[i][1] <= era.range[1]) eraVals.push(pairs[i][0]);
+            }
+        });
+        if (eraVals.length < 20) return;
+        var n = eraVals.length;
+        var mean = eraVals.reduce(function (a, b) { return a + b; }, 0) / n;
+        var ri30 = eraVals.filter(function (v) { return v >= 30; }).length;
+        var ri35 = eraVals.filter(function (v) { return v >= 35; }).length;
+        var ri50 = eraVals.filter(function (v) { return v >= 50; }).length;
+        var ri65 = eraVals.filter(function (v) { return v >= 65; }).length;
+        var maxRI = Math.max.apply(null, eraVals);
+        eraHtml += '<tr><td style="color:' + era.color + '">' + era.label + '</td>' +
+            '<td class="mono">' + n.toLocaleString() + '</td>' +
+            '<td class="mono">' + mean.toFixed(1) + '</td>' +
+            '<td class="mono">' + (ri30 / n * 100).toFixed(1) + '%</td>' +
+            '<td class="mono">' + (ri35 / n * 100).toFixed(1) + '%</td>' +
+            '<td class="mono">' + (ri50 / n * 100).toFixed(1) + '%</td>' +
+            '<td class="mono">' + (ri65 / n * 100).toFixed(1) + '%</td>' +
+            '<td class="mono">+' + maxRI + '</td></tr>';
+    });
+    eraHtml += '</tbody></table>';
+    document.getElementById('ri-era-stats-table').innerHTML = eraHtml;
 }
 
 // ══════════════════════════════════════════════════════════════
