@@ -25,7 +25,7 @@ var trackLayer = null;       // L.layerGroup for browser track
 var detailTrackLayer = null; // L.layerGroup for detail track
 var activeBasins = ['ALL'];  // Active basin filter
 var filterDebounce = null;   // Debounce timer
-var mapViewMode = 'cluster'; // 'cluster' or 'tracks'
+var mapViewMode = 'tracks'; // 'cluster' or 'tracks'
 var trackViewLayer = null;   // L.layerGroup for track-view polylines
 var trackCanvasRenderer = null; // L.canvas renderer (created after map init)
 
@@ -206,7 +206,11 @@ function loadData() {
             document.getElementById('filtered-count').textContent = allStorms.length.toLocaleString();
 
             initBrowserMap();
-            renderMarkers(filteredStorms);
+            if (mapViewMode === 'tracks') {
+                renderTracks(filteredStorms);
+            } else {
+                renderMarkers(filteredStorms);
+            }
             if (loadingEl) loadingEl.style.display = 'none';
 
             showToast('Loaded ' + allStorms.length.toLocaleString() + ' storms');
@@ -298,13 +302,18 @@ function initBrowserMap() {
         zoomToBoundsOnClick: true,
         disableClusteringAtZoom: 8
     });
-    stormMap.addLayer(markerCluster);
-
     trackLayer = L.layerGroup().addTo(stormMap);
 
-    // Canvas renderer + layer for track view (not added to map until toggled)
+    // Canvas renderer + layer for track view
     trackCanvasRenderer = L.canvas({ padding: 0.5 });
     trackViewLayer = L.layerGroup();
+
+    // Default view: tracks (clusters ready but not added to map)
+    if (mapViewMode === 'tracks') {
+        stormMap.addLayer(trackViewLayer);
+    } else {
+        stormMap.addLayer(markerCluster);
+    }
 
     // Add legend
     var legend = L.control({ position: 'bottomright' });
