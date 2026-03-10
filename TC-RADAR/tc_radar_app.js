@@ -1203,10 +1203,11 @@ function _buildTiltProfileTrace(tiltData) {
             colorscale: 'Viridis',
             cmin: 0, cmax: 14,
             colorbar: {
-                title: { text: 'Height (km)', font: { color: '#ccc', size: 9 } },
+                title: { text: 'Tilt Height (km)', font: { color: '#ccc', size: 9 } },
                 tickfont: { color: '#ccc', size: 8 },
-                thickness: 8, len: 0.35,
-                x: 1.14, xpad: 0, y: 0.5,
+                thickness: 10, len: 0.35,
+                x: 1.02, xpad: 2, y: 0.15,
+                yanchor: 'bottom',
                 outlinewidth: 0
             },
             line: { color: 'rgba(255,255,255,0.8)', width: 1.2 }
@@ -3758,6 +3759,10 @@ function renderPlotFromJSON(json, resultDiv) {
         if (tiltResult) {
             tiltTraces.push(tiltResult.line);
             tiltTraces.push(tiltResult.scatter);
+            // Stack colorbars vertically: shrink wind colorbar to upper portion
+            heatmap.colorbar = Object.assign({}, heatmap.colorbar, {
+                len: 0.45, y: 0.98, yanchor: 'top'
+            });
         }
     }
 
@@ -5425,7 +5430,13 @@ function openPlotModal(csJson) {
     var fsShearInset = buildShearInset(_currentSddc, true);
     if (fsShearInset.shapes.length) fullLayout.shapes = (fullLayout.shapes || []).concat(fsShearInset.shapes);
     if (fsShearInset.annotations.length) fullLayout.annotations = (fullLayout.annotations || []).concat(fsShearInset.annotations);
-    var fullHeatmap = Object.assign({}, d.heatmap, { colorbar: Object.assign({}, d.heatmap.colorbar, { title: { text: d.heatmap.colorbar.title.text, font: { color: '#ccc', size: 13 } }, tickfont: { color: '#ccc', size: 11 }, thickness: 16, len: 0.85 }) });
+    var fullCbar = { title: { text: d.heatmap.colorbar.title.text, font: { color: '#ccc', size: 13 } }, tickfont: { color: '#ccc', size: 11 }, thickness: 16, len: 0.85 };
+    if (d.tiltTraces && d.tiltTraces.length > 0) {
+        fullCbar.len = 0.45;
+        fullCbar.y = 0.98;
+        fullCbar.yanchor = 'top';
+    }
+    var fullHeatmap = Object.assign({}, d.heatmap, { colorbar: Object.assign({}, d.heatmap.colorbar, fullCbar) });
     Plotly.newPlot('plotly-fullscreen', [fullHeatmap].concat(d.overlayTraces||[]).concat(d.maxTraces||[]).concat(d.tiltTraces||[]), fullLayout, d.config);
     if (hasCrossSection) renderCrossSectionInto('cs-fullscreen', csJson, true);
     if (hasAzMean) {
