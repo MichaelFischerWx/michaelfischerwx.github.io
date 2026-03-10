@@ -8187,7 +8187,7 @@ function renderCompositeCFADMultiInto(targetId, json, filters) {
         paper_bgcolor: plotBg, plot_bgcolor: plotBg,
         grid: { rows: 2, columns: 2, pattern: 'independent', xgap: 0.08, ygap: 0.12 },
         annotations: annotations,
-        margin: { l:55, r:60, t:120, b:50 },
+        margin: { l:55, r:60, t:140, b:50 },
         hoverlabel: { bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
         showlegend: false
     };
@@ -8920,7 +8920,7 @@ function _renderDiffQuadMean(targetId, diffJson, jsonA, jsonB, filtersA, filters
         var layout = Object.assign({
             title:{ text:titleText, font:{color:'#e5e7eb',size:fontSize.title}, y:0.99, x:0.5, xanchor:'center' },
             paper_bgcolor:plotBg, plot_bgcolor:plotBg,
-            margin:{ l:50, r:60, t:120, b:44 },
+            margin:{ l:50, r:60, t:140, b:44 },
             annotations:annotations, shapes:shapes.concat(shearInset.shapes || []),
             hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
             showlegend:false
@@ -9125,7 +9125,7 @@ function _renderDiffPlanView(targetId, diffJson, jsonA, jsonB, filtersA, filters
             paper_bgcolor:plotBg, plot_bgcolor:plotBg,
             xaxis: { title:{text:xLabel,font:{color:'#aaa',size:fontSize.axis}}, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:true, zerolinecolor:'rgba(255,255,255,0.12)', range:[ext.xMin, ext.xMax] },
             yaxis: { title:{text:yLabel,font:{color:'#aaa',size:fontSize.axis}}, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:true, zerolinecolor:'rgba(255,255,255,0.12)', scaleanchor:'x', scaleratio:1, range:[ext.yMin, ext.yMax] },
-            margin:{ l:60, r:24, t:120, b:50 },
+            margin:{ l:60, r:24, t:140, b:50 },
             shapes: sInset.shapes || [], annotations: sInset.annotations || [],
             hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
             showlegend:false
@@ -9565,7 +9565,7 @@ function _renderDiffCFADMulti(targetId, jsonA, jsonB, filtersA, filtersB) {
             paper_bgcolor: plotBg, plot_bgcolor: plotBg,
             grid: { rows:2, columns:2, pattern:'independent', xgap:0.08, ygap:0.12 },
             annotations: anns,
-            margin: { l:55, r:60, t:100, b:50 },
+            margin: { l:55, r:60, t:140, b:50 },
             hoverlabel: { bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
             showlegend: false
         };
