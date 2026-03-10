@@ -4883,7 +4883,12 @@ fetch('tc_radar_metadata.json')
             markers.addLayer(marker);
         });
 
-        map.addLayer(markers);
+        // Default view: tracks (load IBTrACS); clusters kept ready but not added to map
+        if (_mapViewMode === 'tracks') {
+            _loadIBTrACSData(function() { _renderArchiveTracks(); });
+        } else {
+            map.addLayer(markers);
+        }
 
         var legend = L.control({ position:'bottomright' });
         legend.onAdd = function() {
@@ -4925,7 +4930,7 @@ _injectDataTypeToggle();
 // ══════════════════════════════════════════════════════════════
 // ── Track View (Clusters / Tracks toggle) ─────────────────────
 // ══════════════════════════════════════════════════════════════
-var _mapViewMode = 'cluster';   // 'cluster' or 'tracks'
+var _mapViewMode = 'tracks';    // 'cluster' or 'tracks'
 var _trackViewLayer = null;     // L.layerGroup for track polylines + markers
 var _trackCanvasRenderer = null;
 var _allTracks = {};            // IBTrACS track data keyed by SID
@@ -5010,11 +5015,11 @@ function _injectViewToggle() {
     grp.className = 'toolbar-group view-toggle-group';
     grp.innerHTML =
         '<div class="archive-view-toggle">' +
-            '<button class="archive-view-btn active" data-view="cluster" onclick="setArchiveMapView(\'cluster\')" title="Show clustered markers">' +
+            '<button class="archive-view-btn" data-view="cluster" onclick="setArchiveMapView(\'cluster\')" title="Show clustered markers">' +
                 '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="6" cy="6" r="2"/><circle cx="18" cy="8" r="2"/><circle cx="8" cy="18" r="2"/><circle cx="17" cy="17" r="2"/></svg>' +
                 ' Clusters' +
             '</button>' +
-            '<button class="archive-view-btn" data-view="tracks" onclick="setArchiveMapView(\'tracks\')" title="Show best-track lines with TDR markers">' +
+            '<button class="archive-view-btn active" data-view="tracks" onclick="setArchiveMapView(\'tracks\')" title="Show best-track lines with TDR markers">' +
                 '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l4-4 4 4 4-8 5 6"/><circle cx="7" cy="13" r="1.5" fill="currentColor"/><circle cx="15" cy="9" r="1.5" fill="currentColor"/></svg>' +
                 ' Tracks' +
             '</button>' +
