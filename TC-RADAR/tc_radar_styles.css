@@ -1469,3 +1469,72 @@ footer a:hover { text-decoration: underline; }
         min-height: 32px;
     }
 }
+
+/* ── Archive View Toggle (Clusters / Tracks) ──────────────── */
+.view-toggle-group {
+    margin-left: 4px;
+}
+.archive-view-toggle {
+    display: flex;
+    gap: 2px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px;
+}
+.archive-view-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    font-family: 'DM Sans', sans-serif;
+    color: var(--slate);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+.archive-view-btn:hover {
+    color: var(--text);
+    background: rgba(255,255,255,0.06);
+}
+.archive-view-btn.active {
+    color: #fff;
+    background: var(--blue);
+    border-color: var(--blue);
+    box-shadow: 0 1px 4px rgba(46,125,255,0.3);
+}
+.archive-view-btn svg {
+    flex-shrink: 0;
+}
+
+/* Track tooltip styling */
+.track-tooltip {
+    background: rgba(12,29,61,0.95) !important;
+    color: var(--text) !important;
+    border: 1px solid var(--border-light) !important;
+    border-radius: 6px !important;
+    padding: 6px 10px !important;
+    font-size: 12px !important;
+    font-family: 'DM Sans', sans-serif !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
+    line-height: 1.4 !important;
+}
+.track-tooltip .leaflet-tooltip-arrow {
+    display: none;
+}
+
+/* Responsive: hide toggle text on small screens */
+@media (max-width: 900px) {
+    .archive-view-btn {
+        padding: 4px 8px;
+        font-size: 0;
+    }
+    .archive-view-btn svg {
+        font-size: initial;
+    }
+}

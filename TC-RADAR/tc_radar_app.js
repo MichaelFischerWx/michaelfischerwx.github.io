@@ -128,6 +128,7 @@ var _focusMarker = null;
 function enterFocusMode(caseData) {
     _focusMode = true;
     if (markers) map.removeLayer(markers);
+    if (_trackViewLayer) map.removeLayer(_trackViewLayer);
     if (_focusMarker) { map.removeLayer(_focusMarker); _focusMarker = null; }
     var color = getIntensityColor(caseData.vmax_kt);
     var icon = L.divIcon({
@@ -155,7 +156,11 @@ function exitFocusMode() {
     if (_focusMarker) { map.removeLayer(_focusMarker); _focusMarker = null; }
     removeIRMapOverlay();
     cleanupERA5();
-    if (markers) map.addLayer(markers);
+    if (_mapViewMode === 'tracks') {
+        if (_trackViewLayer) map.addLayer(_trackViewLayer);
+    } else {
+        if (markers) map.addLayer(markers);
+    }
     document.getElementById('map-wrapper').classList.remove('focus-mode');
     document.getElementById('side-panel').classList.remove('focus-panel');
     document.getElementById('storm-select').value = '';
@@ -4745,6 +4750,279 @@ function _injectDataTypeToggle() {
     grp.parentNode.insertBefore(sep, grp.nextSibling);
 }
 _injectDataTypeToggle();
+
+// ══════════════════════════════════════════════════════════════
+// ── Track View (Clusters / Tracks toggle) ─────────────────────
+// ══════════════════════════════════════════════════════════════
+var _mapViewMode = 'cluster';   // 'cluster' or 'tracks'
+var _trackViewLayer = null;     // L.layerGroup for track polylines + markers
+var _trackCanvasRenderer = null;
+var _allTracks = {};            // IBTrACS track data keyed by SID
+var _tracksLoaded = false;
+var _tracksLoading = false;
+var _ibtStorms = [];            // IBTrACS storm metadata array
+var _ibtStormsBySID = {};       // Lookup by SID
+var _tdrToSID = {};             // Mapping: "STORMNAME|YEAR" → IBTrACS SID
+
+// Helper: check if IBTrACS nature code represents TC phase
+function _isTCNature(n) {
+    if (!n) return true;  // Assume TC if no nature data
+    return n === 'TS' || n === 'SS';
+}
+
+// Build TDR → IBTrACS SID mapping
+function _buildTDRtoSIDMapping() {
+    if (!_ibtStorms.length) return;
+    _tdrToSID = {};
+    _ibtStorms.forEach(function(s) {
+        if (s.name && s.year) {
+            var key = s.name + '|' + s.year;
+            // Some storms share name+year across basins; prefer NA/EP
+            if (!_tdrToSID[key] || (s.basin === 'NA' || s.basin === 'EP')) {
+                _tdrToSID[key] = s.sid;
+            }
+        }
+    });
+}
+
+// Load IBTrACS storms + tracks (chunked)
+function _loadIBTrACSData(onDone) {
+    if (_tracksLoaded || _tracksLoading) { if (onDone) onDone(); return; }
+    _tracksLoading = true;
+
+    // 1) Load storm metadata
+    var stormsReady = false, tracksReady = false;
+    function checkDone() { if (stormsReady && tracksReady) { _tracksLoaded = true; _tracksLoading = false; _buildTDRtoSIDMapping(); console.log('IBTrACS loaded: ' + _ibtStorms.length + ' storms, ' + Object.keys(_allTracks).length + ' tracks'); if (onDone) onDone(); } }
+
+    fetch('ibtracs_storms.json')
+        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function(data) {
+            _ibtStorms = data.storms || [];
+            _ibtStorms.forEach(function(s) { _ibtStormsBySID[s.sid] = s; });
+            stormsReady = true;
+            checkDone();
+        })
+        .catch(function(err) { console.warn('Failed to load IBTrACS storms: ' + err.message); _tracksLoading = false; });
+
+    // 2) Load chunked tracks
+    fetch('ibtracs_tracks_manifest.json')
+        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function(manifest) {
+            var nChunks = manifest.chunks.length;
+            var loaded = 0;
+            manifest.chunks.forEach(function(chunkName) {
+                fetch(chunkName)
+                    .then(function(r) { return r.json(); })
+                    .then(function(chunk) {
+                        var keys = Object.keys(chunk);
+                        for (var i = 0; i < keys.length; i++) { _allTracks[keys[i]] = chunk[keys[i]]; }
+                        loaded++;
+                        if (loaded === nChunks) { tracksReady = true; checkDone(); }
+                    })
+                    .catch(function(err) { console.warn('Failed to load track chunk ' + chunkName + ': ' + err.message); loaded++; if (loaded === nChunks) { tracksReady = true; checkDone(); } });
+            });
+        })
+        .catch(function() {
+            // Fallback: single file
+            fetch('ibtracs_tracks.json')
+                .then(function(r) { return r.json(); })
+                .then(function(data) { _allTracks = data; tracksReady = true; checkDone(); })
+                .catch(function(err) { console.warn('Failed to load tracks: ' + err.message); _tracksLoading = false; });
+        });
+}
+
+// Inject the Clusters / Tracks toggle into the toolbar
+function _injectViewToggle() {
+    var toolbar = document.querySelector('.map-toolbar');
+    if (!toolbar) return;
+    var grp = document.createElement('div');
+    grp.className = 'toolbar-group view-toggle-group';
+    grp.innerHTML =
+        '<div class="archive-view-toggle">' +
+            '<button class="archive-view-btn active" data-view="cluster" onclick="setArchiveMapView(\'cluster\')" title="Show clustered markers">' +
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="6" cy="6" r="2"/><circle cx="18" cy="8" r="2"/><circle cx="8" cy="18" r="2"/><circle cx="17" cy="17" r="2"/></svg>' +
+                ' Clusters' +
+            '</button>' +
+            '<button class="archive-view-btn" data-view="tracks" onclick="setArchiveMapView(\'tracks\')" title="Show best-track lines with TDR markers">' +
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l4-4 4 4 4-8 5 6"/><circle cx="7" cy="13" r="1.5" fill="currentColor"/><circle cx="15" cy="9" r="1.5" fill="currentColor"/></svg>' +
+                ' Tracks' +
+            '</button>' +
+        '</div>';
+    // Insert after the Reset button (before the count span)
+    var countSpan = toolbar.querySelector('.toolbar-count');
+    if (countSpan) {
+        toolbar.insertBefore(grp, countSpan);
+    } else {
+        toolbar.appendChild(grp);
+    }
+}
+_injectViewToggle();
+
+// Switch between cluster and track views
+window.setArchiveMapView = function(mode) {
+    if (mode === _mapViewMode) return;
+    _mapViewMode = mode;
+
+    // Update toggle button active states
+    document.querySelectorAll('.archive-view-btn').forEach(function(btn) {
+        btn.classList.toggle('active', btn.getAttribute('data-view') === mode);
+    });
+
+    if (mode === 'cluster') {
+        // Remove tracks, show clusters
+        if (_trackViewLayer) map.removeLayer(_trackViewLayer);
+        map.addLayer(markers);
+    } else {
+        // Show tracks — load IBTrACS if not yet loaded
+        map.removeLayer(markers);
+        if (!_tracksLoaded) {
+            showToast('Loading best-track data (~45 MB)…', 'info', 4000);
+            _loadIBTrACSData(function() {
+                _renderArchiveTracks();
+            });
+        } else {
+            _renderArchiveTracks();
+        }
+    }
+};
+
+// Get unique storms from current active filtered data
+function _getFilteredTDRStorms() {
+    var data = _getActiveData();
+    if (!data) return {};
+    // Group filtered cases by storm_name|year
+    var storms = {};
+    data.cases.forEach(function(c) {
+        if (!passesFilters(c)) return;
+        var key = c.storm_name + '|' + c.year;
+        if (!storms[key]) storms[key] = { name: c.storm_name, year: c.year, cases: [] };
+        storms[key].cases.push(c);
+    });
+    return storms;
+}
+
+// Main track rendering function
+function _renderArchiveTracks() {
+    if (!_trackViewLayer) {
+        _trackCanvasRenderer = L.canvas({ padding: 0.5 });
+        _trackViewLayer = L.layerGroup();
+    }
+    _trackViewLayer.clearLayers();
+
+    var tdrStorms = _getFilteredTDRStorms();
+    var stormKeys = Object.keys(tdrStorms);
+    var rendered = 0;
+
+    stormKeys.forEach(function(key) {
+        var storm = tdrStorms[key];
+        var sid = _tdrToSID[key];
+        var track = sid ? _allTracks[sid] : null;
+
+        if (track && track.length >= 2) {
+            // Draw best-track polyline
+            _drawBestTrack(track, storm, sid);
+            rendered++;
+        }
+
+        // Always draw TDR center-fix markers (even if no best-track match)
+        storm.cases.forEach(function(c) {
+            var color = getIntensityColor(c.vmax_kt);
+            var cm = L.circleMarker([c.latitude, c.longitude], {
+                renderer: _trackCanvasRenderer,
+                radius: 5,
+                color: '#fff',
+                weight: 1.5,
+                fillColor: color,
+                fillOpacity: 0.95,
+                opacity: 0.9
+            });
+            cm.bindTooltip(
+                '<strong>' + c.storm_name + '</strong> (' + c.year + ')<br>' +
+                c.datetime + '<br>' +
+                (c.vmax_kt != null ? c.vmax_kt + ' kt' : '') +
+                (c.tilt_magnitude_km != null ? ' · Tilt: ' + c.tilt_magnitude_km.toFixed(1) + ' km' : ''),
+                { className: 'track-tooltip', direction: 'top', offset: [0, -6] }
+            );
+            cm.on('click', function() { openSidePanelById(c.case_index); });
+            _trackViewLayer.addLayer(cm);
+        });
+    });
+
+    _trackViewLayer.addTo(map);
+
+    var nCases = 0;
+    stormKeys.forEach(function(k) { nCases += tdrStorms[k].cases.length; });
+    document.getElementById('filtered-count').textContent = nCases;
+    console.log('Rendered ' + rendered + ' best tracks + TDR markers for ' + stormKeys.length + ' storms');
+}
+
+// Draw a single storm's best-track polyline
+function _drawBestTrack(track, storm, sid) {
+    // Collect valid points
+    var pts = [];
+    for (var i = 0; i < track.length; i++) {
+        if (track[i].la != null && track[i].lo != null) pts.push(track[i]);
+    }
+    if (pts.length < 2) return;
+
+    // Build color-segmented polyline
+    var segColor = _isTCNature(pts[0].n) ? getIntensityColor(pts[0].w) : '#6b7280';
+    var segIsTC = _isTCNature(pts[0].n);
+    var runCoords = [[pts[0].la, pts[0].lo]];
+
+    for (var j = 1; j < pts.length; j++) {
+        var p = pts[j];
+        var isTC = _isTCNature(p.n);
+        var ptColor = isTC ? getIntensityColor(p.w) : '#6b7280';
+
+        if (ptColor !== segColor || isTC !== segIsTC) {
+            if (runCoords.length >= 2) {
+                _addArchiveTrackPolyline(runCoords, segIsTC, segColor, storm);
+            }
+            runCoords = [[pts[j - 1].la, pts[j - 1].lo]];
+            segColor = ptColor;
+            segIsTC = isTC;
+        }
+        runCoords.push([p.la, p.lo]);
+    }
+    if (runCoords.length >= 2) {
+        _addArchiveTrackPolyline(runCoords, segIsTC, segColor, storm);
+    }
+}
+
+function _addArchiveTrackPolyline(coords, isTC, segColor, storm) {
+    var opts = {
+        renderer: _trackCanvasRenderer,
+        interactive: true
+    };
+    if (isTC) {
+        opts.color = segColor;
+        opts.weight = 1.8;
+        opts.opacity = 0.55;
+    } else {
+        opts.color = '#6b7280';
+        opts.weight = 0.8;
+        opts.opacity = 0.2;
+        opts.dashArray = '4,3';
+    }
+    var line = L.polyline(coords, opts);
+    line.bindTooltip(
+        '<strong>' + storm.name + '</strong> (' + storm.year + ')',
+        { sticky: true, className: 'track-tooltip' }
+    );
+    line.on('mouseover', function() { if (isTC) this.setStyle({ weight: 3.5, opacity: 1 }); });
+    line.on('mouseout', function() { if (isTC) this.setStyle({ weight: 1.8, opacity: 0.55 }); });
+    _trackViewLayer.addLayer(line);
+}
+
+// Hook into updateMarkers so track view also refreshes when filters change
+var _origUpdateMarkers = updateMarkers;
+updateMarkers = function() {
+    _origUpdateMarkers();
+    if (_mapViewMode === 'tracks' && _tracksLoaded) {
+        _renderArchiveTracks();
+    }
+};
 
 function switchDataType(dt) {
     if (dt === _activeDataType) return;
