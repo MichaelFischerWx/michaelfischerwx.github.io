@@ -245,6 +245,11 @@ function loadData() {
             var n = Object.keys(allTracks).length;
             console.log('Loaded tracks for ' + n + ' storms from chunks');
             showToast('Track data ready — ' + n.toLocaleString() + ' storm tracks');
+            // Re-render tracks now that data is available (initial render may
+            // have fired before chunks finished loading)
+            if (mapViewMode === 'tracks' && filteredStorms.length) {
+                renderTracks(filteredStorms);
+            }
         })
         .catch(function (manifestErr) {
             // Fallback: try loading single combined file
@@ -256,6 +261,9 @@ function loadData() {
                     var n = Object.keys(data).length;
                     console.log('Loaded tracks for ' + n + ' storms (single file)');
                     showToast('Track data ready — ' + n.toLocaleString() + ' storm tracks');
+                    if (mapViewMode === 'tracks' && filteredStorms.length) {
+                        renderTracks(filteredStorms);
+                    }
                 })
                 .catch(function (err) {
                     console.warn('Track data not loaded:', err);
