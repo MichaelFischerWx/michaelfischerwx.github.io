@@ -294,6 +294,7 @@ function openSidePanel(caseData, fromQuickSelect) {
                     '<button class="cs-btn" id="anomaly-az-btn" onclick="fetchAnomalyAzimuthalMean()" disabled style="background:rgba(239,68,68,0.12);border-color:rgba(239,68,68,0.35);color:#fca5a5;">Z* Anomaly</button>' +
                     '<button class="cs-btn" id="vp-scatter-btn" onclick="fetchVPScatter()" style="background:rgba(251,191,36,0.12);border-color:rgba(251,191,36,0.35);color:#fde68a;">\u2B24 VP Scatter</button>' +
                     '<button class="cs-btn" id="barb-btn" onclick="toggleWindBarbs()" disabled>\uD83C\uDF2C\uFE0F Barbs Off</button>' +
+                    '<button class="cs-btn" id="tilt-btn" onclick="toggleTiltProfile()">\uD83C\uDFAF Tilt Off</button>' +
                 '</div>' +
                 '<div class="display-actions" style="margin-top:4px;">' +
                     '<button class="cs-btn env-case-btn" id="env-case-btn" onclick="toggleEnvOverlay()" style="background:rgba(0,180,100,0.12);border-color:rgba(0,180,100,0.35);color:#6ee7b7;flex:1;">\uD83C\uDF0D Environment Diagnostics</button>' +
@@ -1131,6 +1132,99 @@ function toggleWindBarbs() {
     if (currentCaseIndex !== null) {
         generateCustomPlot();
     }
+}
+
+// ── Tilt Profile overlay ──────────────────────────────────────
+var _tiltProfileEnabled = false;
+
+function toggleTiltProfile() {
+    _tiltProfileEnabled = !_tiltProfileEnabled;
+    var btn = document.getElementById('tilt-btn');
+    if (btn) {
+        btn.textContent = _tiltProfileEnabled ? '\uD83C\uDFAF Tilt On' : '\uD83C\uDFAF Tilt Off';
+        btn.classList.toggle('active', _tiltProfileEnabled);
+        if (_tiltProfileEnabled) {
+            btn.style.background = 'rgba(251,191,36,0.18)';
+            btn.style.borderColor = 'rgba(251,191,36,0.45)';
+            btn.style.color = '#fde68a';
+        } else {
+            btn.style.background = '';
+            btn.style.borderColor = '';
+            btn.style.color = '';
+        }
+    }
+    // Re-generate current plot with or without tilt profile
+    if (currentCaseIndex !== null) {
+        generateCustomPlot();
+    }
+}
+
+/**
+ * Build a Plotly scatter trace showing the vortex tilt profile on a plan-view plot.
+ * Each marker represents the vortex center at a given height, colored by height.
+ * @param {Object} tiltData - { x_km, y_km, height_km, tilt_magnitude_km, ref_height_km }
+ * @returns {Object} Plotly scatter trace
+ */
+function _buildTiltProfileTrace(tiltData) {
+    var x = [], y = [], colors = [], texts = [], sizes = [];
+    var refH = tiltData.ref_height_km || 2.0;
+    for (var i = 0; i < tiltData.height_km.length; i++) {
+        if (tiltData.x_km[i] === null || tiltData.y_km[i] === null) continue;
+        var h = tiltData.height_km[i];
+        var tiltMag = tiltData.tilt_magnitude_km[i];
+        x.push(tiltData.x_km[i]);
+        y.push(tiltData.y_km[i]);
+        colors.push(h);
+        sizes.push(h === refH ? 12 : 8);
+        var hoverText = '<b>Tilt Profile</b><br>' +
+            'Height: ' + h.toFixed(1) + ' km<br>' +
+            'X: ' + tiltData.x_km[i].toFixed(1) + ' km<br>' +
+            'Y: ' + tiltData.y_km[i].toFixed(1) + ' km';
+        if (tiltMag !== null) hoverText += '<br>Tilt from ' + refH.toFixed(1) + ' km: ' + tiltMag.toFixed(1) + ' km';
+        if (tiltData.rmw_km && tiltData.rmw_km[i] !== null) hoverText += '<br>RMW: ' + tiltData.rmw_km[i].toFixed(1) + ' km';
+        texts.push(hoverText);
+    }
+    if (x.length === 0) return null;
+
+    // Build line trace connecting the centers (the tilt profile "path")
+    var lineTrace = {
+        x: x, y: y,
+        type: 'scatter', mode: 'lines',
+        line: { color: 'rgba(255,255,255,0.4)', width: 1.5, dash: 'dot' },
+        hoverinfo: 'skip', showlegend: false
+    };
+    // Build scatter trace with markers colored by height
+    var scatterTrace = {
+        x: x, y: y,
+        type: 'scatter', mode: 'markers',
+        marker: {
+            size: sizes,
+            color: colors,
+            colorscale: [
+                [0, 'rgb(0,0,180)'],
+                [0.15, 'rgb(0,100,255)'],
+                [0.3, 'rgb(0,200,200)'],
+                [0.45, 'rgb(0,220,100)'],
+                [0.6, 'rgb(200,220,0)'],
+                [0.75, 'rgb(255,160,0)'],
+                [0.9, 'rgb(255,60,0)'],
+                [1, 'rgb(180,0,0)']
+            ],
+            cmin: 0, cmax: 18,
+            colorbar: {
+                title: { text: 'Height (km)', font: { color: '#ccc', size: 9 } },
+                tickfont: { color: '#ccc', size: 8 },
+                thickness: 8, len: 0.5,
+                x: 1.06, xpad: 0,
+                outlinewidth: 0
+            },
+            line: { color: 'rgba(255,255,255,0.8)', width: 1.2 }
+        },
+        text: texts,
+        hovertemplate: '%{text}<extra></extra>',
+        showlegend: false
+    };
+    return { line: lineTrace, scatter: scatterTrace };
 }
 
 //
@@ -3218,7 +3312,8 @@ function generateCustomPlot(callback) {
         }
     }
     var wantBarbs = _windBarbsEnabled && _BARB_ELIGIBLE_VARS[variable];
-    var cacheKey = _activeDataType + '_' + currentCaseIndex + '_' + variable + '_' + level_km + '_' + overlay + (wantBarbs ? '_barbs' : '');
+    var wantTilt = _tiltProfileEnabled;
+    var cacheKey = _activeDataType + '_' + currentCaseIndex + '_' + variable + '_' + level_km + '_' + overlay + (wantBarbs ? '_barbs' : '') + (wantTilt ? '_tilt' : '');
     if (_dataCache[cacheKey]) {
         renderPlotFromJSON(_dataCache[cacheKey], resultDiv);
         btn.disabled = false; btn.textContent = 'Generate Plot';
@@ -3229,6 +3324,7 @@ function generateCustomPlot(callback) {
     var url = API_BASE + '/data?case_index=' + currentCaseIndex + '&variable=' + variable + '&level_km=' + level_km + '&data_type=' + _activeDataType + '';
     if (overlay) url += '&overlay=' + overlay;
     if (wantBarbs) url += '&wind_barbs=true';
+    if (wantTilt) url += '&tilt_profile=true';
     fetch(url, { signal: controller.signal })
         .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
         .then(function(json) { _dataCache[cacheKey] = json; renderPlotFromJSON(json, resultDiv); if (callback) callback(); })
@@ -3664,8 +3760,18 @@ function renderPlotFromJSON(json, resultDiv) {
         baseLayout.shapes = (baseLayout.shapes || []).concat(barbShapes);
     }
 
-    Plotly.newPlot('plotly-chart', [heatmap].concat(overlayTraces).concat(maxTraces), smallLayout, config);
-    window._lastPlotlyData = { heatmap: heatmap, overlayTraces: overlayTraces, maxTraces: maxTraces, baseLayout: baseLayout, title: title, config: config, barbShapes: barbShapes };
+    // Tilt profile overlay
+    var tiltTraces = [];
+    if (json.tilt_profile) {
+        var tiltResult = _buildTiltProfileTrace(json.tilt_profile);
+        if (tiltResult) {
+            tiltTraces.push(tiltResult.line);
+            tiltTraces.push(tiltResult.scatter);
+        }
+    }
+
+    Plotly.newPlot('plotly-chart', [heatmap].concat(overlayTraces).concat(maxTraces).concat(tiltTraces), smallLayout, config);
+    window._lastPlotlyData = { heatmap: heatmap, overlayTraces: overlayTraces, maxTraces: maxTraces, tiltTraces: tiltTraces, baseLayout: baseLayout, title: title, config: config, barbShapes: barbShapes };
     var csBtn = document.getElementById('cs-btn'); if (csBtn) csBtn.disabled = false;
     var azBtn = document.getElementById('az-btn'); if (azBtn) azBtn.disabled = false;
     var sqBtn = document.getElementById('sq-btn'); if (sqBtn) sqBtn.disabled = false;
@@ -5329,7 +5435,7 @@ function openPlotModal(csJson) {
     if (fsShearInset.shapes.length) fullLayout.shapes = (fullLayout.shapes || []).concat(fsShearInset.shapes);
     if (fsShearInset.annotations.length) fullLayout.annotations = (fullLayout.annotations || []).concat(fsShearInset.annotations);
     var fullHeatmap = Object.assign({}, d.heatmap, { colorbar: Object.assign({}, d.heatmap.colorbar, { title: { text: d.heatmap.colorbar.title.text, font: { color: '#ccc', size: 13 } }, tickfont: { color: '#ccc', size: 11 }, thickness: 16, len: 0.85 }) });
-    Plotly.newPlot('plotly-fullscreen', [fullHeatmap].concat(d.overlayTraces||[]).concat(d.maxTraces||[]), fullLayout, d.config);
+    Plotly.newPlot('plotly-fullscreen', [fullHeatmap].concat(d.overlayTraces||[]).concat(d.maxTraces||[]).concat(d.tiltTraces||[]), fullLayout, d.config);
     if (hasCrossSection) renderCrossSectionInto('cs-fullscreen', csJson, true);
     if (hasAzMean) {
         if (_lastVPScatterJson) renderVPScatterInto('az-fullscreen', _lastVPScatterJson, true);
