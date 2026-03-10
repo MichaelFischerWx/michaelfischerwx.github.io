@@ -1134,6 +1134,208 @@ var COMPARE_COLORS = [
     '#a78bfa', '#fb923c', '#f472b6', '#38bdf8'
 ];
 var COMPARE_MAX = 8;
+var compareSearchBasins = ['ALL'];
+var compareSearchVisible = false;
+var _compareSearchTimer = null;
+
+// ── Compare Search / Filter ────────────────────────────────
+
+window.toggleCompareBasin = function (btn) {
+    var basin = btn.getAttribute('data-basin');
+    var parent = btn.parentElement;
+    if (basin === 'ALL') {
+        compareSearchBasins = ['ALL'];
+        parent.querySelectorAll('.basin-chip').forEach(function (b) {
+            b.classList.toggle('active', b.getAttribute('data-basin') === 'ALL');
+        });
+    } else {
+        // Remove ALL
+        compareSearchBasins = compareSearchBasins.filter(function (b) { return b !== 'ALL'; });
+        var idx = compareSearchBasins.indexOf(basin);
+        if (idx >= 0) {
+            compareSearchBasins.splice(idx, 1);
+        } else {
+            compareSearchBasins.push(basin);
+        }
+        if (compareSearchBasins.length === 0) compareSearchBasins = ['ALL'];
+        parent.querySelectorAll('.basin-chip').forEach(function (b) {
+            var d = b.getAttribute('data-basin');
+            b.classList.toggle('active', compareSearchBasins.indexOf(d) >= 0);
+        });
+    }
+    updateCompareSearch();
+};
+
+window.toggleCompareSearch = function () {
+    compareSearchVisible = !compareSearchVisible;
+    var inlinePanel = document.getElementById('compare-search-inline');
+    var btn = document.getElementById('compare-add-btn');
+    if (compareSearchVisible) {
+        // Build inline search panel (mirrors the empty-state panel)
+        inlinePanel.innerHTML = _buildCompareSearchHTML('inline');
+        inlinePanel.style.display = '';
+        if (btn) { btn.textContent = 'Hide Search'; btn.classList.add('active'); }
+        // Sync basin chips in inline panel
+        _syncCompareBasinChips(inlinePanel);
+        _doCompareSearch('inline');
+    } else {
+        inlinePanel.style.display = 'none';
+        inlinePanel.innerHTML = '';
+        if (btn) { btn.textContent = '+ Add Storm'; btn.classList.remove('active'); }
+    }
+};
+
+function _buildCompareSearchHTML(ctx) {
+    var sfx = ctx === 'inline' ? '-i' : '';
+    return '<h3 class="compare-search-title">Add Storms</h3>' +
+        '<div class="compare-search-row">' +
+            '<input type="text" id="compare-search-name' + sfx + '" class="ga-input" placeholder="Search by name (e.g. Katrina)" oninput="updateCompareSearch()">' +
+        '</div>' +
+        '<div class="compare-filter-row">' +
+            '<span class="compare-filter-label">Basin:</span>' +
+            '<div class="compare-basin-chips">' +
+                '<button class="basin-chip active" data-basin="ALL" onclick="toggleCompareBasin(this)">All</button>' +
+                '<button class="basin-chip" data-basin="AL" onclick="toggleCompareBasin(this)">AL</button>' +
+                '<button class="basin-chip" data-basin="EP" onclick="toggleCompareBasin(this)">EP</button>' +
+                '<button class="basin-chip" data-basin="WP" onclick="toggleCompareBasin(this)">WP</button>' +
+                '<button class="basin-chip" data-basin="IO" onclick="toggleCompareBasin(this)">IO</button>' +
+                '<button class="basin-chip" data-basin="SH" onclick="toggleCompareBasin(this)">SH</button>' +
+            '</div>' +
+        '</div>' +
+        '<div class="compare-filter-row compare-filter-grid">' +
+            '<div class="compare-filter-cell"><label>Year</label><div class="compare-range-inputs">' +
+                '<input type="number" id="compare-year-min' + sfx + '" class="ga-input ga-input-sm" placeholder="1997" oninput="updateCompareSearch()">' +
+                '<span>&ndash;</span>' +
+                '<input type="number" id="compare-year-max' + sfx + '" class="ga-input ga-input-sm" placeholder="2024" oninput="updateCompareSearch()">' +
+            '</div></div>' +
+            '<div class="compare-filter-cell"><label>Min Wind (kt)</label>' +
+                '<input type="number" id="compare-wind-min' + sfx + '" class="ga-input ga-input-sm" placeholder="0" oninput="updateCompareSearch()">' +
+            '</div>' +
+            '<div class="compare-filter-cell"><label>Min RI (kt/24h)</label>' +
+                '<input type="number" id="compare-ri-min' + sfx + '" class="ga-input ga-input-sm" placeholder="0" oninput="updateCompareSearch()">' +
+            '</div>' +
+        '</div>' +
+        '<div class="compare-filter-row">' +
+            '<span class="compare-filter-label">Sort:</span>' +
+            '<select id="compare-sort' + sfx + '" class="ga-select ga-select-sm" onchange="updateCompareSearch()">' +
+                '<option value="year-desc">Year (newest)</option>' +
+                '<option value="year-asc">Year (oldest)</option>' +
+                '<option value="wind-desc">Peak Wind</option>' +
+                '<option value="ri-desc">RI Rate</option>' +
+                '<option value="ace-desc">ACE</option>' +
+            '</select>' +
+            '<span class="compare-result-count" id="compare-result-count' + sfx + '"></span>' +
+        '</div>' +
+        '<div id="compare-search-results' + sfx + '" class="compare-search-results"></div>';
+}
+
+function _syncCompareBasinChips(container) {
+    container.querySelectorAll('.compare-basin-chips .basin-chip').forEach(function (b) {
+        var d = b.getAttribute('data-basin');
+        b.classList.toggle('active', compareSearchBasins.indexOf(d) >= 0);
+    });
+}
+
+window.updateCompareSearch = function () {
+    clearTimeout(_compareSearchTimer);
+    _compareSearchTimer = setTimeout(function () {
+        // Update both panels (empty-state and inline)
+        _doCompareSearch('');
+        _doCompareSearch('inline');
+    }, 150);
+};
+
+function _doCompareSearch(ctx) {
+    var sfx = ctx === 'inline' ? '-i' : '';
+    var resultsEl = document.getElementById('compare-search-results' + sfx);
+    if (!resultsEl) return;
+
+    var nameInput = document.getElementById('compare-search-name' + sfx);
+    var nameQuery = nameInput ? nameInput.value.trim().toUpperCase() : '';
+    var yearMin = parseInt((document.getElementById('compare-year-min' + sfx) || {}).value) || 0;
+    var yearMax = parseInt((document.getElementById('compare-year-max' + sfx) || {}).value) || 9999;
+    var windMin = parseInt((document.getElementById('compare-wind-min' + sfx) || {}).value) || 0;
+    var riMin = parseInt((document.getElementById('compare-ri-min' + sfx) || {}).value) || 0;
+    var sortBy = (document.getElementById('compare-sort' + sfx) || {}).value || 'year-desc';
+
+    var filtered = allStorms.filter(function (s) {
+        if (nameQuery && (!s.name || s.name.toUpperCase().indexOf(nameQuery) === -1)) return false;
+        if (compareSearchBasins[0] !== 'ALL' && compareSearchBasins.indexOf(s.basin) === -1) return false;
+        if (s.year < yearMin || s.year > yearMax) return false;
+        if ((s.peak_wind_kt || 0) < windMin) return false;
+        if (riMin > 0 && (s.ri_24h == null || s.ri_24h < riMin)) return false;
+        return true;
+    });
+
+    var comparators = {
+        'year-desc': function (a, b) { return (b.year || 0) - (a.year || 0); },
+        'year-asc':  function (a, b) { return (a.year || 0) - (b.year || 0); },
+        'wind-desc': function (a, b) { return (b.peak_wind_kt || 0) - (a.peak_wind_kt || 0); },
+        'ri-desc':   function (a, b) { return (b.ri_24h || 0) - (a.ri_24h || 0); },
+        'ace-desc':  function (a, b) { return (b.ace || 0) - (a.ace || 0); }
+    };
+    if (comparators[sortBy]) filtered.sort(comparators[sortBy]);
+
+    var total = filtered.length;
+    filtered = filtered.slice(0, 50);
+
+    // Update count
+    var countEl = document.getElementById('compare-result-count' + sfx);
+    if (countEl) countEl.textContent = total + ' storms' + (total > 50 ? ' (showing 50)' : '');
+
+    // Render results
+    _renderCompareSearchResults(resultsEl, filtered);
+}
+
+function _renderCompareSearchResults(container, storms) {
+    if (!storms || storms.length === 0) {
+        container.innerHTML = '<div class="compare-result-empty">No storms match your filters.</div>';
+        return;
+    }
+
+    var alreadySids = {};
+    compareStorms.forEach(function (s) { alreadySids[s.sid] = true; });
+    var atMax = compareStorms.length >= COMPARE_MAX;
+
+    var html = '';
+    storms.forEach(function (s, i) {
+        var isAdded = alreadySids[s.sid];
+        var rowClass = 'compare-result-row' + (isAdded ? ' added' : '');
+        var cat = _windCategory(s.peak_wind_kt);
+
+        html += '<div class="' + rowClass + '" data-sid="' + s.sid + '" ' +
+            (isAdded || atMax ? '' : 'onclick="addCompareFromSearch(\'' + s.sid + '\')"') + '>' +
+            '<span class="compare-result-name">' + (s.name || 'UNNAMED') + '</span>' +
+            '<span class="compare-result-meta">' + s.year + '</span>' +
+            '<span class="compare-result-meta basin-badge-sm">' + (s.basin || '?') + '</span>' +
+            '<span class="compare-result-meta">' + (s.peak_wind_kt || '-') + ' kt' +
+                (cat ? ' <span class="cat-label-sm">' + cat + '</span>' : '') + '</span>' +
+            '<span class="compare-result-meta">' + (s.ri_24h != null ? 'RI +' + s.ri_24h : '') + '</span>' +
+            (isAdded
+                ? '<span class="compare-result-add added">Added</span>'
+                : atMax
+                    ? '<span class="compare-result-add added">Full</span>'
+                    : '<button class="compare-result-add" onclick="event.stopPropagation();addCompareFromSearch(\'' + s.sid + '\')">+ Add</button>'
+            ) +
+            '</div>';
+    });
+    container.innerHTML = html;
+}
+
+function _windCategory(kt) {
+    if (!kt || kt < 34) return '';
+    if (kt < 64) return 'TS';
+    if (kt < 83) return 'Cat1';
+    if (kt < 96) return 'Cat2';
+    if (kt < 113) return 'Cat3';
+    if (kt < 137) return 'Cat4';
+    return 'Cat5';
+}
+
+window.addCompareFromSearch = function (sid) {
+    var storm = allStorms.find(function (s) { return s.sid === sid; });
+    if (storm) addToCompare(storm);
+};
 
 window.addCurrentToCompare = function () {
     if (!selectedStorm) return;
@@ -1152,15 +1354,21 @@ function addToCompare(storm) {
     compareStorms.push(storm);
     showToast(storm.name + ' (' + storm.year + ') added to comparison');
     renderCompareView();
+    // Refresh search results to update "Added" badges
+    _doCompareSearch('');
+    _doCompareSearch('inline');
 }
 
 window.removeFromCompare = function (sid) {
     compareStorms = compareStorms.filter(function (s) { return s.sid !== sid; });
     renderCompareView();
+    _doCompareSearch('');
+    _doCompareSearch('inline');
 };
 
 window.clearCompare = function () {
     compareStorms = [];
+    compareSearchVisible = false;
     renderCompareView();
 };
 
@@ -1177,6 +1385,8 @@ function renderCompareView() {
     var empty = document.getElementById('compare-empty');
     var content = document.getElementById('compare-content');
     var tableWrap = document.getElementById('compare-table-wrap');
+    var addBtn = document.getElementById('compare-add-btn');
+    var inlinePanel = document.getElementById('compare-search-inline');
 
     // Render chips
     chips.innerHTML = compareStorms.map(function (s, i) {
@@ -1192,12 +1402,18 @@ function renderCompareView() {
         empty.style.display = '';
         content.style.display = 'none';
         tableWrap.style.display = 'none';
+        if (addBtn) addBtn.style.display = 'none';
+        if (inlinePanel) { inlinePanel.style.display = 'none'; inlinePanel.innerHTML = ''; }
+        compareSearchVisible = false;
+        // Auto-populate search results in empty state
+        setTimeout(function () { _doCompareSearch(''); }, 50);
         return;
     }
 
     empty.style.display = 'none';
     content.style.display = '';
     tableWrap.style.display = '';
+    if (addBtn) addBtn.style.display = '';
 
     renderCompareTimeline();
     renderCompareMap();

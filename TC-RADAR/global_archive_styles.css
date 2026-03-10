@@ -1247,14 +1247,65 @@ input[type="range"].ga-range::-moz-range-thumb {
 }
 .compare-chip-remove:hover { opacity: 1; }
 
-/* Empty state */
+/* Empty state (now hosts the search panel) */
 .compare-empty {
-    text-align: center;
-    padding: 60px 20px;
+    padding: 24px 20px;
     color: var(--slate);
 }
-.compare-empty p { margin: 4px 0; }
-.compare-empty-hint { font-size: 0.8rem; opacity: 0.7; }
+
+/* Compare search panel */
+.compare-search-panel { max-width: 600px; margin: 0 auto; text-align: left; }
+.compare-search-title { font-size: 1rem; color: var(--white); margin: 0 0 4px; font-weight: 700; }
+.compare-search-hint { font-size: 0.78rem; color: var(--slate); margin: 0 0 14px; opacity: 0.8; }
+.compare-search-row { margin-bottom: 10px; }
+.compare-filter-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.compare-filter-label { font-size: 0.75rem; color: var(--slate); min-width: 36px; }
+.compare-basin-chips { display: flex; gap: 4px; flex-wrap: wrap; }
+.compare-filter-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; align-items: start; }
+.compare-filter-cell label { display: block; font-size: 0.7rem; color: var(--slate); margin-bottom: 2px; }
+.compare-range-inputs { display: flex; align-items: center; gap: 4px; }
+.compare-range-inputs span { color: var(--slate); font-size: 0.8rem; }
+.compare-result-count { font-size: 0.72rem; color: var(--slate); margin-left: auto; }
+
+/* Search results list */
+.compare-search-results {
+    max-height: 320px; overflow-y: auto; margin-top: 10px;
+    border: 1px solid var(--border); border-radius: 8px;
+}
+.compare-result-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 12px; cursor: pointer; transition: background 0.15s;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    font-size: 0.78rem;
+}
+.compare-result-row:last-child { border-bottom: none; }
+.compare-result-row:hover { background: rgba(255,255,255,0.04); }
+.compare-result-row.added { opacity: 0.45; cursor: default; }
+.compare-result-row.added:hover { background: transparent; }
+.compare-result-name { font-weight: 600; color: var(--white); min-width: 90px; }
+.compare-result-meta { font-size: 0.72rem; color: var(--slate); font-family: 'JetBrains Mono', monospace; }
+.basin-badge-sm {
+    background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 3px;
+    font-size: 0.65rem; font-weight: 600; letter-spacing: 0.03em;
+}
+.cat-label-sm { font-size: 0.62rem; opacity: 0.7; }
+.compare-result-add {
+    margin-left: auto; font-size: 0.7rem; padding: 3px 10px;
+    border-radius: 6px; border: 1px solid var(--blue); color: var(--blue);
+    background: transparent; cursor: pointer; white-space: nowrap; transition: background 0.15s;
+}
+.compare-result-add:hover { background: rgba(0,212,255,0.1); }
+.compare-result-add.added { border-color: var(--slate); color: var(--slate); cursor: default; }
+.compare-result-add.added:hover { background: transparent; }
+.compare-result-empty { text-align: center; padding: 24px; color: var(--slate); font-size: 0.8rem; }
+
+/* Inline search (when storms already selected) */
+.compare-search-inline {
+    background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px; margin-bottom: 14px;
+}
+.compare-search-inline .compare-search-title { font-size: 0.9rem; margin-bottom: 8px; }
+.compare-search-inline .compare-search-results { max-height: 220px; }
 
 /* Stats table */
 .compare-stats-table {
