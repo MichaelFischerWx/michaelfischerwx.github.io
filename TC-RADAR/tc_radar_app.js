@@ -293,6 +293,7 @@ function openSidePanel(caseData, fromQuickSelect) {
                     '<button class="cs-btn" id="hybrid-az-btn" onclick="fetchHybridAzimuthalMean()" disabled style="background:rgba(168,85,247,0.12);border-color:rgba(168,85,247,0.35);color:#c4b5fd;">R\u2095 Hybrid</button>' +
                     '<button class="cs-btn" id="anomaly-az-btn" onclick="fetchAnomalyAzimuthalMean()" disabled style="background:rgba(239,68,68,0.12);border-color:rgba(239,68,68,0.35);color:#fca5a5;">Z* Anomaly</button>' +
                     '<button class="cs-btn" id="vp-scatter-btn" onclick="fetchVPScatter()" style="background:rgba(251,191,36,0.12);border-color:rgba(251,191,36,0.35);color:#fde68a;">\u2B24 VP Scatter</button>' +
+                    '<button class="cs-btn" id="barb-btn" onclick="toggleWindBarbs()" disabled>\uD83C\uDF2C\uFE0F Barbs Off</button>' +
                 '</div>' +
                 '<div class="display-actions" style="margin-top:4px;">' +
                     '<button class="cs-btn env-case-btn" id="env-case-btn" onclick="toggleEnvOverlay()" style="background:rgba(0,180,100,0.12);border-color:rgba(0,180,100,0.35);color:#6ee7b7;flex:1;">\uD83C\uDF0D Environment Diagnostics</button>' +
@@ -985,6 +986,153 @@ function renderThetaProfile(profiles, divId) {
 // Draws standard meteorological wind barbs as Plotly shape arrays.
 // Each barb: staff pointing INTO the wind, feathers on left side.
 // Convention: half barb = 5 kt, full barb = 10 kt, flag = 50 kt.
+// ── Plan-view wind barbs (for archive plan-view plots) ───────
+// Draws standard meteorological wind barbs on a Cartesian (km) grid.
+// barbData = { u:[[]], v:[[]], x:[], y:[], units:'m/s', type:'storm_relative'|'earth_relative' }
+// axRanges = { xMin, xMax, yMin, yMax }
+// Returns array of Plotly shape objects (type:'line', xref:'x', yref:'y').
+function _buildPlanViewWindBarbs(barbData, axRanges) {
+    var shapes = [];
+    if (!barbData || !barbData.u || !barbData.v) return shapes;
+
+    var uGrid = barbData.u, vGrid = barbData.v;
+    var xCoords = barbData.x, yCoords = barbData.y;
+
+    var xSpan = axRanges.xMax - axRanges.xMin;
+    var ySpan = axRanges.yMax - axRanges.yMin;
+    var span = Math.max(xSpan, ySpan);
+    if (span <= 0) return shapes;
+
+    // Staff length in data units (km) — ~4% of axis span
+    var staffLen = span * 0.04;
+    var barbFrac = 0.38;    // feather length as fraction of staff
+    var gapFrac  = 0.12;    // gap between feathers
+    var flagWFrac = 0.38;   // flag width (50-kt pennant)
+    var flagHFrac = 0.18;   // flag height along staff
+
+    var lineColor = 'rgba(220,220,240,0.85)';
+    var lineWidth = 1.4;
+
+    function mkLine(x0, y0, x1, y1) {
+        return {
+            type: 'line', xref: 'x', yref: 'y',
+            x0: x0, y0: y0, x1: x1, y1: y1,
+            line: { color: lineColor, width: lineWidth }
+        };
+    }
+
+    for (var yi = 0; yi < uGrid.length; yi++) {
+        for (var xi = 0; xi < uGrid[yi].length; xi++) {
+            var uMs = uGrid[yi][xi], vMs = vGrid[yi][xi];
+            if (uMs === null || vMs === null) continue;
+
+            var spdKt = Math.sqrt(uMs * uMs + vMs * vMs) * 1.944;
+            if (spdKt < 2.5) continue;  // calm — skip
+
+            var xBase = xCoords[xi], yBase = yCoords[yi];
+
+            // Direction wind is coming FROM (meteorological convention)
+            var dirRad = Math.atan2(-uMs, -vMs);
+            var sinD = Math.sin(dirRad), cosD = Math.cos(dirRad);
+
+            // Staff: tip is in the "from" direction (away from base)
+            var xTip = xBase + staffLen * sinD;
+            var yTip = yBase + staffLen * cosD;
+
+            // Draw staff line
+            shapes.push(mkLine(xBase, yBase, xTip, yTip));
+
+            // Feather encoding
+            var remaining = Math.round(spdKt / 5) * 5;
+            var nFlags = Math.floor(remaining / 50); remaining -= nFlags * 50;
+            var nFull  = Math.floor(remaining / 10); remaining -= nFull * 10;
+            var nHalf  = Math.floor(remaining / 5);
+
+            // Perpendicular (left side of staff, looking from base to tip): rotate +90°
+            var perpX = cosD;
+            var perpY = -sinD;
+
+            var barbLen = staffLen * barbFrac;
+            var barbGap = staffLen * gapFrac;
+            var flagW   = staffLen * flagWFrac;
+            var flagH   = staffLen * flagHFrac;
+
+            var featherPos = 0;
+
+            // 50-kt flags (triangular pennants)
+            for (var fi = 0; fi < nFlags; fi++) {
+                var frac = featherPos / staffLen;
+                var fx  = xTip - (xTip - xBase) * frac;
+                var fy  = yTip - (yTip - yBase) * frac;
+                var frac2 = (featherPos + flagH) / staffLen;
+                var fx2 = xTip - (xTip - xBase) * frac2;
+                var fy2 = yTip - (yTip - yBase) * frac2;
+                var midFrac = (featherPos + flagH * 0.5) / staffLen;
+                var mx = xTip - (xTip - xBase) * midFrac;
+                var my = yTip - (yTip - yBase) * midFrac;
+                var outX = mx + flagW * perpX;
+                var outY = my + flagW * perpY;
+                shapes.push(mkLine(fx, fy, outX, outY));
+                shapes.push(mkLine(outX, outY, fx2, fy2));
+                featherPos += flagH + barbGap * 0.3;
+            }
+
+            // 10-kt full barbs
+            for (var fb = 0; fb < nFull; fb++) {
+                var frac = featherPos / staffLen;
+                var bx = xTip - (xTip - xBase) * frac;
+                var by = yTip - (yTip - yBase) * frac;
+                shapes.push(mkLine(bx, by, bx + barbLen * perpX, by + barbLen * perpY));
+                featherPos += barbGap;
+            }
+
+            // 5-kt half barbs
+            for (var hb = 0; hb < nHalf; hb++) {
+                var frac = featherPos / staffLen;
+                var hx = xTip - (xTip - xBase) * frac;
+                var hy = yTip - (yTip - yBase) * frac;
+                shapes.push(mkLine(hx, hy, hx + barbLen * 0.55 * perpX, hy + barbLen * 0.55 * perpY));
+                featherPos += barbGap;
+            }
+        }
+    }
+    return shapes;
+}
+
+// Set of variable keys eligible for wind barbs (wind speed variables)
+var _BARB_ELIGIBLE_VARS = {
+    'recentered_wind_speed': true,
+    'recentered_earth_relative_wind_speed': true,
+    'total_recentered_wind_speed': true,
+    'total_recentered_earth_relative_wind_speed': true,
+    'swath_wind_speed': true,
+    'swath_earth_relative_wind_speed': true,
+    'merged_wind_speed': true
+};
+var _windBarbsEnabled = false;
+
+function toggleWindBarbs() {
+    _windBarbsEnabled = !_windBarbsEnabled;
+    var btn = document.getElementById('barb-btn');
+    if (btn) {
+        btn.textContent = _windBarbsEnabled ? '\uD83C\uDF2C\uFE0F Barbs On' : '\uD83C\uDF2C\uFE0F Barbs Off';
+        btn.classList.toggle('active', _windBarbsEnabled);
+        if (_windBarbsEnabled) {
+            btn.style.background = 'rgba(96,165,250,0.18)';
+            btn.style.borderColor = 'rgba(96,165,250,0.45)';
+            btn.style.color = '#93c5fd';
+        } else {
+            btn.style.background = '';
+            btn.style.borderColor = '';
+            btn.style.color = '';
+        }
+    }
+    // Re-generate current plot with or without barbs
+    if (currentCaseIndex !== null) {
+        generateCustomPlot();
+    }
+}
+
 //
 // Works in paper-normalised space internally so barbs are
 // aspect-ratio-independent, then converts back to data coords for Plotly.
@@ -3058,7 +3206,19 @@ function generateCustomPlot(callback) {
         var panelInner = document.getElementById('side-panel-inner');
         if (panelInner) panelInner.scrollTop = 0;
     }
-    var cacheKey = _activeDataType + '_' + currentCaseIndex + '_' + variable + '_' + level_km + '_' + overlay;
+    // Enable/disable wind barb button based on variable eligibility
+    var barbBtn = document.getElementById('barb-btn');
+    if (barbBtn) {
+        barbBtn.disabled = !_BARB_ELIGIBLE_VARS[variable];
+        if (!_BARB_ELIGIBLE_VARS[variable] && _windBarbsEnabled) {
+            _windBarbsEnabled = false;
+            barbBtn.textContent = '\uD83C\uDF2C\uFE0F Barbs Off';
+            barbBtn.classList.remove('active');
+            barbBtn.style.background = ''; barbBtn.style.borderColor = ''; barbBtn.style.color = '';
+        }
+    }
+    var wantBarbs = _windBarbsEnabled && _BARB_ELIGIBLE_VARS[variable];
+    var cacheKey = _activeDataType + '_' + currentCaseIndex + '_' + variable + '_' + level_km + '_' + overlay + (wantBarbs ? '_barbs' : '');
     if (_dataCache[cacheKey]) {
         renderPlotFromJSON(_dataCache[cacheKey], resultDiv);
         btn.disabled = false; btn.textContent = 'Generate Plot';
@@ -3068,6 +3228,7 @@ function generateCustomPlot(callback) {
     var timeout = setTimeout(function() { controller.abort(); }, 90000);
     var url = API_BASE + '/data?case_index=' + currentCaseIndex + '&variable=' + variable + '&level_km=' + level_km + '&data_type=' + _activeDataType + '';
     if (overlay) url += '&overlay=' + overlay;
+    if (wantBarbs) url += '&wind_barbs=true';
     fetch(url, { signal: controller.signal })
         .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
         .then(function(json) { _dataCache[cacheKey] = json; renderPlotFromJSON(json, resultDiv); if (callback) callback(); })
@@ -3493,8 +3654,18 @@ function renderPlotFromJSON(json, resultDiv) {
         smallLayout.annotations = (smallLayout.annotations || []).concat(shearInset.annotations);
     }
 
+    // Wind barbs overlay
+    var barbShapes = [];
+    if (json.wind_barbs) {
+        var xArr = x, yArr = y;
+        var axR = { xMin: xArr[0], xMax: xArr[xArr.length - 1], yMin: yArr[0], yMax: yArr[yArr.length - 1] };
+        barbShapes = _buildPlanViewWindBarbs(json.wind_barbs, axR);
+        smallLayout.shapes = (smallLayout.shapes || []).concat(barbShapes);
+        baseLayout.shapes = (baseLayout.shapes || []).concat(barbShapes);
+    }
+
     Plotly.newPlot('plotly-chart', [heatmap].concat(overlayTraces).concat(maxTraces), smallLayout, config);
-    window._lastPlotlyData = { heatmap: heatmap, overlayTraces: overlayTraces, maxTraces: maxTraces, baseLayout: baseLayout, title: title, config: config };
+    window._lastPlotlyData = { heatmap: heatmap, overlayTraces: overlayTraces, maxTraces: maxTraces, baseLayout: baseLayout, title: title, config: config, barbShapes: barbShapes };
     var csBtn = document.getElementById('cs-btn'); if (csBtn) csBtn.disabled = false;
     var azBtn = document.getElementById('az-btn'); if (azBtn) azBtn.disabled = false;
     var sqBtn = document.getElementById('sq-btn'); if (sqBtn) sqBtn.disabled = false;
