@@ -1200,22 +1200,13 @@ function _buildTiltProfileTrace(tiltData) {
         marker: {
             size: sizes,
             color: colors,
-            colorscale: [
-                [0, 'rgb(0,0,180)'],
-                [0.15, 'rgb(0,100,255)'],
-                [0.3, 'rgb(0,200,200)'],
-                [0.45, 'rgb(0,220,100)'],
-                [0.6, 'rgb(200,220,0)'],
-                [0.75, 'rgb(255,160,0)'],
-                [0.9, 'rgb(255,60,0)'],
-                [1, 'rgb(180,0,0)']
-            ],
-            cmin: 0, cmax: 18,
+            colorscale: 'Viridis',
+            cmin: 0, cmax: 14,
             colorbar: {
                 title: { text: 'Height (km)', font: { color: '#ccc', size: 9 } },
                 tickfont: { color: '#ccc', size: 8 },
-                thickness: 8, len: 0.5,
-                x: 1.06, xpad: 0,
+                thickness: 8, len: 0.35,
+                x: 1.14, xpad: 0, y: 0.5,
                 outlinewidth: 0
             },
             line: { color: 'rgba(255,255,255,0.8)', width: 1.2 }
