@@ -136,7 +136,14 @@ var PLOTLY_CONFIG = {
     responsive: true,
     displayModeBar: true,
     displaylogo: false,
-    modeBarButtonsToRemove: ['lasso2d', 'select2d', 'toggleSpikelines']
+    modeBarButtonsToRemove: ['lasso2d', 'select2d', 'toggleSpikelines'],
+    toImageButtonOptions: {
+        format: 'png',
+        filename: 'tc-radar-chart',
+        height: 900,
+        width: 1600,
+        scale: 2
+    }
 };
 
 // ══════════════════════════════════════════════════════════════
