@@ -11077,6 +11077,12 @@ function archiveToggleDropsondes() {
         .then(function(json) {
             if (!_archiveSondeActive) return;
             json._caseIndex = currentCaseIndex;
+            // Sort dropsondes chronologically by launch time
+            if (json.dropsondes) {
+                json.dropsondes.sort(function(a, b) {
+                    return (a.launch_time || '').localeCompare(b.launch_time || '');
+                });
+            }
             _archiveSondeData = json;
 
             if (!json.success && json.success !== undefined) {
