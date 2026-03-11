@@ -1447,7 +1447,10 @@ footer a:hover { text-decoration: underline; }
     }
 }
 
-/* ── Plotly modebar: scale down on mobile ─────────────────── */
+/* ── Plotly modebar: avoid overlap with custom save/expand buttons ── */
+.modebar-container {
+    padding-right: 72px !important;   /* clear save + expand buttons */
+}
 @media (max-width: 768px) {
     .modebar-container {
         transform: scale(0.85);

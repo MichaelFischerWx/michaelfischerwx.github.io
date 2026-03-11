@@ -11266,29 +11266,23 @@ function _archiveRenderSondePanel(data) {
         for (var j = 0; j < p.wspd.length; j++) {
             if (p.wspd[j] != null && (maxWspd === null || p.wspd[j] > maxWspd)) maxWspd = p.wspd[j];
         }
-        // WL150: interpolate wind speed to 150 m (0.15 km) altitude
+        // WL150: mean wind speed in the 0–150 m AGL layer (same as wind plot)
         if (p.alt_km && p.wspd) {
-            // Find the two nearest valid points bracketing 0.15 km
-            var below = null, above = null;
-            for (var j = 0; j < p.alt_km.length; j++) {
-                if (p.alt_km[j] != null && p.wspd[j] != null) {
-                    if (p.alt_km[j] <= 0.15) {
-                        if (below === null || p.alt_km[j] > p.alt_km[below]) below = j;
-                    }
-                    if (p.alt_km[j] >= 0.15) {
-                        if (above === null || p.alt_km[j] < p.alt_km[above]) above = j;
+            // Find the lowest valid altitude (surface altitude)
+            var tblSfcAlt = null;
+            for (var j = p.alt_km.length - 1; j >= 0; j--) {
+                if (p.alt_km[j] != null) { tblSfcAlt = p.alt_km[j]; break; }
+            }
+            if (tblSfcAlt != null) {
+                var wlSum = 0, wlCnt = 0;
+                var topKm = tblSfcAlt + 0.15;
+                for (var j = 0; j < p.alt_km.length; j++) {
+                    if (p.alt_km[j] != null && p.wspd[j] != null &&
+                        p.alt_km[j] >= tblSfcAlt && p.alt_km[j] <= topKm) {
+                        wlSum += p.wspd[j]; wlCnt++;
                     }
                 }
-            }
-            if (below !== null && above !== null && below !== above) {
-                var a0 = p.alt_km[below], a1 = p.alt_km[above];
-                var w0 = p.wspd[below], w1 = p.wspd[above];
-                var frac = (a1 - a0) > 0 ? (0.15 - a0) / (a1 - a0) : 0;
-                wl150 = w0 + frac * (w1 - w0);
-            } else if (below !== null && p.alt_km[below] === 0.15) {
-                wl150 = p.wspd[below];
-            } else if (above !== null && p.alt_km[above] === 0.15) {
-                wl150 = p.wspd[above];
+                if (wlCnt >= 3) wl150 = wlSum / wlCnt;
             }
         }
         // Surface pressure: use splash_pr or hyd_sfcp from .frd metadata, else max pressure
@@ -11678,7 +11672,7 @@ function archiveShowSondeWind(idx) {
     // Compute WL150 and WL500
     var wl150 = null, wl500 = null, wl150Top = null, wl500Top = null;
     var sfcAltKm = null;
-    if (sonde.hit_surface && p.alt_km && p.alt_km.length > 3) {
+    if (p.alt_km && p.alt_km.length > 3) {
         for (var ai = p.alt_km.length - 1; ai >= 0; ai--) {
             if (p.alt_km[ai] != null) { sfcAltKm = p.alt_km[ai]; break; }
         }
@@ -11898,9 +11892,9 @@ function archiveShowSondeWind(idx) {
 
         if (maxW != null) items.push('Vmax: ' + maxW.toFixed(1) + ' m/s (' + (maxW * 1.944).toFixed(0) + ' kt)');
         if (wl150 != null) items.push('WL150: ' + wl150.toFixed(1) + ' m/s (' + (wl150 * 1.944).toFixed(0) + ' kt)');
-        else if (!sonde.hit_surface) items.push('<span style="color:#6b7280;">WL150: N/A (no sfc)</span>');
+        else items.push('<span style="color:#6b7280;">WL150: N/A</span>');
         if (wl500 != null) items.push('WL500: ' + wl500.toFixed(1) + ' m/s (' + (wl500 * 1.944).toFixed(0) + ' kt)');
-        else if (!sonde.hit_surface) items.push('<span style="color:#6b7280;">WL500: N/A (no sfc)</span>');
+        else items.push('<span style="color:#6b7280;">WL500: N/A</span>');
         items.push('Psfc: <span style="color:' + wSplashColor + ';">' + (sfcPresWL ? sfcPresWL.toFixed(0) : '?') + ' hPa' + wSplashTag + '</span>');
         items.push('Aircraft: ' + (sonde.aircraft || '\u2014'));
         infoEl.innerHTML = '<div style="font-size:10px;color:#94a3b8;">' + items.join(' &middot; ') + '</div>';
