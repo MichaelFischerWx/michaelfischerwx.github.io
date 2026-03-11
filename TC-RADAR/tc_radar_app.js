@@ -11463,7 +11463,7 @@ function _archiveRenderSondeSkewTInfo(profiles, sonde) {
             pw += qAvg * dp / g;
         }
     }
-    if (pw > 0) pwat = pw * 1000; // mm (= kg/m²)
+    if (pw > 0) pwat = pw; // kg/m² = mm
 
     // -- Freezing level --
     var frzLvl = null;
@@ -11554,15 +11554,21 @@ function archiveShowSondeWind(idx) {
 
     var color = _archSondeColor(idx);
 
-    // Build filtered arrays for wind speed and direction vs pressure
-    var wspdArr = [], wdirArr = [], presWspd = [], presWdir = [];
-    var uwndArr = [], vwndArr = [], presUV = [];
+    // Build filtered arrays for wind speed, temp, dewpoint vs pressure
+    var wspdArr = [], presWspd = [];
+    var tempArr = [], presTemp = [];
+    var dewArr = [], presDew = [];
     for (var i = 0; i < p.pres.length; i++) {
         if (p.pres[i] == null) continue;
         if (p.wspd[i] != null) { wspdArr.push(p.wspd[i]); presWspd.push(p.pres[i]); }
-        if (p.wdir && p.wdir[i] != null) { wdirArr.push(p.wdir[i]); presWdir.push(p.pres[i]); }
-        if (p.uwnd && p.uwnd[i] != null && p.vwnd && p.vwnd[i] != null) {
-            uwndArr.push(p.uwnd[i]); vwndArr.push(p.vwnd[i]); presUV.push(p.pres[i]);
+        if (p.temp[i] != null) { tempArr.push(p.temp[i]); presTemp.push(p.pres[i]); }
+        // Compute dewpoint from RH + T via Magnus formula
+        if (p.temp[i] != null && p.rh && p.rh[i] != null && p.rh[i] > 0) {
+            var _T = p.temp[i], _RH = p.rh[i];
+            var _a = 17.27, _b = 237.7;
+            var _gam = (_a * _T) / (_b + _T) + Math.log(_RH / 100.0);
+            var _Td = (_b * _gam) / (_a - _gam);
+            dewArr.push(_Td); presDew.push(p.pres[i]);
         }
     }
 
@@ -11611,7 +11617,7 @@ function archiveShowSondeWind(idx) {
 
     var traces = [];
 
-    // Wind speed trace
+    // Wind speed trace (primary x-axis)
     traces.push({
         x: wspdArr, y: presWspd,
         type: 'scatter', mode: 'lines',
@@ -11621,21 +11627,27 @@ function archiveShowSondeWind(idx) {
         text: wspdArr.map(function(w) { return (w * 1.944).toFixed(0); }),
     });
 
-    // U-wind and V-wind components
-    if (uwndArr.length > 10) {
+    // Temperature trace (secondary x-axis, top)
+    if (tempArr.length > 5) {
         traces.push({
-            x: uwndArr, y: presUV,
+            x: tempArr, y: presTemp,
             type: 'scatter', mode: 'lines',
-            line: { color: '#f59e0b', width: 1.5, dash: 'dot' },
-            name: 'U-wind (m/s)',
-            hovertemplate: '%{y:.0f} hPa: U = %{x:.1f} m/s<extra></extra>',
+            line: { color: '#ef4444', width: 1.8 },
+            name: 'Temp (\u00b0C)',
+            xaxis: 'x2', yaxis: 'y',
+            hovertemplate: '%{y:.0f} hPa: T = %{x:.1f}\u00b0C<extra></extra>',
         });
+    }
+
+    // Dewpoint trace (secondary x-axis, top)
+    if (dewArr.length > 5) {
         traces.push({
-            x: vwndArr, y: presUV,
+            x: dewArr, y: presDew,
             type: 'scatter', mode: 'lines',
-            line: { color: '#8b5cf6', width: 1.5, dash: 'dot' },
-            name: 'V-wind (m/s)',
-            hovertemplate: '%{y:.0f} hPa: V = %{x:.1f} m/s<extra></extra>',
+            line: { color: '#3b82f6', width: 1.5, dash: 'dash' },
+            name: 'Dewpoint (\u00b0C)',
+            xaxis: 'x2', yaxis: 'y',
+            hovertemplate: '%{y:.0f} hPa: Td = %{x:.1f}\u00b0C<extra></extra>',
         });
     }
 
@@ -11702,9 +11714,18 @@ function archiveShowSondeWind(idx) {
         plot_bgcolor: '#111827',
         xaxis: {
             title: { text: 'Wind Speed (m/s)', font: { color: '#22c55e', size: 12 } },
-            tickfont: { color: '#aaa', size: 10 },
+            tickfont: { color: '#22c55e', size: 10 },
             gridcolor: 'rgba(255,255,255,0.08)',
             zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)',
+            side: 'bottom',
+        },
+        xaxis2: {
+            title: { text: 'Temperature (\u00b0C)', font: { color: '#ef4444', size: 11 } },
+            tickfont: { color: '#ef4444', size: 9 },
+            gridcolor: 'rgba(239,68,68,0.08)',
+            side: 'top',
+            overlaying: 'x',
+            anchor: 'y',
         },
         yaxis: {
             title: { text: 'Pressure (hPa)', font: { color: '#aaa', size: 12 } },
@@ -11715,7 +11736,7 @@ function archiveShowSondeWind(idx) {
             range: [Math.log10(pMax), Math.log10(pMin)],
             dtick: 'D1',
         },
-        margin: { l: 55, r: 15, t: 10, b: 45 },
+        margin: { l: 55, r: 15, t: 30, b: 45 },
         legend: { x: 0.01, y: 0.01, bgcolor: 'rgba(17,24,39,0.85)', font: { color: '#d1d5db', size: 10 },
                   xanchor: 'left', yanchor: 'bottom' },
         showlegend: true,
