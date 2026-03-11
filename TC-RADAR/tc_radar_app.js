@@ -11637,21 +11637,42 @@ function archiveShowSondeWind(idx) {
     var color = _archSondeColor(idx);
 
     // Build filtered arrays for wind speed, temp, dewpoint vs pressure
-    var wspdArr = [], presWspd = [];
-    var tempArr = [], presTemp = [];
-    var dewArr = [], presDew = [];
+    // Also build a pressure→altitude lookup for the right-side altitude axis and hover
+    var wspdArr = [], presWspd = [], altWspd = [];
+    var tempArr = [], presTemp = [], altTemp = [];
+    var dewArr = [], presDew = [], altDew = [];
+    var presAltMap = [];  // [{pres, alt_km}] for building the right axis
     for (var i = 0; i < p.pres.length; i++) {
         if (p.pres[i] == null) continue;
-        if (p.wspd[i] != null) { wspdArr.push(p.wspd[i]); presWspd.push(p.pres[i]); }
-        if (p.temp[i] != null) { tempArr.push(p.temp[i]); presTemp.push(p.pres[i]); }
+        var _altKm = (p.alt_km && p.alt_km[i] != null) ? p.alt_km[i] : null;
+        if (_altKm != null) presAltMap.push({ pres: p.pres[i], alt: _altKm });
+        if (p.wspd[i] != null) { wspdArr.push(p.wspd[i]); presWspd.push(p.pres[i]); altWspd.push(_altKm); }
+        if (p.temp[i] != null) { tempArr.push(p.temp[i]); presTemp.push(p.pres[i]); altTemp.push(_altKm); }
         // Compute dewpoint from RH + T via Magnus formula
         if (p.temp[i] != null && p.rh && p.rh[i] != null && p.rh[i] > 0) {
             var _T = p.temp[i], _RH = p.rh[i];
             var _a = 17.27, _b = 237.7;
             var _gam = (_a * _T) / (_b + _T) + Math.log(_RH / 100.0);
             var _Td = (_b * _gam) / (_a - _gam);
-            dewArr.push(_Td); presDew.push(p.pres[i]);
+            dewArr.push(_Td); presDew.push(p.pres[i]); altDew.push(_altKm);
         }
+    }
+
+    // Helper: interpolate altitude from pressure using the profile's pres/alt pairs
+    function _interpAltKm(targetPres) {
+        if (presAltMap.length < 2) return null;
+        // presAltMap is in profile order (high→low pressure typically)
+        // Find bracketing pair
+        var best = null;
+        for (var k = 0; k < presAltMap.length - 1; k++) {
+            var p0 = presAltMap[k].pres, p1 = presAltMap[k + 1].pres;
+            if ((p0 <= targetPres && p1 >= targetPres) || (p0 >= targetPres && p1 <= targetPres)) {
+                var frac = (p1 !== p0) ? (targetPres - p0) / (p1 - p0) : 0;
+                best = presAltMap[k].alt + frac * (presAltMap[k + 1].alt - presAltMap[k].alt);
+                break;
+            }
+        }
+        return best;
     }
 
     // Compute WL150 and WL500
@@ -11699,14 +11720,15 @@ function archiveShowSondeWind(idx) {
 
     var traces = [];
 
-    // Wind speed trace (primary x-axis)
+    // Wind speed trace (primary x-axis) — include altitude in hover
     traces.push({
         x: wspdArr, y: presWspd,
         type: 'scatter', mode: 'lines',
         line: { color: '#22c55e', width: 2.5 },
         name: 'Wind Speed (m/s)',
-        hovertemplate: '%{y:.0f} hPa: %{x:.1f} m/s (%{text} kt)<extra>Wspd</extra>',
-        text: wspdArr.map(function(w) { return (w * 1.944).toFixed(0); }),
+        customdata: altWspd,
+        hovertemplate: '%{y:.0f} hPa (%{text} m): %{x:.1f} m/s<extra>Wspd</extra>',
+        text: altWspd.map(function(a) { return a != null ? (a * 1000).toFixed(0) : '?'; }),
     });
 
     // Temperature trace (secondary x-axis, top)
@@ -11717,7 +11739,9 @@ function archiveShowSondeWind(idx) {
             line: { color: '#ef4444', width: 1.8 },
             name: 'Temp (\u00b0C)',
             xaxis: 'x2', yaxis: 'y',
-            hovertemplate: '%{y:.0f} hPa: T = %{x:.1f}\u00b0C<extra></extra>',
+            customdata: altTemp,
+            hovertemplate: '%{y:.0f} hPa (%{text} m): T = %{x:.1f}\u00b0C<extra></extra>',
+            text: altTemp.map(function(a) { return a != null ? (a * 1000).toFixed(0) : '?'; }),
         });
     }
 
@@ -11729,7 +11753,9 @@ function archiveShowSondeWind(idx) {
             line: { color: '#3b82f6', width: 1.5, dash: 'dash' },
             name: 'Dewpoint (\u00b0C)',
             xaxis: 'x2', yaxis: 'y',
-            hovertemplate: '%{y:.0f} hPa: Td = %{x:.1f}\u00b0C<extra></extra>',
+            customdata: altDew,
+            hovertemplate: '%{y:.0f} hPa (%{text} m): Td = %{x:.1f}\u00b0C<extra></extra>',
+            text: altDew.map(function(a) { return a != null ? (a * 1000).toFixed(0) : '?'; }),
         });
     }
 
@@ -11791,6 +11817,20 @@ function archiveShowSondeWind(idx) {
             (sonde.hit_surface ? ' \u2713 Sfc' : ' \u2717 No sfc');
     }
 
+    // Build right-side altitude tick labels at standard pressure levels
+    var altTickVals = [], altTickText = [];
+    var stdLevels = [1000, 925, 850, 700, 500, 400, 300, 200, 150, 100];
+    for (var si = 0; si < stdLevels.length; si++) {
+        var sp = stdLevels[si];
+        if (sp >= pMin && sp <= pMax) {
+            var altAtLevel = _interpAltKm(sp);
+            if (altAtLevel != null) {
+                altTickVals.push(sp);
+                altTickText.push((altAtLevel < 10 ? altAtLevel.toFixed(1) : altAtLevel.toFixed(0)) + ' km');
+            }
+        }
+    }
+
     var layout = {
         paper_bgcolor: '#111827',
         plot_bgcolor: '#111827',
@@ -11818,7 +11858,18 @@ function archiveShowSondeWind(idx) {
             range: [Math.log10(pMax), Math.log10(pMin)],
             dtick: 'D1',
         },
-        margin: { l: 55, r: 15, t: 30, b: 45 },
+        yaxis2: {
+            title: { text: 'Altitude (km)', font: { color: '#9ca3af', size: 11 } },
+            tickfont: { color: '#9ca3af', size: 9 },
+            side: 'right',
+            overlaying: 'y',
+            type: 'log',
+            range: [Math.log10(pMax), Math.log10(pMin)],
+            tickvals: altTickVals,
+            ticktext: altTickText,
+            showgrid: false,
+        },
+        margin: { l: 55, r: 55, t: 30, b: 45 },
         legend: { x: 0.01, y: 0.01, bgcolor: 'rgba(17,24,39,0.85)', font: { color: '#d1d5db', size: 10 },
                   xanchor: 'left', yanchor: 'bottom' },
         showlegend: true,
