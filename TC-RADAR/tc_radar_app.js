@@ -11380,15 +11380,17 @@ function _archiveRenderSondePanel(data) {
 
     // Skew-T chart container + info panel
     html += '<div id="archive-skewt-container" style="display:none;margin-top:8px;">' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;padding:2px 6px;">' +
-            '<span id="archive-skewt-title" style="color:#e5e7eb;font-size:11px;font-weight:600;flex:1;"></span>' +
-            '<button onclick="archiveSaveSondePNG(\'archive-skewt-chart\',\'SkewT\')" ' +
-                'title="Save as PNG" class="rt-save-png-btn" style="margin-right:4px;">' +
-                '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-                '<path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>' +
-                '<circle cx="12" cy="13" r="4"/></svg></button>' +
-            '<button onclick="document.getElementById(\'archive-skewt-container\').style.display=\'none\'" ' +
-                'class="cs-btn" style="padding:0 6px;font-size:13px;line-height:1;">&times;</button>' +
+        '<div style="display:flex;align-items:flex-start;justify-content:space-between;padding:2px 6px;">' +
+            '<div id="archive-skewt-title" style="color:#e5e7eb;font-size:11px;font-weight:600;flex:1;min-width:0;"></div>' +
+            '<div style="display:flex;align-items:center;flex-shrink:0;margin-left:4px;">' +
+                '<button onclick="archiveSaveSondePNG(\'archive-skewt-chart\',\'SkewT\')" ' +
+                    'title="Save as PNG" class="rt-save-png-btn" style="margin-right:4px;">' +
+                    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                    '<path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>' +
+                    '<circle cx="12" cy="13" r="4"/></svg></button>' +
+                '<button onclick="document.getElementById(\'archive-skewt-container\').style.display=\'none\'" ' +
+                    'class="cs-btn" style="padding:0 6px;font-size:13px;line-height:1;">&times;</button>' +
+            '</div>' +
         '</div>' +
         '<div id="archive-skewt-chart" style="width:100%;height:460px;"></div>' +
         '<div id="archive-skewt-info" style="padding:4px 8px;"></div>' +
@@ -11396,15 +11398,17 @@ function _archiveRenderSondePanel(data) {
 
     // Wind profile chart container
     html += '<div id="archive-wind-container" style="display:none;margin-top:8px;">' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;padding:2px 6px;">' +
-            '<span id="archive-wind-title" style="color:#e5e7eb;font-size:11px;font-weight:600;flex:1;"></span>' +
-            '<button onclick="archiveSaveSondePNG(\'archive-wind-chart\',\'WindProfile\')" ' +
-                'title="Save as PNG" class="rt-save-png-btn" style="margin-right:4px;">' +
-                '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-                '<path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>' +
-                '<circle cx="12" cy="13" r="4"/></svg></button>' +
-            '<button onclick="document.getElementById(\'archive-wind-container\').style.display=\'none\'" ' +
-                'class="cs-btn" style="padding:0 6px;font-size:13px;line-height:1;">&times;</button>' +
+        '<div style="display:flex;align-items:flex-start;justify-content:space-between;padding:2px 6px;">' +
+            '<div id="archive-wind-title" style="color:#e5e7eb;font-size:11px;font-weight:600;flex:1;min-width:0;"></div>' +
+            '<div style="display:flex;align-items:center;flex-shrink:0;margin-left:4px;">' +
+                '<button onclick="archiveSaveSondePNG(\'archive-wind-chart\',\'WindProfile\')" ' +
+                    'title="Save as PNG" class="rt-save-png-btn" style="margin-right:4px;">' +
+                    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                    '<path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>' +
+                    '<circle cx="12" cy="13" r="4"/></svg></button>' +
+                '<button onclick="document.getElementById(\'archive-wind-container\').style.display=\'none\'" ' +
+                    'class="cs-btn" style="padding:0 6px;font-size:13px;line-height:1;">&times;</button>' +
+            '</div>' +
         '</div>' +
         '<div id="archive-wind-chart" style="width:100%;height:420px;"></div>' +
         '<div id="archive-wind-info" style="padding:4px 8px;"></div>' +
@@ -11461,15 +11465,18 @@ function archiveShowSondeSkewT(idx) {
     var titleEl = document.getElementById('archive-skewt-title');
     if (titleEl) {
         var tOff = sonde.time_offset_min != null ?
-            (sonde.time_offset_min >= 0 ? '+' : '') + sonde.time_offset_min.toFixed(0) + ' min' : '';
+            ' (T' + (sonde.time_offset_min >= 0 ? '+' : '') + sonde.time_offset_min.toFixed(0) + ' min)' : '';
         var stormLabel = currentCaseData ? currentCaseData.storm_name : '';
         var missionLabel = currentCaseData ? currentCaseData.mission_id : '';
-        titleEl.textContent = '\uD83E\uDE82 ' + (stormLabel ? stormLabel + ' ' : '') +
-            (missionLabel ? '(' + missionLabel + ') ' : '') +
-            '\u2014 ' + (sonde.sonde_id || 'Sonde ' + (idx + 1)) +
-            ' \u2014 ' + sonde.launch_time +
-            (tOff ? ' (T' + tOff + ')' : '') +
-            (sonde.hit_surface ? ' \u2713 Sfc' : ' \u2717 No sfc');
+        var sfcTag = sonde.hit_surface ?
+            ' <span style="color:#34d399;">\u2713 Sfc</span>' :
+            ' <span style="color:#f87171;">\u2717 No sfc</span>';
+        titleEl.innerHTML =
+            '\uD83E\uDE82 ' + (stormLabel || '') +
+            (missionLabel ? ' <span style="color:#9ca3af;">(' + missionLabel + ')</span>' : '') +
+            '<br>' +
+            '<span style="color:#94a3b8;">' + (sonde.sonde_id || 'Sonde ' + (idx + 1)) +
+            ' \u2014 ' + sonde.launch_time + tOff + '</span>' + sfcTag;
     }
 
     // Render proper Skew-T using the global renderSkewT function
@@ -11846,11 +11853,15 @@ function archiveShowSondeWind(idx) {
     if (titleEl) {
         var stormLabel = currentCaseData ? currentCaseData.storm_name : '';
         var missionLabel = currentCaseData ? currentCaseData.mission_id : '';
-        titleEl.textContent = '\uD83C\uDF2C\uFE0F ' + (stormLabel ? stormLabel + ' ' : '') +
-            (missionLabel ? '(' + missionLabel + ') ' : '') +
-            '\u2014 ' + (sonde.sonde_id || 'Sonde ' + (idx + 1)) +
-            ' \u2014 ' + sonde.launch_time + tOffStr +
-            (sonde.hit_surface ? ' \u2713 Sfc' : ' \u2717 No sfc');
+        var sfcTag = sonde.hit_surface ?
+            ' <span style="color:#34d399;">\u2713 Sfc</span>' :
+            ' <span style="color:#f87171;">\u2717 No sfc</span>';
+        titleEl.innerHTML =
+            '\uD83C\uDF2C\uFE0F ' + (stormLabel || '') +
+            (missionLabel ? ' <span style="color:#9ca3af;">(' + missionLabel + ')</span>' : '') +
+            '<br>' +
+            '<span style="color:#94a3b8;">' + (sonde.sonde_id || 'Sonde ' + (idx + 1)) +
+            ' \u2014 ' + sonde.launch_time + tOffStr + '</span>' + sfcTag;
     }
 
     // Build right-side altitude tick labels at standard pressure levels
