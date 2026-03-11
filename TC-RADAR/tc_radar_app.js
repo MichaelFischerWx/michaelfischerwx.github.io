@@ -11030,6 +11030,7 @@ function archiveToggleDropsondes() {
 
             if (!json.success && json.success !== undefined) {
                 var msg = json.message || 'No dropsonde data available.';
+                if (json._diag) console.log('Sonde diag:', JSON.stringify(json._diag, null, 2));
                 var status = document.getElementById('fl-archive-status');
                 if (status) { status.textContent = '\uD83E\uDE82 ' + msg; status.style.display = 'block'; }
                 if (btn) { btn.textContent = '\uD83E\uDE82 Sondes Off'; btn.disabled = false; }
