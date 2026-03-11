@@ -11194,7 +11194,7 @@ function _archiveRenderSondePanel(data) {
         '<th style="text-align:left;padding:2px 4px;">Time</th>' +
         '<th style="text-align:right;padding:2px 4px;">\u0394t</th>' +
         '<th style="text-align:right;padding:2px 4px;">Vmax</th>' +
-        '<th style="text-align:right;padding:2px 4px;">Pmin</th>' +
+        '<th style="text-align:right;padding:2px 4px;">Psfc</th>' +
         '<th style="text-align:center;padding:2px 4px;">Sfc</th>' +
         '<th style="text-align:left;padding:2px 4px;">Skew-T</th>' +
         '</tr>';
@@ -11202,20 +11202,27 @@ function _archiveRenderSondePanel(data) {
     data.dropsondes.forEach(function(sonde, idx) {
         var color = _archSondeColor(idx);
         var maxWspd = null;
-        var minPres = null;
+        var sfcPres = null;
         var p = sonde.profile;
         for (var j = 0; j < p.wspd.length; j++) {
             if (p.wspd[j] != null && (maxWspd === null || p.wspd[j] > maxWspd)) maxWspd = p.wspd[j];
         }
-        for (var j = 0; j < p.pres.length; j++) {
-            if (p.pres[j] != null && (minPres === null || p.pres[j] < minPres)) minPres = p.pres[j];
+        // Surface pressure: use splash_pr or hyd_sfcp from .frd metadata, else max pressure
+        if (sonde.splash_pr != null && sonde.splash_pr > 0) {
+            sfcPres = sonde.splash_pr;
+        } else if (sonde.hyd_sfcp != null && sonde.hyd_sfcp > 0) {
+            sfcPres = sonde.hyd_sfcp;
+        } else {
+            for (var j = 0; j < p.pres.length; j++) {
+                if (p.pres[j] != null && (sfcPres === null || p.pres[j] > sfcPres)) sfcPres = p.pres[j];
+            }
         }
 
         var timeStr = sonde.launch_time ? sonde.launch_time.substring(11, 19) : '?';
         var dtStr = sonde.time_offset_min != null ?
             (sonde.time_offset_min >= 0 ? '+' : '') + sonde.time_offset_min.toFixed(0) : '';
         var wspdStr = maxWspd != null ? maxWspd.toFixed(1) : '-';
-        var presStr = minPres != null ? minPres.toFixed(0) : '-';
+        var presStr = sfcPres != null ? sfcPres.toFixed(0) : '-';
 
         html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;" ' +
             'onclick="archiveShowSondeSkewT(' + idx + ')" ' +
