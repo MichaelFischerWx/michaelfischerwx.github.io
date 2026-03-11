@@ -11259,14 +11259,18 @@ function _archiveRenderSondePanel(data) {
             if (p.wspd[j] != null && (maxWspd === null || p.wspd[j] > maxWspd)) maxWspd = p.wspd[j];
         }
         // Surface pressure: use splash_pr or hyd_sfcp from .frd metadata, else max pressure
+        var splashSource = 'none';  // Track splash measurement source
         if (sonde.splash_pr != null && sonde.splash_pr > 0) {
             sfcPres = sonde.splash_pr;
+            splashSource = 'splash';
         } else if (sonde.hyd_sfcp != null && sonde.hyd_sfcp > 0) {
             sfcPres = sonde.hyd_sfcp;
+            splashSource = 'hyd';
         } else {
             for (var j = 0; j < p.pres.length; j++) {
                 if (p.pres[j] != null && (sfcPres === null || p.pres[j] > sfcPres)) sfcPres = p.pres[j];
             }
+            if (sfcPres != null) splashSource = 'est';
         }
 
         var timeStr = sonde.launch_time ? sonde.launch_time.substring(11, 19) : '?';
@@ -11274,6 +11278,22 @@ function _archiveRenderSondePanel(data) {
             (sonde.time_offset_min >= 0 ? '+' : '') + sonde.time_offset_min.toFixed(0) : '';
         var wspdStr = maxWspd != null ? maxWspd.toFixed(1) : '-';
         var presStr = sfcPres != null ? sfcPres.toFixed(0) : '-';
+        // Color-code Psfc: green if measured splash, yellow if hydrostatic, red/dim if estimated from profile
+        var presColor = splashSource === 'splash' ? '#34d399' :
+                        splashSource === 'hyd' ? '#fbbf24' :
+                        splashSource === 'est' ? '#f87171' : '#6b7280';
+        var presTip = splashSource === 'splash' ? 'GPS splash measurement' :
+                      splashSource === 'hyd' ? 'Hydrostatic surface estimate' :
+                      splashSource === 'est' ? 'Estimated from max profile pressure' : 'No data';
+        // Sfc column: green check if hit surface, red X if not; yellow warning if no valid splash
+        var sfcIcon, sfcColor, sfcTip;
+        if (sonde.hit_surface && (splashSource === 'splash' || splashSource === 'hyd')) {
+            sfcIcon = '\u2713'; sfcColor = '#34d399'; sfcTip = 'Valid surface measurement';
+        } else if (sonde.hit_surface && splashSource === 'est') {
+            sfcIcon = '\u26A0'; sfcColor = '#fbbf24'; sfcTip = 'Hit surface but no splash pressure in metadata';
+        } else {
+            sfcIcon = '\u2717'; sfcColor = '#f87171'; sfcTip = 'Did not reach surface';
+        }
 
         html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;" ' +
             'onclick="archiveShowSondeSkewT(' + idx + ')" ' +
@@ -11284,8 +11304,8 @@ function _archiveRenderSondePanel(data) {
             '<td style="padding:2px 4px;">' + timeStr + '</td>' +
             '<td style="padding:2px 4px;text-align:right;">' + dtStr + '</td>' +
             '<td style="padding:2px 4px;text-align:right;">' + wspdStr + '</td>' +
-            '<td style="padding:2px 4px;text-align:right;">' + presStr + '</td>' +
-            '<td style="padding:2px 4px;text-align:center;">' + (sonde.hit_surface ? '\u2713' : '\u2717') + '</td>' +
+            '<td style="padding:2px 4px;text-align:right;color:' + presColor + ';" title="' + presTip + '">' + presStr + '</td>' +
+            '<td style="padding:2px 4px;text-align:center;color:' + sfcColor + ';" title="' + sfcTip + '">' + sfcIcon + '</td>' +
             '<td style="padding:2px 4px;"><button class="cs-btn" style="padding:1px 6px;font-size:9px;color:' + color + ';" ' +
             'onclick="event.stopPropagation();archiveShowSondeSkewT(' + idx + ')">Skew-T</button></td>' +
             '<td style="padding:2px 4px;"><button class="cs-btn" style="padding:1px 6px;font-size:9px;color:#22c55e;" ' +
@@ -11294,6 +11314,16 @@ function _archiveRenderSondePanel(data) {
     });
 
     html += '</table></div>';
+
+    // Splash/surface quality legend
+    html += '<div style="font-size:9px;color:#9ca3af;padding:2px 6px;margin-top:2px;">' +
+        'Psfc: <span style="color:#34d399;">green</span>=GPS splash, ' +
+        '<span style="color:#fbbf24;">yellow</span>=hydrostatic, ' +
+        '<span style="color:#f87171;">red</span>=estimated &nbsp;|&nbsp; ' +
+        'Sfc: <span style="color:#34d399;">\u2713</span>=valid splash, ' +
+        '<span style="color:#fbbf24;">\u26A0</span>=no splash data, ' +
+        '<span style="color:#f87171;">\u2717</span>=no surface' +
+        '</div>';
 
     // Skew-T chart container + info panel
     html += '<div id="archive-skewt-container" style="display:none;margin-top:8px;">' +
@@ -11476,9 +11506,10 @@ function _archiveRenderSondeSkewTInfo(profiles, sonde) {
     }
 
     // -- WL150 and WL500: mean wind speed over lowest 150m and 500m AGL --
+    // Only compute for sondes that hit the surface (otherwise layer is meaningless)
     var sp = sonde.profile;
     var wl150 = null, wl500 = null;
-    if (sp && sp.alt_km && sp.wspd && sp.alt_km.length > 3) {
+    if (sonde.hit_surface && sp && sp.alt_km && sp.wspd && sp.alt_km.length > 3) {
         // Find surface altitude (lowest valid altitude near end of arrays)
         var sfcAltKm = null;
         for (var ai = sp.alt_km.length - 1; ai >= 0; ai--) {
@@ -11499,8 +11530,9 @@ function _archiveRenderSondeSkewTInfo(profiles, sonde) {
                     }
                 }
             }
-            if (layers[0].cnt >= 2) wl150 = layers[0].sum / layers[0].cnt;
-            if (layers[1].cnt >= 2) wl500 = layers[1].sum / layers[1].cnt;
+            // Require minimum 3 data points for a meaningful average
+            if (layers[0].cnt >= 3) wl150 = layers[0].sum / layers[0].cnt;
+            if (layers[1].cnt >= 3) wl500 = layers[1].sum / layers[1].cnt;
         }
     }
 
@@ -11514,12 +11546,27 @@ function _archiveRenderSondeSkewTInfo(profiles, sonde) {
         }
     }
 
+    // Determine splash quality
+    var splashSrc = 'none';
+    if (sonde.splash_pr != null && sonde.splash_pr > 0) splashSrc = 'splash';
+    else if (sonde.hyd_sfcp != null && sonde.hyd_sfcp > 0) splashSrc = 'hyd';
+    else if (sfcP != null) splashSrc = 'est';
+
+    var splashColor = splashSrc === 'splash' ? '#34d399' :
+                      splashSrc === 'hyd' ? '#fbbf24' :
+                      splashSrc === 'est' ? '#f87171' : '#6b7280';
+    var splashLabel = splashSrc === 'splash' ? ' (GPS)' :
+                      splashSrc === 'hyd' ? ' (hyd)' :
+                      splashSrc === 'est' ? ' (est)' : '';
+
     // Build HTML table
     var items = [];
-    if (sfcP != null) items.push(['Psfc', sfcP.toFixed(1) + ' hPa']);
+    if (sfcP != null) items.push(['Psfc', '<span style="color:' + splashColor + ';">' + sfcP.toFixed(1) + ' hPa' + splashLabel + '</span>']);
     if (maxWspd != null) items.push(['Vmax', maxWspd.toFixed(1) + ' m/s (' + (maxWspd * 1.944).toFixed(0) + ' kt)']);
     if (wl150 != null) items.push(['WL150', wl150.toFixed(1) + ' m/s (' + (wl150 * 1.944).toFixed(0) + ' kt)']);
+    else if (!sonde.hit_surface) items.push(['WL150', '<span style="color:#6b7280;">N/A (no sfc)</span>']);
     if (wl500 != null) items.push(['WL500', wl500.toFixed(1) + ' m/s (' + (wl500 * 1.944).toFixed(0) + ' kt)']);
+    else if (!sonde.hit_surface) items.push(['WL500', '<span style="color:#6b7280;">N/A (no sfc)</span>']);
     if (pwat != null) items.push(['PWAT', pwat.toFixed(1) + ' mm']);
     if (frzLvl != null) items.push(['0\u00b0C', frzLvl.toFixed(0) + ' hPa']);
     items.push(['Aircraft', sonde.aircraft || '\u2014']);
@@ -11575,7 +11622,7 @@ function archiveShowSondeWind(idx) {
     // Compute WL150 and WL500
     var wl150 = null, wl500 = null, wl150Top = null, wl500Top = null;
     var sfcAltKm = null;
-    if (p.alt_km && p.alt_km.length > 3) {
+    if (sonde.hit_surface && p.alt_km && p.alt_km.length > 3) {
         for (var ai = p.alt_km.length - 1; ai >= 0; ai--) {
             if (p.alt_km[ai] != null) { sfcAltKm = p.alt_km[ai]; break; }
         }
@@ -11603,8 +11650,8 @@ function archiveShowSondeWind(idx) {
                 }
             }
         }
-        if (layers[0].cnt >= 2) wl150 = layers[0].sum / layers[0].cnt;
-        if (layers[1].cnt >= 2) wl500 = layers[1].sum / layers[1].cnt;
+        if (layers[0].cnt >= 3) wl150 = layers[0].sum / layers[0].cnt;
+        if (layers[1].cnt >= 3) wl500 = layers[1].sum / layers[1].cnt;
         wl150Top = layers[0].topP;
         wl500Top = layers[1].topP;
     }
@@ -11755,9 +11802,20 @@ function archiveShowSondeWind(idx) {
         for (var i = 0; i < wspdArr.length; i++) {
             if (maxW === null || wspdArr[i] > maxW) maxW = wspdArr[i];
         }
+        // Splash quality
+        var wSplashSrc = 'none';
+        if (sonde.splash_pr != null && sonde.splash_pr > 0) wSplashSrc = 'splash';
+        else if (sonde.hyd_sfcp != null && sonde.hyd_sfcp > 0) wSplashSrc = 'hyd';
+        else wSplashSrc = 'est';
+        var wSplashColor = wSplashSrc === 'splash' ? '#34d399' : wSplashSrc === 'hyd' ? '#fbbf24' : '#f87171';
+        var wSplashTag = wSplashSrc === 'splash' ? ' (GPS)' : wSplashSrc === 'hyd' ? ' (hyd)' : ' (est)';
+
         if (maxW != null) items.push('Vmax: ' + maxW.toFixed(1) + ' m/s (' + (maxW * 1.944).toFixed(0) + ' kt)');
         if (wl150 != null) items.push('WL150: ' + wl150.toFixed(1) + ' m/s (' + (wl150 * 1.944).toFixed(0) + ' kt)');
+        else if (!sonde.hit_surface) items.push('<span style="color:#6b7280;">WL150: N/A (no sfc)</span>');
         if (wl500 != null) items.push('WL500: ' + wl500.toFixed(1) + ' m/s (' + (wl500 * 1.944).toFixed(0) + ' kt)');
+        else if (!sonde.hit_surface) items.push('<span style="color:#6b7280;">WL500: N/A (no sfc)</span>');
+        items.push('Psfc: <span style="color:' + wSplashColor + ';">' + (sfcPresWL ? sfcPresWL.toFixed(0) : '?') + ' hPa' + wSplashTag + '</span>');
         items.push('Aircraft: ' + (sonde.aircraft || '\u2014'));
         infoEl.innerHTML = '<div style="font-size:10px;color:#94a3b8;">' + items.join(' &middot; ') + '</div>';
     }
