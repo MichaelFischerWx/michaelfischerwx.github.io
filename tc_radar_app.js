@@ -1,16 +1,104 @@
 const API_BASE = 'https://tc-radar-api.onrender.com';
 
+// ── Prevent browser from restoring previous scroll position on reload ──
+if ('scrollRestoration' in history) {
+    history.scrollRestoration = 'manual';
+}
+window.addEventListener('DOMContentLoaded', function() {
+    window.scrollTo(0, 0);
+});
+
+// ── Toast notification system ────────────────────────────────
+function showToast(message, type, duration) {
+    type = type || 'info';
+    duration = duration || 5000;
+    var container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.style.cssText = 'position:fixed;top:60px;right:16px;z-index:100000;display:flex;flex-direction:column;gap:8px;pointer-events:none;';
+        document.body.appendChild(container);
+    }
+    var toast = document.createElement('div');
+    var bgColor = type === 'error' ? 'rgba(239,68,68,0.95)' : type === 'warn' ? 'rgba(245,158,11,0.95)' : 'rgba(14,45,90,0.95)';
+    var borderColor = type === 'error' ? '#f87171' : type === 'warn' ? '#fbbf24' : '#60a5fa';
+    toast.style.cssText = 'background:' + bgColor + ';color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;font-family:DM Sans,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.4);border:1px solid ' + borderColor + ';backdrop-filter:blur(8px);pointer-events:auto;max-width:380px;opacity:0;transform:translateX(30px);transition:all 0.3s ease;';
+    toast.textContent = message;
+    container.appendChild(toast);
+    requestAnimationFrame(function() { toast.style.opacity = '1'; toast.style.transform = 'translateX(0)'; });
+    setTimeout(function() {
+        toast.style.opacity = '0'; toast.style.transform = 'translateX(30px)';
+        setTimeout(function() { toast.remove(); }, 300);
+    }, duration);
+}
+
+// ── Save plot as PNG ─────────────────────────────────────────
+function archiveSavePlotPNG(chartDivId, defaultName) {
+    var gd = document.getElementById(chartDivId);
+    if (!gd || !gd.data) { showToast('No plot to save', 'warn'); return; }
+    var fname = defaultName || chartDivId;
+    var now = new Date();
+    var ts = now.getFullYear() +
+        String(now.getMonth() + 1).padStart(2, '0') +
+        String(now.getDate()).padStart(2, '0') + '_' +
+        String(now.getHours()).padStart(2, '0') +
+        String(now.getMinutes()).padStart(2, '0') +
+        String(now.getSeconds()).padStart(2, '0');
+    Plotly.downloadImage(gd, {
+        format: 'png',
+        width: gd.offsetWidth * 2,
+        height: gd.offsetHeight * 2,
+        scale: 2,
+        filename: fname + '_' + ts,
+    });
+}
+
+function _archSaveBtnHTML(chartDivId, defaultName) {
+    return '<button onclick="archiveSavePlotPNG(\'' + chartDivId + '\',\'' + (defaultName || chartDivId) + '\')" ' +
+        'title="Save as PNG" class="rt-save-png-btn" style="position:absolute;top:6px;right:40px;z-index:10;">' +
+        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+        '<path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>' +
+        '<circle cx="12" cy="13" r="4"/></svg></button>';
+}
+
+// ── API cold-start pre-warming ───────────────────────────────
+var _apiReady = false;
+(function warmAPI() {
+    var start = Date.now();
+    fetch(API_BASE + '/health', { method: 'GET' })
+        .then(function(r) {
+            _apiReady = true;
+            var elapsed = Date.now() - start;
+            if (elapsed > 3000) {
+                showToast('API server is ready (' + (elapsed / 1000).toFixed(1) + 's warm-up)', 'info', 3000);
+            }
+        })
+        .catch(function() {
+            // API might be cold-starting — retry once after 5s
+            setTimeout(function() {
+                fetch(API_BASE + '/health', { method: 'GET' })
+                    .then(function() { _apiReady = true; })
+                    .catch(function() {
+                        showToast('API server may be waking up — first requests could take 30–60s', 'warn', 8000);
+                    });
+            }, 5000);
+        });
+})();
+
 let allData = null;
 var _activeDataType = 'swath';  // 'swath' or 'merge'
 function _getActiveData() { return _activeDataType === 'merge' ? mergeData : allData; }
 let markers = null;
 let allMarkers = [];
 let currentCaseIndex = null;
+var currentCaseData = null;
 
 const filters = {
     minIntensity:0, maxIntensity:200,
     minVmaxChange:-100, maxVmaxChange:85,
     minTilt:0, maxTilt:200,
+    minWspd05:0, maxWspd05:100,
+    minWspd20:0, maxWspd20:100,
     minYear:1997, maxYear:2024,
     stormName:'all'
 };
@@ -28,6 +116,8 @@ function toggleFilterDrawer() {
     const drawer = document.getElementById('filter-drawer');
     const btn = document.getElementById('filter-toggle');
     drawer.classList.toggle('open');
+    var isOpen = drawer.classList.contains('open');
+    btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
     btn.classList.toggle('active');
 }
 
@@ -38,6 +128,7 @@ var _focusMarker = null;
 function enterFocusMode(caseData) {
     _focusMode = true;
     if (markers) map.removeLayer(markers);
+    if (_trackViewLayer) map.removeLayer(_trackViewLayer);
     if (_focusMarker) { map.removeLayer(_focusMarker); _focusMarker = null; }
     var color = getIntensityColor(caseData.vmax_kt);
     var icon = L.divIcon({
@@ -49,14 +140,27 @@ function enterFocusMode(caseData) {
     map.setView([caseData.latitude, caseData.longitude], 6, { animate: true });
     document.getElementById('map-wrapper').classList.add('focus-mode');
     document.getElementById('side-panel').classList.add('focus-panel');
-    setTimeout(function() { map.invalidateSize(); }, 380);
+    setTimeout(function() {
+        map.invalidateSize();
+        // If IR data was already fetched before focus mode, show it now
+        if (_irData && _irFrameURLs.length) {
+            _injectIRMapControls();
+            showIRMapOverlay(0);
+        }
+    }, 380);
 }
 
 function exitFocusMode() {
     if (!_focusMode) return;
     _focusMode = false;
     if (_focusMarker) { map.removeLayer(_focusMarker); _focusMarker = null; }
-    if (markers) map.addLayer(markers);
+    removeIRMapOverlay();
+    cleanupERA5();
+    if (_mapViewMode === 'tracks') {
+        if (_trackViewLayer) map.addLayer(_trackViewLayer);
+    } else {
+        if (markers) map.addLayer(markers);
+    }
     document.getElementById('map-wrapper').classList.remove('focus-mode');
     document.getElementById('side-panel').classList.remove('focus-panel');
     document.getElementById('storm-select').value = '';
@@ -130,7 +234,10 @@ function exploreCaseGo() {
 
 // ── Side panel ───────────────────────────────────────────────
 function openSidePanel(caseData, fromQuickSelect) {
+    _archiveFLReset();
+    _archiveSondeReset();
     currentCaseIndex = caseData.case_index;
+    currentCaseData = caseData;
     _currentSddc = (caseData.sddc !== null && caseData.sddc !== undefined && caseData.sddc !== 9999) ? caseData.sddc : null;
     const idx = caseData.case_index;
     const padded = String(idx).padStart(4, '0');
@@ -140,7 +247,13 @@ function openSidePanel(caseData, fromQuickSelect) {
     var backBtnHtml = _focusMode ?
         '<button class="focus-back-btn" onclick="exitFocusMode();closeSidePanel();">' +
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>' +
-        'Back to all cases</button>' : '';
+        'Back to all cases</button>' :
+        '<button class="focus-back-btn" style="background:var(--blue);color:white;border-color:var(--blue);" ' +
+        'onclick="enterFocusMode(_lastCaseData);openSidePanel(_lastCaseData,false);">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 6 15 12 9 18"/></svg>' +
+        'Focus &amp; IR Satellite</button>';
+
+    window._lastCaseData = caseData;
 
     document.getElementById('side-panel-inner').innerHTML =
         '<button id="side-panel-close" onclick="closeSidePanel()">\u2715</button>' +
@@ -172,6 +285,39 @@ function openSidePanel(caseData, fromQuickSelect) {
                     '<button class="cs-btn" id="cs-btn" onclick="toggleCrossSection()" disabled>\u2702 Cross Section</button>' +
                     '<button class="cs-btn" id="az-btn" onclick="fetchAzimuthalMean()" disabled>\u27F3 Azim. Mean</button>' +
                     '<button class="cs-btn" id="sq-btn" onclick="fetchShearQuadrants()" disabled>\u25D1 Shear Quads</button>' +
+                    '<button class="cs-btn" id="vol-btn" onclick="fetch3DVolume()" disabled>\uD83D\uDDA5 3D Volume</button>' +
+                    '<button class="cs-btn" id="ir-underlay-btn" onclick="toggleIRPlotlyUnderlay()" disabled>\uD83D\uDEF0 IR Off</button>' +
+                    '<button class="cs-btn" id="btn-archive-fl" onclick="archiveToggleFlightLevel()" style="background:rgba(96,165,250,0.12);border-color:rgba(96,165,250,0.35);color:#93c5fd;">\u2708 FL Off</button>' +
+                    '<button class="cs-btn" id="btn-archive-sonde" onclick="archiveToggleDropsondes()" style="background:rgba(52,211,153,0.12);border-color:rgba(52,211,153,0.35);color:#6ee7b7;">\uD83E\uDE82 Sondes Off</button>' +
+                '</div>' +
+                '<div class="fl-archive-status" id="fl-archive-status" style="display:none;font-size:10px;color:#fbbf24;padding:2px 8px;"></div>' +
+                '<div class="display-actions" style="margin-top:4px;">' +
+                    '<button class="cs-btn" id="hybrid-az-btn" onclick="fetchHybridAzimuthalMean()" disabled style="background:rgba(168,85,247,0.12);border-color:rgba(168,85,247,0.35);color:#c4b5fd;">R\u2095 Hybrid</button>' +
+                    '<button class="cs-btn" id="anomaly-az-btn" onclick="fetchAnomalyAzimuthalMean()" disabled style="background:rgba(239,68,68,0.12);border-color:rgba(239,68,68,0.35);color:#fca5a5;">Z* Anomaly</button>' +
+                    '<button class="cs-btn" id="vp-scatter-btn" onclick="fetchVPScatter()" style="background:rgba(251,191,36,0.12);border-color:rgba(251,191,36,0.35);color:#fde68a;">\u2B24 VP Scatter</button>' +
+                    '<button class="cs-btn" id="barb-btn" onclick="toggleWindBarbs()" disabled>\uD83C\uDF2C\uFE0F Barbs Off</button>' +
+                    '<button class="cs-btn" id="tilt-btn" onclick="toggleTiltProfile()">\uD83C\uDFAF Tilt Off</button>' +
+                '</div>' +
+                '<div class="display-actions" style="margin-top:4px;">' +
+                    '<button class="cs-btn env-case-btn" id="env-case-btn" onclick="toggleEnvOverlay()" style="background:rgba(0,180,100,0.12);border-color:rgba(0,180,100,0.35);color:#6ee7b7;flex:1;">\uD83C\uDF0D Environment Diagnostics</button>' +
+                '</div>' +
+                // ── Pre-rendered FL time-series panel (hidden by default) ──
+                '<div id="fl-archive-ts" class="fl-archive-ts" style="display:none;">' +
+                    '<div class="fl-ts-header">' +
+                        '<span class="fl-ts-title">\u2708 Along-Track Time Series</span>' +
+                        '<div class="fl-ts-res-group" id="arch-fl-res-group"></div>' +
+                        '<button onclick="archiveSavePlotPNG(\'fl-ts-chart\',\'FL_TimeSeries\')" class="rt-save-png-btn" style="margin-left:4px;" title="Save as PNG"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></button>' +
+                        '<button onclick="archFLCloseTimeSeries()" class="fl-ts-close" title="Close">&times;</button>' +
+                    '</div>' +
+                    '<div class="fl-ts-var-bar" id="arch-fl-ts-vars"></div>' +
+                    '<div class="fl-ts-info" id="fl-ts-info"></div>' +
+                    '<div id="fl-ts-chart" style="width:100%;height:340px;"></div>' +
+                    '<div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:2px 0 6px;">' +
+                        '<span style="color:#64748b;font-size:10px;">X-Axis:</span>' +
+                        '<button class="fl-ts-xbtn' + (_archFLTSXAxis === 'time' ? ' active' : '') + '" onclick="_archFLSetXAxis(\'time\')" id="fl-ts-xbtn-time">Time</button>' +
+                        '<button class="fl-ts-xbtn' + (_archFLTSXAxis === 'radius' ? ' active' : '') + '" onclick="_archFLSetXAxis(\'radius\')" id="fl-ts-xbtn-radius">Radius</button>' +
+                        '<span style="color:#64748b;font-size:10px;margin-left:8px;">Click and drag to zoom \u00b7 Double-click to reset</span>' +
+                    '</div>' +
                 '</div>' +
             '</div>' +
 
@@ -304,13 +450,39 @@ function openSidePanel(caseData, fromQuickSelect) {
     _updateExplorerOriginalGroups();
 
     document.getElementById('side-panel').classList.add('open');
+
+    // Fetch IR satellite data for this case
+    _irData = null; _irFrameURLs = []; _irPlotlyVisible = false; _irAllFramesLoaded = false; _irLoadedCount = 0;
+    _showIRLoadingIndicator();
+    fetchIRData(caseData.case_index, function(data) {
+        _removeIRLoadingIndicator();
+        if (data && currentCaseIndex === caseData.case_index) {
+            var irBtn = document.getElementById('ir-underlay-btn');
+            if (irBtn) irBtn.disabled = false;
+            if (_focusMode) {
+                _injectIRMapControls();
+                showIRMapOverlay(0);
+            }
+        }
+    });
+
+    // Fetch ERA5 environmental data for this case
+    _era5Data = null; _era5PlotlyVisible = false;
+    fetchERA5Data(caseData.case_index, 'shear_mag', function(data) {
+        // ERA5 data pre-fetched for the Environment overlay (top-nav)
+    });
+
     setTimeout(function() { map.invalidateSize(); }, 360);
 }
 
 function closeSidePanel() {
     document.getElementById('side-panel').classList.remove('open');
     currentCaseIndex = null;
+    currentCaseData = null;
     animStop();
+    removeIRMapOverlay();
+    _irPlotlyVisible = false;
+    cleanupERA5();
     _csMode = false; _csPointA = null; _removeRubberBand();
     exitFocusMode();
     setTimeout(function() { map.invalidateSize(); }, 360);
@@ -329,6 +501,2568 @@ var _lastSqJson = null;
 // ── ASCII Hurricane Loading Animation ────────────────────────
 var _hurricaneAnimId = null;
 var _hurricanePhase = 0;
+
+
+// ══════════════════════════════════════════════════════════════
+// ERA5 Environmental Diagnostics Module
+// ══════════════════════════════════════════════════════════════
+
+// ── ERA5 state ───────────────────────────────────────────────
+var _era5Data = null;
+var _era5MapField = 'shear_mag';
+var _era5Fetching = false;
+var _era5PlotlyVisible = false;
+
+// ── ERA5 colormaps ───────────────────────────────────────────
+var _era5Colormaps = {
+    shear_mag: {
+        stops: [
+            { pos: 0.00, r: 255, g: 255, b: 204 },
+            { pos: 0.15, r: 255, g: 237, b: 160 },
+            { pos: 0.30, r: 254, g: 217, b: 118 },
+            { pos: 0.45, r: 254, g: 178, b: 76  },
+            { pos: 0.60, r: 253, g: 141, b: 60  },
+            { pos: 0.75, r: 240, g: 59,  b: 32  },
+            { pos: 0.90, r: 189, g: 0,   b: 38  },
+            { pos: 1.00, r: 128, g: 0,   b: 38  },
+        ],
+    },
+    rh_mid: {
+        stops: [
+            { pos: 0.00, r: 140, g: 81,  b: 10  },
+            { pos: 0.15, r: 191, g: 129, b: 45  },
+            { pos: 0.30, r: 223, g: 194, b: 125 },
+            { pos: 0.50, r: 245, g: 245, b: 220 },
+            { pos: 0.70, r: 128, g: 205, b: 193 },
+            { pos: 0.85, r: 53,  g: 151, b: 143 },
+            { pos: 1.00, r: 1,   g: 102, b: 94  },
+        ],
+    },
+    div200: {
+        stops: [
+            { pos: 0.00, r: 178, g: 24,  b: 43  },
+            { pos: 0.25, r: 239, g: 138, b: 98  },
+            { pos: 0.45, r: 253, g: 219, b: 199 },
+            { pos: 0.55, r: 209, g: 229, b: 240 },
+            { pos: 0.75, r: 103, g: 169, b: 207 },
+            { pos: 1.00, r: 33,  g: 102, b: 172 },
+        ],
+    },
+    sst: {
+        stops: [
+            { pos: 0.00, r: 49,  g: 54,  b: 149 },
+            { pos: 0.15, r: 69,  g: 117, b: 180 },
+            { pos: 0.30, r: 116, g: 173, b: 209 },
+            { pos: 0.45, r: 171, g: 217, b: 233 },
+            { pos: 0.55, r: 253, g: 174, b: 97  },
+            { pos: 0.70, r: 244, g: 109, b: 67  },
+            { pos: 0.85, r: 215, g: 48,  b: 39  },
+            { pos: 1.00, r: 165, g: 0,   b: 38  },
+        ],
+    },
+    entropy_def: {
+        stops: [
+            { pos: 0.00, r: 255, g: 247, b: 236 },
+            { pos: 0.15, r: 254, g: 232, b: 200 },
+            { pos: 0.30, r: 253, g: 212, b: 158 },
+            { pos: 0.45, r: 253, g: 187, b: 132 },
+            { pos: 0.60, r: 227, g: 145, b: 86  },
+            { pos: 0.75, r: 189, g: 109, b: 53  },
+            { pos: 0.90, r: 140, g: 81,  b: 10  },
+            { pos: 1.00, r: 84,  g: 48,  b: 5   },
+        ],
+    },
+};
+
+function _era5ValToColor(val, field) {
+    var cfg = _era5Data ? _era5Data.field_config : null;
+    if (!cfg) return [0, 0, 0, 0];
+    var vmin = cfg.vmin, vmax = cfg.vmax;
+    if (val === null || val === undefined || isNaN(val)) return [0, 0, 0, 0];
+    var frac = (val - vmin) / (vmax - vmin);
+    frac = Math.max(0, Math.min(1, frac));
+    var stops = _era5Colormaps[field] ? _era5Colormaps[field].stops : _era5Colormaps.shear_mag.stops;
+    var lo = stops[0], hi = stops[stops.length - 1];
+    for (var i = 0; i < stops.length - 1; i++) {
+        if (frac >= stops[i].pos && frac <= stops[i + 1].pos) {
+            lo = stops[i]; hi = stops[i + 1]; break;
+        }
+    }
+    var t = (hi.pos === lo.pos) ? 0 : (frac - lo.pos) / (hi.pos - lo.pos);
+    return [
+        Math.round(lo.r + t * (hi.r - lo.r)),
+        Math.round(lo.g + t * (hi.g - lo.g)),
+        Math.round(lo.b + t * (hi.b - lo.b)),
+        200
+    ];
+}
+
+function _era5RenderCanvas(data2d, field) {
+    var nLat = data2d.length, nLon = data2d[0].length;
+    var canvas = document.createElement('canvas');
+    canvas.width = nLon; canvas.height = nLat;
+    var ctx = canvas.getContext('2d');
+    var imgData = ctx.createImageData(nLon, nLat);
+    var d = imgData.data;
+    for (var yi = 0; yi < nLat; yi++) {
+        var srcRow = nLat - 1 - yi;
+        for (var xi = 0; xi < nLon; xi++) {
+            var idx = (yi * nLon + xi) * 4;
+            var rgba = _era5ValToColor(data2d[srcRow][xi], field);
+            d[idx] = rgba[0]; d[idx + 1] = rgba[1]; d[idx + 2] = rgba[2]; d[idx + 3] = rgba[3];
+        }
+    }
+    ctx.putImageData(imgData, 0, 0);
+    return canvas;
+}
+
+// ── ERA5 data fetch ──────────────────────────────────────────
+function fetchERA5Data(caseIndex, field, callback) {
+    if (_era5Fetching) return;
+    _era5Fetching = true;
+    var url = API_BASE + '/era5?case_index=' + caseIndex + '&field=' + (field || 'shear_mag') + '&radius_km=300' + '&data_type=' + _activeDataType;
+    fetch(url)
+        .then(function(r) {
+            if (!r.ok) { _era5Fetching = false; if (callback) callback(null); return null; }
+            return r.json();
+        })
+        .then(function(data) {
+            _era5Fetching = false;
+            if (!data) return;
+            _era5Data = data;
+            if (callback) callback(data);
+        })
+        .catch(function(err) {
+            console.warn('ERA5 fetch failed:', err);
+            _era5Fetching = false; _era5Data = null;
+            if (callback) callback(null);
+        });
+}
+
+// ── Leaflet map overlay ──────────────────────────────────────
+function _era5GetBounds(data) {
+    var latOff = data.lat_offsets, lonOff = data.lon_offsets;
+    return L.latLngBounds(
+        [data.center_lat + latOff[0], data.center_lon + lonOff[0]],
+        [data.center_lat + latOff[latOff.length - 1], data.center_lon + lonOff[lonOff.length - 1]]
+    );
+}
+
+// ── Plotly explorer underlay ─────────────────────────────────
+function buildERA5PlotlyTrace(data) {
+    if (!data || !data.data) return null;
+    var frame = data.data;
+    var latOff = data.lat_offsets, lonOff = data.lon_offsets;
+    var centerLat = data.center_lat;
+    var cosLat = Math.cos(centerLat * Math.PI / 180);
+    var yKm = latOff.map(function(d) { return d * 111.0; });
+    var xKm = lonOff.map(function(d) { return d * 111.0 * cosLat; });
+    return {
+        z: frame, x: xKm, y: yKm, type: 'heatmap',
+        colorscale: data.field_config.colorscale,
+        zmin: data.field_config.vmin, zmax: data.field_config.vmax,
+        showscale: false, hoverongaps: false, opacity: 0.25,
+        hovertemplate: '<b>' + data.field_config.display_name + '</b>: %{z:.2f} ' + data.field_config.units + '<extra>ERA5</extra>',
+    };
+}
+
+function buildERA5QuiverTraces(data) {
+    if (!data || !data.vectors) return [];
+    var vecs = data.vectors;
+    var latOff = data.lat_offsets, lonOff = data.lon_offsets;
+    var centerLat = data.center_lat;
+    var cosLat = Math.cos(centerLat * Math.PI / 180);
+    var stride = vecs.stride;
+    var traces = [];
+    var arrowScale = 40;
+    for (var yi = 0; yi < vecs.u.length; yi++) {
+        for (var xi = 0; xi < vecs.u[yi].length; xi++) {
+            var u = vecs.u[yi][xi], v = vecs.v[yi][xi];
+            if (u === null || v === null) continue;
+            var x0 = lonOff[xi * stride] * 111.0 * cosLat;
+            var y0 = latOff[yi * stride] * 111.0;
+            var mag = Math.sqrt(u * u + v * v);
+            if (mag < 0.5) continue;
+            var scale = arrowScale * mag / 20;
+            traces.push({
+                x: [x0, x0 + u / mag * scale], y: [y0, y0 + v / mag * scale],
+                type: 'scatter', mode: 'lines',
+                line: { color: 'rgba(255,255,255,0.4)', width: 1 },
+                showlegend: false, hoverinfo: 'skip',
+            });
+        }
+    }
+    return traces;
+}
+
+function toggleERA5PlotlyUnderlay() {
+    _era5PlotlyVisible = !_era5PlotlyVisible;
+    var plotDiv = document.getElementById('plotly-chart');
+    if (!plotDiv || !plotDiv.data) { _era5PlotlyVisible = false; return; }
+
+    if (_era5PlotlyVisible && _era5Data) {
+        var trace = buildERA5PlotlyTrace(_era5Data);
+        if (trace) {
+            // Insert at index 0 (or 1 if IR underlay present)
+            var insertIdx = 0;
+            if (plotDiv.data.length > 0 && plotDiv.data[0].hovertemplate &&
+                plotDiv.data[0].hovertemplate.indexOf('satellite') !== -1) {
+                insertIdx = 1;
+            }
+            Plotly.addTraces('plotly-chart', trace, insertIdx);
+            // Add quiver traces
+            var quivers = buildERA5QuiverTraces(_era5Data);
+            if (quivers.length) {
+                for (var qi = 0; qi < quivers.length; qi++) {
+                    Plotly.addTraces('plotly-chart', quivers[qi]);
+                }
+            }
+        }
+    } else {
+        _era5PlotlyVisible = false;
+        // Remove ERA5 traces (tagged with 'ERA5' in hovertemplate)
+        var toRemove = [];
+        for (var i = plotDiv.data.length - 1; i >= 0; i--) {
+            if ((plotDiv.data[i].hovertemplate && plotDiv.data[i].hovertemplate.indexOf('ERA5') !== -1) ||
+                (plotDiv.data[i].hoverinfo === 'skip' && plotDiv.data[i].line && plotDiv.data[i].line.color === 'rgba(255,255,255,0.4)')) {
+                toRemove.push(i);
+            }
+        }
+        if (toRemove.length) Plotly.deleteTraces('plotly-chart', toRemove);
+    }
+    _updateERA5Buttons();
+}
+
+function _updateERA5Buttons() {
+    var btn = document.getElementById('era5-underlay-btn');
+    if (btn) {
+        btn.classList.toggle('active', _era5PlotlyVisible);
+        btn.textContent = _era5PlotlyVisible ? '\uD83C\uDF0D ' + (_era5Data ? _era5Data.field_config.display_name.split('(')[0].trim() : 'Env') : '\uD83C\uDF0D Env Off';
+    }
+}
+
+// ── ERA5 field selector ──────────────────────────────────────
+function showERA5FieldMenu() {
+    var existing = document.getElementById('era5-field-menu');
+    if (existing) { existing.remove(); return; }
+    var btn = document.getElementById('era5-underlay-btn');
+    if (!btn) return;
+    var menu = document.createElement('div');
+    menu.id = 'era5-field-menu';
+    menu.className = 'env-field-dropdown';
+
+    // ── Toggle row at top ──
+    var toggleRow = document.createElement('div');
+    toggleRow.className = 'env-field-option env-toggle-row' + (_era5PlotlyVisible ? ' active' : '');
+    toggleRow.textContent = _era5PlotlyVisible ? '\u2705 Overlay On' : '\u274C Overlay Off';
+    toggleRow.style.cssText = 'border-bottom:1px solid rgba(255,255,255,0.15);font-weight:bold;';
+    toggleRow.onclick = function() {
+        menu.remove();
+        toggleERA5PlotlyUnderlay();
+    };
+    menu.appendChild(toggleRow);
+
+    // ── Field options ──
+    var fields = [
+        { key: 'shear_mag',   label: '\uD83C\uDF2C Shear (200\u2013850 hPa)' },
+        { key: 'rh_mid',      label: '\uD83D\uDCA7 Mid-Level RH (500\u2013700)' },
+        { key: 'div200',      label: '\u2B06 200 hPa Divergence' },
+        { key: 'sst',         label: '\uD83C\uDF0A Sea Surface Temperature' },
+        { key: 'entropy_def', label: '\uD83C\uDF21 Entropy Deficit (\u03c7\u2098)' },
+    ];
+    fields.forEach(function(f) {
+        var opt = document.createElement('div');
+        opt.className = 'env-field-option' + (_era5MapField === f.key ? ' active' : '');
+        opt.textContent = f.label;
+        opt.onclick = function() {
+            menu.remove();
+            _era5MapField = f.key;
+            if (currentCaseIndex !== null) {
+                fetchERA5Data(currentCaseIndex, f.key, function(data) {
+                    if (data) {
+                        // Turn on underlay if not already visible
+                        if (!_era5PlotlyVisible) {
+                            toggleERA5PlotlyUnderlay();
+                        } else {
+                            // Already visible — swap the field
+                            _era5PlotlyVisible = false;
+                            toggleERA5PlotlyUnderlay();
+                        }
+                        _updateERA5Buttons();
+                    }
+                });
+            }
+        };
+        menu.appendChild(opt);
+    });
+    btn.parentElement.style.position = 'relative';
+    btn.parentElement.appendChild(menu);
+    setTimeout(function() {
+        document.addEventListener('click', function closeMenu(e) {
+            if (!menu.contains(e.target) && e.target !== btn) {
+                menu.remove(); document.removeEventListener('click', closeMenu);
+            }
+        });
+    }, 10);
+}
+
+
+
+// ── Hodograph ────────────────────────────────────────────────
+function renderHodograph(profiles, divId) {
+    var el = document.getElementById(divId);
+    if (!el || !profiles.u || !profiles.v) return;
+
+    var u = profiles.u, v = profiles.v, plev = profiles.plev;
+    var n = plev.length;
+
+    // Height-based colors: blue (low) → green (mid) → red (upper)
+    function plevColor(p) {
+        var logMin = Math.log(100), logMax = Math.log(1000);
+        var frac = 1.0 - (Math.log(p) - logMin) / (logMax - logMin);
+        frac = Math.max(0, Math.min(1, frac));
+        if (frac < 0.5) {
+            var t = frac / 0.5;
+            return 'rgb(' + Math.round(30 + t * 0) + ',' + Math.round(100 + t * 155) + ',' + Math.round(255 - t * 100) + ')';
+        } else {
+            var t2 = (frac - 0.5) / 0.5;
+            return 'rgb(' + Math.round(30 + t2 * 225) + ',' + Math.round(255 - t2 * 155) + ',' + Math.round(155 - t2 * 155) + ')';
+        }
+    }
+
+    var colors = plev.map(plevColor);
+
+    // Profile line trace
+    var profileTrace = {
+        x: u, y: v, type: 'scatter', mode: 'lines+markers',
+        marker: { color: colors, size: 7, line: { color: 'rgba(255,255,255,0.6)', width: 1 } },
+        line: { color: 'rgba(180,180,180,0.4)', width: 1.5 },
+        text: plev.map(function(p, i) {
+            return p + ' hPa<br>u=' + (u[i] != null ? u[i].toFixed(1) : '?') + ' v=' + (v[i] != null ? v[i].toFixed(1) : '?') + ' m/s';
+        }),
+        hovertemplate: '%{text}<extra></extra>',
+        showlegend: false,
+    };
+
+    // Shear vector: 850 → 200 hPa
+    var i850 = -1, i200 = -1;
+    for (var i = 0; i < n; i++) {
+        if (plev[i] === 850) i850 = i;
+        if (plev[i] === 200) i200 = i;
+    }
+
+    var traces = [profileTrace];
+    if (i850 >= 0 && i200 >= 0 && u[i850] != null && u[i200] != null) {
+        traces.push({
+            x: [u[i850], u[i200]], y: [v[i850], v[i200]],
+            type: 'scatter', mode: 'lines+markers+text',
+            line: { color: '#f59e0b', width: 2.5, dash: 'dash' },
+            marker: { size: [8, 10], color: '#f59e0b', symbol: ['circle', 'triangle-up'] },
+            text: ['850', '200'], textposition: 'top right',
+            textfont: { color: '#f59e0b', size: 9 },
+            showlegend: false, hoverinfo: 'skip',
+        });
+    }
+
+    // Range rings
+    var shapes = [];
+    var maxWind = 0;
+    for (var j = 0; j < n; j++) {
+        if (u[j] != null && v[j] != null) {
+            maxWind = Math.max(maxWind, Math.sqrt(u[j] * u[j] + v[j] * v[j]));
+        }
+    }
+    var ringMax = Math.ceil(maxWind / 5) * 5 + 5;
+    for (var r = 5; r <= ringMax; r += 5) {
+        shapes.push({
+            type: 'circle', xref: 'x', yref: 'y',
+            x0: -r, y0: -r, x1: r, y1: r,
+            line: { color: 'rgba(255,255,255,0.07)', width: 1 },
+        });
+    }
+    // Crosshairs
+    shapes.push({ type: 'line', xref: 'x', yref: 'y', x0: -ringMax, y0: 0, x1: ringMax, y1: 0,
+        line: { color: 'rgba(255,255,255,0.1)', width: 1 } });
+    shapes.push({ type: 'line', xref: 'x', yref: 'y', x0: 0, y0: -ringMax, x1: 0, y1: ringMax,
+        line: { color: 'rgba(255,255,255,0.1)', width: 1 } });
+
+    var layout = {
+        xaxis: { title: { text: 'u (m/s)', font: { size: 10, color: '#8b9ec2' } },
+            range: [-ringMax, ringMax], scaleanchor: 'y', scaleratio: 1,
+            zeroline: false, gridcolor: 'rgba(255,255,255,0.04)', color: '#8b9ec2', tickfont: { size: 9 } },
+        yaxis: { title: { text: 'v (m/s)', font: { size: 10, color: '#8b9ec2' } },
+            range: [-ringMax, ringMax],
+            zeroline: false, gridcolor: 'rgba(255,255,255,0.04)', color: '#8b9ec2', tickfont: { size: 9 } },
+        shapes: shapes,
+        paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(10,22,40,0.5)',
+        margin: { l: 40, r: 10, t: 25, b: 35 },
+        title: { text: 'Hodograph (200\u2013600 km)', font: { size: 11, color: '#00d4ff' }, x: 0.5, y: 0.98 },
+        showlegend: false,
+    };
+
+    Plotly.newPlot(divId, traces, layout, { responsive: true, displayModeBar: false });
+}
+
+// ── RH Vertical Profile ─────────────────────────────────────
+function renderRHProfile(profiles, divId) {
+    var el = document.getElementById(divId);
+    if (!el || !profiles.rh) return;
+
+    var trace = {
+        x: profiles.rh, y: profiles.plev, type: 'scatter', mode: 'lines+markers',
+        fill: 'tozerox', fillcolor: 'rgba(53,151,143,0.2)',
+        line: { color: '#35978f', width: 2 },
+        marker: { color: '#35978f', size: 5 },
+        hovertemplate: '%{y} hPa: %{x:.0f}%<extra>RH</extra>',
+    };
+    var layout = {
+        xaxis: { title: { text: 'RH (%)', font: { size: 9, color: '#8b9ec2' } },
+            range: [0, 105], color: '#8b9ec2', tickfont: { size: 8 } },
+        yaxis: { title: { text: 'Pressure (hPa)', font: { size: 9, color: '#8b9ec2' } },
+            autorange: 'reversed', type: 'log', color: '#8b9ec2', tickfont: { size: 8 },
+            tickvals: [1000, 850, 700, 500, 300, 200, 100] },
+        paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(10,22,40,0.5)',
+        margin: { l: 45, r: 5, t: 22, b: 30 },
+        title: { text: 'RH Profile', font: { size: 10, color: '#00d4ff' }, x: 0.5, y: 0.98 },
+    };
+    Plotly.newPlot(divId, [trace], layout, { responsive: true, displayModeBar: false });
+}
+
+// ── Theta / Theta-e Vertical Profile ─────────────────────────
+function renderThetaProfile(profiles, divId) {
+    var el = document.getElementById(divId);
+    if (!el) return;
+
+    var traces = [];
+
+    // θ profile (potential temperature)
+    if (profiles.theta) {
+        traces.push({
+            x: profiles.theta, y: profiles.plev, type: 'scatter', mode: 'lines+markers',
+            name: '\u03b8',
+            line: { color: '#f59e0b', width: 2 },
+            marker: { color: '#f59e0b', size: 5 },
+            hovertemplate: '%{y} hPa: \u03b8 = %{x:.1f} K<extra></extra>',
+        });
+    }
+
+    // θe profile (equivalent potential temperature)
+    if (profiles.theta_e) {
+        traces.push({
+            x: profiles.theta_e, y: profiles.plev, type: 'scatter', mode: 'lines+markers',
+            name: '\u03b8e',
+            line: { color: '#ef4444', width: 2 },
+            marker: { color: '#ef4444', size: 5 },
+            hovertemplate: '%{y} hPa: \u03b8e = %{x:.1f} K<extra></extra>',
+        });
+    }
+
+    // Fallback to plain T if no theta data
+    if (!traces.length && profiles.t) {
+        var tC = profiles.t.map(function(t) { return t != null ? t - 273.15 : null; });
+        traces.push({
+            x: tC, y: profiles.plev, type: 'scatter', mode: 'lines+markers',
+            name: 'T',
+            line: { color: '#ef4444', width: 2 },
+            marker: { color: '#ef4444', size: 5 },
+            hovertemplate: '%{y} hPa: %{x:.1f}\u00b0C<extra>Temp</extra>',
+        });
+    }
+
+    if (!traces.length) return;
+
+    var layout = {
+        xaxis: { title: { text: 'K', font: { size: 9, color: '#8b9ec2' } },
+            color: '#8b9ec2', tickfont: { size: 8 } },
+        yaxis: { title: '', autorange: 'reversed', type: 'log', color: '#8b9ec2', tickfont: { size: 8 },
+            tickvals: [1000, 850, 700, 500, 300, 200, 100] },
+        paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(10,22,40,0.5)',
+        margin: { l: 30, r: 5, t: 22, b: 30 },
+        title: { text: '\u03b8 / \u03b8e Profile', font: { size: 10, color: '#00d4ff' }, x: 0.5, y: 0.98 },
+        legend: { font: { color: '#ccc', size: 9 }, x: 0.02, y: 0.02, bgcolor: 'rgba(0,0,0,0.3)' },
+        showlegend: true,
+    };
+    Plotly.newPlot(divId, traces, layout, { responsive: true, displayModeBar: false });
+}
+
+// ── Wind barb helper for Skew-T ──────────────────────────────
+// Draws standard meteorological wind barbs as Plotly shape arrays.
+// Each barb: staff pointing INTO the wind, feathers on left side.
+// Convention: half barb = 5 kt, full barb = 10 kt, flag = 50 kt.
+// ── Plan-view wind barbs (for archive plan-view plots) ───────
+// Draws standard meteorological wind barbs on a Cartesian (km) grid.
+// barbData = { u:[[]], v:[[]], x:[], y:[], units:'m/s', type:'storm_relative'|'earth_relative' }
+// axRanges = { xMin, xMax, yMin, yMax }
+// Returns array of Plotly shape objects (type:'line', xref:'x', yref:'y').
+function _buildPlanViewWindBarbs(barbData, axRanges) {
+    var shapes = [];
+    if (!barbData || !barbData.u || !barbData.v) return shapes;
+
+    var uGrid = barbData.u, vGrid = barbData.v;
+    var xCoords = barbData.x, yCoords = barbData.y;
+
+    var xSpan = axRanges.xMax - axRanges.xMin;
+    var ySpan = axRanges.yMax - axRanges.yMin;
+    var span = Math.max(xSpan, ySpan);
+    if (span <= 0) return shapes;
+
+    // Staff length in data units (km) — ~4% of axis span
+    var staffLen = span * 0.04;
+    var barbFrac = 0.38;    // feather length as fraction of staff
+    var gapFrac  = 0.12;    // gap between feathers
+    var flagWFrac = 0.38;   // flag width (50-kt pennant)
+    var flagHFrac = 0.18;   // flag height along staff
+
+    var lineColor = 'rgba(220,220,240,0.85)';
+    var lineWidth = 1.4;
+
+    function mkLine(x0, y0, x1, y1) {
+        return {
+            type: 'line', xref: 'x', yref: 'y',
+            x0: x0, y0: y0, x1: x1, y1: y1,
+            line: { color: lineColor, width: lineWidth }
+        };
+    }
+
+    for (var yi = 0; yi < uGrid.length; yi++) {
+        for (var xi = 0; xi < uGrid[yi].length; xi++) {
+            var uMs = uGrid[yi][xi], vMs = vGrid[yi][xi];
+            if (uMs === null || vMs === null) continue;
+
+            var spdKt = Math.sqrt(uMs * uMs + vMs * vMs) * 1.944;
+            if (spdKt < 2.5) continue;  // calm — skip
+
+            var xBase = xCoords[xi], yBase = yCoords[yi];
+
+            // Direction wind is coming FROM (meteorological convention)
+            var dirRad = Math.atan2(-uMs, -vMs);
+            var sinD = Math.sin(dirRad), cosD = Math.cos(dirRad);
+
+            // Staff: tip is in the "from" direction (away from base)
+            var xTip = xBase + staffLen * sinD;
+            var yTip = yBase + staffLen * cosD;
+
+            // Draw staff line
+            shapes.push(mkLine(xBase, yBase, xTip, yTip));
+
+            // Feather encoding
+            var remaining = Math.round(spdKt / 5) * 5;
+            var nFlags = Math.floor(remaining / 50); remaining -= nFlags * 50;
+            var nFull  = Math.floor(remaining / 10); remaining -= nFull * 10;
+            var nHalf  = Math.floor(remaining / 5);
+
+            // Perpendicular (left side of staff, looking from base to tip): rotate +90°
+            var perpX = cosD;
+            var perpY = -sinD;
+
+            var barbLen = staffLen * barbFrac;
+            var barbGap = staffLen * gapFrac;
+            var flagW   = staffLen * flagWFrac;
+            var flagH   = staffLen * flagHFrac;
+
+            var featherPos = 0;
+
+            // 50-kt flags (triangular pennants)
+            for (var fi = 0; fi < nFlags; fi++) {
+                var frac = featherPos / staffLen;
+                var fx  = xTip - (xTip - xBase) * frac;
+                var fy  = yTip - (yTip - yBase) * frac;
+                var frac2 = (featherPos + flagH) / staffLen;
+                var fx2 = xTip - (xTip - xBase) * frac2;
+                var fy2 = yTip - (yTip - yBase) * frac2;
+                var midFrac = (featherPos + flagH * 0.5) / staffLen;
+                var mx = xTip - (xTip - xBase) * midFrac;
+                var my = yTip - (yTip - yBase) * midFrac;
+                var outX = mx + flagW * perpX;
+                var outY = my + flagW * perpY;
+                shapes.push(mkLine(fx, fy, outX, outY));
+                shapes.push(mkLine(outX, outY, fx2, fy2));
+                featherPos += flagH + barbGap * 0.3;
+            }
+
+            // 10-kt full barbs
+            for (var fb = 0; fb < nFull; fb++) {
+                var frac = featherPos / staffLen;
+                var bx = xTip - (xTip - xBase) * frac;
+                var by = yTip - (yTip - yBase) * frac;
+                shapes.push(mkLine(bx, by, bx + barbLen * perpX, by + barbLen * perpY));
+                featherPos += barbGap;
+            }
+
+            // 5-kt half barbs
+            for (var hb = 0; hb < nHalf; hb++) {
+                var frac = featherPos / staffLen;
+                var hx = xTip - (xTip - xBase) * frac;
+                var hy = yTip - (yTip - yBase) * frac;
+                shapes.push(mkLine(hx, hy, hx + barbLen * 0.55 * perpX, hy + barbLen * 0.55 * perpY));
+                featherPos += barbGap;
+            }
+        }
+    }
+    return shapes;
+}
+
+// Set of variable keys eligible for wind barbs (wind speed variables)
+var _BARB_ELIGIBLE_VARS = {
+    'recentered_wind_speed': true,
+    'recentered_earth_relative_wind_speed': true,
+    'total_recentered_wind_speed': true,
+    'total_recentered_earth_relative_wind_speed': true,
+    'swath_wind_speed': true,
+    'swath_earth_relative_wind_speed': true,
+    'merged_wind_speed': true
+};
+var _windBarbsEnabled = false;
+
+function toggleWindBarbs() {
+    _windBarbsEnabled = !_windBarbsEnabled;
+    var btn = document.getElementById('barb-btn');
+    if (btn) {
+        btn.textContent = _windBarbsEnabled ? '\uD83C\uDF2C\uFE0F Barbs On' : '\uD83C\uDF2C\uFE0F Barbs Off';
+        btn.classList.toggle('active', _windBarbsEnabled);
+        if (_windBarbsEnabled) {
+            btn.style.background = 'rgba(96,165,250,0.18)';
+            btn.style.borderColor = 'rgba(96,165,250,0.45)';
+            btn.style.color = '#93c5fd';
+        } else {
+            btn.style.background = '';
+            btn.style.borderColor = '';
+            btn.style.color = '';
+        }
+    }
+    // Re-generate current plot with or without barbs
+    if (currentCaseIndex !== null) {
+        generateCustomPlot();
+    }
+}
+
+// ── Tilt Profile overlay ──────────────────────────────────────
+var _tiltProfileEnabled = false;
+
+function toggleTiltProfile() {
+    _tiltProfileEnabled = !_tiltProfileEnabled;
+    var btn = document.getElementById('tilt-btn');
+    if (btn) {
+        btn.textContent = _tiltProfileEnabled ? '\uD83C\uDFAF Tilt On' : '\uD83C\uDFAF Tilt Off';
+        btn.classList.toggle('active', _tiltProfileEnabled);
+        if (_tiltProfileEnabled) {
+            btn.style.background = 'rgba(251,191,36,0.18)';
+            btn.style.borderColor = 'rgba(251,191,36,0.45)';
+            btn.style.color = '#fde68a';
+        } else {
+            btn.style.background = '';
+            btn.style.borderColor = '';
+            btn.style.color = '';
+        }
+    }
+    // Re-generate current plot with or without tilt profile
+    if (currentCaseIndex !== null) {
+        generateCustomPlot();
+    }
+}
+
+/**
+ * Build a Plotly scatter trace showing the vortex tilt profile on a plan-view plot.
+ * Each marker represents the vortex center at a given height, colored by height.
+ * @param {Object} tiltData - { x_km, y_km, height_km, tilt_magnitude_km, ref_height_km }
+ * @returns {Object} Plotly scatter trace
+ */
+function _buildTiltProfileTrace(tiltData) {
+    var x = [], y = [], colors = [], texts = [], sizes = [];
+    var refH = tiltData.ref_height_km || 2.0;
+    for (var i = 0; i < tiltData.height_km.length; i++) {
+        if (tiltData.x_km[i] === null || tiltData.y_km[i] === null) continue;
+        var h = tiltData.height_km[i];
+        var tiltMag = tiltData.tilt_magnitude_km[i];
+        x.push(tiltData.x_km[i]);
+        y.push(tiltData.y_km[i]);
+        colors.push(h);
+        sizes.push(h === refH ? 12 : 8);
+        var hoverText = '<b>Tilt Profile</b><br>' +
+            'Height: ' + h.toFixed(1) + ' km<br>' +
+            'X: ' + tiltData.x_km[i].toFixed(1) + ' km<br>' +
+            'Y: ' + tiltData.y_km[i].toFixed(1) + ' km';
+        if (tiltMag !== null) hoverText += '<br>Tilt from ' + refH.toFixed(1) + ' km: ' + tiltMag.toFixed(1) + ' km';
+        if (tiltData.rmw_km && tiltData.rmw_km[i] !== null) hoverText += '<br>RMW: ' + tiltData.rmw_km[i].toFixed(1) + ' km';
+        texts.push(hoverText);
+    }
+    if (x.length === 0) return null;
+
+    // Build line trace connecting the centers (the tilt profile "path")
+    var lineTrace = {
+        x: x, y: y,
+        type: 'scatter', mode: 'lines',
+        line: { color: 'rgba(255,255,255,0.4)', width: 1.5, dash: 'dot' },
+        hoverinfo: 'skip', showlegend: false
+    };
+    // Build scatter trace with markers colored by height
+    var scatterTrace = {
+        x: x, y: y,
+        type: 'scatter', mode: 'markers',
+        marker: {
+            size: sizes,
+            color: colors,
+            colorscale: 'Viridis',
+            cmin: 0, cmax: 14,
+            colorbar: {
+                title: { text: 'Tilt Height (km)', font: { color: '#ccc', size: 9 } },
+                tickfont: { color: '#ccc', size: 8 },
+                thickness: 10, len: 0.35,
+                x: 1.02, xpad: 2, y: 0.15,
+                yanchor: 'bottom',
+                outlinewidth: 0
+            },
+            line: { color: 'rgba(255,255,255,0.8)', width: 1.2 }
+        },
+        text: texts,
+        hovertemplate: '%{text}<extra></extra>',
+        showlegend: false
+    };
+    return { line: lineTrace, scatter: scatterTrace };
+}
+
+//
+// Works in paper-normalised space internally so barbs are
+// aspect-ratio-independent, then converts back to data coords for Plotly.
+// axRanges = { xMin, xMax, logPMin, logPMax } (logPMin > logPMax because
+// the y-axis is reversed: bottom of plot = high pressure).
+function _buildWindBarbShapes(u, v, plev, xPos, staffLen, axRanges) {
+    var shapes = [];
+    if (!u || !v) return shapes;
+
+    // ── Coordinate helpers: data ↔ paper [0,1] ──────────────
+    var xMin = axRanges.xMin, xMax = axRanges.xMax;
+    var logPMin = axRanges.logPMin, logPMax = axRanges.logPMax;
+    var xSpan = xMax - xMin;                    // e.g. 120 (temp units)
+    var logPSpan = logPMin - logPMax;            // positive, ~1.02
+
+    // paper x: 0 = left, 1 = right
+    function xToPaper(x) { return (x - xMin) / xSpan; }
+    // paper y: 0 = bottom (high P), 1 = top (low P) — matches Plotly paper y
+    function logPToPaper(lp) { return (logPMin - lp) / logPSpan; }
+    // inverse
+    function paperToX(px) { return xMin + px * xSpan; }
+    function paperToLogP(py) { return logPMin - py * logPSpan; }
+
+    var barbLevels = [1000, 975, 950, 925, 900, 850, 800, 750, 700, 650,
+                      600, 550, 500, 450, 400, 350, 300, 250, 200, 150, 100];
+
+    // Staff size in paper units — visually constant regardless of plot stretch.
+    // Use a fixed fraction of plot height (~4.5% of the vertical extent).
+    var staffPaper = 0.045;
+    var barbFrac   = 0.38;
+    var gapFrac    = 0.12;
+    var flagWFrac  = 0.38;
+    var flagHFrac  = 0.18;
+    var lineColor  = 'rgba(220,220,240,0.85)';
+    var lineWidth  = 1.4;
+
+    for (var bi = 0; bi < barbLevels.length; bi++) {
+        var pTarget = barbLevels[bi];
+        var bestIdx = -1, bestDist = 1e9;
+        for (var pi = 0; pi < plev.length; pi++) {
+            if (u[pi] == null || v[pi] == null) continue;
+            var d = Math.abs(plev[pi] - pTarget);
+            if (d < bestDist) { bestDist = d; bestIdx = pi; }
+        }
+        if (bestIdx < 0 || bestDist > 15) continue;
+
+        var uMs = u[bestIdx], vMs = v[bestIdx];
+        var spdKt = Math.sqrt(uMs * uMs + vMs * vMs) * 1.944;
+        if (spdKt < 2.5) continue;
+
+        // Direction wind is coming FROM
+        var dirRad = Math.atan2(-uMs, -vMs);
+        var cosD = Math.cos(dirRad), sinD = Math.sin(dirRad);
+
+        // Base position in paper coords
+        var pxBase = xToPaper(xPos);
+        var pyBase = logPToPaper(Math.log10(pTarget));
+
+        // Staff tip — sinD is x-component, cosD is y-component (north = up)
+        var pxTip = pxBase + staffPaper * sinD;
+        var pyTip = pyBase + staffPaper * cosD;
+
+        // Helper: paper → data for Plotly shape
+        function mkLine(px0, py0, px1, py1) {
+            return {
+                type: 'line', xref: 'x', yref: 'y',
+                x0: paperToX(px0), y0: Math.pow(10, paperToLogP(py0)),
+                x1: paperToX(px1), y1: Math.pow(10, paperToLogP(py1)),
+                line: { color: lineColor, width: lineWidth },
+            };
+        }
+
+        shapes.push(mkLine(pxBase, pyBase, pxTip, pyTip));
+
+        // Feather encoding
+        var remaining = Math.round(spdKt / 5) * 5;
+        var nFlags = Math.floor(remaining / 50); remaining -= nFlags * 50;
+        var nFull  = Math.floor(remaining / 10); remaining -= nFull * 10;
+        var nHalf  = Math.floor(remaining / 5);
+
+        // Perpendicular to staff (left side): rotate +90°
+        var perpPx = cosD;
+        var perpPy = -sinD;
+
+        var featherPos = 0;
+        var barbLen = staffPaper * barbFrac;
+        var barbGap = staffPaper * gapFrac;
+        var flagW   = staffPaper * flagWFrac;
+        var flagH   = staffPaper * flagHFrac;
+
+        for (var fi = 0; fi < nFlags; fi++) {
+            var frac  = featherPos / staffPaper;
+            var fx  = pxTip - (pxTip - pxBase) * frac;
+            var fy  = pyTip - (pyTip - pyBase) * frac;
+            var frac2 = (featherPos + flagH) / staffPaper;
+            var fx2 = pxTip - (pxTip - pxBase) * frac2;
+            var fy2 = pyTip - (pyTip - pyBase) * frac2;
+            var midFrac = (featherPos + flagH * 0.5) / staffPaper;
+            var mx = pxTip - (pxTip - pxBase) * midFrac;
+            var my = pyTip - (pyTip - pyBase) * midFrac;
+            var outX = mx + flagW * perpPx;
+            var outY = my + flagW * perpPy;
+            shapes.push(mkLine(fx, fy, outX, outY));
+            shapes.push(mkLine(outX, outY, fx2, fy2));
+            featherPos += flagH + barbGap * 0.3;
+        }
+
+        for (var fb = 0; fb < nFull; fb++) {
+            var frac = featherPos / staffPaper;
+            var bx = pxTip - (pxTip - pxBase) * frac;
+            var by = pyTip - (pyTip - pyBase) * frac;
+            shapes.push(mkLine(bx, by, bx + barbLen * perpPx, by + barbLen * perpPy));
+            featherPos += barbGap;
+        }
+
+        for (var hb = 0; hb < nHalf; hb++) {
+            var frac = featherPos / staffPaper;
+            var hx = pxTip - (pxTip - pxBase) * frac;
+            var hy = pyTip - (pyTip - pyBase) * frac;
+            shapes.push(mkLine(hx, hy, hx + barbLen * 0.55 * perpPx, hy + barbLen * 0.55 * perpPy));
+            featherPos += barbGap;
+        }
+    }
+    return shapes;
+}
+
+// ── Skew-T / Log-P Diagram ────────────────────────────────────
+function renderSkewT(profiles, divId) {
+    var el = document.getElementById(divId);
+    if (!el || !profiles || !profiles.t || !profiles.plev) return;
+
+    var plev = profiles.plev;
+    var tK = profiles.t;
+    var qRaw = profiles.q;
+
+    // Convert T from K to °C
+    var tC = tK.map(function(v) { return v != null ? v - 273.15 : null; });
+
+    // Detect q units: if max(q) > 0.5 it's g/kg, otherwise already kg/kg
+    var maxQ = 0;
+    if (qRaw) {
+        for (var qi = 0; qi < qRaw.length; qi++) {
+            if (qRaw[qi] != null && qRaw[qi] > maxQ) maxQ = qRaw[qi];
+        }
+    }
+    var qIsGkg = maxQ > 0.5;
+
+    // Compute dewpoint from specific humidity and pressure
+    // Cap vapor pressure at saturation (annular averaging can produce q > q_sat)
+    var tdC = [];
+    for (var i = 0; i < plev.length; i++) {
+        if (qRaw && qRaw[i] != null && plev[i] != null && qRaw[i] > 0) {
+            var qKg = qIsGkg ? qRaw[i] / 1000.0 : qRaw[i];
+            var e = qKg * plev[i] / (0.622 + 0.378 * qKg);
+            // Prevent supersaturation: cap e at saturation vapor pressure
+            if (tC[i] != null) {
+                var esSfc = 6.112 * Math.exp(17.67 * tC[i] / (tC[i] + 243.5));
+                if (e > esSfc) e = esSfc;
+            }
+            if (e > 0.001) {
+                var lnE = Math.log(e / 6.112);
+                tdC.push(243.5 * lnE / (17.67 - lnE));
+            } else { tdC.push(null); }
+        } else { tdC.push(null); }
+    }
+
+    // ── Thermodynamic helper functions ──
+    var Rd = 287.04, Rv = 461.5, Cp = 1005.7, Lv = 2.501e6, g = 9.81, eps = 0.622;
+
+    function satVaporPres(tCelsius) {
+        return 6.112 * Math.exp(17.67 * tCelsius / (tCelsius + 243.5));
+    }
+    function satMixRatio(tCelsius, pHpa) {
+        var es = satVaporPres(tCelsius);
+        return es > pHpa ? 0.04 : eps * es / (pHpa - es);
+    }
+    function moistLapseRate(tCelsius, pHpa) {
+        var tKel = tCelsius + 273.15;
+        var rs = satMixRatio(tCelsius, pHpa);
+        var num = (Rd * tKel / pHpa) + (Lv * rs / pHpa);
+        var den = Cp + (Lv * Lv * rs * eps / (Rd * tKel * tKel));
+        return num / den;
+    }
+    // Lift parcel moist-adiabatically from startP to endP (endP < startP)
+    function liftMoist(tStart, pStart, pEnd) {
+        var t = tStart, p = pStart, dp = 2;
+        while (p > pEnd) {
+            var step = Math.min(dp, p - pEnd);
+            t -= moistLapseRate(t, p) * step;
+            p -= step;
+        }
+        return t;
+    }
+
+    // ── Conventional skew: ~45° tilt across the diagram ──
+    // With log-P y-axis spanning ~1 decade (100–1000 hPa) and a typical
+    // chart aspect ratio (~500×400 px), a skewFactor of ~70 gives the
+    // classic ~45° isotherms.
+    var skewFactor = 70;
+    var pRef = 1000;
+
+    function skewX(tempC, pHpa) {
+        if (tempC == null || pHpa == null) return null;
+        return tempC + skewFactor * Math.log10(pRef / pHpa);
+    }
+
+    // ── Compute derived quantities (store on profiles for info panel) ──
+    // Find surface = highest-pressure level with valid T and Td
+    // (robust to either top-down or bottom-up plev ordering)
+    var sfcIdx = -1;
+    var maxPressure = -1;
+    for (var si = 0; si < plev.length; si++) {
+        if (tC[si] != null && tdC[si] != null && plev[si] > maxPressure) {
+            maxPressure = plev[si];
+            sfcIdx = si;
+        }
+    }
+
+    // Build a list of level indices sorted by DECREASING pressure (sfc → top)
+    var sortedIdx = [];
+    for (var sii = 0; sii < plev.length; sii++) sortedIdx.push(sii);
+    sortedIdx.sort(function(a, b) { return plev[b] - plev[a]; });
+
+    var derived = { cape: null, cin: null, pwat: null, lcl_p: null, lfc_p: null, el_p: null, freezing_p: null };
+
+    if (sfcIdx >= 0) {
+        var sfcT = tC[sfcIdx], sfcTd = tdC[sfcIdx], sfcP = plev[sfcIdx];
+
+        // Mixed-layer averages (lowest 100 hPa)
+        var mlDepth = 100, mlTsum = 0, mlTdSum = 0, mlN = 0;
+        for (var mi = 0; mi < plev.length; mi++) {
+            if (plev[mi] <= sfcP && plev[mi] >= sfcP - mlDepth) {
+                if (tC[mi] != null && tdC[mi] != null) {
+                    mlTsum += tC[mi]; mlTdSum += tdC[mi]; mlN++;
+                }
+            }
+        }
+        var mlT = mlN > 0 ? mlTsum / mlN : sfcT;
+        var mlTd = mlN > 0 ? mlTdSum / mlN : sfcTd;
+
+        // Surface parcel mixing ratio (conserved during dry lift below LCL)
+        var sfcMixR = satMixRatio(mlTd, sfcP);
+
+        // LCL via iterative dry lift until T == Td
+        var lclP = sfcP, lclT = mlT, lclTd = mlTd;
+        while (lclP > 100) {
+            if (lclT <= lclTd + 0.1) break;
+            lclP -= 2;
+            lclT = (mlT + 273.15) * Math.pow(lclP / sfcP, 0.286) - 273.15;
+            // Dewpoint tracks constant mixing ratio under dry lift
+            var eNew = sfcMixR * lclP / (eps + sfcMixR);
+            if (eNew > 0.001) {
+                var lnEN = Math.log(eNew / 6.112);
+                lclTd = 243.5 * lnEN / (17.67 - lnEN);
+            }
+        }
+        derived.lcl_p = lclP;
+
+        // Lift moist from LCL upward → build parcel profile, compute CAPE & CIN
+        // Use pressure-based integration: CAPE = Rd * Σ (Tv_p − Tv_e) × ln(p_lo/p_hi)
+        var parcelT = []; // parcel temperature at each plev
+        var cape = 0, cin = 0, lfcP = null, elP = null, foundLFC = false;
+        for (var pi = 0; pi < plev.length; pi++) {
+            var pp = plev[pi];
+            if (pp > sfcP) { parcelT.push(null); continue; }
+            if (pp >= lclP) {
+                // Dry adiabatic lift from surface
+                parcelT.push((mlT + 273.15) * Math.pow(pp / sfcP, 0.286) - 273.15);
+            } else {
+                // Moist adiabatic lift from LCL
+                parcelT.push(liftMoist(lclT, lclP, pp));
+            }
+        }
+
+        // Buoyancy integration along sorted levels (surface → top)
+        for (var sk = 0; sk < sortedIdx.length; sk++) {
+            var li = sortedIdx[sk];
+            var pp = plev[li];
+            if (pp >= sfcP || tC[li] == null || parcelT[li] == null) continue;
+
+            // Environment virtual temperature
+            var envW = satMixRatio(tdC[li] != null ? tdC[li] : tC[li] - 30, pp);
+            var envTv = (tC[li] + 273.15) * (1 + 0.61 * envW);
+            // Parcel virtual temperature: use actual w below LCL, sat w above
+            var parW = (pp >= lclP) ? sfcMixR : satMixRatio(parcelT[li], pp);
+            var parTv = (parcelT[li] + 273.15) * (1 + 0.61 * parW);
+
+            // Pressure-layer bounds from sorted neighbors
+            var pAbove = (sk + 1 < sortedIdx.length) ? plev[sortedIdx[sk + 1]] : pp;
+            var pBelow = (sk > 0) ? plev[sortedIdx[sk - 1]] : sfcP;
+            // Half-layers on each side
+            var pLo = 0.5 * (pp + pBelow);
+            var pHi = 0.5 * (pp + pAbove);
+            if (pLo <= pHi || pHi <= 0) continue;
+            var dlnP = Math.log(pLo / pHi);
+
+            var dCape = Rd * (parTv - envTv) * dlnP;
+            if (dCape > 0) {
+                cape += dCape;
+                if (!foundLFC) { lfcP = pp; foundLFC = true; }
+                elP = pp;
+            } else if (!foundLFC && pp < lclP) {
+                cin += dCape;
+            }
+        }
+        derived.cape = cape > 0 ? Math.round(cape) : 0;
+        derived.cin = cin < 0 ? Math.round(cin) : 0;
+        derived.lfc_p = lfcP;
+        derived.el_p = elP;
+
+        // Total Precipitable Water: PWAT = (1/g) * ∫ q dp
+        var pwat = 0;
+        for (var pw = 0; pw < plev.length - 1; pw++) {
+            if (qRaw && qRaw[pw] != null && qRaw[pw+1] != null) {
+                var q1 = qIsGkg ? qRaw[pw] / 1000.0 : qRaw[pw];
+                var q2 = qIsGkg ? qRaw[pw+1] / 1000.0 : qRaw[pw+1];
+                var dpp = Math.abs(plev[pw] - plev[pw+1]) * 100; // Pa
+                pwat += 0.5 * (q1 + q2) * dpp / g;
+            }
+        }
+        derived.pwat = pwat > 0 ? pwat : null; // kg/m² ≈ mm
+
+        // 0°C level
+        for (var fk = 0; fk < plev.length - 1; fk++) {
+            if (tC[fk] != null && tC[fk+1] != null && tC[fk] > 0 && tC[fk+1] <= 0) {
+                var frac = tC[fk] / (tC[fk] - tC[fk+1]);
+                derived.freezing_p = plev[fk] + frac * (plev[fk+1] - plev[fk]);
+                break;
+            }
+        }
+    }
+
+    // Store derived quantities for the info panel
+    profiles._derived = derived;
+    profiles._parcelT = (typeof parcelT !== 'undefined') ? parcelT : null;
+    profiles._tC = tC;
+    profiles._tdC = tdC;
+
+    // Compute skewed coordinates
+    var tSkew = [], tdSkew = [];
+    for (var j = 0; j < plev.length; j++) {
+        tSkew.push(skewX(tC[j], plev[j]));
+        tdSkew.push(skewX(tdC[j], plev[j]));
+    }
+
+    // ── Background reference lines ──
+    var pRange = [];
+    for (var pp2 = 1050; pp2 >= 100; pp2 -= 5) pRange.push(pp2);
+
+    // Isotherms
+    var isothermTraces = [];
+    for (var tIso = -80; tIso <= 50; tIso += 10) {
+        var xIso = [], yIso = [];
+        pRange.forEach(function(p) {
+            var sx = skewX(tIso, p);
+            if (sx >= -70 && sx <= 120) { xIso.push(sx); yIso.push(p); }
+        });
+        if (xIso.length > 1) {
+            isothermTraces.push({
+                x: xIso, y: yIso, type: 'scatter', mode: 'lines',
+                line: { color: tIso === 0 ? 'rgba(100,200,255,0.5)' : 'rgba(100,160,220,0.25)',
+                        width: tIso === 0 ? 1.3 : 0.7,
+                        dash: tIso === 0 ? 'dot' : 'solid' },
+                showlegend: false, hoverinfo: 'skip',
+            });
+        }
+    }
+
+    // Dry adiabats
+    var dryAdiabatTraces = [];
+    var thetaVals = [-30, -20, -10, 0, 10, 20, 30, 40, 50, 60, 70, 80, 100, 120, 150];
+    thetaVals.forEach(function(theta) {
+        var xDry = [], yDry = [];
+        var thetaK = theta + 273.15;
+        pRange.forEach(function(p) {
+            var tAtP = thetaK * Math.pow(p / 1000.0, 0.286) - 273.15;
+            var sx = skewX(tAtP, p);
+            if (sx >= -70 && sx <= 120) { xDry.push(sx); yDry.push(p); }
+        });
+        if (xDry.length > 1) {
+            dryAdiabatTraces.push({
+                x: xDry, y: yDry, type: 'scatter', mode: 'lines',
+                line: { color: 'rgba(200,120,80,0.22)', width: 0.8 },
+                showlegend: false, hoverinfo: 'skip',
+            });
+        }
+    });
+
+    // Moist adiabats (Bolton 1980 pseudoadiabat)
+    var moistAdiabatTraces = [];
+    var moistThetaVals = [-10, 0, 6, 10, 14, 18, 22, 26, 30, 34, 38];
+    moistThetaVals.forEach(function(tBase) {
+        var xMoist = [], yMoist = [];
+        var tCur = tBase;
+        for (var p = 1000; p >= 100; p -= 5) {
+            var sx = skewX(tCur, p);
+            if (sx >= -70 && sx <= 120) { xMoist.push(sx); yMoist.push(p); }
+            tCur -= moistLapseRate(tCur, p) * 5;
+        }
+        if (xMoist.length > 2) {
+            moistAdiabatTraces.push({
+                x: xMoist, y: yMoist, type: 'scatter', mode: 'lines',
+                line: { color: 'rgba(80,200,120,0.22)', width: 0.8, dash: 'dot' },
+                showlegend: false, hoverinfo: 'skip',
+            });
+        }
+    });
+
+    // Mixing ratio lines (constant w, in g/kg)
+    var mixRatioTraces = [];
+    var wVals = [0.4, 1, 2, 4, 7, 10, 16, 24];
+    wVals.forEach(function(wGkg) {
+        var w = wGkg / 1000.0;
+        var xMix = [], yMix = [];
+        pRange.forEach(function(p) {
+            // e = w * p / (eps + w); T from inverted Clausius-Clapeyron
+            var eMix = w * p / (eps + w);
+            if (eMix > 0.001 && eMix < p) {
+                var lnEM = Math.log(eMix / 6.112);
+                var tMix = 243.5 * lnEM / (17.67 - lnEM);
+                var sx = skewX(tMix, p);
+                if (sx >= -70 && sx <= 120 && tMix > -50 && tMix < 50) {
+                    xMix.push(sx); yMix.push(p);
+                }
+            }
+        });
+        if (xMix.length > 2) {
+            mixRatioTraces.push({
+                x: xMix, y: yMix, type: 'scatter', mode: 'lines',
+                line: { color: 'rgba(160,120,200,0.2)', width: 0.6, dash: 'dash' },
+                showlegend: false, hoverinfo: 'skip',
+            });
+        }
+    });
+
+    // ── Main data traces ──
+    var traces = [];
+    traces = traces.concat(isothermTraces, dryAdiabatTraces, moistAdiabatTraces, mixRatioTraces);
+
+    // CAPE / CIN shading between parcel and environment
+    if (profiles._parcelT && derived.cape > 0) {
+        // Positive buoyancy (CAPE) shading
+        var capeX = [], capeY = [], cinX = [], cinY = [];
+        for (var ci = 0; ci < plev.length; ci++) {
+            if (profiles._parcelT[ci] != null && tC[ci] != null && plev[ci] <= (sfcP || 1050)) {
+                var pTv = profiles._parcelT[ci], eTv = tC[ci];
+                if (pTv > eTv) {
+                    // Positive buoyancy
+                    capeX.push(skewX(pTv, plev[ci]));
+                    capeX.push(skewX(eTv, plev[ci]));
+                    capeY.push(plev[ci]);
+                    capeY.push(plev[ci]);
+                }
+            }
+        }
+        // Build polygon for CAPE region (between LFC and EL)
+        if (derived.lfc_p && derived.el_p) {
+            var capeFwdX = [], capeFwdY = [], capeRevX = [], capeRevY = [];
+            for (var cci = 0; cci < plev.length; cci++) {
+                if (profiles._parcelT[cci] != null && tC[cci] != null &&
+                    plev[cci] <= derived.lfc_p && plev[cci] >= derived.el_p) {
+                    capeFwdX.push(skewX(profiles._parcelT[cci], plev[cci]));
+                    capeFwdY.push(plev[cci]);
+                    capeRevX.unshift(skewX(tC[cci], plev[cci]));
+                    capeRevY.unshift(plev[cci]);
+                }
+            }
+            if (capeFwdX.length > 1) {
+                traces.push({
+                    x: capeFwdX.concat(capeRevX), y: capeFwdY.concat(capeRevY),
+                    type: 'scatter', mode: 'lines', fill: 'toself',
+                    fillcolor: 'rgba(239,68,68,0.12)', line: { color: 'transparent' },
+                    showlegend: false, hoverinfo: 'skip',
+                });
+            }
+        }
+        // CIN region (between LCL and LFC)
+        if (derived.lcl_p && derived.lfc_p && derived.lcl_p > derived.lfc_p) {
+            var cinFwdX = [], cinFwdY = [], cinRevX2 = [], cinRevY2 = [];
+            for (var cni = 0; cni < plev.length; cni++) {
+                if (profiles._parcelT[cni] != null && tC[cni] != null &&
+                    plev[cni] <= derived.lcl_p && plev[cni] >= derived.lfc_p &&
+                    profiles._parcelT[cni] < tC[cni]) {
+                    cinFwdX.push(skewX(profiles._parcelT[cni], plev[cni]));
+                    cinFwdY.push(plev[cni]);
+                    cinRevX2.unshift(skewX(tC[cni], plev[cni]));
+                    cinRevY2.unshift(plev[cni]);
+                }
+            }
+            if (cinFwdX.length > 1) {
+                traces.push({
+                    x: cinFwdX.concat(cinRevX2), y: cinFwdY.concat(cinRevY2),
+                    type: 'scatter', mode: 'lines', fill: 'toself',
+                    fillcolor: 'rgba(96,165,250,0.12)', line: { color: 'transparent' },
+                    showlegend: false, hoverinfo: 'skip',
+                });
+            }
+        }
+    }
+
+    // Dewpoint trace (green)
+    traces.push({
+        x: tdSkew, y: plev, type: 'scatter', mode: 'lines',
+        name: 'Td', line: { color: '#22c55e', width: 2.5 },
+        hovertemplate: '%{text}<extra>Dewpoint</extra>',
+        text: plev.map(function(p, idx) {
+            return p + ' hPa: Td = ' + (tdC[idx] != null ? tdC[idx].toFixed(1) : '\u2014') + '\u00b0C';
+        }),
+    });
+
+    // Temperature trace (red)
+    traces.push({
+        x: tSkew, y: plev, type: 'scatter', mode: 'lines',
+        name: 'T', line: { color: '#ef4444', width: 2.5 },
+        hovertemplate: '%{text}<extra>Temperature</extra>',
+        text: plev.map(function(p, idx) {
+            return p + ' hPa: T = ' + (tC[idx] != null ? tC[idx].toFixed(1) : '\u2014') + '\u00b0C';
+        }),
+    });
+
+    // Parcel path (dashed purple)
+    if (profiles._parcelT) {
+        var parcelSkew = profiles._parcelT.map(function(t, idx) {
+            return t != null ? skewX(t, plev[idx]) : null;
+        });
+        traces.push({
+            x: parcelSkew, y: plev, type: 'scatter', mode: 'lines',
+            name: 'Parcel', line: { color: '#c084fc', width: 1.8, dash: 'dash' },
+            hovertemplate: '%{text}<extra>Parcel</extra>',
+            text: plev.map(function(p, idx) {
+                return p + ' hPa: Tp = ' + (profiles._parcelT[idx] != null ? profiles._parcelT[idx].toFixed(1) : '\u2014') + '\u00b0C';
+            }),
+        });
+    }
+
+    // ── Axis labels ──
+    var xTickVals = [], xTickText = [];
+    for (var tTick = -40; tTick <= 50; tTick += 10) {
+        xTickVals.push(skewX(tTick, 1000));
+        xTickText.push(tTick + '\u00b0C');
+    }
+
+    // ── Wind barbs (right side of diagram) ──
+    var hasWind = profiles.u && profiles.v && profiles.u.length > 0;
+    var barbXPos = 68;    // x-position for barb base (right edge of plot area)
+    var barbShapes = [];
+    var windAnnotations = [];
+    var xRangeMax = hasWind ? 80 : 70;
+    var skewTAxRanges = {
+        xMin: -40, xMax: xRangeMax,
+        logPMin: Math.log10(1050), logPMax: Math.log10(100),
+    };
+    if (hasWind) {
+        barbShapes = _buildWindBarbShapes(profiles.u, profiles.v, plev, barbXPos, 5.5, skewTAxRanges);
+        // Add a thin vertical line to separate barbs from the diagram
+        barbShapes.push({
+            type: 'line', xref: 'x', yref: 'y',
+            x0: barbXPos - 2, y0: 1050, x1: barbXPos - 2, y1: 100,
+            line: { color: 'rgba(255,255,255,0.08)', width: 0.5 },
+        });
+    }
+
+    var layout = {
+        xaxis: {
+            title: { text: 'Temperature (\u00b0C)', font: { size: 9, color: '#8b9ec2' } },
+            range: [-40, xRangeMax],
+            tickvals: xTickVals, ticktext: xTickText,
+            color: '#8b9ec2', tickfont: { size: 8 },
+            zeroline: false, gridcolor: 'rgba(255,255,255,0.03)',
+            showgrid: false,
+        },
+        yaxis: {
+            title: { text: 'Pressure (hPa)', font: { size: 9, color: '#8b9ec2' } },
+            autorange: false, type: 'log',
+            range: [Math.log10(1050), Math.log10(100)],
+            color: '#8b9ec2', tickfont: { size: 8 },
+            tickvals: [1000, 850, 700, 500, 400, 300, 200, 150, 100],
+            dtick: null,
+            zeroline: false, gridcolor: 'rgba(255,255,255,0.06)',
+        },
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(10,22,40,0.5)',
+        margin: { l: 45, r: 10, t: 22, b: 35 },
+        title: { text: 'Skew-T / Log-P', font: { size: 10, color: '#00d4ff' }, x: 0.5, y: 0.98 },
+        legend: { font: { color: '#ccc', size: 9 }, x: 0.68, y: 0.98, bgcolor: 'rgba(0,0,0,0.4)' },
+        showlegend: true,
+        shapes: barbShapes,
+    };
+    Plotly.newPlot(divId, traces, layout, { responsive: true, displayModeBar: false });
+}
+
+// ── Skew-T sounding fetch with configurable radius ──────────
+function fetchSkewTSounding(caseIdx, radiusKm, callback) {
+    var url = API_BASE + '/era5_sounding?case_index=' + caseIdx + '&radius_km=' + radiusKm + '&data_type=' + _activeDataType;
+    fetch(url)
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) { if (callback) callback(data); })
+        .catch(function() { if (callback) callback(null); });
+}
+
+// ══════════════════════════════════════════════════════════════
+// Environment Overlay Panel (full-screen ERA5 dashboard)
+// ══════════════════════════════════════════════════════════════
+var _envOverlayInit = false;
+var _envOverlayField = 'shear_mag';
+var _envOverlayCropKm = 500;
+var _envOverlayData = null;  // separate ERA5 data for the overlay
+
+function initEnvOverlay() {
+    if (_envOverlayInit) return;
+    _envOverlayInit = true;
+    var overlay = document.createElement('div');
+    overlay.id = 'env-overlay';
+    overlay.className = 'env-overlay';
+    overlay.innerHTML =
+        '<div class="env-box">' +
+            '<div class="env-ov-header">' +
+                '<div class="env-ov-header-left">' +
+                    '<span class="env-ov-logo">\uD83C\uDF21</span> ' +
+                    '<span class="env-ov-title">Environmental Context</span>' +
+                    '<span class="env-ov-subtitle">ERA5 Reanalysis Diagnostics</span>' +
+                '</div>' +
+                '<div class="env-nav-bar" id="env-nav-bar">' +
+                    '<button class="env-nav-btn" id="env-nav-prev" onclick="envNavPrev()" title="Previous case">\u25C0</button>' +
+                    '<select class="env-nav-select" id="env-nav-select" onchange="envNavJump(this.value)"></select>' +
+                    '<button class="env-nav-btn" id="env-nav-next" onclick="envNavNext()" title="Next case">\u25B6</button>' +
+                '</div>' +
+                '<button class="env-ov-close" onclick="toggleEnvOverlay()">\u2715</button>' +
+            '</div>' +
+            '<div class="env-ov-body">' +
+                // ── Left: Controls ──
+                '<div class="env-ov-controls">' +
+                    '<div id="env-ov-case-info" class="env-case-info" style="display:none;"></div>' +
+                    '<div class="env-section-title">\uD83C\uDF0D 2D Field Display</div>' +
+                    '<div class="env-ctrl-row"><label>Field</label>' +
+                        '<select class="env-ctrl-select" id="env-ov-field" onchange="envOverlayChangeField(this.value)">' +
+                            '<option value="shear_mag">Deep-Layer Shear (200\u2013850 hPa)</option>' +
+                            '<option value="rh_mid">Mid-Level RH (500\u2013700 hPa)</option>' +
+                            '<option value="div200">200 hPa Divergence</option>' +
+                            '<option value="sst">Sea Surface Temperature</option>' +
+                            '<option value="entropy_def">Entropy Deficit (\u03c7\u2098)</option>' +
+                        '</select>' +
+                    '</div>' +
+                    '<div class="env-ctrl-row"><label>Crop Radius</label>' +
+                        '<div class="env-slider-row">' +
+                            '<input type="range" id="env-ov-radius" min="100" max="1000" step="50" value="500" oninput="envOverlayRadiusChange(this.value)">' +
+                            '<span class="env-slider-val" id="env-ov-radius-val">500 km</span>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="env-section-title" style="margin-top:18px;">\uD83D\uDCCA Scalar Domain</div>' +
+                    '<div class="env-ctrl-row"><label>Inner Radius</label>' +
+                        '<div class="env-slider-row">' +
+                            '<input type="range" id="env-ov-inner" min="0" max="600" step="50" value="200" oninput="document.getElementById(\'env-ov-inner-val\').textContent=this.value+\' km\'">' +
+                            '<span class="env-slider-val" id="env-ov-inner-val">200 km</span>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="env-ctrl-row"><label>Outer Radius</label>' +
+                        '<div class="env-slider-row">' +
+                            '<input type="range" id="env-ov-outer" min="200" max="1200" step="50" value="800" oninput="document.getElementById(\'env-ov-outer-val\').textContent=this.value+\' km\'">' +
+                            '<span class="env-slider-val" id="env-ov-outer-val">800 km</span>' +
+                        '</div>' +
+                    '</div>' +
+                    '<button class="env-recompute-btn" id="env-ov-recompute" onclick="envOverlayRecomputeScalars()" disabled>Recompute Scalars</button>' +
+                    '<div class="env-section-title" style="margin-top:18px;">\uD83C\uDF21 Skew-T Sounding</div>' +
+                    '<div class="env-ctrl-row"><label>Averaging Radius</label>' +
+                        '<div class="env-slider-row">' +
+                            '<input type="range" id="env-ov-skewt-radius" min="50" max="800" step="50" value="200" oninput="envOverlaySkewTRadiusChange(this.value)">' +
+                            '<span class="env-slider-val" id="env-ov-skewt-radius-val">200 km</span>' +
+                        '</div>' +
+                    '</div>' +
+                    '<button class="env-recompute-btn" id="env-ov-skewt-btn" onclick="envOverlayRecomputeSkewT()" disabled>Generate Skew-T</button>' +
+                    '<div class="env-domain-note" style="margin-top:12px;">' +
+                        '<strong>Precomputed domains:</strong><br>' +
+                        'Profiles/Skew-T: 200\u2013600 km annulus<br>' +
+                        'Shear: 200\u2013800 km annulus<br>' +
+                        'Thermo (RH, div, SST): 0\u2013500 km disc<br>' +
+                        '\u03c7\u2098: inner 0\u2013100 km, env 100\u2013300 km<br>' +
+                        'PI: 100\u2013300 km environment' +
+                    '</div>' +
+                '</div>' +
+                // ── Right: Display area ──
+                '<div class="env-ov-display" id="env-ov-display">' +
+                    '<div class="env-no-case" id="env-ov-placeholder">' +
+                        '<div class="env-no-case-icon">\uD83C\uDF0D</div>' +
+                        '<div class="env-no-case-msg">Select a TC-RADAR case from the map and click <strong>Explore \u2192</strong> to load ERA5 environmental diagnostics.</div>' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+    document.body.appendChild(overlay);
+
+    // Close on ESC
+    overlay.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') toggleEnvOverlay();
+    });
+    // Close on backdrop click
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) toggleEnvOverlay();
+    });
+}
+
+function toggleEnvOverlay() {
+    gtag('event', 'tab_click', { tab_name: 'environment_era5' });
+    // Ensure Plotly is loaded for ERA5 visualizations
+    if (typeof Plotly === 'undefined') {
+        ensurePlotly(function() { toggleEnvOverlay(); });
+        return;
+    }
+    initEnvOverlay();
+    var panel = document.getElementById('env-overlay');
+    panel.classList.toggle('active');
+    if (!panel.classList.contains('active')) return;
+
+    // Determine which case to show
+    var caseIdx = currentCaseIndex;
+    var caseData = currentCaseData;
+
+    // If no case is actively explored, check the dropdown
+    if (caseIdx === null || caseIdx === undefined) {
+        var caseSelect = document.getElementById('case-select');
+        if (caseSelect && caseSelect.value) {
+            caseIdx = parseInt(caseSelect.value);
+            if (!isNaN(caseIdx) && _getActiveData()) {
+                caseData = _getActiveData().cases.find(function(c) { return c.case_index === caseIdx; });
+                // Set globals so the overlay can reference them
+                currentCaseIndex = caseIdx;
+                currentCaseData = caseData || null;
+            } else {
+                caseIdx = null;
+            }
+        }
+    }
+
+    // Case 1: No case selected at all — show placeholder
+    if (caseIdx === null || caseIdx === undefined) {
+        _envOverlayData = null;
+        renderEnvOverlay();
+        return;
+    }
+
+    // Case 2: ERA5 data already loaded from the explorer
+    if (_era5Data && _era5Data.case_index === caseIdx) {
+        var radiusKm = parseInt(document.getElementById('env-ov-radius').value) || 500;
+        if (radiusKm !== 300) {
+            _envOverlayFetchAndRender(caseIdx, radiusKm);
+        } else {
+            _envOverlayData = _era5Data;
+            renderEnvOverlay();
+        }
+        return;
+    }
+
+    // Case 3: Case selected but no ERA5 data yet — fetch it
+    _envOverlayShowLoading();
+    var radiusKm2 = parseInt(document.getElementById('env-ov-radius').value) || 500;
+    _envOverlayFetchAndRender(caseIdx, radiusKm2);
+}
+
+function _envOverlayShowLoading() {
+    _envNavPopulate();
+    var display = document.getElementById('env-ov-display');
+    if (!display) return;
+    display.innerHTML =
+        '<div class="env-no-case" style="display:flex;">' +
+            '<div class="env-loading-spinner"></div>' +
+            '<div class="env-no-case-msg" style="animation:envPulse 2s ease-in-out infinite;">Loading ERA5 environmental data\u2026</div>' +
+        '</div>';
+    // Update case info in the controls
+    var caseInfo = document.getElementById('env-ov-case-info');
+    if (caseInfo && currentCaseData) {
+        caseInfo.style.display = 'block';
+        var cd = currentCaseData;
+        caseInfo.innerHTML =
+            '<div class="env-case-name">' + (cd.storm_name || 'Unknown') + '</div>' +
+            '<div class="env-case-detail">' + (cd.datetime || '') + '</div>' +
+            '<div class="env-case-detail">' +
+                (cd.latitude != null ? cd.latitude.toFixed(1) + '\u00b0N' : '') + ', ' +
+                (cd.longitude != null ? cd.longitude.toFixed(1) + '\u00b0E' : '') +
+                (cd.vmax_kt != null ? ' \u00b7 ' + cd.vmax_kt + ' kt' : '') +
+            '</div>';
+    }
+}
+
+function _envOverlayFetchAndRender(caseIdx, radiusKm) {
+    var field = document.getElementById('env-ov-field').value || 'shear_mag';
+    var url = API_BASE + '/era5?case_index=' + caseIdx + '&field=' + field + '&radius_km=' + radiusKm + '&data_type=' + _activeDataType;
+    fetch(url)
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+            if (data) {
+                _era5Data = _era5Data || data;  // cache for explorer too
+                _envOverlayData = data;
+                renderEnvOverlay();
+            } else {
+                _envOverlayData = null;
+                renderEnvOverlay();
+            }
+        })
+        .catch(function() {
+            _envOverlayData = null;
+            renderEnvOverlay();
+        });
+}
+
+function renderEnvOverlay() {
+    _envNavPopulate();
+    var display = document.getElementById('env-ov-display');
+    var placeholder = document.getElementById('env-ov-placeholder');
+    var caseInfo = document.getElementById('env-ov-case-info');
+    var recomputeBtn = document.getElementById('env-ov-recompute');
+
+    if (!_envOverlayData) {
+        // Show a context-aware placeholder
+        if (display) {
+            var hasCase = document.getElementById('case-select') && document.getElementById('case-select').value;
+            var hasStorm = document.getElementById('storm-select') && document.getElementById('storm-select').value;
+            var msg, icon;
+            if (!hasStorm) {
+                icon = '\uD83C\uDF0A';
+                msg = 'Select a <strong>storm</strong> and <strong>case</strong> from the toolbar dropdowns above, then open this panel to view ERA5 environmental diagnostics.';
+            } else if (!hasCase) {
+                icon = '\uD83C\uDF00';
+                msg = 'Good \u2014 you\'ve selected a storm. Now choose a <strong>case</strong> from the toolbar dropdown, then reopen this panel.';
+            } else {
+                icon = '\u26A0\uFE0F';
+                msg = 'ERA5 data could not be loaded for this case. It may not be available in the ERA5 store.';
+            }
+            display.innerHTML =
+                '<div class="env-no-case" style="display:flex;">' +
+                    '<div class="env-no-case-icon">' + icon + '</div>' +
+                    '<div class="env-no-case-msg">' + msg + '</div>' +
+                '</div>';
+        }
+        if (caseInfo) caseInfo.style.display = 'none';
+        if (recomputeBtn) recomputeBtn.disabled = true;
+        return;
+    }
+    if (placeholder) placeholder.style.display = 'none';
+    if (recomputeBtn) recomputeBtn.disabled = false;
+
+    // Show case info
+    if (caseInfo && currentCaseData) {
+        caseInfo.style.display = 'block';
+        var cd = currentCaseData;
+        caseInfo.innerHTML =
+            '<div class="env-case-name">' + (cd.storm_name || 'Unknown') + '</div>' +
+            '<div class="env-case-detail">' + (cd.datetime || '') + '</div>' +
+            '<div class="env-case-detail">' +
+                (cd.latitude != null ? cd.latitude.toFixed(1) + '\u00b0N' : '') + ', ' +
+                (cd.longitude != null ? cd.longitude.toFixed(1) + '\u00b0E' : '') +
+                (cd.vmax_kt != null ? ' \u00b7 ' + cd.vmax_kt + ' kt' : '') +
+            '</div>';
+    }
+
+    // Build dashboard HTML
+    var data = _envOverlayData;
+    var scalars = data.scalars || {};
+    var profiles = data.profiles;
+
+    var html = '';
+
+    // ── Row 1: 2D Map + Hodograph ──
+    html += '<div class="env-dash-row two-col">' +
+        '<div class="env-dash-card"><div class="env-dash-card-header">2D Spatial Field</div>' +
+            '<div class="env-dash-card-body"><div id="env-ov-map" style="height:340px;"></div></div></div>' +
+        '<div class="env-dash-card"><div class="env-dash-card-header">Hodograph (200\u2013600 km)</div>' +
+            '<div class="env-dash-card-body"><div id="env-ov-hodo" style="height:340px;"></div></div></div>' +
+    '</div>';
+
+    // ── Row 2: Scalar cards ──
+    html += '<div class="env-dash-card" style="margin-bottom:16px;">' +
+        '<div class="env-dash-card-header">\uD83D\uDCCA Environmental Diagnostics</div>' +
+        '<div class="env-dash-card-body">' +
+            '<div class="env-scalars-grid" id="env-ov-scalars"></div>' +
+        '</div></div>';
+
+    // ── Row 3: Skew-T + RH Profile ──
+    html += '<div class="env-dash-row two-col">' +
+        '<div class="env-dash-card"><div class="env-dash-card-header">\uD83C\uDF21 Skew-T / Log-P Sounding</div>' +
+            '<div class="env-dash-card-body"><div id="env-ov-skewt" style="height:400px;"></div></div></div>' +
+        '<div class="env-dash-card"><div class="env-dash-card-header">Relative Humidity Profile</div>' +
+            '<div class="env-dash-card-body"><div id="env-ov-rh-prof" style="height:400px;"></div></div></div>' +
+    '</div>';
+
+    // ── Row 4: θ/θe Profile ──
+    html += '<div class="env-dash-row two-col">' +
+        '<div class="env-dash-card"><div class="env-dash-card-header">\u03b8 / \u03b8e Profile</div>' +
+            '<div class="env-dash-card-body"><div id="env-ov-theta-prof" style="height:300px;"></div></div></div>' +
+        '<div class="env-dash-card" id="env-ov-skewt-info-card">' +
+            '<div class="env-dash-card-header">\uD83D\uDCCB Sounding Info</div>' +
+            '<div class="env-dash-card-body" id="env-ov-skewt-info" style="height:300px;font-size:12px;color:#9ca3af;overflow-y:auto;"></div>' +
+        '</div>' +
+    '</div>';
+
+    display.innerHTML = html;
+
+    // Enable/disable Skew-T radius controls based on 3D data availability
+    var skewTBtn = document.getElementById('env-ov-skewt-btn');
+    var skewTSlider = document.getElementById('env-ov-skewt-radius');
+    var has3D = data && data.has_3d;
+    if (skewTBtn) {
+        skewTBtn.disabled = !has3D;
+        skewTBtn.textContent = has3D ? 'Generate Skew-T' : 'Radius N/A (no 3D fields)';
+        skewTBtn.title = has3D ? 'Recompute sounding at selected radius' :
+            '3D T/q fields not in Zarr store — sounding uses precomputed 200–600 km annulus mean';
+    }
+    if (skewTSlider) {
+        skewTSlider.disabled = !has3D;
+        skewTSlider.style.opacity = has3D ? '1' : '0.35';
+    }
+    // Show a note below the slider when 3D is unavailable
+    var radiusNote = document.getElementById('env-ov-skewt-radius-note');
+    if (!radiusNote) {
+        radiusNote = document.createElement('div');
+        radiusNote.id = 'env-ov-skewt-radius-note';
+        radiusNote.style.cssText = 'font-size:9px;color:#fbbf24;margin-top:2px;padding:3px 6px;' +
+            'background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.15);border-radius:3px;line-height:1.3;';
+        var sliderParent = skewTSlider ? skewTSlider.closest('.env-ctrl-row') : null;
+        if (sliderParent) sliderParent.appendChild(radiusNote);
+    }
+    if (has3D) {
+        radiusNote.style.display = 'none';
+    } else {
+        radiusNote.style.display = 'block';
+        radiusNote.innerHTML = '\u26A0 3D T/q fields not in store \u2014 sounding fixed at precomputed 200\u2013600 km annulus.';
+    }
+
+    // Render each component
+    setTimeout(function() {
+        renderEnvOverlayMap(data);
+        renderEnvOverlayScalars(scalars);
+        if (profiles && profiles.u && profiles.v) {
+            renderHodograph(profiles, 'env-ov-hodo');
+        }
+        if (profiles && profiles.plev) {
+            renderSkewT(profiles, 'env-ov-skewt');
+            renderRHProfile(profiles, 'env-ov-rh-prof');
+            renderThetaProfile(profiles, 'env-ov-theta-prof');
+            _renderSkewTInfo(profiles);
+        }
+    }, 60);
+}
+
+// ── 2D map inside the overlay ────────────────────────────────
+function renderEnvOverlayMap(data) {
+    if (!data || !data.data) return;
+    var frame = data.data;
+    var latOff = data.lat_offsets, lonOff = data.lon_offsets;
+    var centerLat = data.center_lat;
+    var cosLat = Math.cos(centerLat * Math.PI / 180);
+    var yKm = latOff.map(function(d) { return d * 111.0; });
+    var xKm = lonOff.map(function(d) { return d * 111.0 * cosLat; });
+
+    var traces = [{
+        z: frame, x: xKm, y: yKm, type: 'heatmap',
+        colorscale: data.field_config.colorscale,
+        zmin: data.field_config.vmin, zmax: data.field_config.vmax,
+        colorbar: {
+            title: { text: data.field_config.units, font: { size: 10, color: '#8b9ec2' } },
+            tickfont: { size: 9, color: '#8b9ec2' },
+            len: 0.9, thickness: 12,
+        },
+        hoverongaps: false,
+        hovertemplate: '<b>' + data.field_config.display_name + '</b><br>%{z:.2f} ' + data.field_config.units + '<br>(%{x:.0f}, %{y:.0f}) km<extra></extra>',
+    }];
+
+    // Add quiver vectors if available
+    if (data.vectors) {
+        var vecs = data.vectors;
+        var stride = vecs.stride;
+        var arrowScale = 50;
+        for (var yi = 0; yi < vecs.u.length; yi++) {
+            for (var xi = 0; xi < vecs.u[yi].length; xi++) {
+                var u = vecs.u[yi][xi], v = vecs.v[yi][xi];
+                if (u === null || v === null) continue;
+                var x0 = lonOff[xi * stride] * 111.0 * cosLat;
+                var y0 = latOff[yi * stride] * 111.0;
+                var mag = Math.sqrt(u * u + v * v);
+                if (mag < 0.5) continue;
+                var scale = arrowScale * mag / 20;
+                traces.push({
+                    x: [x0, x0 + u / mag * scale], y: [y0, y0 + v / mag * scale],
+                    type: 'scatter', mode: 'lines',
+                    line: { color: 'rgba(255,255,255,0.5)', width: 1.5 },
+                    showlegend: false, hoverinfo: 'skip',
+                });
+            }
+        }
+    }
+
+    // Add TC center marker
+    traces.push({
+        x: [0], y: [0], type: 'scatter', mode: 'markers',
+        marker: { symbol: 'x', size: 12, color: '#ffffff', line: { width: 2, color: '#000' } },
+        showlegend: false, hoverinfo: 'skip',
+    });
+
+    // Add annulus rings for scalar domain
+    var innerKm = parseInt(document.getElementById('env-ov-inner') ? document.getElementById('env-ov-inner').value : '200');
+    var outerKm = parseInt(document.getElementById('env-ov-outer') ? document.getElementById('env-ov-outer').value : '800');
+    var ringPts = 72;
+    function circleTrace(r, color, dash) {
+        var cx = [], cy = [];
+        for (var i = 0; i <= ringPts; i++) {
+            var angle = 2 * Math.PI * i / ringPts;
+            cx.push(r * Math.cos(angle));
+            cy.push(r * Math.sin(angle));
+        }
+        return { x: cx, y: cy, type: 'scatter', mode: 'lines',
+            line: { color: color, width: 1.5, dash: dash || 'solid' },
+            showlegend: false, hoverinfo: 'skip' };
+    }
+    traces.push(circleTrace(innerKm, 'rgba(255,255,255,0.4)', 'dash'));
+    traces.push(circleTrace(outerKm, 'rgba(255,255,255,0.4)', 'dash'));
+
+    var maxR = Math.max(Math.abs(xKm[0]), Math.abs(xKm[xKm.length-1]), Math.abs(yKm[0]), Math.abs(yKm[yKm.length-1]));
+
+    var layout = {
+        xaxis: { title: { text: 'km (east)', font: { size: 10, color: '#8b9ec2' } },
+            range: [-maxR, maxR], scaleanchor: 'y', scaleratio: 1,
+            zeroline: false, gridcolor: 'rgba(255,255,255,0.04)', color: '#8b9ec2', tickfont: { size: 9 } },
+        yaxis: { title: { text: 'km (north)', font: { size: 10, color: '#8b9ec2' } },
+            range: [-maxR, maxR],
+            zeroline: false, gridcolor: 'rgba(255,255,255,0.04)', color: '#8b9ec2', tickfont: { size: 9 } },
+        paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(10,22,40,0.5)',
+        margin: { l: 50, r: 10, t: 10, b: 45 },
+        showlegend: false,
+    };
+    Plotly.newPlot('env-ov-map', traces, layout, { responsive: true, displayModeBar: false });
+}
+
+// ── Scalar diagnostic cards ──────────────────────────────────
+function renderEnvOverlayScalars(scalars) {
+    var el = document.getElementById('env-ov-scalars');
+    if (!el) return;
+
+    function scard(label, value, unit, sub, highlightClass) {
+        return '<div class="env-scard' + (highlightClass ? ' ' + highlightClass : '') + '">' +
+            '<div class="env-scard-value">' + value + '</div>' +
+            '<div class="env-scard-unit">' + unit + '</div>' +
+            '<div class="env-scard-label">' + label + '</div>' +
+            (sub ? '<div class="env-scard-sub">' + sub + '</div>' : '') +
+        '</div>';
+    }
+
+    // Shear
+    var shearMs = scalars.shear_mag_env;
+    var shearKt = shearMs != null ? (shearMs * 1.944).toFixed(0) : null;
+    var shearDir = scalars.shear_dir_env;
+    var shearHl = shearMs != null ? (shearMs < 5 ? 'highlight-good' : shearMs < 12 ? 'highlight-warn' : 'highlight-bad') : '';
+    var shearVal = shearMs != null ? shearMs.toFixed(1) : '\u2014';
+    var shearSub = '';
+    if (shearKt != null) shearSub += shearKt + ' kt';
+    if (shearDir != null) shearSub += ' from ' + shearDir.toFixed(0) + '\u00b0';
+
+    // RH
+    var rh = scalars.rh_mid_env;
+    var rhHl = rh != null ? (rh > 70 ? 'highlight-good' : rh > 45 ? 'highlight-warn' : 'highlight-bad') : '';
+
+    // Divergence
+    var div = scalars.div200_env;
+    var divScaled = div != null ? (div * 1e5).toFixed(1) : '\u2014';
+    var divHl = div != null ? (div > 0.5e-5 ? 'highlight-good' : div > -0.5e-5 ? 'highlight-warn' : 'highlight-bad') : '';
+
+    // SST
+    var sst = scalars.sst_env;
+    var sstHl = sst != null ? (sst >= 28 ? 'highlight-good' : sst >= 26 ? 'highlight-warn' : 'highlight-bad') : '';
+
+    // PI
+    var vpi = scalars.v_pi;
+    var vpiKt = vpi != null ? (vpi * 1.944).toFixed(0) : null;
+    var piHl = vpi != null ? (vpi >= 60 ? 'highlight-good' : vpi >= 40 ? 'highlight-warn' : 'highlight-bad') : '';
+
+    // Entropy deficit
+    var chiM = scalars.chi_m;
+    var chiHl = chiM != null ? (chiM < 0.4 ? 'highlight-good' : chiM < 0.8 ? 'highlight-warn' : 'highlight-bad') : '';
+
+    // Ventilation Index
+    var ventIdx = scalars.vent_index;
+    var ventHl = ventIdx != null ? (ventIdx < 0.1 ? 'highlight-good' : ventIdx < 0.2 ? 'highlight-warn' : 'highlight-bad') : '';
+
+    // SHIPS comparison
+    var shearShips = '';
+    if (_currentSddc !== null && shearDir != null) {
+        shearShips = 'SHIPS SDDC: ' + _currentSddc.toFixed(0) + '\u00b0 (\u0394' + Math.abs(shearDir - _currentSddc).toFixed(0) + '\u00b0)';
+    }
+
+    var html = '';
+    html += scard('Deep-Layer Shear', shearVal, 'm/s', shearSub + (shearShips ? '<br>' + shearShips : ''), shearHl);
+    html += scard('Mid-Level RH', rh != null ? rh.toFixed(0) : '\u2014', '%', '500\u2013700 hPa mean', rhHl);
+    html += scard('200 hPa Div', divScaled, '\u00d710\u207b\u2075 s\u207b\u00b9', 'Positive = outflow', divHl);
+    html += scard('SST', sst != null ? sst.toFixed(1) : '\u2014', '\u00b0C', '26\u00b0C threshold', sstHl);
+    html += scard('Potential Intensity', vpi != null ? vpi.toFixed(1) : '\u2014', 'm/s', vpiKt != null ? vpiKt + ' kt (gradient level)' : '', piHl);
+    html += scard('Entropy Deficit', chiM != null ? chiM.toFixed(2) : '\u2014', '\u03c7\u2098', 'Tang & Emanuel 2012', chiHl);
+    html += scard('Ventilation Index', ventIdx != null ? ventIdx.toFixed(3) : '\u2014', '\u039b', 'V\u209b\u2095 \u00d7 \u03c7\u2098 / V\u209a\u1d62', ventHl);
+
+    // Intensity vs PI gauge
+    if (currentCaseData && currentCaseData.vmax_kt != null && vpi != null) {
+        var vmaxMs = currentCaseData.vmax_kt / 1.944;
+        var ratio = vmaxMs / vpi;
+        var gaugeHl = ratio < 0.5 ? 'highlight-good' : ratio < 0.8 ? 'highlight-warn' : 'highlight-bad';
+        html += scard('V / V\u209a\u1d62', (ratio * 100).toFixed(0) + '%', 'of PI', currentCaseData.vmax_kt + ' kt / ' + vpiKt + ' kt', gaugeHl);
+    }
+
+    el.innerHTML = html;
+}
+
+// ── Field change handler ─────────────────────────────────────
+function envOverlayChangeField(field) {
+    _envOverlayField = field;
+    if (!currentCaseIndex && currentCaseIndex !== 0) return;
+    var radiusKm = parseInt(document.getElementById('env-ov-radius').value) || 500;
+    var url = API_BASE + '/era5?case_index=' + currentCaseIndex + '&field=' + field + '&radius_km=' + radiusKm + '&data_type=' + _activeDataType;
+    fetch(url)
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+            if (data) {
+                _envOverlayData = data;
+                renderEnvOverlayMap(data);
+                renderEnvOverlayScalars(data.scalars || {});
+            }
+        });
+}
+
+// ── Radius change handler ────────────────────────────────────
+function envOverlayRadiusChange(val) {
+    _envOverlayCropKm = parseInt(val);
+    document.getElementById('env-ov-radius-val').textContent = val + ' km';
+    // Debounce: re-fetch with new radius after brief pause
+    if (window._envRadiusTimer) clearTimeout(window._envRadiusTimer);
+    window._envRadiusTimer = setTimeout(function() {
+        if (!currentCaseIndex && currentCaseIndex !== 0) return;
+        var field = document.getElementById('env-ov-field').value || 'shear_mag';
+        var url = API_BASE + '/era5?case_index=' + currentCaseIndex + '&field=' + field + '&radius_km=' + _envOverlayCropKm + '&data_type=' + _activeDataType;
+        fetch(url)
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(data) {
+                if (data) {
+                    _envOverlayData = data;
+                    renderEnvOverlayMap(data);
+                    renderEnvOverlayScalars(data.scalars || {});
+                }
+            });
+    }, 400);
+}
+
+// ── Recompute scalars at custom annulus ───────────────────────
+function envOverlayRecomputeScalars() {
+    if (!currentCaseIndex && currentCaseIndex !== 0) return;
+    var innerKm = parseInt(document.getElementById('env-ov-inner').value) || 200;
+    var outerKm = parseInt(document.getElementById('env-ov-outer').value) || 800;
+    var btn = document.getElementById('env-ov-recompute');
+    if (btn) { btn.disabled = true; btn.textContent = 'Computing...'; }
+
+    var url = API_BASE + '/era5_scalars?case_index=' + currentCaseIndex +
+        '&inner_km=' + innerKm + '&outer_km=' + outerKm + '&data_type=' + _activeDataType;
+    fetch(url)
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+            if (btn) { btn.disabled = false; btn.textContent = 'Recompute Scalars'; }
+            if (data) {
+                // Merge recomputed scalars into the overlay data
+                var merged = Object.assign({}, _envOverlayData.scalars || {}, data);
+                renderEnvOverlayScalars(merged);
+                // Re-render map to update annulus rings
+                renderEnvOverlayMap(_envOverlayData);
+            }
+        })
+        .catch(function() {
+            if (btn) { btn.disabled = false; btn.textContent = 'Recompute Scalars'; }
+        });
+}
+
+// ── Skew-T sounding info panel ────────────────────────────────
+function _renderSkewTInfo(profiles) {
+    var el = document.getElementById('env-ov-skewt-info');
+    if (!el || !profiles || !profiles.t || !profiles.plev) return;
+
+    var plev = profiles.plev;
+    var tK = profiles.t;
+    var qRaw = profiles.q;
+    var rh = profiles.rh;
+    var derived = profiles._derived || {};
+    var tC = profiles._tC || tK.map(function(v) { return v != null ? v - 273.15 : null; });
+    var tdC = profiles._tdC || [];
+
+    // Detect q units
+    var maxQ = 0;
+    if (qRaw) {
+        for (var qi = 0; qi < qRaw.length; qi++) {
+            if (qRaw[qi] != null && qRaw[qi] > maxQ) maxQ = qRaw[qi];
+        }
+    }
+    var qIsGkg = maxQ > 0.5;
+
+    // ── Derived quantities summary (top) ──
+    var html = '<div style="font-family:\'JetBrains Mono\',monospace;">';
+
+    html += '<div style="color:#00d4ff;font-weight:700;margin-bottom:8px;font-size:11px;letter-spacing:1px;">DERIVED PARAMETERS</div>';
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px;">';
+
+    function infoCard(label, value, unit, color) {
+        return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:6px;padding:6px 8px;text-align:center;">' +
+            '<div style="font-size:14px;font-weight:700;color:' + (color || '#e5e7eb') + ';">' + value + '</div>' +
+            '<div style="font-size:8px;color:#6b7280;margin-top:1px;">' + unit + '</div>' +
+            '<div style="font-size:8px;color:#8b9ec2;font-weight:600;">' + label + '</div></div>';
+    }
+
+    // CAPE
+    var capeVal = derived.cape != null ? derived.cape : '\u2014';
+    var capeColor = derived.cape > 2500 ? '#ef4444' : derived.cape > 1000 ? '#f59e0b' : derived.cape > 500 ? '#fbbf24' : '#34d399';
+    html += infoCard('CAPE', capeVal, 'J/kg', capeColor);
+
+    // CIN
+    var cinVal = derived.cin != null ? derived.cin : '\u2014';
+    var cinColor = derived.cin < -200 ? '#60a5fa' : derived.cin < -50 ? '#93c5fd' : '#e5e7eb';
+    html += infoCard('CIN', cinVal, 'J/kg', cinColor);
+
+    // PWAT
+    var pwatVal = derived.pwat != null ? derived.pwat.toFixed(1) : '\u2014';
+    var pwatIn = derived.pwat != null ? (derived.pwat / 25.4).toFixed(2) : '\u2014';
+    html += infoCard('PWAT', pwatVal, 'mm (' + pwatIn + ' in)', '#22d3ee');
+
+    // Freezing level
+    var frzVal = derived.freezing_p != null ? Math.round(derived.freezing_p) : '\u2014';
+    html += infoCard('0\u00b0C Level', frzVal, 'hPa', '#60a5fa');
+
+    // LCL
+    var lclVal = derived.lcl_p != null ? Math.round(derived.lcl_p) : '\u2014';
+    html += infoCard('LCL', lclVal, 'hPa', '#a78bfa');
+
+    // LFC
+    var lfcVal = derived.lfc_p != null ? Math.round(derived.lfc_p) : '\u2014';
+    html += infoCard('LFC', lfcVal, 'hPa', '#fb923c');
+
+    // EL
+    var elVal = derived.el_p != null ? Math.round(derived.el_p) : '\u2014';
+    html += infoCard('EL', elVal, 'hPa', '#c084fc');
+
+    // Mean T-Td depression
+    var totalDep = 0, countDep = 0;
+    for (var m = 0; m < plev.length; m++) {
+        if (tC[m] != null && tdC[m] != null) { totalDep += (tC[m] - tdC[m]); countDep++; }
+    }
+    var meanDep = countDep > 0 ? (totalDep / countDep).toFixed(1) : '\u2014';
+    html += infoCard('Mean T\u2013Td', meanDep, '\u00b0C', '#f59e0b');
+
+    html += '</div>';
+
+    // ── Sounding table ──
+    html += '<div style="color:#00d4ff;font-weight:700;margin-bottom:4px;font-size:10px;letter-spacing:1px;">SOUNDING TABLE</div>';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:10px;">';
+    html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.1);color:#8b9ec2;">' +
+        '<th style="text-align:left;padding:3px 4px;">P</th>' +
+        '<th style="text-align:right;padding:3px 4px;">T</th>' +
+        '<th style="text-align:right;padding:3px 4px;">Td</th>' +
+        '<th style="text-align:right;padding:3px 4px;">RH</th>' +
+        '<th style="text-align:right;padding:3px 4px;">q</th></tr>';
+
+    for (var j = 0; j < plev.length; j++) {
+        var rowColor = plev[j] <= 200 ? 'rgba(100,160,255,0.6)' :
+                       plev[j] <= 500 ? 'rgba(200,200,200,0.6)' : 'rgba(255,200,150,0.6)';
+        var qDisplay = null;
+        if (qRaw && qRaw[j] != null) {
+            qDisplay = qIsGkg ? qRaw[j] : qRaw[j] * 1000.0;
+        }
+        html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);color:' + rowColor + ';">' +
+            '<td style="padding:2px 4px;">' + plev[j] + '</td>' +
+            '<td style="text-align:right;padding:2px 4px;">' + (tC[j] != null ? tC[j].toFixed(1) : '\u2014') + '</td>' +
+            '<td style="text-align:right;padding:2px 4px;">' + (tdC[j] != null ? tdC[j].toFixed(1) : '\u2014') + '</td>' +
+            '<td style="text-align:right;padding:2px 4px;">' + (rh && rh[j] != null ? rh[j].toFixed(0) : '\u2014') + '</td>' +
+            '<td style="text-align:right;padding:2px 4px;">' + (qDisplay != null ? qDisplay.toFixed(1) : '\u2014') + '</td></tr>';
+    }
+    html += '</table></div>';
+    el.innerHTML = html;
+}
+
+// ── Skew-T radius UI handlers ────────────────────────────────
+function envOverlaySkewTRadiusChange(val) {
+    document.getElementById('env-ov-skewt-radius-val').textContent = val + ' km';
+}
+
+function envOverlayRecomputeSkewT() {
+    if (!currentCaseIndex && currentCaseIndex !== 0) return;
+    var radiusKm = parseInt(document.getElementById('env-ov-skewt-radius').value) || 200;
+    var btn = document.getElementById('env-ov-skewt-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Loading\u2026'; }
+
+    fetchSkewTSounding(currentCaseIndex, radiusKm, function(data) {
+        if (data && data.profiles) {
+            renderSkewT(data.profiles, 'env-ov-skewt');
+            _renderSkewTInfo(data.profiles);
+
+            // Update radius slider state based on API response
+            var has3D = data.has_3d;
+            var skewTSlider = document.getElementById('env-ov-skewt-radius');
+            if (btn) {
+                btn.disabled = !has3D;
+                btn.textContent = has3D ? 'Generate Skew-T' : 'Radius N/A (no 3D fields)';
+            }
+            if (skewTSlider) {
+                skewTSlider.disabled = !has3D;
+                skewTSlider.style.opacity = has3D ? '1' : '0.35';
+            }
+
+            // Show subtitle on the Skew-T card with source info
+            var skewDiv = document.getElementById('env-ov-skewt');
+            var sourceNote = document.getElementById('env-ov-skewt-source-note');
+            if (!sourceNote && skewDiv) {
+                sourceNote = document.createElement('div');
+                sourceNote.id = 'env-ov-skewt-source-note';
+                sourceNote.style.cssText = 'font-size:9px;text-align:center;padding:2px 6px;margin-top:-2px;';
+                skewDiv.parentNode.insertBefore(sourceNote, skewDiv.nextSibling);
+            }
+            if (sourceNote) {
+                if (data.source === 'recomputed') {
+                    sourceNote.style.color = '#22d3ee';
+                    sourceNote.textContent = '\u2713 Recomputed at ' + radiusKm + ' km radius';
+                } else {
+                    sourceNote.style.color = '#fbbf24';
+                    sourceNote.textContent = '\u26A0 Precomputed ' +
+                        (data.precomputed_domain || '200\u2013600 km annulus') + ' mean';
+                }
+            }
+        } else {
+            if (btn) { btn.disabled = false; btn.textContent = 'Generate Skew-T'; }
+        }
+    });
+}
+
+// ── Environment overlay case navigation ──────────────────────
+
+// Get the sorted list of cases for the currently-selected storm
+function _envNavGetStormCases() {
+    var d = _getActiveData();
+    if (!d || !currentCaseData) return [];
+    var storm = currentCaseData.storm_name;
+    if (!storm) return [];
+    var cases = d.cases.filter(function(c) { return c.storm_name === storm; });
+    cases.sort(function(a, b) { return a.datetime.localeCompare(b.datetime); });
+    return cases;
+}
+
+// Populate the env nav dropdown with the current storm's cases
+function _envNavPopulate() {
+    var sel = document.getElementById('env-nav-select');
+    var nav = document.getElementById('env-nav-bar');
+    if (!sel || !nav) return;
+
+    var cases = _envNavGetStormCases();
+    if (cases.length === 0) {
+        nav.style.display = 'none';
+        return;
+    }
+    nav.style.display = 'flex';
+
+    sel.innerHTML = '';
+    cases.forEach(function(c) {
+        var opt = document.createElement('option');
+        opt.value = c.case_index;
+        var cat = typeof getIntensityCategory === 'function' ? getIntensityCategory(c.vmax_kt) : '';
+        var vStr = c.vmax_kt !== null ? ' [' + cat + ', ' + c.vmax_kt + ' kt]' : '';
+        opt.textContent = c.datetime + vStr;
+        if (currentCaseIndex === c.case_index) opt.selected = true;
+        sel.appendChild(opt);
+    });
+
+    // Enable/disable prev/next buttons
+    var curIdx = -1;
+    for (var i = 0; i < cases.length; i++) {
+        if (cases[i].case_index === currentCaseIndex) { curIdx = i; break; }
+    }
+    var prevBtn = document.getElementById('env-nav-prev');
+    var nextBtn = document.getElementById('env-nav-next');
+    if (prevBtn) prevBtn.disabled = (curIdx <= 0);
+    if (nextBtn) nextBtn.disabled = (curIdx < 0 || curIdx >= cases.length - 1);
+}
+
+function _envNavGoToCase(caseIdx) {
+    var d = _getActiveData();
+    if (!d) return;
+    var caseData = d.cases.find(function(c) { return c.case_index === caseIdx; });
+    if (!caseData) return;
+
+    // Update globals
+    currentCaseIndex = caseData.case_index;
+    currentCaseData = caseData;
+
+    // Also update main toolbar dropdown so it stays in sync
+    var mainCaseSel = document.getElementById('case-select');
+    if (mainCaseSel) mainCaseSel.value = caseIdx;
+
+    // Show loading and fetch new env data
+    _envOverlayShowLoading();
+    _envNavPopulate();
+    var radiusKm = parseInt(document.getElementById('env-ov-radius').value) || 500;
+    _envOverlayFetchAndRender(caseIdx, radiusKm);
+}
+
+function envNavPrev() {
+    var cases = _envNavGetStormCases();
+    var curIdx = -1;
+    for (var i = 0; i < cases.length; i++) {
+        if (cases[i].case_index === currentCaseIndex) { curIdx = i; break; }
+    }
+    if (curIdx > 0) _envNavGoToCase(cases[curIdx - 1].case_index);
+}
+
+function envNavNext() {
+    var cases = _envNavGetStormCases();
+    var curIdx = -1;
+    for (var i = 0; i < cases.length; i++) {
+        if (cases[i].case_index === currentCaseIndex) { curIdx = i; break; }
+    }
+    if (curIdx >= 0 && curIdx < cases.length - 1) _envNavGoToCase(cases[curIdx + 1].case_index);
+}
+
+function envNavJump(val) {
+    var idx = parseInt(val);
+    if (!isNaN(idx) && idx !== currentCaseIndex) _envNavGoToCase(idx);
+}
+
+// ── ERA5 cleanup ─────────────────────────────────────────────
+function cleanupERA5() {
+    _era5Data = null;
+    _era5PlotlyVisible = false;
+    _envOverlayData = null;
+    var menu = document.getElementById('era5-field-menu');
+    if (menu) menu.remove();
+    // Reset overlay display if open
+    var ovDisplay = document.getElementById('env-ov-display');
+    var ovPlaceholder = document.getElementById('env-ov-placeholder');
+    if (ovDisplay && ovPlaceholder) {
+        ovDisplay.innerHTML = '';
+        ovDisplay.appendChild(ovPlaceholder);
+        ovPlaceholder.style.display = 'flex';
+    }
+    var caseInfo = document.getElementById('env-ov-case-info');
+    if (caseInfo) caseInfo.style.display = 'none';
+}
+
+// ══════════════════════════════════════════════════════════════
+// IR Satellite Imagery Module
+// ══════════════════════════════════════════════════════════════
+
+// ── IR state ─────────────────────────────────────────────────
+var _irData = null;
+var _irMapOverlay = null;
+var _irFrameURLs = [];
+var _irAnimFrame = 0;
+var _irAnimTimer = null;
+var _irAnimPlaying = false;
+var _irMapVisible = true;
+var _irPlotlyVisible = false;
+var _irFetching = false;
+var _irBoundsSet = false;
+var _irDecodedImages = [];
+
+// ── IR data fetch ────────────────────────────────────────────
+// ── IR loading indicator on map ───────────────────────────────
+function _showIRLoadingIndicator() {
+    if (document.getElementById('ir-loading-indicator')) return;
+    var mapEl = document.getElementById('map-container');
+    if (!mapEl) return;
+    var div = document.createElement('div');
+    div.id = 'ir-loading-indicator';
+    div.style.cssText = 'position:absolute;bottom:14px;left:14px;z-index:999;' +
+        'background:rgba(10,22,40,0.88);backdrop-filter:blur(6px);' +
+        'border:1px solid rgba(255,255,255,0.12);border-radius:8px;' +
+        'padding:8px 16px;display:flex;align-items:center;gap:8px;';
+    div.innerHTML =
+        '<div style="width:14px;height:14px;border:2px solid rgba(255,255,255,0.15);' +
+        'border-top:2px solid #60a5fa;border-radius:50%;animation:spin 1s linear infinite;"></div>' +
+        '<span style="font-size:11px;color:#93c5fd;font-family:\'JetBrains Mono\',monospace;">IR loading\u2026</span>';
+    mapEl.appendChild(div);
+}
+function _removeIRLoadingIndicator() {
+    var el = document.getElementById('ir-loading-indicator');
+    if (el) el.remove();
+}
+
+var _irAllFramesLoaded = false;
+var _irLoadedCount = 0;
+
+function fetchIRData(caseIndex, callback) {
+    if (_irFetching) return;
+    _irFetching = true;
+    _irAllFramesLoaded = false;
+    _irLoadedCount = 0;
+    _irBoundsSet = false;  // force setBounds() on new case (center may differ)
+
+    // Phase 1: Fetch metadata + t=0 frame for instant display
+    var url = API_BASE + '/ir?case_index=' + caseIndex + '&data_type=' + _activeDataType;
+    fetch(url)
+        .then(function(r) {
+            if (!r.ok) { _irFetching = false; if (callback) callback(null); return null; }
+            return r.json();
+        })
+        .then(function(data) {
+            _irFetching = false;
+            if (!data) return;
+            _irData = data;
+            // Initialize frame array with just frame0 in position 0
+            var n = data.n_frames || 9;
+            _irFrameURLs = new Array(n);
+            for (var i = 0; i < n; i++) _irFrameURLs[i] = null;
+            if (data.frame0) {
+                _irFrameURLs[0] = data.frame0;
+                _irLoadedCount = 1;
+            }
+
+            if (callback) callback(data);
+
+            // Phase 2: Fetch remaining frames in parallel
+            _fetchRemainingFramesParallel(caseIndex, 1);
+        })
+        .catch(function(err) {
+            console.warn('IR fetch failed:', err);
+            _irFetching = false; _irData = null;
+            if (callback) callback(null);
+        });
+}
+
+function _fetchRemainingFramesParallel(caseIndex, startIdx) {
+    // Stop if case changed or out of range
+    if (!_irData || _irData.case_index !== caseIndex) return;
+    if (startIdx >= _irFrameURLs.length) {
+        _irAllFramesLoaded = true;
+        _updateIRLoadingLabel();
+        _preDecodeIRFrames();
+        return;
+    }
+
+    var promises = [];
+    for (var i = startIdx; i < _irFrameURLs.length; i++) {
+        (function(lagIdx) {
+            var url = API_BASE + '/ir_frame?case_index=' + caseIndex + '&lag_index=' + lagIdx + '&data_type=' + _activeDataType;
+            promises.push(
+                fetch(url)
+                    .then(function(r) { return r.ok ? r.json() : null; })
+                    .then(function(data) {
+                        // Guard: user may have navigated away
+                        if (!data || !_irData || _irData.case_index !== caseIndex) return;
+                        if (data.frame) {
+                            _irFrameURLs[data.lag_index] = data.frame;
+                        }
+                        // Update progress as each frame lands
+                        _irLoadedCount = _countLoadedFrames();
+                        _updateIRLoadingLabel();
+                        if (_irLoadedCount >= 2) {
+                            _enableIRAnimControls();
+                        }
+                    })
+                    .catch(function(err) {
+                        console.warn('IR frame ' + lagIdx + ' fetch failed:', err);
+                    })
+            );
+        })(i);
+    }
+
+    Promise.all(promises).then(function() {
+        // Final update once every request has resolved (success or failure)
+        if (_irData && _irData.case_index === caseIndex) {
+            _irLoadedCount = _countLoadedFrames();
+            _irAllFramesLoaded = true;
+            _updateIRLoadingLabel();
+            if (_irLoadedCount >= 2) {
+                _enableIRAnimControls();
+            }
+            _preDecodeIRFrames();
+        }
+    });
+}
+
+// ── Pre-decoded IR frame images for smooth animation ─────────
+
+function _preDecodeIRFrames() {
+    _irDecodedImages = new Array(_irFrameURLs.length);
+    for (var i = 0; i < _irFrameURLs.length; i++) {
+        if (_irFrameURLs[i]) {
+            var img = new Image();
+            img.src = _irFrameURLs[i];
+            // Use decode() where available to pre-decode off main thread
+            if (img.decode) {
+                img.decode().catch(function() {});
+            }
+            _irDecodedImages[i] = img;
+        } else {
+            _irDecodedImages[i] = null;
+        }
+    }
+}
+
+function _countLoadedFrames() {
+    var count = 0;
+    for (var i = 0; i < _irFrameURLs.length; i++) {
+        if (_irFrameURLs[i]) count++;
+    }
+    return count;
+}
+
+function _enableIRAnimControls() {
+    var playBtn = document.getElementById('ir-play-btn');
+    if (playBtn) playBtn.classList.remove('ir-ctrl-disabled');
+    var stepBack = document.getElementById('ir-step-back');
+    if (stepBack) stepBack.classList.remove('ir-ctrl-disabled');
+    var stepFwd = document.getElementById('ir-step-fwd');
+    if (stepFwd) stepFwd.classList.remove('ir-ctrl-disabled');
+    var slider = document.getElementById('ir-frame-slider');
+    if (slider) slider.disabled = false;
+}
+
+function _updateIRLoadingLabel() {
+    var label = document.getElementById('ir-map-label');
+    if (!label || !_irData) return;
+    if (_irAllFramesLoaded) {
+        // Show current frame info
+        var lagHr = _irData.lag_hours[_irAnimFrame];
+        var dtStr = _irData.ir_datetimes[_irAnimFrame] || '';
+        label.textContent = 'IR ' + (lagHr > 0 ? 't\u2212' + lagHr.toFixed(1) + 'h' : 't=0') + (dtStr ? ' | ' + dtStr : '');
+    } else {
+        // Show loading progress alongside current frame info
+        var lagHr = _irData.lag_hours[_irAnimFrame];
+        var dtStr = _irData.ir_datetimes[_irAnimFrame] || '';
+        var frameInfo = 'IR ' + (lagHr > 0 ? 't\u2212' + lagHr.toFixed(1) + 'h' : 't=0');
+        label.textContent = frameInfo + ' | Loading ' + _irLoadedCount + '/' + _irFrameURLs.length + '...';
+    }
+}
+
+// ── Leaflet map overlay ──────────────────────────────────────
+function _irGetBounds(data) {
+    var latOff = data.lat_offsets, lonOff = data.lon_offsets;
+    return L.latLngBounds(
+        [data.center_lat + latOff[0], data.center_lon + lonOff[0]],
+        [data.center_lat + latOff[latOff.length - 1], data.center_lon + lonOff[lonOff.length - 1]]
+    );
+}
+
+function showIRMapOverlay(frameIdx) {
+    if (!_irData || !_irFrameURLs.length) return;
+    var idx = (frameIdx !== undefined) ? frameIdx : _irAnimFrame;
+    idx = Math.max(0, Math.min(idx, _irFrameURLs.length - 1));
+    _irAnimFrame = idx;
+    var url = _irFrameURLs[idx];
+    if (!url) return;  // skip null frames
+    var bounds = _irGetBounds(_irData);
+    if (_irMapOverlay) {
+        // Fast path: bypass Leaflet's setUrl() to avoid its async load cycle.
+        // Directly set the <img> src — if a pre-decoded Image exists for this
+        // frame, the browser can resolve the data URL from its cache near-instantly.
+        var imgEl = _irMapOverlay.getElement ? _irMapOverlay.getElement() : _irMapOverlay._image;
+        if (imgEl) {
+            imgEl.src = url;
+        } else {
+            _irMapOverlay.setUrl(url);
+        }
+        // Bounds are identical for all frames in a case, so only set once
+        if (!_irBoundsSet) {
+            _irMapOverlay.setBounds(bounds);
+            _irBoundsSet = true;
+        }
+    } else {
+        _irMapOverlay = L.imageOverlay(url, bounds, { opacity: 0.75, interactive: false, zIndex: 200 });
+        _irMapOverlay.addTo(map);
+        _irBoundsSet = true;
+    }
+    _updateIRLoadingLabel();
+}
+
+function removeIRMapOverlay() {
+    irAnimStop();
+    _removeIRLoadingIndicator();
+    if (_irMapOverlay) { map.removeLayer(_irMapOverlay); _irMapOverlay = null; }
+    _irData = null; _irFrameURLs = []; _irAnimFrame = 0; _irMapVisible = true; _irAllFramesLoaded = false; _irLoadedCount = 0; _irBoundsSet = false; _irDecodedImages = [];
+    var ctrl = document.getElementById('ir-map-controls');
+    if (ctrl) ctrl.remove();
+}
+
+function irAnimStep(dir) {
+    if (!_irData || _irLoadedCount < 2) return;
+    var n = _irFrameURLs.length;
+    // Step in direction, skipping null frames
+    var startFrame = _irAnimFrame;
+    for (var i = 0; i < n; i++) {
+        _irAnimFrame = (_irAnimFrame + dir + n) % n;
+        if (_irFrameURLs[_irAnimFrame]) break;
+    }
+    showIRMapOverlay(_irAnimFrame);
+    _updateIRSlider();
+}
+
+function irAnimToggle() {
+    if (_irLoadedCount < 2) return;
+    if (_irAnimPlaying) { irAnimStop(); }
+    else {
+        _irAnimPlaying = true;
+        // Start from the earliest (highest-index) loaded frame
+        for (var i = _irFrameURLs.length - 1; i >= 0; i--) {
+            if (_irFrameURLs[i]) { _irAnimFrame = i; break; }
+        }
+        showIRMapOverlay(_irAnimFrame);
+        _updateIRSlider();
+        _updateIRPlayBtn();
+        irAnimTick();
+    }
+}
+
+function irAnimTick() {
+    if (!_irAnimPlaying) return;
+    irAnimStep(-1);
+    if (_irAnimFrame === 0) {
+        _irAnimTimer = setTimeout(function() {
+            // Reset to the earliest (highest-index) loaded frame
+            for (var i = _irFrameURLs.length - 1; i >= 0; i--) {
+                if (_irFrameURLs[i]) { _irAnimFrame = i; break; }
+            }
+            showIRMapOverlay(_irAnimFrame);
+            _updateIRSlider();
+            _irAnimTimer = setTimeout(irAnimTick, 600);
+        }, 1500);
+    } else {
+        _irAnimTimer = setTimeout(irAnimTick, 600);
+    }
+}
+
+function irAnimStop() {
+    _irAnimPlaying = false;
+    if (_irAnimTimer) { clearTimeout(_irAnimTimer); _irAnimTimer = null; }
+    _updateIRPlayBtn();
+}
+
+function _updateIRPlayBtn() {
+    var btn = document.getElementById('ir-play-btn');
+    if (btn) btn.textContent = _irAnimPlaying ? '\u23F8' : '\u25B6';
+}
+
+function _updateIRSlider() {
+    var slider = document.getElementById('ir-frame-slider');
+    if (slider) slider.value = (_irFrameURLs.length - 1) - _irAnimFrame;
+}
+
+function toggleIRMapVisibility() {
+    _irMapVisible = !_irMapVisible;
+    if (_irMapOverlay) _irMapOverlay.setOpacity(_irMapVisible ? 0.75 : 0);
+    var btn = document.getElementById('ir-toggle-btn');
+    if (btn) btn.textContent = _irMapVisible ? '\uD83C\uDF0D IR On' : '\uD83C\uDF11 IR Off';
+}
+
+function _injectIRMapControls() {
+    if (document.getElementById('ir-map-controls')) return;
+    // Anchor to #map-container (not #map-wrapper) so controls stay pinned
+    // to the bottom of the visible map, not the bottom of the full layout
+    var mapWrapper = document.getElementById('map-container');
+    if (!mapWrapper) return;
+    var n = _irFrameURLs.length;
+    var disabledCls = _irAllFramesLoaded ? '' : ' ir-ctrl-disabled';
+    var disabledAttr = _irAllFramesLoaded ? '' : ' disabled';
+    var ctrl = document.createElement('div');
+    ctrl.id = 'ir-map-controls';
+    ctrl.className = 'ir-map-controls';
+    ctrl.innerHTML =
+        '<div class="ir-ctrl-row">' +
+            '<button class="ir-ctrl-btn" id="ir-toggle-btn" onclick="toggleIRMapVisibility()">\uD83C\uDF0D IR On</button>' +
+            '<button class="ir-ctrl-btn' + disabledCls + '" id="ir-step-back" onclick="irAnimStep(1)" title="Previous (earlier)">\u25C0</button>' +
+            '<button class="ir-ctrl-btn' + disabledCls + '" id="ir-play-btn" onclick="irAnimToggle()" title="Play/Pause">\u25B6</button>' +
+            '<button class="ir-ctrl-btn' + disabledCls + '" id="ir-step-fwd" onclick="irAnimStep(-1)" title="Next (later)">\u25B6</button>' +
+            '<input type="range" id="ir-frame-slider" min="0" max="' + (n - 1) + '" value="' + (n - 1) + '" ' +
+                disabledAttr +
+                ' oninput="showIRMapOverlay(' + (n - 1) + ' - parseInt(this.value))" class="ir-slider">' +
+            '<span class="ir-label" id="ir-map-label">IR t=0</span>' +
+        '</div>';
+    mapWrapper.appendChild(ctrl);
+}
+
+// ── Plotly IR underlay ───────────────────────────────────────
+function buildIRPlotlyImage(irData) {
+    if (!irData || !_irFrameURLs.length) return null;
+    // Use the t=0 frame (index 0 in the frames array)
+    var url = _irFrameURLs[0];
+    if (!url) return null;
+    var latOff = irData.lat_offsets, lonOff = irData.lon_offsets;
+    var centerLat = irData.center_lat;
+    var cosLat = Math.cos(centerLat * Math.PI / 180);
+    var yMin = latOff[0] * 111.0;
+    var yMax = latOff[latOff.length - 1] * 111.0;
+    var xMin = lonOff[0] * 111.0 * cosLat;
+    var xMax = lonOff[lonOff.length - 1] * 111.0 * cosLat;
+    return {
+        source: url,
+        xref: 'x', yref: 'y',
+        x: xMin, y: yMax,
+        sizex: xMax - xMin, sizey: yMax - yMin,
+        sizing: 'stretch', opacity: 0.35, layer: 'below',
+    };
+}
+
+function toggleIRPlotlyUnderlay() {
+    _irPlotlyVisible = !_irPlotlyVisible;
+    var plotDiv = document.getElementById('plotly-chart');
+    if (!plotDiv || !plotDiv.data) { _irPlotlyVisible = false; return; }
+    if (_irPlotlyVisible && _irData) {
+        var irImg = buildIRPlotlyImage(_irData);
+        if (irImg) {
+            var existingImages = (plotDiv.layout.images || []).filter(function(img) {
+                return !img._irUnderlay;
+            });
+            irImg._irUnderlay = true;
+            existingImages.push(irImg);
+            Plotly.relayout('plotly-chart', { images: existingImages });
+            var fsdiv = document.getElementById('plotly-fullscreen');
+            if (fsdiv && fsdiv.layout) {
+                var fsImages = (fsdiv.layout.images || []).filter(function(img) {
+                    return !img._irUnderlay;
+                });
+                var fsImg = JSON.parse(JSON.stringify(irImg));
+                fsImg._irUnderlay = true;
+                fsImages.push(fsImg);
+                Plotly.relayout('plotly-fullscreen', { images: fsImages });
+            }
+        }
+    } else {
+        _irPlotlyVisible = false;
+        var cleanImages = (plotDiv.layout.images || []).filter(function(img) {
+            return !img._irUnderlay;
+        });
+        Plotly.relayout('plotly-chart', { images: cleanImages });
+        var fsdiv2 = document.getElementById('plotly-fullscreen');
+        if (fsdiv2 && fsdiv2.layout) {
+            var fsClean = (fsdiv2.layout.images || []).filter(function(img) {
+                return !img._irUnderlay;
+            });
+            Plotly.relayout('plotly-fullscreen', { images: fsClean });
+        }
+    }
+    var btn = document.getElementById('ir-underlay-btn');
+    if (btn) {
+        btn.classList.toggle('active', _irPlotlyVisible);
+        btn.textContent = _irPlotlyVisible ? '\uD83D\uDEF0 IR On' : '\uD83D\uDEF0 IR Off';
+    }
+}
+
+
 
 function _hurricaneLoadingHTML(message, compact) {
     var id = 'hurricane-anim-' + Date.now();
@@ -533,6 +3267,13 @@ function _removeRubberBand() {
 
 function generateCustomPlot(callback) {
     if (currentCaseIndex === null) return;
+    // Ensure Plotly is loaded before generating any plots
+    if (typeof Plotly === 'undefined') {
+        ensurePlotly(function() { generateCustomPlot(callback); });
+        var resultDiv = document.getElementById('ep-result');
+        if (resultDiv) resultDiv.innerHTML = '<div class="explorer-status loading">Loading visualization library\u2026</div>';
+        return;
+    }
     _lastAzJson = null;
     _lastSqJson = null;
     var variable = document.getElementById('ep-var').value;
@@ -553,7 +3294,20 @@ function generateCustomPlot(callback) {
         var panelInner = document.getElementById('side-panel-inner');
         if (panelInner) panelInner.scrollTop = 0;
     }
-    var cacheKey = _activeDataType + '_' + currentCaseIndex + '_' + variable + '_' + level_km + '_' + overlay;
+    // Enable/disable wind barb button based on variable eligibility
+    var barbBtn = document.getElementById('barb-btn');
+    if (barbBtn) {
+        barbBtn.disabled = !_BARB_ELIGIBLE_VARS[variable];
+        if (!_BARB_ELIGIBLE_VARS[variable] && _windBarbsEnabled) {
+            _windBarbsEnabled = false;
+            barbBtn.textContent = '\uD83C\uDF2C\uFE0F Barbs Off';
+            barbBtn.classList.remove('active');
+            barbBtn.style.background = ''; barbBtn.style.borderColor = ''; barbBtn.style.color = '';
+        }
+    }
+    var wantBarbs = _windBarbsEnabled && _BARB_ELIGIBLE_VARS[variable];
+    var wantTilt = _tiltProfileEnabled;
+    var cacheKey = _activeDataType + '_' + currentCaseIndex + '_' + variable + '_' + level_km + '_' + overlay + (wantBarbs ? '_barbs' : '') + (wantTilt ? '_tilt' : '');
     if (_dataCache[cacheKey]) {
         renderPlotFromJSON(_dataCache[cacheKey], resultDiv);
         btn.disabled = false; btn.textContent = 'Generate Plot';
@@ -563,6 +3317,8 @@ function generateCustomPlot(callback) {
     var timeout = setTimeout(function() { controller.abort(); }, 90000);
     var url = API_BASE + '/data?case_index=' + currentCaseIndex + '&variable=' + variable + '&level_km=' + level_km + '&data_type=' + _activeDataType + '';
     if (overlay) url += '&overlay=' + overlay;
+    if (wantBarbs) url += '&wind_barbs=true';
+    if (wantTilt) url += '&tilt_profile=true';
     fetch(url, { signal: controller.signal })
         .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
         .then(function(json) { _dataCache[cacheKey] = json; renderPlotFromJSON(json, resultDiv); if (callback) callback(); })
@@ -655,12 +3411,22 @@ function _getCompColorscale(fallback) {
 function _getCompVmin(fallback) { var inp = document.getElementById('comp-vmin'); if (inp && inp.value !== '') return parseFloat(inp.value); return fallback; }
 function _getCompVmax(fallback) { var inp = document.getElementById('comp-vmax'); if (inp && inp.value !== '') return parseFloat(inp.value); return fallback; }
 
+function _allCompChartIds() {
+    // Non-diff charts + diff-mode Group A, Group B, and Difference panels
+    return [
+        'comp-az-chart','comp-sq-chart','comp-pv-chart',
+        'comp-diff-az-a','comp-diff-az-b','comp-diff-az-d',
+        'comp-diff-sq-a','comp-diff-sq-b','comp-diff-sq-d',
+        'comp-diff-pv-a','comp-diff-pv-b','comp-diff-pv-d'
+    ];
+}
+
 function applyCompCmap() {
     var sel = document.getElementById('comp-cmap'); if (!sel) return;
     var cs = sel.value;
     if (!cs && _compDefaultColorscale) cs = _compDefaultColorscale; if (!cs) return;
     var colorscale; try { colorscale = JSON.parse(cs); } catch(e) { colorscale = cs; }
-    ['comp-az-chart','comp-sq-chart'].forEach(function(id) {
+    _allCompChartIds().forEach(function(id) {
         var plotDiv = document.getElementById(id);
         if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
         // Restyle all heatmap traces (quadrant view has 4)
@@ -673,7 +3439,7 @@ function applyCompCmap() {
 function applyCompColorRange() {
     var zmin = _getCompVmin(_compDefaultVmin), zmax = _getCompVmax(_compDefaultVmax);
     if (zmin === null || zmax === null) return;
-    ['comp-az-chart','comp-sq-chart'].forEach(function(id) {
+    _allCompChartIds().forEach(function(id) {
         var plotDiv = document.getElementById(id);
         if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
         var indices = plotDiv.data.map(function(_,i){return i;});
@@ -687,7 +3453,7 @@ function resetCompColorRange() {
     var vminInput = document.getElementById('comp-vmin'), vmaxInput = document.getElementById('comp-vmax');
     if (vminInput) vminInput.value = ''; if (vmaxInput) vmaxInput.value = '';
     if (_compDefaultVmin !== null && _compDefaultVmax !== null) {
-        ['comp-az-chart','comp-sq-chart'].forEach(function(id) {
+        _allCompChartIds().forEach(function(id) {
             var plotDiv = document.getElementById(id);
             if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
             var indices = plotDiv.data.map(function(_,i){return i;});
@@ -696,6 +3462,160 @@ function resetCompColorRange() {
             Plotly.restyle(plotDiv, { zmin: zminArr, zmax: zmaxArr }, indices);
         });
     }
+}
+
+// ── Inline shading toolbar helpers (Step 4) ─────────────────
+// These sync the inline toolbar on the Results step with the
+// existing comp-cmap / comp-vmin / comp-vmax controls on Step 3,
+// then trigger the same Plotly.restyle logic.
+
+function _syncCompCmapFromInline() {
+    var inline = document.getElementById('comp-cmap-inline');
+    var master = document.getElementById('comp-cmap');
+    if (inline && master) { master.value = inline.value; }
+    applyCompCmap();
+}
+
+function _syncCompRangeFromInline() {
+    var inMin = document.getElementById('comp-vmin-inline');
+    var inMax = document.getElementById('comp-vmax-inline');
+    var master_min = document.getElementById('comp-vmin');
+    var master_max = document.getElementById('comp-vmax');
+    if (inMin && master_min) master_min.value = inMin.value;
+    if (inMax && master_max) master_max.value = inMax.value;
+    applyCompColorRange();
+}
+
+function _resetCompShadingInline() {
+    var inMin = document.getElementById('comp-vmin-inline');
+    var inMax = document.getElementById('comp-vmax-inline');
+    var inCmap = document.getElementById('comp-cmap-inline');
+    if (inMin) inMin.value = '';
+    if (inMax) inMax.value = '';
+    if (inCmap) inCmap.value = '';
+    resetCompColorRange();
+    // Also reset colormap to default
+    var master = document.getElementById('comp-cmap');
+    if (master) { master.value = ''; applyCompCmap(); }
+}
+
+function _showCompShadingToolbar() {
+    // No-op: replaced by per-result _buildShadingControlsRow() controls
+}
+
+// ── Per-result shading controls ─────────────────────────────────────────
+// Registry: maps prefix → { chartIds, defaultColorscale, defaultVmin, defaultVmax }
+var _shadingRegistry = {};
+
+function _registerShadingTargets(prefix, chartIds, colorscale, vmin, vmax) {
+    _shadingRegistry[prefix] = {
+        chartIds: chartIds,
+        defaultColorscale: colorscale,
+        defaultVmin: vmin,
+        defaultVmax: vmax
+    };
+}
+
+var _SHADING_CMAP_OPTIONS =
+    '<option value="">Default</option>' +
+    '<optgroup label="Sequential"><option value="Viridis">Viridis</option><option value="Inferno">Inferno</option><option value="Magma">Magma</option><option value="Plasma">Plasma</option><option value="Cividis">Cividis</option><option value="Hot">Hot</option><option value="YlOrRd">YlOrRd</option><option value="YlGnBu">YlGnBu</option><option value="Blues">Blues</option><option value="Reds">Reds</option><option value="Greys">Greys</option></optgroup>' +
+    '<optgroup label="Diverging"><option value="RdBu">RdBu</option><option value=\'[[0,&quot;rgb(5,10,172)&quot;],[0.5,&quot;rgb(255,255,255)&quot;],[1,&quot;rgb(178,10,28)&quot;]]\'>BuWtRd</option><option value="Picnic">Picnic</option><option value="Portland">Portland</option></optgroup>' +
+    '<optgroup label="Other"><option value="Jet">Jet</option><option value="Rainbow">Rainbow</option><option value="Electric">Electric</option></optgroup>';
+
+function _buildShadingControlsRow(prefix, opts) {
+    if (!opts) opts = {};
+    var label = opts.label || '';
+    var labelHtml = label
+        ? '<span class="cst-label" style="margin-right:4px;">' + label + '</span><span class="cst-sep"></span>'
+        : '';
+    return '<div class="comp-shading-toolbar" style="margin-top:8px;">' +
+        '<div class="cst-row">' +
+            labelHtml +
+            '<label class="cst-label">Colormap</label>' +
+            '<select id="' + prefix + '-cmap" class="cst-select" onchange="_applyShadingFor(\'' + prefix + '\')">' +
+                _SHADING_CMAP_OPTIONS +
+            '</select>' +
+            '<span class="cst-sep"></span>' +
+            '<label class="cst-label">Range</label>' +
+            '<input type="number" id="' + prefix + '-vmin" class="cst-input" placeholder="' + (opts.defaultVmin != null ? opts.defaultVmin : 'min') + '" step="any" onchange="_applyShadingFor(\'' + prefix + '\')">' +
+            '<span class="cst-to">to</span>' +
+            '<input type="number" id="' + prefix + '-vmax" class="cst-input" placeholder="' + (opts.defaultVmax != null ? opts.defaultVmax : 'max') + '" step="any" onchange="_applyShadingFor(\'' + prefix + '\')">' +
+            '<button class="cst-reset" onclick="_resetShadingFor(\'' + prefix + '\')" title="Reset to default">\u21BA</button>' +
+        '</div>' +
+    '</div>';
+}
+
+function _applyShadingFor(prefix) {
+    var reg = _shadingRegistry[prefix];
+    if (!reg) return;
+    var cmapEl = document.getElementById(prefix + '-cmap');
+    var vminEl = document.getElementById(prefix + '-vmin');
+    var vmaxEl = document.getElementById(prefix + '-vmax');
+
+    // Colorscale
+    var cs = cmapEl ? cmapEl.value : '';
+    if (!cs) cs = reg.defaultColorscale;
+    else { try { cs = JSON.parse(cs); } catch(e) { /* string name like "Viridis" */ } }
+
+    // Range
+    var zmin = (vminEl && vminEl.value !== '') ? parseFloat(vminEl.value) : reg.defaultVmin;
+    var zmax = (vmaxEl && vmaxEl.value !== '') ? parseFloat(vmaxEl.value) : reg.defaultVmax;
+
+    reg.chartIds.forEach(function(id) {
+        var plotDiv = document.getElementById(id);
+        if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
+        // Only restyle trace 0 (heatmap) — leave contour overlays untouched
+        Plotly.restyle(plotDiv, { colorscale: [cs], zmin: [zmin], zmax: [zmax] }, [0]);
+    });
+}
+
+function _resetShadingFor(prefix) {
+    var reg = _shadingRegistry[prefix];
+    if (!reg) return;
+    var cmapEl = document.getElementById(prefix + '-cmap');
+    var vminEl = document.getElementById(prefix + '-vmin');
+    var vmaxEl = document.getElementById(prefix + '-vmax');
+    if (cmapEl) cmapEl.value = '';
+    if (vminEl) vminEl.value = '';
+    if (vmaxEl) vmaxEl.value = '';
+    _applyShadingFor(prefix);
+}
+
+// ── Tight data-extent helper for plan-view axes ─────────────
+// Scans a 2D array and returns the bounding box of non-NaN/non-null
+// cells in terms of the provided x/y coordinate arrays.  Falls back
+// to the full grid extent when the data is entirely NaN.
+function _tightDataExtent(zData, xCoords, yCoords, pad) {
+    if (pad === undefined) pad = 0.25;
+    var minCol = Infinity, maxCol = -Infinity;
+    var minRow = Infinity, maxRow = -Infinity;
+    for (var r = 0; r < zData.length; r++) {
+        if (!zData[r]) continue;
+        for (var c = 0; c < zData[r].length; c++) {
+            var v = zData[r][c];
+            if (v !== null && v !== undefined && isFinite(v)) {
+                if (c < minCol) minCol = c;
+                if (c > maxCol) maxCol = c;
+                if (r < minRow) minRow = r;
+                if (r > maxRow) maxRow = r;
+            }
+        }
+    }
+    if (!isFinite(minCol)) {
+        // All NaN — fall back to full grid
+        return {
+            xMin: xCoords[0] - pad,
+            xMax: xCoords[xCoords.length - 1] + pad,
+            yMin: yCoords[0] - pad,
+            yMax: yCoords[yCoords.length - 1] + pad
+        };
+    }
+    return {
+        xMin: xCoords[minCol] - pad,
+        xMax: xCoords[maxCol] + pad,
+        yMin: yCoords[minRow] - pad,
+        yMax: yCoords[maxRow] + pad
+    };
 }
 
 // ── Max value helper ─────────────────────────────────────────
@@ -755,7 +3675,7 @@ function buildMaxAnnotation(maxInfo, units, xLabel, yLabel, fontSize) {
         xref: 'paper', yref: 'paper', x: 0.01, y: -0.01,
         xanchor: 'left', yanchor: 'top',
         showarrow: false,
-        font: { color: '#d1d5db', size: fs, family: 'JetBrains Mono, monospace' },
+        font: { color: '#d1d5db', size: fs, family: 'DM Sans, sans-serif' },
         bgcolor: 'rgba(10,22,40,0.8)',
         borderpad: 3,
         bordercolor: 'rgba(255,255,255,0.15)',
@@ -768,7 +3688,7 @@ function renderPlotFromJSON(json, resultDiv) {
     var thumbWrap = document.getElementById('thumbnail-wrap');
     if (thumbWrap) thumbWrap.style.display = 'none';
 
-    resultDiv.innerHTML = '<div style="position:relative;"><div id="plotly-chart" style="width:100%;height:360px;border-radius:6px;overflow:hidden;"></div><button onclick="openPlotModal()" title="Expand to fullscreen" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">\u26F6</button></div><div style="font-size:11px;color:var(--slate);text-align:center;margin-top:4px;">Hover for values \u00b7 scroll to zoom \u00b7 drag to pan \u00b7 \u26F6 expand</div>';
+    resultDiv.innerHTML = '<div style="position:relative;"><div id="plotly-chart" style="width:100%;height:400px;border-radius:6px;overflow:hidden;"></div>' + _archSaveBtnHTML('plotly-chart', 'TDR_PlanView') + '<button onclick="openPlotModal()" title="Expand to fullscreen" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">\u26F6</button></div><div style="font-size:11px;color:var(--slate);text-align:center;margin-top:4px;">Hover for values \u00b7 scroll to zoom \u00b7 drag to pan \u00b7 \u26F6 expand</div>';
 
     // Scroll panel to top so plot is visible
     var panelInner = document.getElementById('side-panel-inner');
@@ -796,7 +3716,7 @@ function renderPlotFromJSON(json, resultDiv) {
     var plotBg = '#0a1628';
     var baseLayout = { paper_bgcolor: plotBg, plot_bgcolor: plotBg, xaxis: { title: { text: 'Eastward distance (km)', font: { color: '#aaa' } }, tickfont: { color: '#aaa' }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false, scaleanchor: 'y' }, yaxis: { title: { text: 'Northward distance (km)', font: { color: '#aaa' } }, tickfont: { color: '#aaa' }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, shapes: shapes, hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 12 } }, showlegend: false };
     var config = { responsive: true, displayModeBar: true, modeBarButtonsToRemove: ['lasso2d','select2d','toggleSpikelines'], displaylogo: false };
-    var smallLayout = Object.assign({}, baseLayout, { title: { text: title, font: { color: '#e5e7eb', size: 11 }, y: 0.98, x: 0.5, xanchor: 'center' }, margin: { l: 52, r: 16, t: json.overlay ? 66 : 50, b: 44 }, xaxis: Object.assign({}, baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }), yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }) });
+    var smallLayout = Object.assign({}, baseLayout, { title: { text: title, font: { color: '#e5e7eb', size: 11 }, y: 0.995, x: 0.5, xanchor: 'center', yanchor: 'top' }, margin: { l: 52, r: 16, t: json.overlay ? 110 : 90, b: 44 }, xaxis: Object.assign({}, baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }), yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }) });
 
     var overlayTraces = buildOverlayContours(json, x, y);
 
@@ -824,11 +3744,38 @@ function renderPlotFromJSON(json, resultDiv) {
         smallLayout.annotations = (smallLayout.annotations || []).concat(shearInset.annotations);
     }
 
-    Plotly.newPlot('plotly-chart', [heatmap].concat(overlayTraces).concat(maxTraces), smallLayout, config);
-    window._lastPlotlyData = { heatmap: heatmap, overlayTraces: overlayTraces, maxTraces: maxTraces, baseLayout: baseLayout, title: title, config: config };
+    // Wind barbs overlay
+    var barbShapes = [];
+    if (json.wind_barbs) {
+        var xArr = x, yArr = y;
+        var axR = { xMin: xArr[0], xMax: xArr[xArr.length - 1], yMin: yArr[0], yMax: yArr[yArr.length - 1] };
+        barbShapes = _buildPlanViewWindBarbs(json.wind_barbs, axR);
+        smallLayout.shapes = (smallLayout.shapes || []).concat(barbShapes);
+        baseLayout.shapes = (baseLayout.shapes || []).concat(barbShapes);
+    }
+
+    // Tilt profile overlay
+    var tiltTraces = [];
+    if (json.tilt_profile) {
+        var tiltResult = _buildTiltProfileTrace(json.tilt_profile);
+        if (tiltResult) {
+            tiltTraces.push(tiltResult.line);
+            tiltTraces.push(tiltResult.scatter);
+            // Stack colorbars vertically: shrink wind colorbar to upper portion
+            heatmap.colorbar = Object.assign({}, heatmap.colorbar, {
+                len: 0.45, y: 0.98, yanchor: 'top'
+            });
+        }
+    }
+
+    Plotly.newPlot('plotly-chart', [heatmap].concat(overlayTraces).concat(maxTraces).concat(tiltTraces), smallLayout, config);
+    window._lastPlotlyData = { heatmap: heatmap, overlayTraces: overlayTraces, maxTraces: maxTraces, tiltTraces: tiltTraces, baseLayout: baseLayout, title: title, config: config, barbShapes: barbShapes };
     var csBtn = document.getElementById('cs-btn'); if (csBtn) csBtn.disabled = false;
     var azBtn = document.getElementById('az-btn'); if (azBtn) azBtn.disabled = false;
     var sqBtn = document.getElementById('sq-btn'); if (sqBtn) sqBtn.disabled = false;
+    var volBtn = document.getElementById('vol-btn'); if (volBtn) volBtn.disabled = false;
+    var hybBtn = document.getElementById('hybrid-az-btn'); if (hybBtn) hybBtn.disabled = false;
+    var anomBtn = document.getElementById('anomaly-az-btn'); if (anomBtn) anomBtn.disabled = false;
     document.getElementById('plotly-chart').on('plotly_click', handlePlotClick);
 
     // Auto-scroll the side panel to show the plot (skip during animation)
@@ -912,7 +3859,7 @@ function renderCrossSectionInto(targetId, json, fullsize) {
     var csOverlayLabel = json.overlay ? '<br><span style="font-size:0.85em;color:#9ca3af;">Contours: ' + json.overlay.display_name + ' (' + json.overlay.units + ')</span>' : '';
     var title = 'Cross Section: (' + ep.x0.toFixed(0) + ',' + ep.y0.toFixed(0) + ') \u2192 (' + ep.x1.toFixed(0) + ',' + ep.y1.toFixed(0) + ') km' + csOverlayLabel;
     var plotBg = '#0a1628';
-    var layout = { title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' }, paper_bgcolor: plotBg, plot_bgcolor: plotBg, xaxis: { title: { text: 'Distance along line (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, margin: fullsize ? { l:55,r:24,t:json.overlay?56:40,b:46 } : { l:45,r:12,t:json.overlay?50:36,b:38 }, hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: fontSize.hover } }, showlegend: false };
+    var layout = { title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' }, paper_bgcolor: plotBg, plot_bgcolor: plotBg, xaxis: { title: { text: 'Distance along line (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, margin: fullsize ? { l:55,r:24,t:json.overlay?70:50,b:46 } : { l:45,r:12,t:json.overlay?62:44,b:38 }, hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: fontSize.hover } }, showlegend: false };
     var csOverlayTraces = buildOverlayContours(json, null, null, true);
 
     // Max value marker + annotation for cross-section
@@ -953,10 +3900,79 @@ function fetchAzimuthalMean() {
     var timeout = setTimeout(function() { controller.abort(); }, 90000);
     fetch(url, { signal: controller.signal })
         .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
-        .then(function(json) { _lastAzJson = json; renderAzimuthalMeanInto('az-result', json, false); openPlotModal(); })
+        .then(function(json) { _lastAzJson = json; _lastHybridAzJson = null; _lastAnomalyAzJson = null; _lastVPScatterJson = null; renderAzimuthalMeanInto('az-result', json, false); openPlotModal(); })
         .catch(function(err) { resultDiv.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + (err.name === 'AbortError' ? 'Request timed out (90s).' : err.message) + '</div>'; })
         .finally(function() { clearTimeout(timeout); btn.disabled = false; btn.textContent = '\u27F3 Azimuthal Mean'; });
 }
+
+
+// ── Hybrid R_H Azimuthal Mean (Fischer et al. 2025) ─────────────────────
+
+var _lastHybridAzJson = null;
+
+function fetchHybridAzimuthalMean() {
+    if (currentCaseIndex === null) return;
+    var variable = document.getElementById('ep-var').value;
+    var overlay = (document.getElementById('ep-overlay') || {}).value || '';
+    var covSlider = document.getElementById('az-coverage');
+    var coverage = covSlider ? (parseInt(covSlider.value) / 100) : 0.5;
+    var resultDiv = document.getElementById('az-result'), btn = document.getElementById('hybrid-az-btn');
+    resultDiv.innerHTML = _hurricaneLoadingHTML('Computing hybrid R\u2095 azimuthal mean\u2026', true);
+    btn.disabled = true; btn.textContent = '\u27F3 Computing\u2026';
+    var url = API_BASE + '/hybrid/azimuthal_mean?case_index=' + currentCaseIndex +
+              '&variable=' + variable + '&data_type=' + _activeDataType +
+              '&coverage_min=' + coverage;
+    if (overlay && overlay !== 'none') url += '&overlay=' + overlay;
+    var controller = new AbortController();
+    var timeout = setTimeout(function() { controller.abort(); }, 90000);
+    fetch(url, { signal: controller.signal })
+        .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
+        .then(function(json) { _lastHybridAzJson = json; _lastAzJson = null; _lastAnomalyAzJson = null; _lastVPScatterJson = null; renderHybridAzimuthalMeanInto('az-result', json, false); openPlotModal(); })
+        .catch(function(err) { resultDiv.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + (err.name === 'AbortError' ? 'Request timed out (90s).' : err.message) + '</div>'; })
+        .finally(function() { clearTimeout(timeout); btn.disabled = false; btn.textContent = 'R\u2095 Hybrid'; });
+}
+
+
+// ── Z-Score Anomaly Azimuthal Mean (Fischer et al. 2025) ────────────────
+
+var _lastAnomalyAzJson = null;
+
+function fetchAnomalyAzimuthalMean() {
+    if (currentCaseIndex === null) return;
+    var variable = document.getElementById('ep-var').value;
+    var resultDiv = document.getElementById('az-result'), btn = document.getElementById('anomaly-az-btn');
+    resultDiv.innerHTML = _hurricaneLoadingHTML('Computing Z-score anomaly\u2026', true);
+    btn.disabled = true; btn.textContent = '\u27F3 Computing\u2026';
+    var url = API_BASE + '/anomaly/azimuthal_mean?case_index=' + currentCaseIndex +
+              '&variable=' + variable + '&data_type=' + _activeDataType;
+    var controller = new AbortController();
+    var timeout = setTimeout(function() { controller.abort(); }, 90000);
+    fetch(url, { signal: controller.signal })
+        .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
+        .then(function(json) { _lastAnomalyAzJson = json; _lastAzJson = null; _lastHybridAzJson = null; _lastVPScatterJson = null; renderAnomalyAzimuthalMeanInto('az-result', json, false); openPlotModal(); })
+        .catch(function(err) { resultDiv.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + (err.name === 'AbortError' ? 'Request timed out (90s).' : err.message) + '</div>'; })
+        .finally(function() { clearTimeout(timeout); btn.disabled = false; btn.textContent = 'Z* Anomaly'; });
+}
+
+
+// ── VP vs Vortex Favorability Scatter (Fig. 9) ──────────────────────────
+
+var _lastVPScatterJson = null;
+
+function fetchVPScatter(colorBy) {
+    colorBy = colorBy || 'dvmax_12h';
+    var resultDiv = document.getElementById('az-result');
+    var btn = document.getElementById('vp-scatter-btn');
+    resultDiv.innerHTML = _hurricaneLoadingHTML('Loading VP scatter data\u2026', true);
+    if (btn) { btn.disabled = true; btn.textContent = '\u27F3 Loading\u2026'; }
+    var url = API_BASE + '/scatter/vp_favorability?data_type=merge&color_by=' + colorBy;
+    fetch(url, { cache: 'no-store' })
+        .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
+        .then(function(json) { _lastVPScatterJson = json; _lastAzJson = null; _lastHybridAzJson = null; _lastAnomalyAzJson = null; renderVPScatterInto('az-result', json, false); openPlotModal(); })
+        .catch(function(err) { resultDiv.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + err.message + '</div>'; })
+        .finally(function() { if (btn) { btn.disabled = false; btn.textContent = '\u2B24 VP Scatter'; } });
+}
+
 
 function renderAzimuthalMeanInto(targetId, json, fullsize) {
     var el = document.getElementById(targetId); if (!el) return;
@@ -976,7 +3992,7 @@ function renderAzimuthalMeanInto(targetId, json, fullsize) {
     var shapes = [];
     if (meta.rmw_km && !isNaN(meta.rmw_km)) shapes.push({ type:'line',xref:'x',yref:'paper',x0:meta.rmw_km,x1:meta.rmw_km,y0:0,y1:1,line:{color:'white',width:1.5,dash:'dash'} });
     var plotBg = '#0a1628';
-    var layout = { title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' }, paper_bgcolor: plotBg, plot_bgcolor: plotBg, xaxis: { title: { text: 'Radius (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, margin: fullsize ? { l:55,r:24,t:json.overlay?66:50,b:46 } : { l:45,r:12,t:json.overlay?56:42,b:38 }, shapes: shapes, hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: fontSize.hover } }, showlegend: false };
+    var layout = { title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' }, paper_bgcolor: plotBg, plot_bgcolor: plotBg, xaxis: { title: { text: 'Radius (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, margin: fullsize ? { l:55,r:24,t:json.overlay?96:80,b:46 } : { l:45,r:12,t:json.overlay?78:64,b:38 }, shapes: shapes, hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: fontSize.hover } }, showlegend: false };
 
     // Max value marker + annotation for azimuthal mean
     var azMaxInfo = findDataMax(azData, radius_km, height_km);
@@ -998,7 +4014,7 @@ function renderAzimuthalMeanInto(targetId, json, fullsize) {
     if (!fullsize) {
         var thumbWrap = document.getElementById('thumbnail-wrap');
         if (thumbWrap) thumbWrap.style.display = 'none';
-        el.innerHTML = '<div style="position:relative;"><div id="az-chart" style="width:100%;height:340px;border-radius:6px;overflow:hidden;"></div><button onclick="openPlotModal()" title="Expand to fullscreen" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">\u26F6</button></div><div style="font-size:11px;color:var(--slate);text-align:center;margin-top:4px;">Hover \u00b7 zoom \u00b7 pan \u00b7 \u26F6 expand</div>';
+        el.innerHTML = '<div style="position:relative;"><div id="az-chart" style="width:100%;height:340px;border-radius:6px;overflow:hidden;"></div>' + _archSaveBtnHTML('az-chart', 'TDR_AzMean') + '<button onclick="openPlotModal()" title="Expand to fullscreen" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">\u26F6</button></div><div style="font-size:11px;color:var(--slate);text-align:center;margin-top:4px;">Hover \u00b7 zoom \u00b7 pan \u00b7 \u26F6 expand</div>';
         Plotly.newPlot('az-chart', [heatmap].concat(azOverlayTraces).concat(azMaxTraces), layout, { responsive:true,displayModeBar:false,displaylogo:false });
         var panelInner = document.getElementById('side-panel-inner');
         if (panelInner) panelInner.scrollTop = 0;
@@ -1006,6 +4022,462 @@ function renderAzimuthalMeanInto(targetId, json, fullsize) {
         Plotly.newPlot(targetId, [heatmap].concat(azOverlayTraces).concat(azMaxTraces), layout, { responsive:true,displayModeBar:true,displaylogo:false,modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
     }
 }
+
+// ── Hybrid R_H Azimuthal Mean Renderer ──────────────────────────────────
+
+var _fischerCitation = {
+    text: 'Fischer et al. (2025, MWR) | doi:10.1175/MWR-D-24-0118.1',
+    xref: 'paper', yref: 'paper', x: 1.0, y: -0.01,
+    xanchor: 'right', yanchor: 'top', showarrow: false,
+    font: { color: 'rgba(150,150,150,0.5)', size: 8 }
+};
+
+function _buildHybridXAxis(rHAxis, nInner) {
+    // Build tick labels for the hybrid coordinate
+    // Inner bins: show as fraction of RMW (e.g., 0.2, 0.4, ..., 0.8)
+    // Outer bins: show as "RMW", "+20", "+40", etc.
+    var tickvals = [], ticktext = [];
+    for (var i = 0; i < rHAxis.length; i++) {
+        if (i < nInner) {
+            // Inner: show every 0.2 R*
+            var val = rHAxis[i];
+            if (Math.abs(val % 0.2) < 0.03) {
+                tickvals.push(i);
+                ticktext.push((val).toFixed(1));
+            }
+        } else {
+            // Outer: show at RMW, +20, +40, +60, +80, +100
+            var km = rHAxis[i];
+            if (i === nInner) {
+                tickvals.push(i);
+                ticktext.push('RMW');
+            } else {
+                // Snap to nearest 20-km mark; only label once per target
+                var target = Math.round(km / 20) * 20;
+                if (target > 0 && Math.abs(km - target) < 2.0) {
+                    var thisLabel = '+' + target;
+                    if (ticktext.length === 0 || ticktext[ticktext.length - 1] !== thisLabel) {
+                        tickvals.push(i);
+                        ticktext.push(thisLabel);
+                    }
+                }
+            }
+        }
+    }
+    return { tickvals: tickvals, ticktext: ticktext };
+}
+
+function renderHybridAzimuthalMeanInto(targetId, json, fullsize) {
+    var el = document.getElementById(targetId); if (!el) return;
+    var azData = json.azimuthal_mean, rHAxis = json.r_h_axis, nInner = json.n_inner;
+    var height_km = json.height_km, varInfo = json.variable, meta = _enrichCaseMeta(json.case_meta);
+
+    var fontSize = fullsize ? { title:13,axis:12,tick:10,cbar:12,cbarTick:10 } : { title:10,axis:9,tick:8,cbar:9,cbarTick:8 };
+    var csColorscale = varInfo.colorscale;
+    var cmapSel = document.getElementById('ep-cmap');
+    if (cmapSel && cmapSel.value) { try { csColorscale = JSON.parse(cmapSel.value); } catch(e) { csColorscale = cmapSel.value; } }
+
+    var xIdxArr = []; for (var i = 0; i < rHAxis.length; i++) xIdxArr.push(i);
+    var ticks = _buildHybridXAxis(rHAxis, nInner);
+
+    var heatmap = {
+        z: azData, x: xIdxArr, y: height_km, type: 'heatmap',
+        colorscale: csColorscale, zmin: varInfo.vmin, zmax: varInfo.vmax,
+        colorbar: { title: { text: varInfo.units, font: { color: '#ccc', size: fontSize.cbar } },
+                    tickfont: { color: '#ccc', size: fontSize.cbarTick }, thickness: fullsize?14:10, len: 0.85 },
+        hoverongaps: false
+    };
+
+    var vmaxStr = meta.vmax_kt ? ' | Vmax = ' + meta.vmax_kt + ' kt' : '';
+    var rmwStr = meta.rmw_km ? ' | RMW = ' + meta.rmw_km + ' km' : '';
+    var title = meta.storm_name + ' | ' + meta.datetime + vmaxStr + rmwStr +
+                '<br>Hybrid R\u2095 Azimuthal Mean: ' + varInfo.display_name;
+
+    var shapes = [{
+        type: 'line', xref: 'x', yref: 'paper',
+        x0: nInner, x1: nInner, y0: 0, y1: 1,
+        line: { color: 'rgba(255,255,255,0.5)', width: 1.5, dash: 'dash' }
+    }];
+
+    var plotBg = '#0a1628';
+    var layout = {
+        title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' },
+        paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+        xaxis: { title: { text: 'R\u2095 (RMW + km)', font: { color: '#aaa', size: fontSize.axis } },
+                 tickvals: ticks.tickvals, ticktext: ticks.ticktext,
+                 tickfont: { color: '#aaa', size: fontSize.tick },
+                 gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
+        yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } },
+                 tickfont: { color: '#aaa', size: fontSize.tick },
+                 gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
+        margin: fullsize ? { l:55,r:24,t:80,b:46 } : { l:45,r:12,t:64,b:38 },
+        shapes: shapes, showlegend: false,
+        annotations: [_fischerCitation]
+    };
+
+    if (!fullsize) {
+        var thumbWrap = document.getElementById('thumbnail-wrap');
+        if (thumbWrap) thumbWrap.style.display = 'none';
+        el.innerHTML = '<div style="position:relative;"><div id="az-chart" style="width:100%;height:340px;border-radius:6px;overflow:hidden;"></div>' + _archSaveBtnHTML('az-chart', 'TDR_HybridAzMean') + '<button onclick="openPlotModal()" title="Expand" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;">\u26F6</button></div>';
+        Plotly.newPlot('az-chart', [heatmap], layout, { responsive:true,displayModeBar:false });
+    } else {
+        Plotly.newPlot(targetId, [heatmap], layout, { responsive:true,displayModeBar:true,displaylogo:false });
+    }
+}
+
+
+// ── Z-Score Anomaly Renderer ────────────────────────────────────────────
+
+function renderAnomalyAzimuthalMeanInto(targetId, json, fullsize) {
+    var el = document.getElementById(targetId); if (!el) return;
+
+    if (json.error || !json.anomaly) {
+        el.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + (json.error || 'Anomaly data unavailable.') + '</div>';
+        if (json.raw) {
+            // Fall back to rendering raw hybrid field with natural colorbar range
+            var vi = json.variable || {};
+            var rawVar = Object.assign({}, vi, {
+                vmin: vi.raw_vmin != null ? vi.raw_vmin : vi.vmin,
+                vmax: vi.raw_vmax != null ? vi.raw_vmax : vi.vmax,
+                colorscale: vi.raw_colorscale || vi.colorscale,
+            });
+            var fallback = Object.assign({}, json, { azimuthal_mean: json.raw, variable: rawVar });
+            renderHybridAzimuthalMeanInto(targetId, fallback, fullsize);
+        }
+        return;
+    }
+
+    var anomData = json.anomaly, rHAxis = json.r_h_axis, nInner = json.n_inner;
+    var height_km = json.height_km, varInfo = json.variable, meta = json.case_meta || {};
+
+    var fontSize = fullsize ? { title:13,axis:12,tick:10,cbar:12,cbarTick:10 } : { title:10,axis:9,tick:8,cbar:9,cbarTick:8 };
+
+    var xIdxArr = []; for (var i = 0; i < rHAxis.length; i++) xIdxArr.push(i);
+    var ticks = _buildHybridXAxis(rHAxis, nInner);
+
+    // Diverging colorscale for anomalies (RdBu_r)
+    var anomColorscale = varInfo.colorscale || [
+        [0.0, 'rgb(5,48,97)'], [0.1, 'rgb(33,102,172)'],
+        [0.2, 'rgb(67,147,195)'], [0.3, 'rgb(146,197,222)'],
+        [0.4, 'rgb(209,229,240)'], [0.5, 'rgb(247,247,247)'],
+        [0.6, 'rgb(253,219,199)'], [0.7, 'rgb(244,165,130)'],
+        [0.8, 'rgb(214,96,77)'], [0.9, 'rgb(178,24,43)'],
+        [1.0, 'rgb(103,0,31)']
+    ];
+
+    var heatmap = {
+        z: anomData, x: xIdxArr, y: height_km, type: 'heatmap',
+        colorscale: anomColorscale, zmin: -3, zmax: 3, zmid: 0,
+        colorbar: {
+            title: { text: '\u03c3', font: { color: '#ccc', size: fontSize.cbar } },
+            tickfont: { color: '#ccc', size: fontSize.cbarTick },
+            thickness: fullsize?14:10, len: 0.85,
+            tickvals: [-3, -2, -1, 0, 1, 2, 3],
+        },
+        hoverongaps: false,
+        hovertemplate: '<b>Z-score</b>: %{z:.2f}\u03c3<br>R\u2095: %{x}<br>Height: %{y:.1f} km<extra></extra>'
+    };
+
+    var vmaxStr = meta.vmax_kt ? ' | Vmax = ' + meta.vmax_kt + ' kt' : '';
+    var climInfo = json.clim_bin_kt ? ' (climo: \u00b110 kt of ' + json.clim_bin_kt + ' kt, n=' + json.clim_count + ')' : '';
+    var title = (meta.storm_name || '') + ' | ' + (meta.datetime || '') + vmaxStr +
+                '<br>Anomalous ' + varInfo.display_name + climInfo;
+
+    var shapes = [{
+        type: 'line', xref: 'x', yref: 'paper',
+        x0: nInner, x1: nInner, y0: 0, y1: 1,
+        line: { color: 'rgba(255,255,255,0.5)', width: 1.5, dash: 'dash' }
+    }];
+
+    var plotBg = '#0a1628';
+    var layout = {
+        title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' },
+        paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+        xaxis: { title: { text: 'R\u2095 (RMW + km)', font: { color: '#aaa', size: fontSize.axis } },
+                 tickvals: ticks.tickvals, ticktext: ticks.ticktext,
+                 tickfont: { color: '#aaa', size: fontSize.tick },
+                 gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
+        yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } },
+                 tickfont: { color: '#aaa', size: fontSize.tick },
+                 gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
+        margin: fullsize ? { l:55,r:24,t:96,b:46 } : { l:45,r:12,t:78,b:38 },
+        shapes: shapes, showlegend: false,
+        annotations: [_fischerCitation]
+    };
+
+    if (!fullsize) {
+        var thumbWrap = document.getElementById('thumbnail-wrap');
+        if (thumbWrap) thumbWrap.style.display = 'none';
+        el.innerHTML = '<div style="position:relative;"><div id="az-chart" style="width:100%;height:340px;border-radius:6px;overflow:hidden;"></div>' + _archSaveBtnHTML('az-chart', 'TDR_Anomaly') + '<button onclick="openPlotModal()" title="Expand" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;">\u26F6</button></div>';
+        Plotly.newPlot('az-chart', [heatmap], layout, { responsive:true,displayModeBar:false });
+    } else {
+        Plotly.newPlot(targetId, [heatmap], layout, { responsive:true,displayModeBar:true,displaylogo:false });
+    }
+}
+
+
+// ── VP vs Vortex Favorability Scatter Renderer ──────────────────────────
+
+function renderVPScatterInto(targetId, json, fullsize) {
+    var el = document.getElementById(targetId); if (!el) return;
+    var points = json.points, ellipses = json.ellipses, colorBy = json.color_by;
+
+    if (!points || points.length === 0) {
+        el.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F No VP scatter data available. SHIPS variables (vmpi, rhlo, shgc) may not be in the Zarr stores.</div>';
+        return;
+    }
+
+    // If vortex metrics haven't been computed yet (server still loading), show status
+    if (json.vortex_ready === false) {
+        var nVF = 0;
+        for (var vi = 0; vi < points.length; vi++) {
+            if (points[vi].vortex_favorability !== null && points[vi].vortex_favorability !== undefined) nVF++;
+        }
+        if (nVF === 0) {
+            el.innerHTML = '<div class="explorer-status">\u23F3 Vortex metrics still loading on the server (' + points.length + ' cases have VP data). Please wait ~1 min and refresh.</div>';
+            return;
+        }
+    }
+
+    var fontSize = fullsize ? { title:13,axis:12,tick:10 } : { title:10,axis:9,tick:8 };
+
+    // Separate points with and without vortex favorability
+    var withVF = points.filter(function(p) { return p.vortex_favorability !== null && p.vortex_favorability !== undefined; });
+
+    var traces = [];
+    var dvmaxLabel = colorBy === 'dvmax_12h' ? '12-h \u0394Vmax (kt)' : '24-h \u0394Vmax (kt)';
+    var dvmaxColorscale = [
+        [0.0, 'rgb(0,128,128)'], [0.15, 'rgb(64,175,175)'],
+        [0.3, 'rgb(140,210,210)'], [0.4, 'rgb(200,235,235)'],
+        [0.5, 'rgb(245,245,245)'],
+        [0.6, 'rgb(253,219,199)'], [0.7, 'rgb(244,165,130)'],
+        [0.85, 'rgb(214,96,77)'], [1.0, 'rgb(178,24,43)']
+    ];
+
+    // ── Helper: build marker for background cases ──
+    function buildMarker(dvs, showColorbar) {
+        var m = {
+            size: 7, color: dvs, colorscale: dvmaxColorscale, cmin: -30, cmax: 30,
+            opacity: 0.85,
+            line: { color: 'rgba(255,255,255,0.5)', width: 0.75 }
+        };
+        if (showColorbar) {
+            m.colorbar = {
+                title: { text: dvmaxLabel, font: { color: '#ccc', size: fontSize.tick } },
+                tickfont: { color: '#ccc', size: fontSize.tick }, thickness: 12, len: 0.85
+            };
+        } else {
+            m.showscale = false;
+        }
+        return m;
+    }
+
+    // ── Find current case in withVF for highlighting ──
+    var curCase = null;
+    for (var ci = 0; ci < withVF.length; ci++) {
+        if (withVF[ci].case_index === currentCaseIndex) { curCase = withVF[ci]; break; }
+    }
+
+    if (withVF.length > 0) {
+        var vps = withVF.map(function(p) { return p.vp; });
+        var vfs = withVF.map(function(p) { return p.vortex_favorability; });
+        var vhs = withVF.map(function(p) { return p.vortex_height; });
+        var vws = withVF.map(function(p) { return p.vortex_width; });
+        var dvs = withVF.map(function(p) { return p[colorBy] || 0; });
+        var vmaxs = withVF.map(function(p) { return p.vmax_kt != null ? p.vmax_kt : ''; });
+        var labels = withVF.map(function(p) { return p.storm_name + ' ' + p.datetime; });
+
+        // ── Left panel: VP vs Vortex Favorability (xaxis, yaxis) ──
+        traces.push({
+            x: vps, y: vfs, mode: 'markers', type: 'scatter',
+            xaxis: 'x', yaxis: 'y',
+            marker: buildMarker(dvs, false),
+            text: labels, customdata: vmaxs,
+            hovertemplate: '<b>%{text}</b><br>Vmax: %{customdata} kt<br>VP: %{x:.1f}<br>Vortex Fav: %{y:.2f}<br>\u0394Vmax: %{marker.color:.0f} kt<extra></extra>',
+            name: 'Cases', legendgroup: 'cases'
+        });
+
+        // ── Right panel: Vortex Width vs Vortex Height (xaxis2, yaxis2) ──
+        traces.push({
+            x: vws, y: vhs, mode: 'markers', type: 'scatter',
+            xaxis: 'x2', yaxis: 'y2',
+            marker: buildMarker(dvs, true),
+            text: labels, customdata: vmaxs,
+            hovertemplate: '<b>%{text}</b><br>Vmax: %{customdata} kt<br>Width: %{x:.2f}<br>Height: %{y:.2f}<br>\u0394Vmax: %{marker.color:.0f} kt<extra></extra>',
+            name: 'Cases', legendgroup: 'cases', showlegend: false
+        });
+    }
+
+    // ── 2σ ellipses (filtered: overwater, ≤100 kt) ──
+    var grpColors = { RI: 'rgba(239,68,68,0.6)', SI: 'rgba(251,191,36,0.6)', NI: 'rgba(96,165,250,0.6)' };
+    var dtlKey = colorBy === 'dvmax_24h' ? 'dtl_min_24h' : 'dtl_min_12h';
+
+    // Filter for ellipse-eligible cases: overwater (DTL > 0) and Vmax ≤ 100 kt
+    var ellipseEligible = withVF.filter(function(p) {
+        if (p.vmax_kt == null || p.vmax_kt > 100) return false;
+        var dtl = p[dtlKey];
+        if (dtl == null || dtl <= 0) return false;
+        return true;
+    });
+
+    // Group eligible cases by intensification rate
+    var vpGroups = { RI: { vp: [], vf: [] }, SI: { vp: [], vf: [] }, NI: { vp: [], vf: [] } };
+    var hwGroups = { RI: { h: [], w: [] }, SI: { h: [], w: [] }, NI: { h: [], w: [] } };
+    var nEllipse = 0;
+    for (var gi = 0; gi < ellipseEligible.length; gi++) {
+        var p = ellipseEligible[gi];
+        if (p.vortex_favorability === null || p.vortex_favorability === undefined) continue;
+        var dv = p[colorBy] || 0;
+        var gk = dv >= 20 ? 'RI' : (dv > 0 ? 'SI' : 'NI');
+        vpGroups[gk].vp.push(p.vp);
+        vpGroups[gk].vf.push(p.vortex_favorability);
+        if (p.vortex_height != null && p.vortex_width != null) {
+            hwGroups[gk].h.push(p.vortex_height);
+            hwGroups[gk].w.push(p.vortex_width);
+        }
+        nEllipse++;
+    }
+
+    // Helper: compute mean and std of an array
+    function _meanStd(arr) {
+        var n = arr.length; if (n === 0) return { m: 0, s: 0 };
+        var m = arr.reduce(function(a,b){return a+b;},0) / n;
+        var s = Math.sqrt(arr.reduce(function(a,b){return a+(b-m)*(b-m);},0) / n);
+        return { m: m, s: s };
+    }
+
+    var grpNames = ['RI', 'SI', 'NI'];
+    for (var gIdx = 0; gIdx < grpNames.length; gIdx++) {
+        var grp = grpNames[gIdx];
+        var vg = vpGroups[grp];
+        if (vg.vp.length < 3) continue;
+
+        // Left panel ellipse (VP vs Favorability)
+        var vpStat = _meanStd(vg.vp), vfStat = _meanStd(vg.vf);
+        var ellX = [], ellY = [];
+        for (var a = 0; a <= 360; a += 5) {
+            var rad = a * Math.PI / 180;
+            ellX.push(vpStat.m + 2 * vpStat.s * Math.cos(rad));
+            ellY.push(vfStat.m + 2 * vfStat.s * Math.sin(rad));
+        }
+        traces.push({
+            x: ellX, y: ellY, mode: 'lines', type: 'scatter',
+            xaxis: 'x', yaxis: 'y',
+            line: { color: grpColors[grp] || 'rgba(255,255,255,0.4)', width: 2, dash: 'dot' },
+            name: grp + ' (2\u03c3, n=' + vg.vp.length + ')', legendgroup: grp, showlegend: true
+        });
+        traces.push({
+            x: [vpStat.m], y: [vfStat.m], mode: 'markers', type: 'scatter',
+            xaxis: 'x', yaxis: 'y',
+            marker: { symbol: 'square', size: 10, color: grpColors[grp] || '#fff', line: { color: '#fff', width: 1 } },
+            name: grp + ' mean', legendgroup: grp, showlegend: false
+        });
+
+        // Right panel ellipse (Width vs Height)
+        var hw = hwGroups[grp];
+        if (hw && hw.h.length >= 3) {
+            var hStat = _meanStd(hw.h), wStat = _meanStd(hw.w);
+            var eX2 = [], eY2 = [];
+            for (var a2 = 0; a2 <= 360; a2 += 5) {
+                var r2 = a2 * Math.PI / 180;
+                eX2.push(wStat.m + 2 * wStat.s * Math.cos(r2));
+                eY2.push(hStat.m + 2 * hStat.s * Math.sin(r2));
+            }
+            traces.push({
+                x: eX2, y: eY2, mode: 'lines', type: 'scatter',
+                xaxis: 'x2', yaxis: 'y2',
+                line: { color: grpColors[grp] || 'rgba(255,255,255,0.4)', width: 2, dash: 'dot' },
+                name: grp + ' (2\u03c3)', legendgroup: grp, showlegend: false
+            });
+            traces.push({
+                x: [wStat.m], y: [hStat.m], mode: 'markers', type: 'scatter',
+                xaxis: 'x2', yaxis: 'y2',
+                marker: { symbol: 'square', size: 10, color: grpColors[grp] || '#fff', line: { color: '#fff', width: 1 } },
+                name: grp + ' mean', legendgroup: grp, showlegend: false
+            });
+        }
+    }
+
+    // ── Current case highlight (rendered last = on top) ──
+    if (curCase) {
+        var curLabel = curCase.storm_name + ' ' + curCase.datetime;
+        var curDv = curCase[colorBy] || 0;
+        var curVmax = curCase.vmax_kt != null ? curCase.vmax_kt + ' kt' : 'N/A';
+        var starStyle = {
+            symbol: 'star', size: 18,
+            color: '#facc15', opacity: 1,
+            line: { color: '#ffffff', width: 2 }
+        };
+        // Left panel
+        traces.push({
+            x: [curCase.vp], y: [curCase.vortex_favorability],
+            mode: 'markers', type: 'scatter',
+            xaxis: 'x', yaxis: 'y',
+            marker: starStyle,
+            text: [curLabel],
+            hovertemplate: '<b>%{text} \u2605</b><br>Vmax: ' + curVmax + '<br>VP: %{x:.1f}<br>Vortex Fav: %{y:.2f}<br>\u0394Vmax: ' + curDv + ' kt<extra></extra>',
+            name: '\u2605 Current', legendgroup: 'current', showlegend: false
+        });
+        // Right panel
+        if (curCase.vortex_height !== null && curCase.vortex_width !== null) {
+            traces.push({
+                x: [curCase.vortex_width], y: [curCase.vortex_height],
+                mode: 'markers', type: 'scatter',
+                xaxis: 'x2', yaxis: 'y2',
+                marker: starStyle,
+                text: [curLabel],
+                hovertemplate: '<b>%{text} \u2605</b><br>Vmax: ' + curVmax + '<br>Width: %{x:.2f}<br>Height: %{y:.2f}<br>\u0394Vmax: ' + curDv + ' kt<extra></extra>',
+                name: '\u2605 Current', legendgroup: 'current', showlegend: false
+            });
+        }
+    }
+
+    var plotBg = '#0a1628';
+    var ellipseNote = nEllipse > 0 ? '  |  Ellipses: overwater, \u2264100 kt (n=' + nEllipse + ')' : '';
+    var title = 'VP vs Vortex Favorability & Decomposition' + ellipseNote;
+    var layout = {
+        title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.98, x: 0.5, xanchor: 'center' },
+        paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+        // Left panel: VP vs Favorability
+        xaxis:  { title: { text: 'Ventilation Proxy', font: { color: '#aaa', size: fontSize.axis } },
+                  tickfont: { color: '#aaa', size: fontSize.tick },
+                  gridcolor: 'rgba(255,255,255,0.06)', zeroline: false,
+                  domain: [0, 0.45] },
+        yaxis:  { title: { text: 'Vortex Favorability', font: { color: '#aaa', size: fontSize.axis } },
+                  tickfont: { color: '#aaa', size: fontSize.tick },
+                  gridcolor: 'rgba(255,255,255,0.06)', zeroline: false },
+        // Right panel: Vortex Height vs Width
+        xaxis2: { title: { text: 'Anomalous Vortex Width (W1\u2013W2)', font: { color: '#aaa', size: fontSize.axis } },
+                  tickfont: { color: '#aaa', size: fontSize.tick },
+                  gridcolor: 'rgba(255,255,255,0.06)', zeroline: false,
+                  domain: [0.55, 1.0], anchor: 'y2' },
+        yaxis2: { title: { text: 'Anomalous Vortex Height (H1)', font: { color: '#aaa', size: fontSize.axis } },
+                  tickfont: { color: '#aaa', size: fontSize.tick },
+                  gridcolor: 'rgba(255,255,255,0.06)', zeroline: false,
+                  anchor: 'x2' },
+        margin: fullsize ? { l:60,r:60,t:60,b:65 } : { l:50,r:50,t:50,b:55 },
+        showlegend: true,
+        legend: { font: { color: '#aaa', size: 9 }, bgcolor: 'rgba(0,0,0,0.3)',
+                  x: 0.46, y: 0.98, xanchor: 'right', yanchor: 'top',
+                  orientation: 'h' },
+        hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 11 } },
+        annotations: [Object.assign({}, _fischerCitation, { y: -0.12 })]
+    };
+
+    if (!fullsize) {
+        var thumbWrap = document.getElementById('thumbnail-wrap');
+        if (thumbWrap) thumbWrap.style.display = 'none';
+        el.innerHTML = '<div style="position:relative;"><div id="az-chart" style="width:100%;height:360px;border-radius:6px;overflow:hidden;"></div>' + _archSaveBtnHTML('az-chart', 'VP_Scatter') + '<button onclick="openPlotModal()" title="Expand" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;">\u26F6</button></div>' +
+            '<div style="display:flex;gap:6px;justify-content:center;margin-top:6px;">' +
+            '<button class="cs-btn" onclick="fetchVPScatter(\'dvmax_12h\')" style="font-size:10px;padding:2px 8px;">12-h \u0394Vmax</button>' +
+            '<button class="cs-btn" onclick="fetchVPScatter(\'dvmax_24h\')" style="font-size:10px;padding:2px 8px;">24-h \u0394Vmax</button>' +
+            '</div>';
+        Plotly.newPlot('az-chart', traces, layout, { responsive:true,displayModeBar:false });
+    } else {
+        Plotly.newPlot(targetId, traces, layout, { responsive:true,displayModeBar:true,displaylogo:false });
+    }
+}
+
 
 function buildAzOverlayContours(json, radius_km, height_km) {
     if (!json.overlay) return []; var ov = json.overlay; var ovData = ov.azimuthal_mean; if (!ovData) return [];
@@ -1201,7 +4673,7 @@ function renderQuadrantMeansInto(targetId, json, fullsize) {
     var plotBg = '#0a1628';
     var layout = {
         paper_bgcolor: plotBg, plot_bgcolor: plotBg,
-        margin: fullsize ? { l:55, r:70, t:70, b:50 } : { l:45, r:55, t:62, b:42 },
+        margin: fullsize ? { l:55, r:70, t:100, b:50 } : { l:45, r:55, t:84, b:42 },
         showlegend: false,
         annotations: annotations,
         shapes: shapes,
@@ -1307,7 +4779,7 @@ function renderQuadrantMeansInto(targetId, json, fullsize) {
     if (!fullsize) {
         var thumbWrap = document.getElementById('thumbnail-wrap');
         if (thumbWrap) thumbWrap.style.display = 'none';
-        el.innerHTML = '<div style="position:relative;"><div id="sq-chart" style="width:100%;height:400px;border-radius:6px;overflow:hidden;"></div><button onclick="openPlotModal()" title="Expand to fullscreen" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">\u26F6</button></div><div style="font-size:11px;color:var(--slate);text-align:center;margin-top:4px;">Hover \u00b7 zoom \u00b7 pan \u00b7 \u26F6 expand</div>';
+        el.innerHTML = '<div style="position:relative;"><div id="sq-chart" style="width:100%;height:400px;border-radius:6px;overflow:hidden;"></div>' + _archSaveBtnHTML('sq-chart', 'TDR_Profile') + '<button onclick="openPlotModal()" title="Expand to fullscreen" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">\u26F6</button></div><div style="font-size:11px;color:var(--slate);text-align:center;margin-top:4px;">Hover \u00b7 zoom \u00b7 pan \u00b7 \u26F6 expand</div>';
         Plotly.newPlot('sq-chart', traces, layout, { responsive:true, displayModeBar:false, displaylogo:false });
         var panelInner = document.getElementById('side-panel-inner');
         if (panelInner) panelInner.scrollTop = 0;
@@ -1362,6 +4834,8 @@ function passesFilters(c) {
     if (vmax < filters.minIntensity || vmax > filters.maxIntensity) return false;
     if (filters.minVmaxChange !== -100 || filters.maxVmaxChange !== 85) { if (c['24-h_vmax_change_kt'] === null) return false; var vc = c['24-h_vmax_change_kt']; if (vc < filters.minVmaxChange || vc > filters.maxVmaxChange) return false; }
     if (filters.minTilt !== 0 || filters.maxTilt !== 200) { if (c.tilt_magnitude_km === null) return false; if (c.tilt_magnitude_km < filters.minTilt || c.tilt_magnitude_km > filters.maxTilt) return false; }
+    if (filters.minWspd05 !== 0 || filters.maxWspd05 !== 100) { if (c.max_er_wspd_05km == null) return false; if (c.max_er_wspd_05km < filters.minWspd05 || c.max_er_wspd_05km > filters.maxWspd05) return false; }
+    if (filters.minWspd20 !== 0 || filters.maxWspd20 !== 100) { if (c.max_er_wspd_20km == null) return false; if (c.max_er_wspd_20km < filters.minWspd20 || c.max_er_wspd_20km > filters.maxWspd20) return false; }
     if (c.year < filters.minYear || c.year > filters.maxYear) return false;
     if (filters.stormName !== 'all' && c.storm_name !== filters.stormName) return false;
     return true;
@@ -1394,6 +4868,20 @@ function updateTiltSlider() {
     document.getElementById('min-tilt-value').textContent = min; document.getElementById('max-tilt-value').textContent = max;
     var rf = document.getElementById('tilt-range-fill'); rf.style.left = (min/200*100)+'%'; rf.style.width = ((max-min)/200*100)+'%'; updateMarkers();
 }
+function updateWspd05Slider() {
+    var min = parseInt(document.getElementById('min-wspd05').value), max = parseInt(document.getElementById('max-wspd05').value);
+    if (min > max) { document.getElementById('min-wspd05').value = max; min = max; }
+    filters.minWspd05 = min; filters.maxWspd05 = max;
+    document.getElementById('min-wspd05-value').textContent = min; document.getElementById('max-wspd05-value').textContent = max;
+    var rf = document.getElementById('wspd05-range-fill'); rf.style.left = (min/100*100)+'%'; rf.style.width = ((max-min)/100*100)+'%'; updateMarkers();
+}
+function updateWspd20Slider() {
+    var min = parseInt(document.getElementById('min-wspd20').value), max = parseInt(document.getElementById('max-wspd20').value);
+    if (min > max) { document.getElementById('min-wspd20').value = max; min = max; }
+    filters.minWspd20 = min; filters.maxWspd20 = max;
+    document.getElementById('min-wspd20-value').textContent = min; document.getElementById('max-wspd20-value').textContent = max;
+    var rf = document.getElementById('wspd20-range-fill'); rf.style.left = (min/100*100)+'%'; rf.style.width = ((max-min)/100*100)+'%'; updateMarkers();
+}
 function updateYearFilter() { var min = parseInt(document.getElementById('min-year').value), max = parseInt(document.getElementById('max-year').value); if (min > max) { document.getElementById('min-year').value = max; min = max; } filters.minYear = min; filters.maxYear = max; updateMarkers(); }
 function updateStormFilter() { filters.stormName = document.getElementById('storm-select').value || 'all'; updateMarkers(); }
 
@@ -1401,6 +4889,8 @@ function resetFilters() {
     filters.minIntensity=0; filters.maxIntensity=200; document.getElementById('min-intensity').value=0; document.getElementById('max-intensity').value=200; updateIntensitySlider();
     filters.minVmaxChange=-100; filters.maxVmaxChange=85; document.getElementById('min-vmax-change').value=-100; document.getElementById('max-vmax-change').value=85; updateVmaxChangeSlider();
     filters.minTilt=0; filters.maxTilt=200; document.getElementById('min-tilt').value=0; document.getElementById('max-tilt').value=200; updateTiltSlider();
+    filters.minWspd05=0; filters.maxWspd05=100; document.getElementById('min-wspd05').value=0; document.getElementById('max-wspd05').value=100; updateWspd05Slider();
+    filters.minWspd20=0; filters.maxWspd20=100; document.getElementById('min-wspd20').value=0; document.getElementById('max-wspd20').value=100; updateWspd20Slider();
     filters.minYear=1997; filters.maxYear=2024; document.getElementById('min-year').value=1997; document.getElementById('max-year').value=2024;
     filters.stormName='all'; document.getElementById('storm-select').value=''; updateMarkers();
     // Also reset case dropdown
@@ -1416,10 +4906,40 @@ function initializeFilters() {
     document.getElementById('max-vmax-change').addEventListener('input', updateVmaxChangeSlider);
     document.getElementById('min-tilt').addEventListener('input', updateTiltSlider);
     document.getElementById('max-tilt').addEventListener('input', updateTiltSlider);
+    document.getElementById('min-wspd05').addEventListener('input', updateWspd05Slider);
+    document.getElementById('max-wspd05').addEventListener('input', updateWspd05Slider);
+    document.getElementById('min-wspd20').addEventListener('input', updateWspd20Slider);
+    document.getElementById('max-wspd20').addEventListener('input', updateWspd20Slider);
     document.getElementById('min-year').addEventListener('change', updateYearFilter);
     document.getElementById('max-year').addEventListener('change', updateYearFilter);
     // Storm filtering handled by two-step handler at top of file
     updateIntensitySlider(); updateVmaxChangeSlider(); updateTiltSlider();
+    updateWspd05Slider(); updateWspd20Slider();
+}
+
+// ── Fetch enriched metadata (max wind speeds from API) ───────
+function _fetchEnrichedWindData(dataType) {
+    fetch(API_BASE + '/metadata_all?data_type=' + dataType)
+        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function(enriched) {
+            var target = dataType === 'merge' ? mergeData : allData;
+            if (!target || !target.cases) return;
+            // Build lookup by case_index
+            var lookup = {};
+            enriched.cases.forEach(function(ec) { lookup[ec.case_index] = ec; });
+            // Merge max wind speed fields into existing case objects
+            var merged = 0;
+            target.cases.forEach(function(c) {
+                var ec = lookup[c.case_index];
+                if (ec) {
+                    if (ec.max_er_wspd_05km != null) { c.max_er_wspd_05km = ec.max_er_wspd_05km; merged++; }
+                    if (ec.max_er_wspd_20km != null) { c.max_er_wspd_20km = ec.max_er_wspd_20km; }
+                }
+            });
+            console.log('Enriched ' + merged + ' ' + dataType + ' cases with max wind speed data');
+            updateMarkers();
+        })
+        .catch(function(err) { console.warn('Enriched metadata not available (' + dataType + '): ' + err.message); });
 }
 
 // ── Pre-warm API ─────────────────────────────────────────────
@@ -1429,7 +4949,7 @@ fetch(API_BASE + '/health').catch(function(){});
 var mergeData = null;
 fetch('tc_radar_metadata_merge.json')
     .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-    .then(function(data) { mergeData = data; console.log('Merge metadata loaded: ' + data.total_cases + ' cases'); })
+    .then(function(data) { mergeData = data; console.log('Merge metadata loaded: ' + data.total_cases + ' cases'); _fetchEnrichedWindData('merge'); })
     .catch(function(err) { console.warn('Merge metadata not available: ' + err.message); });
 
 fetch('tc_radar_metadata.json')
@@ -1467,7 +4987,12 @@ fetch('tc_radar_metadata.json')
             markers.addLayer(marker);
         });
 
-        map.addLayer(markers);
+        // Default view: tracks (load IBTrACS); clusters kept ready but not added to map
+        if (_mapViewMode === 'tracks') {
+            _loadIBTrACSData(function() { _renderArchiveTracks(); });
+        } else {
+            map.addLayer(markers);
+        }
 
         var legend = L.control({ position:'bottomright' });
         legend.onAdd = function() {
@@ -1477,6 +5002,9 @@ fetch('tc_radar_metadata.json')
         };
         legend.addTo(map);
         initializeFilters();
+
+        // Fetch enriched metadata from API to populate max wind speed fields
+        _fetchEnrichedWindData('swath');
 
         // Check for composite permalink in URL hash
         _checkCompPermalink();
@@ -1502,6 +5030,279 @@ function _injectDataTypeToggle() {
     grp.parentNode.insertBefore(sep, grp.nextSibling);
 }
 _injectDataTypeToggle();
+
+// ══════════════════════════════════════════════════════════════
+// ── Track View (Clusters / Tracks toggle) ─────────────────────
+// ══════════════════════════════════════════════════════════════
+var _mapViewMode = 'tracks';    // 'cluster' or 'tracks'
+var _trackViewLayer = null;     // L.layerGroup for track polylines + markers
+var _trackCanvasRenderer = null;
+var _allTracks = {};            // IBTrACS track data keyed by SID
+var _tracksLoaded = false;
+var _tracksLoading = false;
+var _ibtStorms = [];            // IBTrACS storm metadata array
+var _ibtStormsBySID = {};       // Lookup by SID
+var _tdrToSID = {};             // Mapping: "STORMNAME|YEAR" → IBTrACS SID
+
+// Helper: check if IBTrACS nature code represents TC phase
+function _isTCNature(n) {
+    if (!n) return true;  // Assume TC if no nature data
+    return n === 'TS' || n === 'SS';
+}
+
+// Build TDR → IBTrACS SID mapping
+function _buildTDRtoSIDMapping() {
+    if (!_ibtStorms.length) return;
+    _tdrToSID = {};
+    _ibtStorms.forEach(function(s) {
+        if (s.name && s.year) {
+            var key = s.name + '|' + s.year;
+            // Some storms share name+year across basins; prefer NA/EP
+            if (!_tdrToSID[key] || (s.basin === 'NA' || s.basin === 'EP')) {
+                _tdrToSID[key] = s.sid;
+            }
+        }
+    });
+}
+
+// Load IBTrACS storms + tracks (chunked)
+function _loadIBTrACSData(onDone) {
+    if (_tracksLoaded || _tracksLoading) { if (onDone) onDone(); return; }
+    _tracksLoading = true;
+
+    // 1) Load storm metadata
+    var stormsReady = false, tracksReady = false;
+    function checkDone() { if (stormsReady && tracksReady) { _tracksLoaded = true; _tracksLoading = false; _buildTDRtoSIDMapping(); console.log('IBTrACS loaded: ' + _ibtStorms.length + ' storms, ' + Object.keys(_allTracks).length + ' tracks'); if (onDone) onDone(); } }
+
+    fetch('ibtracs_storms.json')
+        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function(data) {
+            _ibtStorms = data.storms || [];
+            _ibtStorms.forEach(function(s) { _ibtStormsBySID[s.sid] = s; });
+            stormsReady = true;
+            checkDone();
+        })
+        .catch(function(err) { console.warn('Failed to load IBTrACS storms: ' + err.message); _tracksLoading = false; });
+
+    // 2) Load chunked tracks
+    fetch('ibtracs_tracks_manifest.json')
+        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function(manifest) {
+            var nChunks = manifest.chunks.length;
+            var loaded = 0;
+            manifest.chunks.forEach(function(chunkName) {
+                fetch(chunkName)
+                    .then(function(r) { return r.json(); })
+                    .then(function(chunk) {
+                        var keys = Object.keys(chunk);
+                        for (var i = 0; i < keys.length; i++) { _allTracks[keys[i]] = chunk[keys[i]]; }
+                        loaded++;
+                        if (loaded === nChunks) { tracksReady = true; checkDone(); }
+                    })
+                    .catch(function(err) { console.warn('Failed to load track chunk ' + chunkName + ': ' + err.message); loaded++; if (loaded === nChunks) { tracksReady = true; checkDone(); } });
+            });
+        })
+        .catch(function() {
+            // Fallback: single file
+            fetch('ibtracs_tracks.json')
+                .then(function(r) { return r.json(); })
+                .then(function(data) { _allTracks = data; tracksReady = true; checkDone(); })
+                .catch(function(err) { console.warn('Failed to load tracks: ' + err.message); _tracksLoading = false; });
+        });
+}
+
+// Inject the Clusters / Tracks toggle into the toolbar
+function _injectViewToggle() {
+    var toolbar = document.querySelector('.map-toolbar');
+    if (!toolbar) return;
+    var grp = document.createElement('div');
+    grp.className = 'toolbar-group view-toggle-group';
+    grp.innerHTML =
+        '<div class="archive-view-toggle">' +
+            '<button class="archive-view-btn" data-view="cluster" onclick="setArchiveMapView(\'cluster\')" title="Show clustered markers">' +
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="6" cy="6" r="2"/><circle cx="18" cy="8" r="2"/><circle cx="8" cy="18" r="2"/><circle cx="17" cy="17" r="2"/></svg>' +
+                ' Clusters' +
+            '</button>' +
+            '<button class="archive-view-btn active" data-view="tracks" onclick="setArchiveMapView(\'tracks\')" title="Show best-track lines with TDR markers">' +
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l4-4 4 4 4-8 5 6"/><circle cx="7" cy="13" r="1.5" fill="currentColor"/><circle cx="15" cy="9" r="1.5" fill="currentColor"/></svg>' +
+                ' Tracks' +
+            '</button>' +
+        '</div>';
+    // Insert after the Reset button (before the count span)
+    var countSpan = toolbar.querySelector('.toolbar-count');
+    if (countSpan) {
+        toolbar.insertBefore(grp, countSpan);
+    } else {
+        toolbar.appendChild(grp);
+    }
+}
+_injectViewToggle();
+
+// Switch between cluster and track views
+window.setArchiveMapView = function(mode) {
+    if (mode === _mapViewMode) return;
+    _mapViewMode = mode;
+
+    // Update toggle button active states
+    document.querySelectorAll('.archive-view-btn').forEach(function(btn) {
+        btn.classList.toggle('active', btn.getAttribute('data-view') === mode);
+    });
+
+    if (mode === 'cluster') {
+        // Remove tracks, show clusters
+        if (_trackViewLayer) map.removeLayer(_trackViewLayer);
+        map.addLayer(markers);
+    } else {
+        // Show tracks — load IBTrACS if not yet loaded
+        map.removeLayer(markers);
+        if (!_tracksLoaded) {
+            showToast('Loading best-track data (~45 MB)…', 'info', 4000);
+            _loadIBTrACSData(function() {
+                _renderArchiveTracks();
+            });
+        } else {
+            _renderArchiveTracks();
+        }
+    }
+};
+
+// Get unique storms from current active filtered data
+function _getFilteredTDRStorms() {
+    var data = _getActiveData();
+    if (!data) return {};
+    // Group filtered cases by storm_name|year
+    var storms = {};
+    data.cases.forEach(function(c) {
+        if (!passesFilters(c)) return;
+        var key = c.storm_name + '|' + c.year;
+        if (!storms[key]) storms[key] = { name: c.storm_name, year: c.year, cases: [] };
+        storms[key].cases.push(c);
+    });
+    return storms;
+}
+
+// Main track rendering function
+function _renderArchiveTracks() {
+    if (!_trackViewLayer) {
+        _trackCanvasRenderer = L.canvas({ padding: 0.5 });
+        _trackViewLayer = L.layerGroup();
+    }
+    _trackViewLayer.clearLayers();
+
+    var tdrStorms = _getFilteredTDRStorms();
+    var stormKeys = Object.keys(tdrStorms);
+    var rendered = 0;
+
+    stormKeys.forEach(function(key) {
+        var storm = tdrStorms[key];
+        var sid = _tdrToSID[key];
+        var track = sid ? _allTracks[sid] : null;
+
+        if (track && track.length >= 2) {
+            // Draw best-track polyline
+            _drawBestTrack(track, storm, sid);
+            rendered++;
+        }
+
+        // Always draw TDR center-fix markers (even if no best-track match)
+        storm.cases.forEach(function(c) {
+            var color = getIntensityColor(c.vmax_kt);
+            var cm = L.circleMarker([c.latitude, c.longitude], {
+                renderer: _trackCanvasRenderer,
+                radius: 5,
+                color: '#fff',
+                weight: 1.5,
+                fillColor: color,
+                fillOpacity: 0.95,
+                opacity: 0.9
+            });
+            cm.bindTooltip(
+                '<strong>' + c.storm_name + '</strong> (' + c.year + ')<br>' +
+                c.datetime + '<br>' +
+                (c.vmax_kt != null ? c.vmax_kt + ' kt' : '') +
+                (c.tilt_magnitude_km != null ? ' · Tilt: ' + c.tilt_magnitude_km.toFixed(1) + ' km' : ''),
+                { className: 'track-tooltip', direction: 'top', offset: [0, -6] }
+            );
+            cm.on('click', function() { openSidePanelById(c.case_index); });
+            _trackViewLayer.addLayer(cm);
+        });
+    });
+
+    _trackViewLayer.addTo(map);
+
+    var nCases = 0;
+    stormKeys.forEach(function(k) { nCases += tdrStorms[k].cases.length; });
+    document.getElementById('filtered-count').textContent = nCases;
+    console.log('Rendered ' + rendered + ' best tracks + TDR markers for ' + stormKeys.length + ' storms');
+}
+
+// Draw a single storm's best-track polyline
+function _drawBestTrack(track, storm, sid) {
+    // Collect valid points
+    var pts = [];
+    for (var i = 0; i < track.length; i++) {
+        if (track[i].la != null && track[i].lo != null) pts.push(track[i]);
+    }
+    if (pts.length < 2) return;
+
+    // Build color-segmented polyline
+    var segColor = _isTCNature(pts[0].n) ? getIntensityColor(pts[0].w) : '#6b7280';
+    var segIsTC = _isTCNature(pts[0].n);
+    var runCoords = [[pts[0].la, pts[0].lo]];
+
+    for (var j = 1; j < pts.length; j++) {
+        var p = pts[j];
+        var isTC = _isTCNature(p.n);
+        var ptColor = isTC ? getIntensityColor(p.w) : '#6b7280';
+
+        if (ptColor !== segColor || isTC !== segIsTC) {
+            if (runCoords.length >= 2) {
+                _addArchiveTrackPolyline(runCoords, segIsTC, segColor, storm);
+            }
+            runCoords = [[pts[j - 1].la, pts[j - 1].lo]];
+            segColor = ptColor;
+            segIsTC = isTC;
+        }
+        runCoords.push([p.la, p.lo]);
+    }
+    if (runCoords.length >= 2) {
+        _addArchiveTrackPolyline(runCoords, segIsTC, segColor, storm);
+    }
+}
+
+function _addArchiveTrackPolyline(coords, isTC, segColor, storm) {
+    var opts = {
+        renderer: _trackCanvasRenderer,
+        interactive: true
+    };
+    if (isTC) {
+        opts.color = segColor;
+        opts.weight = 1.8;
+        opts.opacity = 0.55;
+    } else {
+        opts.color = '#6b7280';
+        opts.weight = 0.8;
+        opts.opacity = 0.2;
+        opts.dashArray = '4,3';
+    }
+    var line = L.polyline(coords, opts);
+    line.bindTooltip(
+        '<strong>' + storm.name + '</strong> (' + storm.year + ')',
+        { sticky: true, className: 'track-tooltip' }
+    );
+    line.on('mouseover', function() { if (isTC) this.setStyle({ weight: 3.5, opacity: 1 }); });
+    line.on('mouseout', function() { if (isTC) this.setStyle({ weight: 1.8, opacity: 0.55 }); });
+    _trackViewLayer.addLayer(line);
+}
+
+// Hook into updateMarkers so track view also refreshes when filters change
+var _origUpdateMarkers = updateMarkers;
+updateMarkers = function() {
+    _origUpdateMarkers();
+    if (_mapViewMode === 'tracks' && _tracksLoaded) {
+        _renderArchiveTracks();
+    }
+};
 
 function switchDataType(dt) {
     if (dt === _activeDataType) return;
@@ -1594,7 +5395,7 @@ function openPlotModal(csJson) {
         container.appendChild(sqDivider); container.appendChild(sqFull);
     }
     modal.classList.add('active'); document.body.style.overflow = 'hidden';
-    var hasCrossSection = !!csJson, hasAzMean = !!_lastAzJson, hasShearQuads = !!_lastSqJson;
+    var hasCrossSection = !!csJson, hasAzMean = !!_lastAzJson || !!_lastHybridAzJson || !!_lastAnomalyAzJson || !!_lastVPScatterJson, hasShearQuads = !!_lastSqJson;
     var hasSub = hasCrossSection || hasAzMean || hasShearQuads;
     if (hasSub) box.classList.add('split'); else box.classList.remove('split');
     csFull.style.display = hasCrossSection?'block':'none'; csDivider.style.display = hasCrossSection?'block':'none';
@@ -1620,7 +5421,7 @@ function openPlotModal(csJson) {
     }
 
     var d = window._lastPlotlyData;
-    var fullLayout = Object.assign({}, d.baseLayout, { title: { text: d.title, font: { color: '#e5e7eb', size: 15 }, y: 0.97, x: 0.5, xanchor: 'center' }, margin: { l:65,r:30,t:d.overlayTraces&&d.overlayTraces.length?76:60,b:55 }, xaxis: Object.assign({}, d.baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }), yaxis: Object.assign({}, d.baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }) });
+    var fullLayout = Object.assign({}, d.baseLayout, { title: { text: d.title, font: { color: '#e5e7eb', size: 15 }, y: 0.97, x: 0.5, xanchor: 'center' }, margin: { l:65,r:30,t:d.overlayTraces&&d.overlayTraces.length?110:94,b:55 }, xaxis: Object.assign({}, d.baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }), yaxis: Object.assign({}, d.baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }) });
     // Scale up annotations for fullscreen
     if (fullLayout.annotations) {
         fullLayout.annotations = fullLayout.annotations.map(function(a) {
@@ -1631,10 +5432,21 @@ function openPlotModal(csJson) {
     var fsShearInset = buildShearInset(_currentSddc, true);
     if (fsShearInset.shapes.length) fullLayout.shapes = (fullLayout.shapes || []).concat(fsShearInset.shapes);
     if (fsShearInset.annotations.length) fullLayout.annotations = (fullLayout.annotations || []).concat(fsShearInset.annotations);
-    var fullHeatmap = Object.assign({}, d.heatmap, { colorbar: Object.assign({}, d.heatmap.colorbar, { title: { text: d.heatmap.colorbar.title.text, font: { color: '#ccc', size: 13 } }, tickfont: { color: '#ccc', size: 11 }, thickness: 16, len: 0.85 }) });
-    Plotly.newPlot('plotly-fullscreen', [fullHeatmap].concat(d.overlayTraces||[]).concat(d.maxTraces||[]), fullLayout, d.config);
+    var fullCbar = { title: { text: d.heatmap.colorbar.title.text, font: { color: '#ccc', size: 13 } }, tickfont: { color: '#ccc', size: 11 }, thickness: 16, len: 0.85 };
+    if (d.tiltTraces && d.tiltTraces.length > 0) {
+        fullCbar.len = 0.45;
+        fullCbar.y = 0.98;
+        fullCbar.yanchor = 'top';
+    }
+    var fullHeatmap = Object.assign({}, d.heatmap, { colorbar: Object.assign({}, d.heatmap.colorbar, fullCbar) });
+    Plotly.newPlot('plotly-fullscreen', [fullHeatmap].concat(d.overlayTraces||[]).concat(d.maxTraces||[]).concat(d.tiltTraces||[]), fullLayout, d.config);
     if (hasCrossSection) renderCrossSectionInto('cs-fullscreen', csJson, true);
-    if (hasAzMean) renderAzimuthalMeanInto('az-fullscreen', _lastAzJson, true);
+    if (hasAzMean) {
+        if (_lastVPScatterJson) renderVPScatterInto('az-fullscreen', _lastVPScatterJson, true);
+        else if (_lastAnomalyAzJson) renderAnomalyAzimuthalMeanInto('az-fullscreen', _lastAnomalyAzJson, true);
+        else if (_lastHybridAzJson) renderHybridAzimuthalMeanInto('az-fullscreen', _lastHybridAzJson, true);
+        else renderAzimuthalMeanInto('az-fullscreen', _lastAzJson, true);
+    }
     if (hasShearQuads) renderQuadrantMeansInto('sq-fullscreen', _lastSqJson, true);
 }
 
@@ -1655,7 +5467,258 @@ function closePlotModal() {
 function openImageModal(url, caption) { document.getElementById('imageModal').style.display = 'block'; document.getElementById('modalImage').src = url; document.getElementById('modalCaption').textContent = caption; }
 function closeImageModal() { document.getElementById('imageModal').style.display = 'none'; }
 document.addEventListener('click', function(e) { if (e.target===document.getElementById('imageModal')) closeImageModal(); });
-document.addEventListener('keydown', function(e) { if (e.key==='Escape') { closeImageModal(); closePlotModal(); } });
+document.addEventListener('keydown', function(e) { if (e.key==='Escape') { closeImageModal(); closePlotModal(); close3DModal(); } });
+
+// ── 3D Isosurface Volume Viewer ───────────────────────────────
+var _last3DJson = null;
+
+function fetch3DVolume() {
+    if (currentCaseIndex === null) return;
+    var variable = document.getElementById('ep-var').value;
+    var btn = document.getElementById('vol-btn');
+    btn.disabled = true; btn.textContent = '\uD83D\uDDA5 Loading\u2026';
+
+    // Check cache
+    var cacheKey = '3d_' + _activeDataType + '_' + currentCaseIndex + '_' + variable;
+    if (_dataCache[cacheKey]) {
+        _last3DJson = _dataCache[cacheKey];
+        open3DModal();
+        btn.disabled = false; btn.textContent = '\uD83D\uDDA5 3D Volume';
+        return;
+    }
+
+    var controller = new AbortController();
+    var timeout = setTimeout(function() { controller.abort(); }, 120000);
+    var url = API_BASE + '/volume?case_index=' + currentCaseIndex + '&variable=' + variable + '&data_type=' + _activeDataType + '&stride=2&max_height_km=15&compact=true';
+    fetch(url, { signal: controller.signal })
+        .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
+        .then(function(json) {
+            _dataCache[cacheKey] = json;
+            _last3DJson = json;
+            open3DModal();
+        })
+        .catch(function(err) {
+            var msg = err.name === 'AbortError' ? 'Request timed out (120s).' : err.message;
+            alert('\u26A0\uFE0F 3D Volume: ' + msg);
+        })
+        .finally(function() { clearTimeout(timeout); btn.disabled = false; btn.textContent = '\uD83D\uDDA5 3D Volume'; });
+}
+
+function open3DModal() {
+    if (!_last3DJson) return;
+    var modal = document.getElementById('vol3DModal');
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+
+    var json = _last3DJson;
+    var vi = json.variable;
+
+    // Build title
+    var meta = json.case_meta || {};
+    var title = (meta.storm_name || '') + '  |  ' + (meta.datetime || '') +
+        (meta.vmax_kt !== null && meta.vmax_kt !== undefined ? ' [' + meta.vmax_kt + ' kt]' : '') +
+        '\n' + vi.display_name + '  \u2014  3D Isosurface';
+
+    // Set up control defaults from data range
+    var isoMin = document.getElementById('vol-iso-min');
+    var isoMax = document.getElementById('vol-iso-max');
+    var surfs = document.getElementById('vol-surfaces');
+    var opac = document.getElementById('vol-opacity');
+    var capBtn = document.getElementById('vol-caps');
+
+    // Reasonable defaults based on variable
+    var dMin = vi.data_min, dMax = vi.data_max;
+    var rangeMin = Math.max(vi.vmin, dMin);
+    var rangeMax = Math.min(vi.vmax, dMax);
+    // For diverging variables (vmin < 0), only show positive isosurfaces by default
+    if (vi.vmin < 0) {
+        rangeMin = Math.max(0, dMin);
+    }
+    // For reflectivity, start at 15 dBZ
+    if (vi.key.indexOf('reflectivity') !== -1) {
+        rangeMin = Math.max(15, rangeMin);
+    }
+
+    isoMin.value = rangeMin.toFixed(1);
+    isoMax.value = rangeMax.toFixed(1);
+    document.getElementById('vol-iso-min-val').textContent = rangeMin.toFixed(1);
+    document.getElementById('vol-iso-max-val').textContent = rangeMax.toFixed(1);
+    document.getElementById('vol-units').textContent = vi.units;
+
+    render3DIsosurface();
+}
+
+function close3DModal() {
+    var modal = document.getElementById('vol3DModal');
+    if (!modal) return;
+    modal.classList.remove('active');
+    document.body.style.overflow = '';
+    Plotly.purge('vol-3d-chart');
+}
+
+function render3DIsosurface() {
+    var json = _last3DJson;
+    if (!json) return;
+
+    var vi = json.variable;
+    var sentinel = json.sentinel;
+
+    var isoMin = parseFloat(document.getElementById('vol-iso-min').value) || vi.vmin;
+    var isoMax = parseFloat(document.getElementById('vol-iso-max').value) || vi.vmax;
+    var nSurfaces = parseInt(document.getElementById('vol-surfaces').value) || 4;
+    var opacity = parseFloat(document.getElementById('vol-opacity').value) || 0.3;
+    var showCaps = document.getElementById('vol-caps').classList.contains('active');
+
+    // Clamp iso range above sentinel
+    if (isoMin <= sentinel + 1) isoMin = sentinel + 1;
+
+    var meta = json.case_meta || {};
+    var title = (meta.storm_name || '') + '  |  ' + (meta.datetime || '') +
+        (meta.vmax_kt !== null && meta.vmax_kt !== undefined ? ' [' + meta.vmax_kt + ' kt]' : '') +
+        '<br><span style="font-size:12px;">' + vi.display_name + ' (' + vi.units + ')  \u2014  3D Isosurface</span>';
+
+    // Handle both compact (x_axis/y_axis/z_axis) and legacy (x/y/z) formats.
+    // Compact sends 1D axis vectors; we reconstruct the flattened meshgrid here.
+    // Legacy sends pre-flattened meshgrid arrays directly.
+    var xFlat, yFlat, zFlat;
+    if (json.x_axis) {
+        // Compact format: reconstruct flattened meshgrid from 1D axes
+        var xA = json.x_axis, yA = json.y_axis, zA = json.z_axis;
+        var shape = json.grid_shape;
+        var nz = shape[0], ny = shape[1], nx = shape[2];
+        var total = nz * ny * nx;
+        xFlat = new Array(total);
+        yFlat = new Array(total);
+        zFlat = new Array(total);
+        var idx = 0;
+        for (var iz = 0; iz < nz; iz++) {
+            for (var iy = 0; iy < ny; iy++) {
+                for (var ix = 0; ix < nx; ix++) {
+                    xFlat[idx] = xA[ix];
+                    yFlat[idx] = yA[iy];
+                    zFlat[idx] = zA[iz];
+                    idx++;
+                }
+            }
+        }
+    } else {
+        // Legacy format: use pre-flattened arrays directly
+        xFlat = json.x;
+        yFlat = json.y;
+        zFlat = json.z;
+    }
+
+    var plotBg = '#0d1117';
+
+    var trace = {
+        type: 'isosurface',
+        x: xFlat,
+        y: yFlat,
+        z: zFlat,
+        value: json.value,
+        isomin: isoMin,
+        isomax: isoMax,
+        surface: { count: nSurfaces, fill: 1.0 },
+        caps: {
+            x: { show: showCaps },
+            y: { show: showCaps },
+            z: { show: showCaps }
+        },
+        opacity: opacity,
+        colorscale: vi.colorscale,
+        cmin: isoMin,
+        cmax: isoMax,
+        colorbar: {
+            title: { text: vi.units, font: { color: '#ccc', size: 12 } },
+            tickfont: { color: '#ccc', size: 10 },
+            thickness: 14,
+            len: 0.7,
+            x: 1.02
+        },
+        showscale: true,
+        hovertemplate: '<b>' + vi.display_name + '</b>: %{value:.1f} ' + vi.units +
+            '<br>X: %{x:.0f} km  Y: %{y:.0f} km<br>Height: %{z:.1f} km<extra></extra>',
+        lighting: {
+            ambient: 0.6,
+            diffuse: 0.7,
+            specular: 0.3,
+            roughness: 0.6,
+            fresnel: 0.3
+        },
+        lightposition: { x: 1000, y: 1000, z: 2000 }
+    };
+
+    // Determine axis ranges — use compact axis vectors if available (faster),
+    // otherwise fall back to first/last of flattened arrays
+    var gs = json.grid_shape; // [nz, ny, nx]
+    var xRange, yRange, zRange;
+    if (json.x_axis) {
+        xRange = [json.x_axis[0], json.x_axis[json.x_axis.length - 1]];
+        yRange = [json.y_axis[0], json.y_axis[json.y_axis.length - 1]];
+        zRange = [json.z_axis[0], json.z_axis[json.z_axis.length - 1]];
+    } else {
+        xRange = [xFlat[0], xFlat[xFlat.length - 1]];
+        yRange = [yFlat[0], yFlat[yFlat.length - 1]];
+        zRange = [zFlat[0], zFlat[zFlat.length - 1]];
+    }
+
+    // Horizontal span (km) vs vertical span
+    var hSpan = Math.max(xRange[1] - xRange[0], yRange[1] - yRange[0]);
+    var vSpan = zRange[1] - zRange[0];
+    var vertExag = Math.min(hSpan / vSpan * 0.25, 8); // Exaggerate vertical but cap it
+
+    var layout = {
+        title: { text: title, font: { color: '#e5e7eb', size: 15 }, y: 0.97, x: 0.5, xanchor: 'center' },
+        paper_bgcolor: plotBg,
+        scene: {
+            bgcolor: plotBg,
+            xaxis: {
+                title: { text: 'East (km)', font: { color: '#aaa', size: 11 } },
+                tickfont: { color: '#888', size: 9 },
+                gridcolor: 'rgba(255,255,255,0.06)',
+                showbackground: true,
+                backgroundcolor: '#0f1419'
+            },
+            yaxis: {
+                title: { text: 'North (km)', font: { color: '#aaa', size: 11 } },
+                tickfont: { color: '#888', size: 9 },
+                gridcolor: 'rgba(255,255,255,0.06)',
+                showbackground: true,
+                backgroundcolor: '#0f1419'
+            },
+            zaxis: {
+                title: { text: 'Height (km)', font: { color: '#aaa', size: 11 } },
+                tickfont: { color: '#888', size: 9 },
+                gridcolor: 'rgba(255,255,255,0.06)',
+                showbackground: true,
+                backgroundcolor: '#111822'
+            },
+            aspectmode: 'manual',
+            aspectratio: { x: 1, y: 1, z: 1 / vertExag },
+            camera: {
+                eye: { x: 0, y: -2.2, z: 0.8 },
+                up: { x: 0, y: 0, z: 1 },
+                center: { x: 0, y: 0, z: -0.1 }
+            }
+        },
+        margin: { l: 0, r: 0, t: 50, b: 0 },
+        hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 12 } }
+    };
+
+    Plotly.newPlot('vol-3d-chart', [trace], layout, {
+        responsive: true,
+        displayModeBar: true,
+        displaylogo: false,
+        modeBarButtonsToRemove: ['toImage', 'resetCameraLastSave3d']
+    });
+}
+
+function toggle3DCaps() {
+    var btn = document.getElementById('vol-caps');
+    btn.classList.toggle('active');
+    render3DIsosurface();
+}
+
 
 // ── Hide scroll prompt on scroll ─────────────────────────────
 var _scrollPromptHidden = false;
@@ -1770,146 +5833,446 @@ function initCompositePanel() {
     if (_compositePanel) return;
     var overlay = document.createElement('div');
     overlay.id = 'composite-panel';
-    overlay.className = 'composite-overlay';
-    overlay.innerHTML =
-        '<div class="composite-box">' +
-            '<div class="composite-header">' +
-                '<div class="composite-header-left">' +
-                    '<span class="composite-logo">\uD83D\uDCCA</span> ' +
-                    '<span class="composite-title">Composite Analysis</span>' +
-                    '<span class="composite-subtitle">Multi-case averaged fields</span>' +
-                '</div>' +
-                '<button class="composite-close" onclick="toggleCompositePanel()">\u2715</button>' +
-            '</div>' +
-            '<div class="composite-body">' +
-                // ── Left: Controls ──
-                '<div class="composite-controls">' +
-                    '<div class="comp-section-title">\uD83C\uDFAF Variable & Grid</div>' +
-                    '<div class="comp-filter-row"><label>Variable</label>' + _varOptionsHTML('comp') + '</div>' +
-                    '<div class="comp-filter-row"><label>Data Type</label>' +
-                        '<select class="explorer-select" id="comp-dtype"><option value="swath">Swath</option><option value="merge">Merge</option></select>' +
-                    '</div>' +
-                    '<div class="comp-filter-row"><label>Coverage</label>' +
-                        '<div style="display:flex;align-items:center;gap:6px;">' +
-                            '<input type="range" id="comp-coverage" min="0" max="100" step="5" value="50" class="az-cov-slider" oninput="document.getElementById(\'comp-cov-val\').textContent=this.value+\'%\'">' +
-                            '<span id="comp-cov-val" style="font-size:11px;font-weight:600;color:var(--cyan);min-width:32px;font-family:\'JetBrains Mono\',monospace;">50%</span>' +
-                        '</div>' +
-                    '</div>' +
-                    '<div class="comp-filter-row"><label>Contour Overlay</label>' +
-                        '<select class="explorer-select" id="comp-overlay" style="font-size:11px;">' +
-                            '<option value="">None</option>' +
-                            '<optgroup label="WCM Recentered (2 km)">' +
-                                '<option value="recentered_tangential_wind">Tangential Wind</option>' +
-                                '<option value="recentered_radial_wind">Radial Wind</option>' +
-                                '<option value="recentered_upward_air_velocity">Vertical Velocity</option>' +
-                                '<option value="recentered_reflectivity">Reflectivity</option>' +
-                                '<option value="recentered_wind_speed">Wind Speed</option>' +
-                                '<option value="recentered_relative_vorticity">Relative Vorticity</option>' +
-                                '<option value="recentered_divergence">Divergence</option>' +
-                            '</optgroup>' +
-                            '<optgroup label="Tilt-Relative">' +
-                                '<option value="total_recentered_tangential_wind">Tangential Wind</option>' +
-                                '<option value="total_recentered_radial_wind">Radial Wind</option>' +
-                                '<option value="total_recentered_upward_air_velocity">Vertical Velocity</option>' +
-                                '<option value="total_recentered_reflectivity">Reflectivity</option>' +
-                                '<option value="total_recentered_wind_speed">Wind Speed</option>' +
-                            '</optgroup>' +
-                            '<optgroup label="Original Swath" id="comp-overlay-original">' +
-                                '<option value="swath_tangential_wind">Tangential Wind</option>' +
-                                '<option value="swath_radial_wind">Radial Wind</option>' +
-                                '<option value="swath_reflectivity">Reflectivity</option>' +
-                                '<option value="swath_wind_speed">Wind Speed</option>' +
-                            '</optgroup>' +
-                        '</select>' +
-                        '<div style="display:flex;align-items:center;gap:5px;margin-top:2px;">' +
-                            '<label style="font-size:9px;white-space:nowrap;margin:0;">Int:</label>' +
-                            '<input type="number" id="comp-contour-int" value="" placeholder="auto" style="width:55px;padding:2px 4px;font-size:10px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);color:var(--text);">' +
-                        '</div>' +
-                    '</div>' +
-                    '<div class="comp-section-title" style="margin-top:14px;">\uD83C\uDFA8 Display</div>' +
-                    '<div class="comp-filter-row"><label>Colormap</label>' +
-                        '<select class="explorer-select" id="comp-cmap" style="font-size:11px;" onchange="applyCompCmap()">' +
-                            '<option value="">Default (from variable)</option>' +
-                            '<optgroup label="Sequential"><option value="Viridis">Viridis</option><option value="Inferno">Inferno</option><option value="Magma">Magma</option><option value="Plasma">Plasma</option><option value="Cividis">Cividis</option><option value="Hot">Hot</option><option value="YlOrRd">YlOrRd</option><option value="YlGnBu">YlGnBu</option><option value="Blues">Blues</option><option value="Reds">Reds</option><option value="Greys">Greys</option></optgroup>' +
-                            '<optgroup label="Diverging"><option value="RdBu">RdBu (red-blue)</option><option value=\'[[0,"rgb(5,10,172)"],[0.5,"rgb(255,255,255)"],[1,"rgb(178,10,28)"]]\'>BuWtRd (blue-white-red)</option><option value="Picnic">Picnic</option><option value="Portland">Portland</option></optgroup>' +
-                            '<optgroup label="Other"><option value="Jet">Jet</option><option value="Rainbow">Rainbow</option><option value="Electric">Electric</option><option value="Earth">Earth</option><option value="Blackbody">Blackbody</option></optgroup>' +
-                        '</select>' +
-                    '</div>' +
-                    '<div class="comp-filter-row"><label>Color Range</label>' +
-                        '<div style="display:flex;align-items:center;gap:4px;">' +
-                            '<input type="number" id="comp-vmin" placeholder="min" step="any" style="width:60px;padding:2px 4px;font-size:10px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);color:var(--text);" onchange="applyCompColorRange()">' +
-                            '<span style="font-size:10px;color:var(--slate);">to</span>' +
-                            '<input type="number" id="comp-vmax" placeholder="max" step="any" style="width:60px;padding:2px 4px;font-size:10px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);color:var(--text);" onchange="applyCompColorRange()">' +
-                            '<button onclick="resetCompColorRange()" title="Reset to default" style="padding:2px 5px;font-size:9px;border:1px solid var(--border-light);border-radius:4px;background:var(--navy);cursor:pointer;color:var(--slate);">\u21BA</button>' +
-                        '</div>' +
-                    '</div>' +
-                    '<div class="comp-section-title" style="margin-top:14px;">\uD83D\uDD0D Filter Criteria <span id="comp-group-a-label" style="display:none;color:#60a5fa;font-size:10px;">(Group A)</span></div>' +
-                    _buildRangeRow('Intensity', 'comp-int', 0, 200, 5, 0, 200, 'kt') +
-                    _buildRangeRow('24-h \u0394V<sub>max</sub>', 'comp-dv', -100, 85, 5, -100, 85, 'kt') +
-                    _buildRangeRow('Tilt', 'comp-tilt', 0, 200, 5, 0, 200, 'km') +
-                    _buildRangeRow('Year', 'comp-year', 1997, 2024, 1, 1997, 2024, '') +
-                    _buildRangeRow('Shear Mag', 'comp-shrmag', 0, 100, 2, 0, 100, 'kt') +
-                    _buildRangeRow('Shear Dir', 'comp-shrdir', 0, 360, 5, 0, 360, '\u00b0') +
-                    '<div class="comp-case-count" id="comp-count-display">' +
-                        '<span class="comp-count-label">Matching cases:</span> ' +
-                        '<span class="comp-count-num" id="comp-count-num">\u2014</span>' +
-                    '</div>' +
-                    '<div class="comp-actions">' +
-                        '<button class="comp-btn comp-btn-primary" id="comp-btn-az" onclick="generateCompositeAzMean()">\u27F3 Azimuthal Mean</button>' +
-                        '<button class="comp-btn comp-btn-accent" id="comp-btn-sq" onclick="generateCompositeQuadMean()">\u25D1 Shear Quadrants</button>' +
-                    '</div>' +
-                    // ── Difference Mode ──
-                    '<div class="comp-diff-toggle">' +
-                        '<label class="comp-diff-label"><input type="checkbox" id="comp-diff-check" onchange="_toggleDiffMode()"> <span>\u0394 Difference Mode</span></label>' +
-                    '</div>' +
-                    '<div id="comp-group-b-wrap" style="display:none;">' +
-                        '<div class="comp-section-title comp-group-b-title">\uD83D\uDD0D Group B Filters</div>' +
-                        _buildRangeRow('Intensity', 'compb-int', 0, 200, 5, 0, 200, 'kt') +
-                        _buildRangeRow('24-h \u0394V<sub>max</sub>', 'compb-dv', -100, 85, 5, -100, 85, 'kt') +
-                        _buildRangeRow('Tilt', 'compb-tilt', 0, 200, 5, 0, 200, 'km') +
-                        _buildRangeRow('Year', 'compb-year', 1997, 2024, 1, 1997, 2024, '') +
-                        _buildRangeRow('Shear Mag', 'compb-shrmag', 0, 100, 2, 0, 100, 'kt') +
-                        _buildRangeRow('Shear Dir', 'compb-shrdir', 0, 360, 5, 0, 360, '\u00b0') +
-                        '<div class="comp-case-count" id="compb-count-display">' +
-                            '<span class="comp-count-label">Group B cases:</span> ' +
-                            '<span class="comp-count-num" id="compb-count-num">\u2014</span>' +
-                        '</div>' +
-                        '<div class="comp-actions">' +
-                            '<button class="comp-btn comp-btn-diff" id="comp-btn-diff-az" onclick="generateCompDiffAzMean()">\u0394 Az Mean (A\u2212B)</button>' +
-                            '<button class="comp-btn comp-btn-diff" id="comp-btn-diff-sq" onclick="generateCompDiffQuadMean()">\u0394 Quad Mean (A\u2212B)</button>' +
-                        '</div>' +
-                    '</div>' +
-                '</div>' +
-                // ── Right: Results ──
-                '<div class="composite-results">' +
-                    '<div class="comp-result-placeholder" id="comp-result-placeholder">' +
-                        '<div class="comp-result-icon">\uD83C\uDF00</div>' +
-                        '<div class="comp-result-msg">Set filter criteria and click a generate button to compute a composite.</div>' +
-                    '</div>' +
-                    '<div id="comp-status" style="display:none;"></div>' +
-                    '<div id="comp-result-az" style="display:none;"></div>' +
-                    '<div id="comp-result-sq" style="display:none;"></div>' +
-                '</div>' +
-            '</div>' +
+    overlay.className = 'wizard-overlay';
+
+    // ── Height level options ──
+    var levelOpts = '';
+    for (var h = 0.5; h <= 18; h += 0.5) {
+        levelOpts += '<option value="' + h.toFixed(1) + '"' + (h === 2.0 ? ' selected' : '') + '>' + h.toFixed(1) + ' km</option>';
+    }
+
+    // ── Build filter rows helper (compact wizard style) ──
+    function wfRow(label, idBase, min, max, step, defaultMin, defaultMax, units) {
+        return '<div class="wizard-filter-row">' +
+            '<span class="wf-label">' + label + '</span>' +
+            '<input type="number" id="' + idBase + '-min" value="' + defaultMin + '" min="' + min + '" max="' + max + '" step="' + step + '">' +
+            '<span class="wf-sep">\u2013</span>' +
+            '<input type="number" id="' + idBase + '-max" value="' + defaultMax + '" min="' + min + '" max="' + max + '" step="' + step + '">' +
+            '<span class="wf-unit">' + units + '</span>' +
         '</div>';
+    }
+
+    // ── Build one filter column ──
+    function filterCol(prefix) {
+        return wfRow('Intensity', prefix + '-int', 0, 200, 5, 0, 200, 'kt') +
+            wfRow('\u0394V\u2098\u2090\u2093 (24h)', prefix + '-dv', -100, 85, 5, -100, 85, 'kt') +
+            wfRow('Tilt', prefix + '-tilt', 0, 200, 5, 0, 200, 'km') +
+            wfRow('Year', prefix + '-year', 1997, 2024, 1, 1997, 2024, '') +
+            wfRow('Shear Mag', prefix + '-shrmag', 0, 100, 2, 0, 100, 'kt') +
+            wfRow('Shear Dir', prefix + '-shrdir', 0, 360, 5, 0, 360, '\u00b0') +
+            '<div class="wizard-filter-row">' +
+                '<span class="wf-label">Min DTL</span>' +
+                '<input type="number" id="' + prefix + '-dtl-min" value="0" min="0" max="9999" step="10">' +
+                '<span class="wf-sep">km</span>' +
+                '<select id="' + prefix + '-dtl-win" style="width:62px;font-size:11px;padding:2px 4px;border:1px solid rgba(255,255,255,0.15);border-radius:4px;background:rgba(255,255,255,0.06);color:#e2e8f0;">' +
+                    '<option value="12h">0\u201312 h</option>' +
+                    '<option value="24h" selected>0\u201324 h</option>' +
+                '</select>' +
+            '</div>';
+    }
+
+    overlay.innerHTML =
+        '<div class="wizard-box">' +
+            // ── Header ──
+            '<div class="wizard-header">' +
+                '<div class="wizard-header-left">' +
+                    '<span class="wizard-header-logo">\uD83D\uDCCA</span>' +
+                    '<span class="wizard-header-title">Composite Analysis</span>' +
+                    '<span class="wizard-header-sub">Multi-case averaged fields</span>' +
+                '</div>' +
+                '<button class="wizard-close" onclick="toggleCompositePanel()">\u2715</button>' +
+            '</div>' +
+
+            // ── Step indicator ──
+            '<div class="wizard-stepper">' +
+                '<div class="wizard-step-item active" onclick="_wizardGoToStep(1)">' +
+                    '<div class="wizard-step-circle">1</div>' +
+                    '<span class="wizard-step-label">Select</span>' +
+                '</div>' +
+                '<div class="wizard-step-connector"></div>' +
+                '<div class="wizard-step-item" onclick="_wizardGoToStep(2)">' +
+                    '<div class="wizard-step-circle">2</div>' +
+                    '<span class="wizard-step-label">Filter</span>' +
+                '</div>' +
+                '<div class="wizard-step-connector"></div>' +
+                '<div class="wizard-step-item" onclick="_wizardGoToStep(3)">' +
+                    '<div class="wizard-step-circle">3</div>' +
+                    '<span class="wizard-step-label">Configure</span>' +
+                '</div>' +
+                '<div class="wizard-step-connector"></div>' +
+                '<div class="wizard-step-item" onclick="_wizardGoToStep(4)">' +
+                    '<div class="wizard-step-circle">4</div>' +
+                    '<span class="wizard-step-label">Results</span>' +
+                '</div>' +
+            '</div>' +
+
+            // ── Summary strip ──
+            '<div class="wizard-summary" id="wizard-summary"></div>' +
+
+            // ── Body (step content) ──
+            '<div class="wizard-body">' +
+
+                // ═══ STEP 1: Select ═══
+                '<div class="wizard-step-content active" id="wizard-step-1">' +
+                    '<div class="wizard-section-title">Analysis Mode</div>' +
+                    '<div class="wizard-mode-cards">' +
+                        '<div class="wizard-mode-card selected" id="wiz-mode-single" onclick="_wizardSetMode(\'single\')">' +
+                            '<div class="wizard-mode-icon">\uD83C\uDF00</div>' +
+                            '<div class="wizard-mode-title">Single Group</div>' +
+                            '<div class="wizard-mode-desc">Composite one set of cases defined by filter criteria</div>' +
+                        '</div>' +
+                        '<div class="wizard-mode-card" id="wiz-mode-diff" onclick="_wizardSetMode(\'diff\')">' +
+                            '<div class="wizard-mode-icon">\u0394</div>' +
+                            '<div class="wizard-mode-title">Compare (A vs B)</div>' +
+                            '<div class="wizard-mode-desc">Define two groups and compute difference composites</div>' +
+                        '</div>' +
+                    '</div>' +
+
+                    '<div class="wizard-section-title">TDR Radar Outputs</div>' +
+                    '<div class="wizard-output-grid">' +
+                        '<div class="wizard-output-item checked" id="wiz-out-az" onclick="_wizardToggleOutput(this, event)">' +
+                            '<input type="checkbox" id="wiz-chk-az" checked>' +
+                            '<label for="wiz-chk-az">\u27F3 Azimuthal Mean<small>Radius\u2013height cross-section</small></label>' +
+                        '</div>' +
+                        '<div class="wizard-output-item" id="wiz-out-sq" onclick="_wizardToggleOutput(this, event)">' +
+                            '<input type="checkbox" id="wiz-chk-sq">' +
+                            '<label for="wiz-chk-sq">\u25D1 Shear Quadrants<small>4-panel shear-relative</small></label>' +
+                        '</div>' +
+                        '<div class="wizard-output-item" id="wiz-out-pv" onclick="_wizardToggleOutput(this, event)">' +
+                            '<input type="checkbox" id="wiz-chk-pv">' +
+                            '<label for="wiz-chk-pv">\uD83D\uDDFA Plan View<small>Horizontal map at height</small></label>' +
+                        '</div>' +
+                        '<div class="wizard-output-item" id="wiz-out-cfad" onclick="_wizardToggleOutput(this, event)">' +
+                            '<input type="checkbox" id="wiz-chk-cfad">' +
+                            '<label for="wiz-chk-cfad">\uD83D\uDCCA CFAD<small>Frequency by altitude diagram</small></label>' +
+                        '</div>' +
+                        '<div class="wizard-output-item" id="wiz-out-anom" onclick="_wizardToggleOutput(this, event)">' +
+                            '<input type="checkbox" id="wiz-chk-anom">' +
+                            '<label for="wiz-chk-anom">Z* Anomaly<small>Intensity-normalised R\u2095 structure</small></label>' +
+                        '</div>' +
+                        '<div class="wizard-output-item" id="wiz-out-vpsc" onclick="_wizardToggleOutput(this, event)">' +
+                            '<input type="checkbox" id="wiz-chk-vpsc">' +
+                            '<label for="wiz-chk-vpsc">\u2B24 VP Scatter<small>Ventilation vs. vortex favorability</small></label>' +
+                        '</div>' +
+                    '</div>' +
+
+                    '<div class="wizard-section-title env">Environment Outputs</div>' +
+                    '<div class="wizard-output-grid">' +
+                        '<div class="wizard-output-item env-item" id="wiz-out-env-pv" onclick="_wizardToggleOutput(this, event)">' +
+                            '<input type="checkbox" id="wiz-chk-env-pv">' +
+                            '<label for="wiz-chk-env-pv">\uD83C\uDF0D ERA5 Plan View<small>Spatial environmental field</small></label>' +
+                        '</div>' +
+                        '<div class="wizard-output-item env-item" id="wiz-out-env-sc" onclick="_wizardToggleOutput(this, event)">' +
+                            '<input type="checkbox" id="wiz-chk-env-sc">' +
+                            '<label for="wiz-chk-env-sc">\uD83D\uDCCA Scalar Diagnostics<small>SHIPS-style parameters</small></label>' +
+                        '</div>' +
+                        '<div class="wizard-output-item env-item" id="wiz-out-env-th" onclick="_wizardToggleOutput(this, event)">' +
+                            '<input type="checkbox" id="wiz-chk-env-th">' +
+                            '<label for="wiz-chk-env-th">\uD83C\uDF21 Thermo Profiles<small>Skew-T & Hodograph</small></label>' +
+                        '</div>' +
+                    '</div>' +
+
+                    '<div class="wizard-dtype-row">' +
+                        '<label>Data Type</label>' +
+                        '<select id="comp-dtype"><option value="swath">Swath</option><option value="merge">Merge</option></select>' +
+                    '</div>' +
+                '</div>' +
+
+                // ═══ STEP 2: Filter ═══
+                '<div class="wizard-step-content" id="wizard-step-2">' +
+                    '<div class="wizard-filter-columns" id="wizard-filter-cols">' +
+                        // Group A (always shown)
+                        '<div class="wizard-group-col group-a">' +
+                            '<div class="wizard-group-label" id="wiz-group-a-title">Filter Criteria</div>' +
+                            filterCol('comp') +
+                            '<div class="wizard-case-count">' +
+                                '<div class="wcc-label">Matching cases</div>' +
+                                '<div class="wcc-num" id="comp-count-num">\u2014</div>' +
+                                '<div class="wcc-cap-note" id="comp-cap-note">Composites are limited to 1,000 cases per group. If your filters match more, only the first 1,000 will be used.</div>' +
+                            '</div>' +
+                        '</div>' +
+                        // Group B (hidden unless diff mode)
+                        '<div class="wizard-group-col group-b" id="wiz-group-b-col" style="display:none;">' +
+                            '<div class="wizard-group-label">Group B</div>' +
+                            filterCol('compb') +
+                            '<div class="wizard-case-count">' +
+                                '<div class="wcc-label">Group B cases</div>' +
+                                '<div class="wcc-num" id="compb-count-num">\u2014</div>' +
+                                '<div class="wcc-cap-note" id="compb-cap-note">Composites are limited to 1,000 cases per group. If your filters match more, only the first 1,000 will be used.</div>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
+
+                // ═══ STEP 3: Configure ═══
+                '<div class="wizard-step-content" id="wizard-step-3">' +
+                    '<div class="wizard-config-cols">' +
+                        // TDR config section
+                        '<div class="wizard-config-section" id="wiz-cfg-tdr">' +
+                            '<div class="wizard-config-section-title" onclick="_wizardToggleSection(this.parentElement)">' +
+                                '<span class="wcs-icon">\uD83C\uDF00</span> TDR Settings' +
+                                '<span class="wcs-toggle">\u25BC</span>' +
+                            '</div>' +
+                            '<div class="wizard-config-body">' +
+                                '<div class="wizard-config-row"><label>Variable</label>' + _varOptionsHTML('comp') + '</div>' +
+                                '<div class="wizard-config-row" id="wiz-cfg-level-row"><label>Height Level</label>' +
+                                    '<select id="comp-level">' + levelOpts + '</select>' +
+                                    '<div class="wiz-level-hint" id="wiz-level-hint" style="display:none;font-size:10px;color:#6b7280;margin-top:4px;">Not applicable — Azimuthal Mean and Shear Quadrants use all levels.</div>' +
+                                '</div>' +
+                                '<div class="wizard-config-row"><label>Coverage Threshold</label>' +
+                                    '<div class="wizard-slider-row">' +
+                                        '<input type="range" id="comp-coverage" min="0" max="100" step="5" value="50" oninput="document.getElementById(\'comp-cov-val\').textContent=this.value+\'%\'">' +
+                                        '<span class="wizard-slider-val" id="comp-cov-val">50%</span>' +
+                                    '</div>' +
+                                '</div>' +
+                                '<div class="wizard-config-row">' +
+                                    '<div class="wizard-config-inline">' +
+                                        '<input type="checkbox" id="comp-norm-rmw">' +
+                                        '<label for="comp-norm-rmw" style="font-size:11px;color:#9ca3af;">Normalize by RMW (2-km)</label>' +
+                                    '</div>' +
+                                '</div>' +
+                                '<div id="comp-rmw-opts" style="display:none;">' +
+                                    '<div class="wizard-config-row"><label>Max Extent (R/RMW)</label>' +
+                                        '<input type="number" id="comp-max-r-rmw" value="5.0" min="1" max="20" step="0.5" style="width:80px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                                    '</div>' +
+                                    '<div class="wizard-config-row"><label>Bin Width (R/RMW)</label>' +
+                                        '<input type="number" id="comp-dr-rmw" value="0.1" min="0.05" max="1" step="0.05" style="width:80px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                                    '</div>' +
+                                '</div>' +
+                                '<div class="wizard-config-row">' +
+                                    '<div class="wizard-config-inline">' +
+                                        '<input type="checkbox" id="comp-shear-rel">' +
+                                        '<label for="comp-shear-rel" style="font-size:11px;color:#9ca3af;">Shear-Relative Rotation</label>' +
+                                    '</div>' +
+                                '</div>' +
+                                '<div class="wizard-config-row"><label>Contour Overlay</label>' +
+                                    '<select id="comp-overlay">' +
+                                        '<option value="">None</option>' +
+                                        '<optgroup label="WCM Recentered (2 km)">' +
+                                            '<option value="recentered_tangential_wind">Tangential Wind</option>' +
+                                            '<option value="recentered_radial_wind">Radial Wind</option>' +
+                                            '<option value="recentered_upward_air_velocity">Vertical Velocity</option>' +
+                                            '<option value="recentered_reflectivity">Reflectivity</option>' +
+                                            '<option value="recentered_wind_speed">Wind Speed</option>' +
+                                            '<option value="recentered_relative_vorticity">Relative Vorticity</option>' +
+                                            '<option value="recentered_divergence">Divergence</option>' +
+                                        '</optgroup>' +
+                                        '<optgroup label="Tilt-Relative">' +
+                                            '<option value="total_recentered_tangential_wind">Tangential Wind</option>' +
+                                            '<option value="total_recentered_radial_wind">Radial Wind</option>' +
+                                            '<option value="total_recentered_upward_air_velocity">Vertical Velocity</option>' +
+                                            '<option value="total_recentered_reflectivity">Reflectivity</option>' +
+                                            '<option value="total_recentered_wind_speed">Wind Speed</option>' +
+                                        '</optgroup>' +
+                                        '<optgroup label="Original Swath" id="comp-overlay-original">' +
+                                            '<option value="swath_tangential_wind">Tangential Wind</option>' +
+                                            '<option value="swath_radial_wind">Radial Wind</option>' +
+                                            '<option value="swath_reflectivity">Reflectivity</option>' +
+                                            '<option value="swath_wind_speed">Wind Speed</option>' +
+                                        '</optgroup>' +
+                                    '</select>' +
+                                    '<div style="display:flex;align-items:center;gap:5px;margin-top:4px;">' +
+                                        '<label style="font-size:9px;white-space:nowrap;margin:0;color:#9ca3af;">Interval:</label>' +
+                                        '<input type="number" id="comp-contour-int" value="" placeholder="auto" style="width:55px;padding:2px 4px;font-size:10px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);">' +
+                                    '</div>' +
+                                '</div>' +
+                                '<div class="wizard-config-row"><label>Colormap</label>' +
+                                    '<select id="comp-cmap" onchange="applyCompCmap()">' +
+                                        '<option value="">Default (from variable)</option>' +
+                                        '<optgroup label="Sequential"><option value="Viridis">Viridis</option><option value="Inferno">Inferno</option><option value="Magma">Magma</option><option value="Plasma">Plasma</option><option value="Cividis">Cividis</option><option value="Hot">Hot</option><option value="YlOrRd">YlOrRd</option><option value="YlGnBu">YlGnBu</option><option value="Blues">Blues</option><option value="Reds">Reds</option><option value="Greys">Greys</option></optgroup>' +
+                                        '<optgroup label="Diverging"><option value="RdBu">RdBu (red-blue)</option><option value=\'[[0,"rgb(5,10,172)"],[0.5,"rgb(255,255,255)"],[1,"rgb(178,10,28)"]]\'>BuWtRd (blue-white-red)</option><option value="Picnic">Picnic</option><option value="Portland">Portland</option></optgroup>' +
+                                        '<optgroup label="Other"><option value="Jet">Jet</option><option value="Rainbow">Rainbow</option><option value="Electric">Electric</option><option value="Earth">Earth</option><option value="Blackbody">Blackbody</option></optgroup>' +
+                                    '</select>' +
+                                '</div>' +
+                                '<div class="wizard-config-row"><label>Color Range</label>' +
+                                    '<div class="wizard-color-range">' +
+                                        '<input type="number" id="comp-vmin" placeholder="min" step="any" onchange="applyCompColorRange()">' +
+                                        '<span class="wcr-sep">to</span>' +
+                                        '<input type="number" id="comp-vmax" placeholder="max" step="any" onchange="applyCompColorRange()">' +
+                                        '<button onclick="resetCompColorRange()" title="Reset">\u21BA</button>' +
+                                    '</div>' +
+                                '</div>' +
+                                // CFAD-specific options (visible only when CFAD is checked)
+                                '<div id="wiz-cfg-cfad-opts" style="display:none;border-top:1px solid rgba(255,255,255,0.06);padding-top:8px;margin-top:4px;">' +
+                                    '<div style="font-size:10px;font-weight:600;color:#22d3ee;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">\uD83D\uDCCA CFAD Options</div>' +
+
+                                    // Bin width
+                                    '<div class="wizard-config-row"><label>Bin Width</label>' +
+                                        '<input type="number" id="cfad-bin-width" value="" placeholder="auto" min="0.1" step="any" style="width:80px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                                        '<span style="font-size:9px;color:#6b7280;margin-left:4px;">(leave blank for auto)</span>' +
+                                    '</div>' +
+
+                                    // Number of bins
+                                    '<div class="wizard-config-row"><label>Number of Bins</label>' +
+                                        '<input type="number" id="cfad-n-bins" value="20" min="5" max="200" step="1" style="width:80px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                                        '<span style="font-size:9px;color:#6b7280;margin-left:4px;">(used when bin width is blank)</span>' +
+                                    '</div>' +
+
+                                    // Bin range (min/max)
+                                    '<div class="wizard-config-row"><label>Bin Range</label>' +
+                                        '<div style="display:flex;align-items:center;gap:6px;">' +
+                                            '<input type="number" id="cfad-bin-min" value="" placeholder="auto" step="any" style="width:72px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                                            '<span style="font-size:10px;color:#6b7280;">to</span>' +
+                                            '<input type="number" id="cfad-bin-max" value="" placeholder="auto" step="any" style="width:72px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                                            '<span style="font-size:9px;color:#6b7280;margin-left:4px;">(blank = auto from variable)</span>' +
+                                        '</div>' +
+                                    '</div>' +
+
+                                    // Normalisation
+                                    '<div class="wizard-config-row"><label>Normalisation</label>' +
+                                        '<select id="cfad-normalise" style="font-size:11px;">' +
+                                            '<option value="height">% at Each Height (standard)</option>' +
+                                            '<option value="total">% of Total Pixels</option>' +
+                                            '<option value="raw">Raw Counts</option>' +
+                                        '</select>' +
+                                    '</div>' +
+
+                                    // Radial domain (min + max)
+                                    '<div class="wizard-config-row"><label>Radial Domain</label>' +
+                                        '<div style="display:flex;align-items:center;gap:6px;">' +
+                                            '<input type="number" id="cfad-min-radius" value="0" min="0" max="500" step="any" style="width:65px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                                            '<span style="font-size:10px;color:#6b7280;">to</span>' +
+                                            '<input type="number" id="cfad-max-radius" value="200" min="0.1" max="500" step="any" style="width:65px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                                            '<span id="cfad-radius-unit" style="font-size:10px;color:#6b7280;">km</span>' +
+                                        '</div>' +
+                                    '</div>' +
+
+                                    // RMW toggle
+                                    '<div class="wizard-config-row">' +
+                                        '<div class="wizard-config-inline">' +
+                                            '<input type="checkbox" id="cfad-use-rmw" onchange="_cfadUpdateRadiusUnit()">' +
+                                            '<label for="cfad-use-rmw" style="font-size:11px;color:#9ca3af;">Normalise by RMW (radii become R/RMW)</label>' +
+                                        '</div>' +
+                                    '</div>' +
+
+                                    // Shear-relative quadrant selector (with MULTI button)
+                                    '<div class="wizard-config-row"><label>Quadrant Filter</label>' +
+                                        '<div id="cfad-quad-btns" style="display:flex;gap:4px;flex-wrap:wrap;">' +
+                                            '<button type="button" class="cfad-quad-btn active" data-quad="ALL" onclick="_cfadToggleQuad(this)" style="padding:4px 10px;font-size:10px;font-weight:600;border:1px solid rgba(34,211,238,0.3);border-radius:4px;background:rgba(34,211,238,0.15);color:#22d3ee;cursor:pointer;font-family:\'JetBrains Mono\',monospace;">All</button>' +
+                                            '<button type="button" class="cfad-quad-btn" data-quad="DSL" onclick="_cfadToggleQuad(this)" style="padding:4px 10px;font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:rgba(255,255,255,0.03);color:#9ca3af;cursor:pointer;font-family:\'JetBrains Mono\',monospace;">DSL</button>' +
+                                            '<button type="button" class="cfad-quad-btn" data-quad="DSR" onclick="_cfadToggleQuad(this)" style="padding:4px 10px;font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:rgba(255,255,255,0.03);color:#9ca3af;cursor:pointer;font-family:\'JetBrains Mono\',monospace;">DSR</button>' +
+                                            '<button type="button" class="cfad-quad-btn" data-quad="USL" onclick="_cfadToggleQuad(this)" style="padding:4px 10px;font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:rgba(255,255,255,0.03);color:#9ca3af;cursor:pointer;font-family:\'JetBrains Mono\',monospace;">USL</button>' +
+                                            '<button type="button" class="cfad-quad-btn" data-quad="USR" onclick="_cfadToggleQuad(this)" style="padding:4px 10px;font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:rgba(255,255,255,0.03);color:#9ca3af;cursor:pointer;font-family:\'JetBrains Mono\',monospace;">USR</button>' +
+                                            '<button type="button" class="cfad-quad-btn" data-quad="MULTI" onclick="_cfadToggleQuad(this)" style="padding:4px 10px;font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:rgba(255,255,255,0.03);color:#9ca3af;cursor:pointer;font-family:\'JetBrains Mono\',monospace;">Multi</button>' +
+                                        '</div>' +
+                                    '</div>' +
+
+                                    // Log-scale toggle
+                                    '<div class="wizard-config-row">' +
+                                        '<div class="wizard-config-inline">' +
+                                            '<input type="checkbox" id="cfad-log-scale" checked>' +
+                                            '<label for="cfad-log-scale" style="font-size:11px;color:#9ca3af;">Log-scale colorbar</label>' +
+                                        '</div>' +
+                                    '</div>' +
+                                '</div>' +
+                            '</div>' +
+                        '</div>' +
+
+                        // Environment config section
+                        '<div class="wizard-config-section" id="wiz-cfg-env">' +
+                            '<div class="wizard-config-section-title" onclick="_wizardToggleSection(this.parentElement)">' +
+                                '<span class="wcs-icon">\uD83C\uDF0D</span> Environment Settings' +
+                                '<span class="wcs-toggle">\u25BC</span>' +
+                            '</div>' +
+                            '<div class="wizard-config-body">' +
+                                '<div class="wizard-config-row"><label>ERA5 Field</label>' +
+                                    '<select id="comp-env-field">' +
+                                        '<option value="shear_mag">Deep-Layer Shear (200\u2013850 hPa)</option>' +
+                                        '<option value="rh_mid">Mid-Level RH (500\u2013700 hPa)</option>' +
+                                        '<option value="div200">200 hPa Divergence</option>' +
+                                        '<option value="sst">Sea Surface Temperature</option>' +
+                                        '<option value="entropy_def">Entropy Deficit (\u03c7\u2098)</option>' +
+                                    '</select>' +
+                                '</div>' +
+                                '<div class="wizard-config-row">' +
+                                    '<div class="wizard-config-inline">' +
+                                        '<input type="checkbox" id="comp-env-vectors">' +
+                                        '<label for="comp-env-vectors" style="font-size:11px;color:#9ca3af;">Include Shear Vectors</label>' +
+                                    '</div>' +
+                                '</div>' +
+                                '<div class="wizard-config-row">' +
+                                    '<div class="wizard-config-inline">' +
+                                        '<input type="checkbox" id="comp-env-shear-rel">' +
+                                        '<label for="comp-env-shear-rel" style="font-size:11px;color:#9ca3af;">Shear-Relative Rotation</label>' +
+                                    '</div>' +
+                                '</div>' +
+                                '<div class="wizard-config-row"><label>Crop Radius</label>' +
+                                    '<div class="wizard-slider-row">' +
+                                        '<input type="range" id="comp-env-radius" min="100" max="1000" step="50" value="500" oninput="document.getElementById(\'comp-env-radius-val\').textContent=this.value+\' km\'">' +
+                                        '<span class="wizard-slider-val" id="comp-env-radius-val">500 km</span>' +
+                                    '</div>' +
+                                '</div>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
+
+                // ═══ STEP 4: Results ═══
+                '<div class="wizard-step-content" id="wizard-step-4">' +
+                    '<div class="wizard-generate-bar">' +
+                        '<button class="wizard-generate-btn" id="wiz-generate-btn" onclick="_wizardGenerateSelected()">\u25B6 Generate Selected</button>' +
+                        '<span class="wizard-generate-summary" id="wiz-generate-summary"></span>' +
+                    '</div>' +
+                    // ── Inline shading toolbar (mirrors Step 3 controls for live adjustment) ──
+                    '<div class="comp-shading-toolbar" id="comp-shading-toolbar" style="display:none !important;">' +
+                        '<div class="cst-row">' +
+                            '<label class="cst-label">Colormap</label>' +
+                            '<select id="comp-cmap-inline" class="cst-select" onchange="_syncCompCmapFromInline()">' +
+                                '<option value="">Default</option>' +
+                                '<optgroup label="Sequential"><option value="Viridis">Viridis</option><option value="Inferno">Inferno</option><option value="Magma">Magma</option><option value="Plasma">Plasma</option><option value="Cividis">Cividis</option><option value="Hot">Hot</option><option value="YlOrRd">YlOrRd</option><option value="YlGnBu">YlGnBu</option><option value="Blues">Blues</option><option value="Reds">Reds</option><option value="Greys">Greys</option></optgroup>' +
+                                '<optgroup label="Diverging"><option value="RdBu">RdBu</option><option value=\'[[0,"rgb(5,10,172)"],[0.5,"rgb(255,255,255)"],[1,"rgb(178,10,28)"]]\'>BuWtRd</option><option value="Picnic">Picnic</option><option value="Portland">Portland</option></optgroup>' +
+                                '<optgroup label="Other"><option value="Jet">Jet</option><option value="Rainbow">Rainbow</option><option value="Electric">Electric</option></optgroup>' +
+                            '</select>' +
+                            '<span class="cst-sep"></span>' +
+                            '<label class="cst-label">Range</label>' +
+                            '<input type="number" id="comp-vmin-inline" class="cst-input" placeholder="min" step="any" onchange="_syncCompRangeFromInline()">' +
+                            '<span class="cst-to">to</span>' +
+                            '<input type="number" id="comp-vmax-inline" class="cst-input" placeholder="max" step="any" onchange="_syncCompRangeFromInline()">' +
+                            '<button class="cst-reset" onclick="_resetCompShadingInline()" title="Reset to default">\u21BA</button>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="wizard-results-area" id="wizard-results-area">' +
+                        '<div class="wizard-result-placeholder" id="wiz-result-placeholder">' +
+                            '<div class="wrp-icon">\uD83C\uDF00</div>' +
+                            '<div class="wrp-msg">Select outputs in Step 1, set filters in Step 2, then click <strong>Generate Selected</strong> to compute composites.</div>' +
+                        '</div>' +
+                        // TDR result containers
+                        '<div id="comp-status" style="display:none;"></div>' +
+                        '<div id="comp-result-az" style="display:none;"></div>' +
+                        '<div id="comp-result-sq" style="display:none;"></div>' +
+                        '<div id="comp-result-pv" style="display:none;"></div>' +
+                        '<div id="comp-result-cfad" style="display:none;"></div>' +
+                        '<div id="comp-result-anom" style="display:none;"></div>' +
+                        '<div id="comp-result-vpsc" style="display:none;"></div>' +
+                        // Environment result containers
+                        '<div id="comp-env-status" style="display:none;"></div>' +
+                        '<div id="comp-env-scalars" style="display:none;"></div>' +
+                        '<div id="comp-env-plan-view" style="display:none;"></div>' +
+                        '<div class="comp-env-row" style="display:none;" id="comp-env-thermo-row">' +
+                            '<div id="comp-env-skewt" style="flex:1;min-width:0;"></div>' +
+                            '<div id="comp-env-hodo" style="flex:1;min-width:0;"></div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
+
+            '</div>' + // end wizard-body
+
+            // ── Bottom navigation ──
+            '<div class="wizard-nav">' +
+                '<button class="wizard-nav-btn secondary" id="wiz-back-btn" onclick="_wizardBack()" style="visibility:hidden;">\u2190 Back</button>' +
+                '<div></div>' +
+                '<button class="wizard-nav-btn primary" id="wiz-next-btn" onclick="_wizardNext()">Next \u2192</button>' +
+            '</div>' +
+
+        '</div>'; // end wizard-box
+
     document.body.appendChild(overlay);
     _compositePanel = overlay;
 
-    // Wire up live case count on filter changes
-    var filterInputs = overlay.querySelectorAll('.composite-controls > .comp-filter-row input[type="number"], .composite-controls > .comp-filter-row select, .composite-controls > div > select, .composite-controls > div input[type="range"]');
-    filterInputs.forEach(function(inp) {
-        inp.addEventListener('change', _debouncedCompositeCount);
-        inp.addEventListener('input', _debouncedCompositeCount);
-    });
+    // ── Wire up live case counts ──
+    _wizardWireFilters();
 
-    // Wire up Group B filter inputs
-    var groupBInputs = document.querySelectorAll('#comp-group-b-wrap input[type="number"]');
-    groupBInputs.forEach(function(inp) {
-        inp.addEventListener('change', _debouncedGroupBCount);
-        inp.addEventListener('input', _debouncedGroupBCount);
-    });
-
-    // Wire up data type change to swap original-domain variable options
+    // ── Wire up data type change ──
     var dtypeSelect = document.getElementById('comp-dtype');
     if (dtypeSelect) {
         dtypeSelect.addEventListener('change', function() {
@@ -1917,51 +6280,350 @@ function initCompositePanel() {
             _updateOriginalVarGroup('comp', varType);
             _updateCompOverlayOriginalGroup(varType);
             _debouncedCompositeCount();
-            if (document.getElementById('comp-diff-check').checked) _debouncedGroupBCount();
+            if (_wizardMode === 'diff') _debouncedGroupBCount();
         });
     }
 
-    _injectCompositeStyles();
+    // ── Wire up RMW normalize toggle ──
+    var normCheck = document.getElementById('comp-norm-rmw');
+    if (normCheck) {
+        normCheck.addEventListener('change', function() {
+            var opts = document.getElementById('comp-rmw-opts');
+            if (opts) opts.style.display = this.checked ? 'block' : 'none';
+        });
+    }
+
+    // ── Wire up output checkboxes to update config visibility ──
+    overlay.querySelectorAll('.wizard-output-item input[type="checkbox"]').forEach(function(cb) {
+        cb.addEventListener('change', function() { _wizardUpdateConfigVisibility(); _wizardUpdateSummary(); });
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ── WIZARD STATE & NAVIGATION ─────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+
+var _wizardCurrentStep = 1;
+var _wizardMode = 'single'; // 'single' or 'diff'
+
+function _wizardGoToStep(n) {
+    if (n < 1 || n > 4) return;
+    _wizardCurrentStep = n;
+
+    // Update step content visibility
+    for (var i = 1; i <= 4; i++) {
+        var content = document.getElementById('wizard-step-' + i);
+        if (content) { content.classList.toggle('active', i === n); }
+    }
+
+    // Update step indicator
+    var items = document.querySelectorAll('.wizard-step-item');
+    var connectors = document.querySelectorAll('.wizard-step-connector');
+    items.forEach(function(item, idx) {
+        var stepNum = idx + 1;
+        item.classList.remove('active', 'completed');
+        if (stepNum === n) item.classList.add('active');
+        else if (stepNum < n) item.classList.add('completed');
+        // Update circle content for completed steps
+        var circle = item.querySelector('.wizard-step-circle');
+        if (circle) circle.innerHTML = stepNum < n ? '\u2713' : String(stepNum);
+    });
+    connectors.forEach(function(conn, idx) {
+        conn.classList.toggle('completed', idx < n - 1);
+    });
+
+    // Update nav buttons
+    var backBtn = document.getElementById('wiz-back-btn');
+    var nextBtn = document.getElementById('wiz-next-btn');
+    if (backBtn) backBtn.style.visibility = n === 1 ? 'hidden' : 'visible';
+    if (nextBtn) {
+        if (n === 4) {
+            nextBtn.style.display = 'none';
+        } else {
+            nextBtn.style.display = '';
+            nextBtn.textContent = 'Next \u2192';
+        }
+    }
+
+    // Update summary
+    _wizardUpdateSummary();
+
+    // When entering step 2, trigger count update
+    if (n === 2) {
+        updateCompositeCount();
+        if (_wizardMode === 'diff') _updateGroupBCount();
+    }
+
+    // When entering step 3, update config section visibility
+    if (n === 3) _wizardUpdateConfigVisibility();
+
+    // When entering step 4, update generate summary
+    if (n === 4) _wizardUpdateGenerateSummary();
+}
+
+function _wizardNext() { _wizardGoToStep(_wizardCurrentStep + 1); }
+function _wizardBack() { _wizardGoToStep(_wizardCurrentStep - 1); }
+
+function _wizardSetMode(mode) {
+    _wizardMode = mode;
+    var singleCard = document.getElementById('wiz-mode-single');
+    var diffCard = document.getElementById('wiz-mode-diff');
+    var groupBCol = document.getElementById('wiz-group-b-col');
+    var groupATitle = document.getElementById('wiz-group-a-title');
+
+    if (mode === 'diff') {
+        singleCard.classList.remove('selected');
+        diffCard.classList.add('selected', 'diff');
+        if (groupBCol) groupBCol.style.display = '';
+        if (groupATitle) groupATitle.textContent = 'Group A';
+    } else {
+        singleCard.classList.add('selected');
+        diffCard.classList.remove('selected', 'diff');
+        if (groupBCol) groupBCol.style.display = 'none';
+        if (groupATitle) groupATitle.textContent = 'Filter Criteria';
+    }
+    _wizardUpdateSummary();
+}
+
+function _wizardToggleOutput(el, ev) {
+    var cb = el.querySelector('input[type="checkbox"]');
+    // If click originated from the checkbox or its label, the browser already
+    // toggled the checked state — don't toggle it again.
+    if (ev && (ev.target.tagName === 'INPUT' || ev.target.tagName === 'LABEL' || ev.target.tagName === 'SMALL')) {
+        // Browser handled the toggle; just sync the visual state.
+    } else {
+        if (cb) { cb.checked = !cb.checked; }
+    }
+    el.classList.toggle('checked', cb && cb.checked);
+    _wizardUpdateConfigVisibility();
+    _wizardUpdateSummary();
+}
+
+function _wizardToggleSection(section) {
+    section.classList.toggle('collapsed');
+}
+
+function _wizardUpdateConfigVisibility() {
+    var chkAz = document.getElementById('wiz-chk-az').checked;
+    var chkSq = document.getElementById('wiz-chk-sq').checked;
+    var chkPv = document.getElementById('wiz-chk-pv').checked;
+    var chkCfad = document.getElementById('wiz-chk-cfad') && document.getElementById('wiz-chk-cfad').checked;
+    var chkAnom = document.getElementById('wiz-chk-anom') && document.getElementById('wiz-chk-anom').checked;
+    var chkVpsc = document.getElementById('wiz-chk-vpsc') && document.getElementById('wiz-chk-vpsc').checked;
+    var anyTDR = chkAz || chkSq || chkPv || chkCfad || chkAnom || chkVpsc;
+    var envPV  = document.getElementById('wiz-chk-env-pv').checked;
+    var envSC  = document.getElementById('wiz-chk-env-sc').checked;
+    var envTH  = document.getElementById('wiz-chk-env-th').checked;
+    var anyEnv = envPV || envSC || envTH;
+    var tdrCfg = document.getElementById('wiz-cfg-tdr');
+    var envCfg = document.getElementById('wiz-cfg-env');
+    if (tdrCfg) tdrCfg.style.display = anyTDR ? '' : 'none';
+    if (envCfg) envCfg.style.display = anyEnv ? '' : 'none';
+    // If neither selected, show a message
+    if (!anyTDR && !anyEnv) {
+        if (tdrCfg) tdrCfg.style.display = '';
+        if (envCfg) envCfg.style.display = '';
+    }
+
+    // Height Level is only relevant for Plan View — hide it when only
+    // Azimuthal Mean and/or Shear Quadrants are selected.
+    var levelRow = document.getElementById('wiz-cfg-level-row');
+    var levelHint = document.getElementById('wiz-level-hint');
+    if (levelRow) {
+        if (chkPv) {
+            // Plan View selected — show the height selector normally
+            levelRow.style.display = '';
+            var lvlSel = document.getElementById('comp-level');
+            if (lvlSel) lvlSel.disabled = false;
+            if (levelHint) levelHint.style.display = 'none';
+        } else if (chkAz || chkSq) {
+            // Only radius-height outputs — show row but indicate not applicable
+            levelRow.style.display = '';
+            var lvlSel = document.getElementById('comp-level');
+            if (lvlSel) lvlSel.disabled = true;
+            if (levelHint) levelHint.style.display = '';
+        }
+    }
+
+    // CFAD options — show only when CFAD checkbox is checked
+    var cfadOpts = document.getElementById('wiz-cfg-cfad-opts');
+    if (cfadOpts) cfadOpts.style.display = chkCfad ? '' : 'none';
+
+    // When Thermo Profiles is selected, auto-select Scalar Diagnostics too,
+    // since shear/mid-level RH/SST etc. are needed for vertical profile context.
+    if (envTH) {
+        var scCb = document.getElementById('wiz-chk-env-sc');
+        var scItem = document.getElementById('wiz-out-env-sc');
+        if (scCb && !scCb.checked) {
+            scCb.checked = true;
+            if (scItem) scItem.classList.add('checked');
+        }
+    }
+
+    // Hide ERA5 Plan View config options (field, vectors, rotation, crop radius)
+    // when only Thermo Profiles / Scalar Diagnostics are selected (no ERA5 Plan View).
+    if (envCfg) {
+        var envBodyRows = envCfg.querySelectorAll('.wizard-config-body .wizard-config-row');
+        var showPlanViewOpts = envPV;
+        envBodyRows.forEach(function(row) {
+            // The ERA5 Field, Shear Vectors, Shear-Relative, and Crop Radius rows
+            // are only relevant to the ERA5 Plan View output.
+            var hasField = row.querySelector('#comp-env-field');
+            var hasVectors = row.querySelector('#comp-env-vectors');
+            var hasShearRel = row.querySelector('#comp-env-shear-rel');
+            var hasRadius = row.querySelector('#comp-env-radius');
+            if (hasField || hasVectors || hasShearRel || hasRadius) {
+                row.style.display = showPlanViewOpts ? '' : 'none';
+            }
+        });
+    }
+}
+
+function _wizardUpdateSummary() {
+    var el = document.getElementById('wizard-summary');
+    if (!el) return;
+    var parts = [];
+
+    // Mode
+    parts.push('<span class="ws-tag' + (_wizardMode === 'diff' ? ' amber' : ' cyan') + '">' +
+        (_wizardMode === 'diff' ? '\u0394 Diff Mode' : 'Single Group') + '</span>');
+
+    // Outputs
+    var outputs = [];
+    if (document.getElementById('wiz-chk-az') && document.getElementById('wiz-chk-az').checked) outputs.push('Az Mean');
+    if (document.getElementById('wiz-chk-sq') && document.getElementById('wiz-chk-sq').checked) outputs.push('Quad');
+    if (document.getElementById('wiz-chk-pv') && document.getElementById('wiz-chk-pv').checked) outputs.push('Plan');
+    if (document.getElementById('wiz-chk-cfad') && document.getElementById('wiz-chk-cfad').checked) outputs.push('CFAD');
+    if (document.getElementById('wiz-chk-env-pv') && document.getElementById('wiz-chk-env-pv').checked) outputs.push('Env PV');
+    if (document.getElementById('wiz-chk-env-sc') && document.getElementById('wiz-chk-env-sc').checked) outputs.push('Env Scalars');
+    if (document.getElementById('wiz-chk-env-th') && document.getElementById('wiz-chk-env-th').checked) outputs.push('Env Thermo');
+    if (outputs.length > 0) {
+        parts.push('<span class="ws-tag blue">' + outputs.join(', ') + '</span>');
+    }
+
+    // Case counts (if step 2+ and counts are available)
+    var countA = document.getElementById('comp-count-num');
+    if (countA && countA.textContent !== '\u2014' && countA.textContent !== '\u2026') {
+        if (_wizardMode === 'diff') {
+            var countB = document.getElementById('compb-count-num');
+            var bText = countB ? countB.textContent : '?';
+            parts.push('<span class="ws-tag green">N=' + countA.textContent + ' vs ' + bText + '</span>');
+        } else {
+            parts.push('<span class="ws-tag green">N=' + countA.textContent + '</span>');
+        }
+    }
+
+    // Data type
+    var dtype = document.getElementById('comp-dtype');
+    if (dtype) parts.push('<span class="ws-tag">' + dtype.value + '</span>');
+
+    el.innerHTML = parts.join(' ');
+}
+
+// Update the case-count badge from the actual composite result's n_cases.
+// This is the authoritative count from the backend after filtering + processing.
+function _updateBadgeFromResult(nCases) {
+    if (nCases == null) return;
+    var el = document.getElementById('comp-count-num');
+    if (el) {
+        el.textContent = nCases;
+        _wizardUpdateSummary();
+    }
+}
+
+function _wizardUpdateGenerateSummary() {
+    var el = document.getElementById('wiz-generate-summary');
+    if (!el) return;
+    var outputs = [];
+    if (document.getElementById('wiz-chk-az').checked) outputs.push('Azimuthal Mean');
+    if (document.getElementById('wiz-chk-sq').checked) outputs.push('Shear Quadrants');
+    if (document.getElementById('wiz-chk-pv').checked) outputs.push('Plan View');
+    if (document.getElementById('wiz-chk-cfad') && document.getElementById('wiz-chk-cfad').checked) outputs.push('CFAD');
+    if (document.getElementById('wiz-chk-env-pv').checked) outputs.push('ERA5 Plan View');
+    if (document.getElementById('wiz-chk-env-sc').checked) outputs.push('Scalar Diagnostics');
+    if (document.getElementById('wiz-chk-env-th').checked) outputs.push('Thermo Profiles');
+    if (outputs.length === 0) {
+        el.textContent = 'No outputs selected. Go back to Step 1 to choose outputs.';
+    } else {
+        el.textContent = 'Will generate: ' + outputs.join(', ') +
+            (_wizardMode === 'diff' ? ' (with A\u2212B differences)' : '');
+    }
+}
+
+function _wizardWireFilters() {
+    // Group A
+    var groupAInputs = document.querySelectorAll('.wizard-group-col.group-a input[type="number"]');
+    groupAInputs.forEach(function(inp) {
+        inp.addEventListener('change', _debouncedCompositeCount);
+        inp.addEventListener('input', _debouncedCompositeCount);
+    });
+    // Group A selects (e.g. DTL window dropdown)
+    var groupASelects = document.querySelectorAll('.wizard-group-col.group-a select');
+    groupASelects.forEach(function(sel) {
+        sel.addEventListener('change', _debouncedCompositeCount);
+    });
+    // Group B
+    var groupBInputs = document.querySelectorAll('.wizard-group-col.group-b input[type="number"]');
+    groupBInputs.forEach(function(inp) {
+        inp.addEventListener('change', _debouncedGroupBCount);
+        inp.addEventListener('input', _debouncedGroupBCount);
+    });
+    // Group B selects
+    var groupBSelects = document.querySelectorAll('.wizard-group-col.group-b select');
+    groupBSelects.forEach(function(sel) {
+        sel.addEventListener('change', _debouncedGroupBCount);
+    });
+}
+
+// ── Master generate function ──
+function _wizardGenerateSelected() {
+    var placeholder = document.getElementById('wiz-result-placeholder');
+    if (placeholder) placeholder.style.display = 'none';
+
+    // Belt-and-suspenders: refresh the case count with current filters
+    // right before generating, so the badge is up-to-date
+    if (_wizardMode !== 'diff') {
+        updateCompositeCount();
+    }
+
+    var isDiff = _wizardMode === 'diff';
+
+    // TDR outputs
+    if (document.getElementById('wiz-chk-az').checked) {
+        if (isDiff) generateCompDiffAzMean(); else generateCompositeAzMean();
+    }
+    if (document.getElementById('wiz-chk-sq').checked) {
+        if (isDiff) generateCompDiffQuadMean(); else generateCompositeQuadMean();
+    }
+    if (document.getElementById('wiz-chk-pv').checked) {
+        if (isDiff) generateCompDiffPlanView(); else generateCompositePlanView();
+    }
+    if (document.getElementById('wiz-chk-cfad') && document.getElementById('wiz-chk-cfad').checked) {
+        if (isDiff) generateCompDiffCFAD(); else generateCompositeCFAD();
+    }
+    if (document.getElementById('wiz-chk-anom') && document.getElementById('wiz-chk-anom').checked) {
+        if (isDiff) generateCompDiffAnomaly(); else generateCompositeAnomaly();
+    }
+    if (document.getElementById('wiz-chk-vpsc') && document.getElementById('wiz-chk-vpsc').checked) {
+        generateCompositeVPScatter();
+    }
+
+    // Environment outputs
+    var anyEnv = document.getElementById('wiz-chk-env-pv').checked ||
+                 document.getElementById('wiz-chk-env-sc').checked ||
+                 document.getElementById('wiz-chk-env-th').checked;
+    if (anyEnv) {
+        if (isDiff) generateEnvCompDiff(); else generateEnvComposite();
+    }
 }
 
 function _injectCompositeStyles() {
+    // Styles now in external CSS file (tc_radar_styles.css)
+    // Keep the old injected styles as fallback for any existing class references
     if (document.getElementById('composite-styles')) return;
     var style = document.createElement('style');
     style.id = 'composite-styles';
     style.textContent =
-        '.composite-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; z-index:3000; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px); overflow-y:auto; }' +
-        '.composite-overlay.active { display:flex; align-items:flex-start; justify-content:center; padding:20px; }' +
-        '.composite-box { width:100%; max-width:1400px; background:var(--navy, #0a1628); border:1px solid rgba(255,255,255,0.08); border-radius:12px; overflow:hidden; box-shadow:0 25px 50px rgba(0,0,0,0.5); }' +
-        '.composite-header { display:flex; justify-content:space-between; align-items:center; padding:16px 24px; border-bottom:1px solid rgba(255,255,255,0.06); background:rgba(255,255,255,0.02); }' +
-        '.composite-header-left { display:flex; align-items:center; gap:10px; }' +
-        '.composite-logo { font-size:20px; }' +
-        '.composite-title { font-size:18px; font-weight:700; color:#e5e7eb; font-family:"JetBrains Mono",monospace; }' +
-        '.composite-subtitle { font-size:12px; color:#6b7280; margin-left:4px; }' +
-        '.composite-close { background:none; border:1px solid rgba(255,255,255,0.1); color:#9ca3af; font-size:18px; width:36px; height:36px; border-radius:8px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.15s; }' +
-        '.composite-close:hover { background:rgba(255,255,255,0.05); color:#e5e7eb; }' +
-        '.composite-body { display:flex; min-height:600px; }' +
-        '.composite-controls { width:320px; min-width:320px; padding:20px; border-right:1px solid rgba(255,255,255,0.06); overflow-y:auto; max-height:calc(100vh - 120px); }' +
-        '.composite-results { flex:1; padding:20px; overflow-y:auto; max-height:calc(100vh - 120px); display:flex; flex-direction:column; }' +
-        '.comp-section-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; color:var(--cyan, #22d3ee); margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid rgba(34,211,238,0.15); }' +
-        '.comp-filter-row { margin-bottom:10px; }' +
-        '.comp-filter-row label { display:block; font-size:11px; font-weight:600; color:#9ca3af; margin-bottom:3px; font-family:"JetBrains Mono",monospace; }' +
-        '.comp-range-inputs { display:flex; align-items:center; gap:5px; }' +
-        '.comp-range-inputs input[type="number"] { width:65px; padding:4px 6px; font-size:11px; border:1px solid rgba(255,255,255,0.1); border-radius:4px; background:rgba(255,255,255,0.03); color:#e5e7eb; font-family:"JetBrains Mono",monospace; }' +
-        '.comp-range-sep { font-size:10px; color:#6b7280; }' +
-        '.comp-range-unit { font-size:10px; color:#6b7280; min-width:18px; }' +
-        '.comp-case-count { margin:16px 0; padding:12px; background:rgba(34,211,238,0.05); border:1px solid rgba(34,211,238,0.15); border-radius:8px; text-align:center; }' +
-        '.comp-count-label { font-size:11px; color:#9ca3af; }' +
-        '.comp-count-num { font-size:22px; font-weight:700; color:var(--cyan, #22d3ee); font-family:"JetBrains Mono",monospace; }' +
-        '.comp-actions { display:flex; flex-direction:column; gap:8px; margin-top:8px; }' +
-        '.comp-btn { padding:10px 16px; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family:"JetBrains Mono",monospace; transition:all 0.15s; }' +
-        '.comp-btn:disabled { opacity:0.4; cursor:not-allowed; }' +
-        '.comp-btn-primary { background:var(--cyan, #22d3ee); color:#0a1628; }' +
-        '.comp-btn-primary:hover:not(:disabled) { background:#67e8f9; }' +
-        '.comp-btn-accent { background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3); }' +
-        '.comp-btn-accent:hover:not(:disabled) { background:rgba(245,158,11,0.25); }' +
-        '.comp-result-placeholder { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#4b5563; }' +
-        '.comp-result-icon { font-size:48px; margin-bottom:12px; opacity:0.4; }' +
-        '.comp-result-msg { font-size:13px; text-align:center; max-width:320px; line-height:1.6; }' +
         '.comp-status { padding:12px 16px; border-radius:8px; font-size:12px; font-family:"JetBrains Mono",monospace; margin-bottom:12px; }' +
         '.comp-status.loading { background:rgba(34,211,238,0.08); color:var(--cyan, #22d3ee); border:1px solid rgba(34,211,238,0.2); }' +
         '.comp-status.success { background:rgba(16,185,129,0.08); color:#10b981; border:1px solid rgba(16,185,129,0.2); }' +
@@ -1982,31 +6644,35 @@ function _injectCompositeStyles() {
         '.comp-cl-copy { font-size:10px !important; padding:3px 8px !important; }' +
         '.comp-link-btn { border-color:rgba(34,211,238,0.25); color:var(--cyan, #22d3ee); }' +
         '.comp-link-btn:hover { background:rgba(34,211,238,0.1); border-color:rgba(34,211,238,0.4); }' +
-        // Difference mode styles
-        '.comp-diff-toggle { margin-top:14px; padding:8px 0; border-top:1px solid rgba(255,255,255,0.06); }' +
-        '.comp-diff-label { display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; font-weight:600; color:#f59e0b; font-family:"JetBrains Mono",monospace; }' +
-        '.comp-diff-label input { accent-color:#f59e0b; cursor:pointer; }' +
-        '.comp-group-b-title { color:#f59e0b !important; border-top:1px dashed rgba(245,158,11,0.25); padding-top:10px; margin-top:10px; }' +
-        '#comp-group-b-wrap .comp-filter-row label { color:#d97706; }' +
-        '#comp-group-b-wrap .comp-range-inputs input { border-color:rgba(245,158,11,0.2); }' +
+        '.comp-btn { padding:10px 16px; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family:"JetBrains Mono",monospace; transition:all 0.15s; }' +
+        '.comp-btn:disabled { opacity:0.4; cursor:not-allowed; }' +
+        '.comp-btn-primary { background:var(--cyan, #22d3ee); color:#0a1628; }' +
+        '.comp-btn-primary:hover:not(:disabled) { background:#67e8f9; }' +
+        '.comp-btn-accent { background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3); }' +
+        '.comp-btn-accent:hover:not(:disabled) { background:rgba(245,158,11,0.25); }' +
+        '.comp-btn-pv { background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3); }' +
+        '.comp-btn-pv:hover:not(:disabled) { background:rgba(16,185,129,0.25); }' +
         '.comp-btn-diff { background:rgba(245,158,11,0.12); color:#f59e0b; border:1px solid rgba(245,158,11,0.25); font-weight:600; }' +
         '.comp-btn-diff:hover:not(:disabled) { background:rgba(245,158,11,0.22); }' +
         '.hurricane-loader { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:16px 0 8px; }' +
         '.hurricane-pre { font-family:"JetBrains Mono","Fira Code",Consolas,monospace; line-height:1.1; letter-spacing:0.3px; margin:0; text-align:center; color:rgba(34,211,238,0.5); user-select:none; }' +
         '.hurricane-msg { margin-top:10px; font-size:12px; font-weight:600; color:#9ca3af; font-family:"JetBrains Mono",monospace; text-align:center; animation:hurricanePulse 2s ease-in-out infinite; }' +
-        '@keyframes hurricanePulse { 0%,100% { opacity:0.5; } 50% { opacity:1; } }' +
-        '@media (max-width:900px) { .composite-body { flex-direction:column; } .composite-controls { width:100%; min-width:auto; border-right:none; border-bottom:1px solid rgba(255,255,255,0.06); max-height:none; } .composite-results { min-height:500px; } }';
+        '@keyframes hurricanePulse { 0%,100% { opacity:0.5; } 50% { opacity:1; } }';
     document.head.appendChild(style);
 }
 
 function toggleCompositePanel() {
+    gtag('event', 'tab_click', { tab_name: 'composites' });
     initCompositePanel();
+    _injectCompositeStyles();
     var panel = document.getElementById('composite-panel');
     panel.classList.toggle('active');
     if (panel.classList.contains('active')) {
         updateCompositeCount();
+        _wizardUpdateSummary();
     }
 }
+
 
 function _getCompositeFilters() {
     return {
@@ -2022,6 +6688,8 @@ function _getCompositeFilters() {
         max_shear_mag:   parseFloat(document.getElementById('comp-shrmag-max').value) || 100,
         min_shear_dir:   parseFloat(document.getElementById('comp-shrdir-min').value) || 0,
         max_shear_dir:   parseFloat(document.getElementById('comp-shrdir-max').value) || 360,
+        min_dtl:         parseFloat(document.getElementById('comp-dtl-min').value) || 0,
+        dtl_window:      document.getElementById('comp-dtl-win').value || '24h',
     };
 }
 
@@ -2043,7 +6711,22 @@ function updateCompositeCount() {
     el.textContent = '\u2026';
     fetch(API_BASE + '/composite/count?' + _compositeQueryString(filters) + '&data_type=' + dataType)
         .then(function(r) { return r.json(); })
-        .then(function(json) { el.textContent = json.count; })
+        .then(function(json) {
+            el.textContent = json.count;
+            var capNote = document.getElementById('comp-cap-note');
+            if (json.capped) {
+                el.textContent = json.count + ' (max ' + json.max_cases + ')';
+                el.style.color = '#fbbf24';
+                el.title = 'Only the first ' + json.max_cases + ' cases will be composited.';
+                if (capNote) { capNote.classList.add('capped'); capNote.textContent = 'Cap exceeded \u2014 only the first ' + json.max_cases + ' matching cases will be composited.'; }
+            } else {
+                el.style.color = '';
+                el.title = '';
+                if (capNote) { capNote.classList.remove('capped'); capNote.textContent = 'Composites are limited to ' + json.max_cases + ' cases per group.'; }
+            }
+            // Keep the summary badge in sync with the latest count
+            _wizardUpdateSummary();
+        })
         .catch(function() { el.textContent = '?'; });
 }
 
@@ -2061,6 +6744,8 @@ function _compositeFilterSummary(filters, nCases) {
         parts.push('Shr ' + filters.min_shear_mag + '\u2013' + filters.max_shear_mag + ' kt');
     if (filters.min_shear_dir > 0 || filters.max_shear_dir < 360)
         parts.push('Dir ' + filters.min_shear_dir + '\u2013' + filters.max_shear_dir + '\u00b0');
+    if (filters.min_dtl > 0)
+        parts.push('DTL \u2265 ' + filters.min_dtl + ' km (' + (filters.dtl_window || '24h') + ')');
     var summary = parts.length > 0 ? parts.join(' | ') : 'All cases';
     return 'Composite (N=' + nCases + ') | ' + summary;
 }
@@ -2094,9 +6779,108 @@ function _computeCompositeMeanVmax(filters) {
             if (sd === null) return;
             if (sd < filters.min_shear_dir || sd > filters.max_shear_dir) return;
         }
+        if (filters.min_dtl > 0) {
+            var dtlKey = filters.dtl_window === '12h' ? 'dtl_min_12h' : 'dtl_min_24h';
+            var dtlVal = c[dtlKey];
+            if (dtlVal == null || dtlVal < filters.min_dtl) return;
+        }
         sum += v; count++;
     });
     return count > 0 ? Math.round(sum / count) : null;
+}
+
+/**
+ * Fetch with a timeout — rejects with a clear message if the server doesn't
+ * respond within `ms` milliseconds.  Helps surface crashes or stalls on the
+ * Render server instead of leaving the user with a perpetual spinner.
+ */
+function _fetchWithTimeout(url, ms) {
+    if (!ms) ms = 300000; // 5 minutes default (upgraded 2 GB Render plan)
+    var controller = new AbortController();
+    var timer = setTimeout(function() { controller.abort(); }, ms);
+    return fetch(url, { signal: controller.signal })
+        .then(function(r) { clearTimeout(timer); return r; })
+        .catch(function(err) {
+            clearTimeout(timer);
+            if (err.name === 'AbortError') {
+                throw new Error('Server timed out — the composite may be too large. Try narrowing your filters to reduce the case count.');
+            }
+            throw err;
+        });
+}
+
+/**
+ * Streaming composite fetch: reads NDJSON progress lines, updates the
+ * loading status with a progress percentage, and returns the final result
+ * JSON.  Falls back to a normal fetch if the browser doesn't support
+ * ReadableStream (shouldn't happen in any modern browser).
+ *
+ * @param {string} url  – API URL (stream=true will be appended)
+ * @param {string} label – Human label for the loading message
+ * @param {number} [ms]  – Timeout in milliseconds (default 300 000)
+ * @returns {Promise<Object>} – The final result JSON object
+ */
+function _fetchCompositeStream(url, label, ms) {
+    if (!ms) ms = 300000;
+    var sep = url.indexOf('?') === -1 ? '?' : '&';
+    var streamUrl = url + sep + 'stream=true';
+    var controller = new AbortController();
+    var timer = setTimeout(function() { controller.abort(); }, ms);
+
+    return fetch(streamUrl, { signal: controller.signal }).then(function(resp) {
+        clearTimeout(timer);
+        if (!resp.ok) {
+            return resp.text().then(function(t) {
+                try {
+                    var j = JSON.parse(t);
+                    var detail = j.detail;
+                    if (typeof detail === 'object') detail = Array.isArray(detail) ? detail.map(function(d){return d.msg||JSON.stringify(d);}).join('; ') : JSON.stringify(detail);
+                    throw new Error(detail || 'API error (HTTP ' + resp.status + ')');
+                }
+                catch(e) { if (e.message) throw e; throw new Error('API error: ' + t); }
+            });
+        }
+        var reader = resp.body.getReader();
+        var decoder = new TextDecoder();
+        var buffer = '';
+        var lastResult = null;
+
+        function pump() {
+            return reader.read().then(function(chunk) {
+                if (chunk.done) return lastResult;
+                buffer += decoder.decode(chunk.value, { stream: true });
+                // Process complete lines
+                var lines = buffer.split('\n');
+                buffer = lines.pop(); // keep incomplete line in buffer
+                for (var i = 0; i < lines.length; i++) {
+                    var line = lines[i].trim();
+                    if (!line) continue;
+                    try {
+                        var obj = JSON.parse(line);
+                        if (obj.progress !== undefined && obj.total !== undefined) {
+                            var pct = Math.round(100 * obj.progress / obj.total);
+                            _showCompStatus('loading', label + ' — ' + obj.progress + ' / ' + obj.total + ' cases (' + pct + '%)');
+                        } else if (obj.error) {
+                            throw new Error(typeof obj.error === 'string' ? obj.error : JSON.stringify(obj.error));
+                        } else {
+                            // Final result JSON
+                            lastResult = obj;
+                        }
+                    } catch(e) {
+                        if (e.message && e.message !== 'Unexpected end of JSON input') throw e;
+                    }
+                }
+                return pump();
+            });
+        }
+        return pump();
+    }).catch(function(err) {
+        clearTimeout(timer);
+        if (err.name === 'AbortError') {
+            throw new Error('Server timed out — the composite may be too large. Try narrowing your filters to reduce the case count.');
+        }
+        throw err;
+    });
 }
 
 function _showCompStatus(cls, msg) {
@@ -2199,6 +6983,13 @@ function _buildCompPermalinkHash() {
     if (coverage && coverage.value !== '50') params.coverage = coverage.value;
     var overlay = document.getElementById('comp-overlay');
     if (overlay && overlay.value) params.overlay = overlay.value;
+    // Plan-view parameters (only when relevant)
+    var pvParams = _getCompositePlanViewParams();
+    if (pvParams.level_km !== 2.0)    params.level_km = pvParams.level_km;
+    if (pvParams.normalize_rmw)        params.normalize_rmw = 'true';
+    if (pvParams.max_r_rmw !== 5.0)   params.max_r_rmw = pvParams.max_r_rmw;
+    if (pvParams.dr_rmw !== 0.1)      params.dr_rmw = pvParams.dr_rmw;
+    if (pvParams.shear_relative)       params.shear_relative = 'true';
     // Which view was generated
     if (_lastCompType) params.view = _lastCompType;
     var qs = Object.keys(params).map(function(k) { return k + '=' + encodeURIComponent(params[k]); }).join('&');
@@ -2279,6 +7070,28 @@ function _applyCompHashParams(params) {
         if (ovSel) ovSel.value = params.overlay;
     }
 
+    // Plan-view parameters
+    if (params.level_km) {
+        var lvlSel = document.getElementById('comp-level');
+        if (lvlSel) lvlSel.value = params.level_km;
+    }
+    if (params.normalize_rmw === 'true') {
+        var nrmCheck = document.getElementById('comp-norm-rmw');
+        if (nrmCheck) { nrmCheck.checked = true; nrmCheck.dispatchEvent(new Event('change')); }
+    }
+    if (params.max_r_rmw) {
+        var mrEl = document.getElementById('comp-max-r-rmw');
+        if (mrEl) mrEl.value = params.max_r_rmw;
+    }
+    if (params.dr_rmw) {
+        var drEl = document.getElementById('comp-dr-rmw');
+        if (drEl) drEl.value = params.dr_rmw;
+    }
+    if (params.shear_relative === 'true') {
+        var srCheck = document.getElementById('comp-shear-rel');
+        if (srCheck) srCheck.checked = true;
+    }
+
     // Open the panel
     var panel = document.getElementById('composite-panel');
     if (!panel.classList.contains('active')) panel.classList.add('active');
@@ -2286,9 +7099,14 @@ function _applyCompHashParams(params) {
     // Update the count then auto-generate if a view was specified
     updateCompositeCount();
     if (params.view === 'az') {
+        _wizardGoToStep(4);
         setTimeout(generateCompositeAzMean, 600);
     } else if (params.view === 'sq') {
+        _wizardGoToStep(4);
         setTimeout(generateCompositeQuadMean, 600);
+    } else if (params.view === 'pv') {
+        _wizardGoToStep(4);
+        setTimeout(generateCompositePlanView, 600);
     }
     return true;
 }
@@ -2371,14 +7189,44 @@ function _downloadCompCSV() {
                 lines.push(row.join(','));
             }
         });
+    } else if (_lastCompType === 'pv') {
+        // Plan-view: Y × X table
+        var xAxis = json.x_axis, yAxis = json.y_axis;
+        lines.push('# TC-RADAR Composite Plan View');
+        lines.push('# Variable: ' + varInfo.display_name + ' (' + varInfo.units + ')');
+        lines.push('# Height: ' + json.level_km + ' km');
+        lines.push('# N cases: ' + json.n_cases);
+        lines.push('# RMW-normalized: ' + (json.normalize_rmw ? 'yes' : 'no'));
+        lines.push('# Shear-relative: ' + (json.shear_relative ? 'yes' : 'no'));
+        lines.push('# Filters: ' + JSON.stringify(json.filters));
+        lines.push('#');
+        lines.push(json.x_label + ',' + xAxis.join(','));
+        var pvData = json.plan_view;
+        for (var yi = 0; yi < yAxis.length; yi++) {
+            var row = [yAxis[yi]];
+            for (var xi = 0; xi < xAxis.length; xi++) {
+                var v = pvData[yi] && pvData[yi][xi];
+                row.push(v !== null && v !== undefined ? v : '');
+            }
+            lines.push(row.join(','));
+        }
     }
 
-    // Append case list
+    // Append case list(s)
     if (json.case_list && json.case_list.length > 0) {
         lines.push('');
-        lines.push('# Cases used in composite');
+        var groupLabel = json._isDiff ? '# Cases in Group A' : '# Cases used in composite';
+        lines.push(groupLabel);
         lines.push('case_index,storm_name,datetime,vmax_kt');
         json.case_list.forEach(function(c) {
+            lines.push([c.case_index, c.storm_name, c.datetime, c.vmax_kt !== null ? c.vmax_kt : ''].join(','));
+        });
+    }
+    if (json._isDiff && json.case_list_b && json.case_list_b.length > 0) {
+        lines.push('');
+        lines.push('# Cases in Group B');
+        lines.push('case_index,storm_name,datetime,vmax_kt');
+        json.case_list_b.forEach(function(c) {
             lines.push([c.case_index, c.storm_name, c.datetime, c.vmax_kt !== null ? c.vmax_kt : ''].join(','));
         });
     }
@@ -2388,16 +7236,46 @@ function _downloadCompCSV() {
     _triggerDownload(lines.join('\n'), filename, 'text/csv');
 }
 
+var _caseListShowingGroup = 'A';  // Track which group is visible in diff mode
+
 function _toggleCompCaseList() {
     var el = document.getElementById('comp-case-list');
     if (!el || !_lastCompJson) return;
     if (el.style.display !== 'none') { el.style.display = 'none'; return; }
-    var caseList = _lastCompJson.case_list || [];
-    if (caseList.length === 0) { el.innerHTML = '<div class="comp-cl-empty">No case list available.</div>'; el.style.display = 'block'; return; }
-    // Build table
-    var html = '<div class="comp-cl-header">' +
-        '<span class="comp-cl-title">\uD83D\uDCCB ' + caseList.length + ' cases used in composite</span>' +
-        '<button class="comp-tool-btn comp-cl-copy" onclick="_copyCompCaseIndices()" title="Copy case indices to clipboard">\uD83D\uDCCB Copy Indices</button>' +
+    _caseListShowingGroup = 'A';
+    _renderCompCaseList();
+}
+
+function _renderCompCaseList() {
+    var el = document.getElementById('comp-case-list');
+    if (!el || !_lastCompJson) return;
+    var isDiff = !!_lastCompJson._isDiff;
+    var group = _caseListShowingGroup;
+    var caseList = (isDiff && group === 'B') ? (_lastCompJson.case_list_b || []) : (_lastCompJson.case_list || []);
+
+    if (caseList.length === 0) {
+        el.innerHTML = '<div class="comp-cl-empty">No case list available for Group ' + group + '.</div>';
+        el.style.display = 'block';
+        return;
+    }
+
+    var html = '<div class="comp-cl-header">';
+    // Add A/B toggle buttons in diff mode
+    if (isDiff) {
+        var nA = (_lastCompJson.case_list || []).length;
+        var nB = (_lastCompJson.case_list_b || []).length;
+        var activeA = group === 'A' ? 'background:rgba(96,165,250,0.2);border-color:rgba(96,165,250,0.5);color:#60a5fa;' : '';
+        var activeB = group === 'B' ? 'background:rgba(245,158,11,0.2);border-color:rgba(245,158,11,0.5);color:#f59e0b;' : '';
+        html += '<div style="display:flex;gap:4px;margin-right:8px;">' +
+            '<button onclick="_switchCaseListGroup(\'A\')" style="padding:3px 10px;font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,0.15);border-radius:4px;cursor:pointer;font-family:\'JetBrains Mono\',monospace;' + activeA + '">Group A (' + nA + ')</button>' +
+            '<button onclick="_switchCaseListGroup(\'B\')" style="padding:3px 10px;font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,0.15);border-radius:4px;cursor:pointer;font-family:\'JetBrains Mono\',monospace;' + activeB + '">Group B (' + nB + ')</button>' +
+        '</div>';
+        var groupColor = group === 'A' ? '#60a5fa' : '#f59e0b';
+        html += '<span class="comp-cl-title" style="color:' + groupColor + ';">\uD83D\uDCCB Group ' + group + ': ' + caseList.length + ' cases</span>';
+    } else {
+        html += '<span class="comp-cl-title">\uD83D\uDCCB ' + caseList.length + ' cases used in composite</span>';
+    }
+    html += '<button class="comp-tool-btn comp-cl-copy" onclick="_copyCompCaseIndices()" title="Copy case indices to clipboard">\uD83D\uDCCB Copy Indices</button>' +
     '</div>' +
     '<div class="comp-cl-scroll"><table class="comp-cl-table"><thead><tr>' +
         '<th>Index</th><th>Storm</th><th>Date/Time</th><th>V<sub>max</sub> (kt)</th>' +
@@ -2413,9 +7291,17 @@ function _toggleCompCaseList() {
     el.style.display = 'block';
 }
 
+function _switchCaseListGroup(group) {
+    _caseListShowingGroup = group;
+    _renderCompCaseList();
+}
+
 function _copyCompCaseIndices() {
-    if (!_lastCompJson || !_lastCompJson.case_list) return;
-    var indices = _lastCompJson.case_list.map(function(c) { return c.case_index; });
+    if (!_lastCompJson) return;
+    var caseList = (_lastCompJson._isDiff && _caseListShowingGroup === 'B')
+        ? (_lastCompJson.case_list_b || [])
+        : (_lastCompJson.case_list || []);
+    var indices = caseList.map(function(c) { return c.case_index; });
     navigator.clipboard.writeText(indices.join(', ')).then(function() {
         var btn = document.querySelector('.comp-cl-copy');
         if (btn) { var orig = btn.textContent; btn.textContent = '\u2713 Copied!'; setTimeout(function() { btn.textContent = orig; }, 1500); }
@@ -2428,17 +7314,9 @@ function renderCompositeAzMeanInto(targetId, json, filters) {
     var isNorm = json.normalized;
     var rLabel = isNorm ? 'R / RMW' : 'Radius (km)';
     var fontSize = { title:14, axis:12, tick:10, cbar:12, cbarTick:10, hover:13 };
-    // Store defaults and update placeholders
-    _compDefaultColorscale = varInfo.colorscale; _compDefaultVmin = varInfo.vmin; _compDefaultVmax = varInfo.vmax;
-    var vminInp = document.getElementById('comp-vmin'), vmaxInp = document.getElementById('comp-vmax');
-    if (vminInp) vminInp.placeholder = varInfo.vmin; if (vmaxInp) vmaxInp.placeholder = varInfo.vmax;
-    // Apply user overrides
-    var activeColorscale = _getCompColorscale(varInfo.colorscale);
-    var activeVmin = _getCompVmin(varInfo.vmin);
-    var activeVmax = _getCompVmax(varInfo.vmax);
     var heatmap = {
         z: azData, x: radius, y: height_km, type: 'heatmap',
-        colorscale: activeColorscale, zmin: activeVmin, zmax: activeVmax,
+        colorscale: varInfo.colorscale, zmin: varInfo.vmin, zmax: varInfo.vmax,
         colorbar: { title: { text: varInfo.units, font: { color:'#ccc', size:fontSize.cbar } }, tickfont: { color:'#ccc', size:fontSize.cbarTick }, thickness:14, len:0.85 },
         hovertemplate: '<b>' + varInfo.display_name + '</b>: %{z:.2f} ' + varInfo.units + '<br>' + rLabel + ': %{x:.2f}<br>Height: %{y:.1f} km<extra></extra>',
         hoverongaps: false
@@ -2460,7 +7338,7 @@ function renderCompositeAzMeanInto(targetId, json, filters) {
         paper_bgcolor: plotBg, plot_bgcolor: plotBg,
         xaxis: { title: { text:rLabel, font:{color:'#aaa',size:fontSize.axis} }, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
         yaxis: { title: { text:'Height (km)', font:{color:'#aaa',size:fontSize.axis} }, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
-        margin: { l:55, r:24, t: json.overlay ? 130 : 116, b:46 }, shapes: shapes,
+        margin: { l:55, r:24, t: json.overlay ? 170 : 156, b:46 }, shapes: shapes,
         hoverlabel: { bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
         showlegend: false
     };
@@ -2472,7 +7350,8 @@ function renderCompositeAzMeanInto(targetId, json, filters) {
     var compAzOverlay = buildCompAzOverlayContours(json, radius, height_km);
     el.style.display = 'block';
     _lastCompJson = json; _lastCompType = 'az';
-    el.innerHTML = '<div id="comp-az-chart" style="width:100%;height:560px;border-radius:8px;overflow:hidden;"></div>' + _buildCompToolbar();
+    _registerShadingTargets('shd-az', ['comp-az-chart'], varInfo.colorscale, varInfo.vmin, varInfo.vmax);
+    el.innerHTML = '<div id="comp-az-chart" style="width:100%;height:560px;border-radius:8px;overflow:hidden;"></div>' + _buildShadingControlsRow('shd-az', {defaultVmin: varInfo.vmin, defaultVmax: varInfo.vmax}) + _buildCompToolbar();
     Plotly.newPlot('comp-az-chart', [heatmap].concat(compAzOverlay), layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
 }
 
@@ -2483,13 +7362,7 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
     var isNorm = json.normalized;
     var rLabel = isNorm ? 'R / RMW' : 'Radius (km)';
     var fontSize = { title:14, axis:11, tick:10, cbar:11, cbarTick:10, hover:12, panel:12 };
-    // Store defaults and update placeholders
-    _compDefaultColorscale = varInfo.colorscale; _compDefaultVmin = varInfo.vmin; _compDefaultVmax = varInfo.vmax;
-    var vminInp = document.getElementById('comp-vmin'), vmaxInp = document.getElementById('comp-vmax');
-    if (vminInp) vminInp.placeholder = varInfo.vmin; if (vmaxInp) vmaxInp.placeholder = varInfo.vmax;
-    // Apply user overrides
-    var activeColorscale = _getCompColorscale(varInfo.colorscale);
-    var zmin = _getCompVmin(varInfo.vmin), zmax = _getCompVmax(varInfo.vmax);
+    var zmin = varInfo.vmin, zmax = varInfo.vmax;
 
     var panelOrder = [
         { key:'USL', label:'Upshear Left', row:0, col:0 },
@@ -2514,7 +7387,7 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
         var showCbar = (i === 1);
         traces.push({
             z:qData.data, x:radius, y:height_km, type:'heatmap',
-            colorscale:activeColorscale, zmin:zmin, zmax:zmax,
+            colorscale:varInfo.colorscale, zmin:zmin, zmax:zmax,
             xaxis:'x'+axSuffix, yaxis:'y'+axSuffix,
             showscale:showCbar,
             colorbar: showCbar ? { title:{text:varInfo.units,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:14, len:0.85, x:1.02, y:0.5 } : undefined,
@@ -2565,9 +7438,9 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
     var compQuadOverlay = buildCompQuadOverlayContours(json, radius, height_km, panelOrder);
 
     var layout = Object.assign({
-        title:{ text:title, font:{color:'#e5e7eb',size:fontSize.title}, y:0.99, x:0.5, xanchor:'center' },
+        title:{ text:title, font:{color:'#e5e7eb',size:fontSize.title}, y:0.98, x:0.5, xanchor:'center', yanchor:'top' },
         paper_bgcolor:plotBg, plot_bgcolor:plotBg,
-        margin:{ l:50, r:60, t: json.overlay ? 130 : 116, b:50 },
+        margin:{ l:50, r:60, t: json.overlay ? 170 : 156, b:50 },
         annotations:annotations, shapes:shapes.concat(shearInset.shapes || []),
         hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
         showlegend:false
@@ -2575,7 +7448,8 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
 
     el.style.display = 'block';
     _lastCompJson = json; _lastCompType = 'sq';
-    el.innerHTML = '<div id="comp-sq-chart" style="width:100%;height:740px;border-radius:8px;overflow:hidden;"></div>' + _buildCompToolbar();
+    _registerShadingTargets('shd-sq', ['comp-sq-chart'], varInfo.colorscale, varInfo.vmin, varInfo.vmax);
+    el.innerHTML = '<div id="comp-sq-chart" style="width:100%;height:740px;border-radius:8px;overflow:hidden;"></div>' + _buildShadingControlsRow('shd-sq', {defaultVmin: varInfo.vmin, defaultVmax: varInfo.vmax}) + _buildCompToolbar();
     Plotly.newPlot('comp-sq-chart', traces.concat(compQuadOverlay), layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
 }
 
@@ -2584,28 +7458,762 @@ function generateCompositeAzMean() {
     var variable = document.getElementById('comp-var').value;
     var dataType = document.getElementById('comp-dtype').value;
     var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
-    var btnAz = document.getElementById('comp-btn-az'), btnSq = document.getElementById('comp-btn-sq');
-    btnAz.disabled = true; btnSq.disabled = true;
-    btnAz.textContent = '\u23F3 Computing\u2026';
-    document.getElementById('comp-result-placeholder').style.display = 'none';
+    var btnAz = document.getElementById('comp-btn-az'), btnSq = document.getElementById('comp-btn-sq'), btnPv = document.getElementById('comp-btn-pv');
+    if (btnAz) if (btnAz) btnAz.disabled = true; if (btnSq) if (btnSq) btnSq.disabled = true; if (btnPv) if (btnPv) btnPv.disabled = true;
+    if (btnAz) btnAz.textContent = '\u23F3 Computing\u2026';
+    var _crp = document.getElementById('comp-result-placeholder') || document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
     document.getElementById('comp-result-sq').style.display = 'none';
+    document.getElementById('comp-result-pv').style.display = 'none';
     _showCompStatus('loading', 'Computing composite azimuthal mean \u2014 this may take 30\u201390 seconds for many cases\u2026');
 
     var overlay = (document.getElementById('comp-overlay') || {}).value || '';
-    var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage;
+    var normRmw = !!(document.getElementById('comp-norm-rmw') || {}).checked;
+    var maxRRmw = normRmw ? (parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 8.0) : 8.0;
+    var drRmw   = normRmw ? Math.max(0.05, parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.25) : 0.25;
+    var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage +
+        '&max_r_rmw=' + maxRRmw + '&dr_rmw=' + drRmw;
     if (overlay) qs += '&overlay=' + encodeURIComponent(overlay);
-    fetch(API_BASE + '/composite/azimuthal_mean?' + qs)
-        .then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error(e.detail||'API error');}); return r.json(); })
+    _fetchCompositeStream(API_BASE + '/composite/azimuthal_mean?' + qs, 'Computing azimuthal mean')
         .then(function(json) {
             _showCompStatus('success', '\u2713 Composite computed: ' + json.n_cases + ' cases processed');
+            _updateBadgeFromResult(json.n_cases);
             renderCompositeAzMeanInto('comp-result-az', json, filters);
+            _showCompShadingToolbar();
             history.replaceState(null, '', '#' + _buildCompPermalinkHash());
         })
-        .catch(function(err) { _showCompStatus('error', '\u2717 ' + err.message); })
+        .catch(function(err) { _showCompStatus('error', '\u2717 ' + (err.message || String(err))); })
         .finally(function() {
-            btnAz.disabled = false; btnSq.disabled = false;
-            btnAz.textContent = '\u27F3 Azimuthal Mean';
+            if (btnAz) btnAz.disabled = false; if (btnSq) btnSq.disabled = false; if (btnPv) if (btnPv) btnPv.disabled = false;
+            if (btnAz) btnAz.textContent = '\u27F3 Azimuthal Mean';
         });
+}
+
+// ── Composite Anomaly & VP Scatter ──────────────────────────────────────
+
+function generateCompositeAnomaly() {
+    var resultEl = document.getElementById('comp-result-anom');
+    var dataType = document.getElementById('comp-dtype').value;
+    if (dataType !== 'merge') {
+        resultEl.style.display = 'block';
+        resultEl.innerHTML = '<div class="explorer-status" style="color:#fbbf24;padding:12px;font-size:12px;">\u26A0\uFE0F Anomaly composites are only available for merged analyses. Switch data type to "Merge".</div>';
+        return;
+    }
+
+    var filters = _getCompositeFilters();
+    var variable = document.getElementById('comp-var').value;
+
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = _hurricaneLoadingHTML('Computing composite Z-score anomaly (per-case anomaly \u2192 average)\u2026', true);
+
+    var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) +
+             '&data_type=merge';
+
+    _fetchCompositeStream(API_BASE + '/composite/anomaly_azimuthal_mean?' + qs, 'Computing composite anomaly')
+        .then(function(json) {
+            _showCompStatus('success', '\u2713 Composite anomaly computed: ' + json.n_cases + ' cases');
+            _updateBadgeFromResult(json.n_cases);
+            renderCompositeAnomalyInto('comp-result-anom', json, filters);
+        })
+        .catch(function(err) {
+            resultEl.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + (err.message || String(err)) + '</div>';
+        });
+}
+
+function generateCompDiffAnomaly() {
+    var resultEl = document.getElementById('comp-result-anom');
+    var dataType = document.getElementById('comp-dtype').value;
+    if (dataType !== 'merge') {
+        resultEl.style.display = 'block';
+        resultEl.innerHTML = '<div class="explorer-status" style="color:#fbbf24;padding:12px;font-size:12px;">\u26A0\uFE0F Anomaly composites are only available for merged analyses. Switch data type to "Merge".</div>';
+        return;
+    }
+
+    var filtersA = _getCompositeFilters();
+    var filtersB = _getCompGroupBFilters();
+    var variable = document.getElementById('comp-var').value;
+
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = _hurricaneLoadingHTML('Computing difference anomaly composite (A\u2212B)\u2026', true);
+
+    var baseQS = '&variable=' + encodeURIComponent(variable) + '&data_type=merge';
+    var urlA = API_BASE + '/composite/anomaly_azimuthal_mean?' + _compositeQueryString(filtersA) + baseQS;
+    var urlB = API_BASE + '/composite/anomaly_azimuthal_mean?' + _compositeQueryString(filtersB) + baseQS;
+
+    var jsonA;
+    _fetchCompositeStream(urlA, 'Group A anomaly').then(function(result) {
+        jsonA = result;
+        _showCompStatus('loading', 'Group A done (' + jsonA.n_cases + ' cases). Computing Group B\u2026');
+        return _fetchCompositeStream(urlB, 'Group B anomaly');
+    }).then(function(jsonB) {
+        var diffData = _subtractArrays2D(jsonA.anomaly, jsonB.anomaly);
+        var symRange = _symmetricRange(diffData);
+
+        var diffJson = {
+            anomaly: diffData,
+            r_h_axis: jsonA.r_h_axis,
+            n_inner: jsonA.n_inner,
+            height_km: jsonA.height_km,
+            n_cases: jsonA.n_cases,
+            case_list: jsonA.case_list,
+            case_list_b: jsonB.case_list,
+            _isDiff: true,
+            _nA: jsonA.n_cases,
+            _nB: jsonB.n_cases,
+            _filtersA: filtersA,
+            _filtersB: filtersB,
+            variable: {
+                key: jsonA.variable.key,
+                display_name: '\u0394 ' + jsonA.variable.display_name,
+                units: jsonA.variable.units,
+                anomaly_units: '\u0394\u03c3',
+                vmin: -symRange,
+                vmax: symRange,
+                colorscale: _DIFF_COLORSCALE,
+            },
+        };
+        _showCompStatus('success', '\u2713 Difference anomaly: ' + jsonA.n_cases + ' (A) \u2212 ' + jsonB.n_cases + ' (B)');
+        _updateBadgeFromResult(jsonA.n_cases);
+        _renderDiffAnomaly('comp-result-anom', diffJson, jsonA, jsonB, filtersA, filtersB);
+    }).catch(function(err) {
+        resultEl.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + (err.message || String(err)) + '</div>';
+    });
+}
+
+function renderCompositeAnomalyInto(targetId, json, filters) {
+    var el = document.getElementById(targetId); if (!el) return;
+
+    if (!json.anomaly) {
+        el.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F Anomaly data unavailable.</div>';
+        return;
+    }
+
+    var anomData = json.anomaly, rHAxis = json.r_h_axis, nInner = json.n_inner;
+    var height_km = json.height_km, varInfo = json.variable;
+    var isDiff = !!json._isDiff;
+
+    var fontSize = { title:14, axis:12, tick:10, cbar:12, cbarTick:10 };
+
+    var xIdxArr = []; for (var i = 0; i < rHAxis.length; i++) xIdxArr.push(i);
+    var ticks = _buildHybridXAxis(rHAxis, nInner);
+
+    var zmin = varInfo.vmin != null ? varInfo.vmin : -3;
+    var zmax = varInfo.vmax != null ? varInfo.vmax : 3;
+    var cbarTitle = isDiff ? '\u0394\u03c3' : '\u03c3';
+    var anomColorscale = varInfo.colorscale || [
+        [0.0, 'rgb(5,48,97)'], [0.1, 'rgb(33,102,172)'],
+        [0.2, 'rgb(67,147,195)'], [0.3, 'rgb(146,197,222)'],
+        [0.4, 'rgb(209,229,240)'], [0.5, 'rgb(247,247,247)'],
+        [0.6, 'rgb(253,219,199)'], [0.7, 'rgb(244,165,130)'],
+        [0.8, 'rgb(214,96,77)'], [0.9, 'rgb(178,24,43)'],
+        [1.0, 'rgb(103,0,31)']
+    ];
+
+    var heatmap = {
+        z: anomData, x: xIdxArr, y: height_km, type: 'heatmap',
+        colorscale: anomColorscale, zmin: zmin, zmax: zmax, zmid: 0,
+        colorbar: {
+            title: { text: cbarTitle, font: { color: '#ccc', size: fontSize.cbar } },
+            tickfont: { color: '#ccc', size: fontSize.cbarTick },
+            thickness: 14, len: 0.85,
+        },
+        hoverongaps: false,
+        hovertemplate: '<b>Z-score</b>: %{z:.2f}\u03c3<br>R\u2095: %{x}<br>Height: %{y:.1f} km<extra></extra>'
+    };
+
+    var dtypeLabel = ' (Merge)';
+    var meanVmax = _computeCompositeMeanVmax(filters);
+    var vmaxNote = meanVmax !== null ? ' | Mean V<sub>max</sub>=' + meanVmax + ' kt' : '';
+    var nLabel;
+    if (isDiff) {
+        nLabel = 'Composite \u0394Anomaly (N=' + json._nA + ' \u2212 ' + json._nB + ')';
+    } else {
+        nLabel = _compositeFilterSummary(filters, json.n_cases);
+    }
+    var title = nLabel + vmaxNote +
+                '<br>Z-score Anomaly: ' + (isDiff ? '\u0394 ' : '') + varInfo.display_name + dtypeLabel;
+
+    var shapes = [{
+        type: 'line', xref: 'x', yref: 'paper',
+        x0: nInner, x1: nInner, y0: 0, y1: 1,
+        line: { color: 'rgba(255,255,255,0.5)', width: 1.5, dash: 'dash' }
+    }];
+
+    var plotBg = '#0a1628';
+    var layout = {
+        title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' },
+        paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+        xaxis: { title: { text: 'R\u2095 (RMW + km)', font: { color: '#aaa', size: fontSize.axis } },
+                 tickvals: ticks.tickvals, ticktext: ticks.ticktext,
+                 tickfont: { color: '#aaa', size: fontSize.tick },
+                 gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
+        yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } },
+                 tickfont: { color: '#aaa', size: fontSize.tick },
+                 gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
+        margin: { l: 55, r: 24, t: 156, b: 46 },
+        shapes: shapes, showlegend: false,
+        annotations: [_fischerCitation]
+    };
+
+    el.style.display = 'block';
+    _lastCompJson = json; _lastCompType = 'anom';
+    _registerShadingTargets('shd-anom', ['comp-anom-chart'], anomColorscale, zmin, zmax);
+    el.innerHTML = '<div id="comp-anom-chart" style="width:100%;height:560px;border-radius:8px;overflow:hidden;"></div>' + _buildShadingControlsRow('shd-anom', {defaultVmin: zmin, defaultVmax: zmax}) + _buildCompToolbar();
+    Plotly.newPlot('comp-anom-chart', [heatmap], layout, { responsive: true, displayModeBar: true, displaylogo: false });
+}
+
+function _renderDiffAnomaly(targetId, diffJson, jsonA, jsonB, filtersA, filtersB) {
+    var el = document.getElementById(targetId); if (!el) return;
+    el.style.display = 'block';
+    _lastCompJson = diffJson; _lastCompType = 'anom';
+
+    // Create 3 stacked chart containers + toolbar
+    el.innerHTML =
+        '<div style="margin-bottom:4px;padding:6px 10px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#60a5fa;">\uD83D\uDD35 Group A</div>' +
+        '<div id="comp-diff-anom-a" style="width:100%;height:460px;border-radius:8px;overflow:hidden;"></div>' +
+        '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#f59e0b;">\uD83D\uDFE0 Group B</div>' +
+        '<div id="comp-diff-anom-b" style="width:100%;height:460px;border-radius:8px;overflow:hidden;"></div>' +
+        _buildShadingControlsRow('shd-danom-ab', {label: 'Panels A &amp; B', defaultVmin: -3, defaultVmax: 3}) +
+        '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#ef4444;">\u0394 Difference (A \u2212 B)</div>' +
+        '<div id="comp-diff-anom-d" style="width:100%;height:460px;border-radius:8px;overflow:hidden;"></div>' +
+        _buildShadingControlsRow('shd-danom-d', {label: 'Difference', defaultVmin: diffJson.variable.vmin, defaultVmax: diffJson.variable.vmax}) +
+        _buildCompToolbar();
+
+    _registerShadingTargets('shd-danom-ab', ['comp-diff-anom-a', 'comp-diff-anom-b'], jsonA.variable.colorscale || [
+        [0.0,'rgb(5,48,97)'],[0.1,'rgb(33,102,172)'],[0.2,'rgb(67,147,195)'],[0.3,'rgb(146,197,222)'],
+        [0.4,'rgb(209,229,240)'],[0.5,'rgb(247,247,247)'],[0.6,'rgb(253,219,199)'],
+        [0.7,'rgb(244,165,130)'],[0.8,'rgb(214,96,77)'],[0.9,'rgb(178,24,43)'],[1.0,'rgb(103,0,31)']
+    ], -3, 3);
+
+    var plotOpts = { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] };
+    var plotBg = '#0a1628';
+    var rHAxis = jsonA.r_h_axis, nInner = jsonA.n_inner, height_km = jsonA.height_km;
+    var xIdxArr = []; for (var i = 0; i < rHAxis.length; i++) xIdxArr.push(i);
+    var ticks = _buildHybridXAxis(rHAxis, nInner);
+    var fontSize = { title:13, axis:11, tick:10, cbar:11, cbarTick:10, hover:12 };
+    var rmwShape = [{ type:'line', xref:'x', yref:'paper', x0:nInner, x1:nInner, y0:0, y1:1, line:{ color:'rgba(255,255,255,0.5)', width:1.5, dash:'dash' } }];
+
+    // RdBu_r for individual group anomalies
+    var anomColorscale = jsonA.variable.colorscale || [
+        [0.0,'rgb(5,48,97)'],[0.1,'rgb(33,102,172)'],[0.2,'rgb(67,147,195)'],[0.3,'rgb(146,197,222)'],
+        [0.4,'rgb(209,229,240)'],[0.5,'rgb(247,247,247)'],[0.6,'rgb(253,219,199)'],
+        [0.7,'rgb(244,165,130)'],[0.8,'rgb(214,96,77)'],[0.9,'rgb(178,24,43)'],[1.0,'rgb(103,0,31)']
+    ];
+
+    // Helper to build one anomaly heatmap panel
+    function buildAnomPlot(chartId, anomData, titleText, colorscale, zmin, zmax, cbarLabel) {
+        var hm = {
+            z: anomData, x: xIdxArr, y: height_km, type: 'heatmap',
+            colorscale: colorscale, zmin: zmin, zmax: zmax, zmid: 0,
+            colorbar: { title:{text:cbarLabel,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:14, len:0.85 },
+            hovertemplate: '<b>Z-score</b>: %{z:.2f}\u03c3<br>R\u2095: %{x}<br>Height: %{y:.1f} km<extra></extra>',
+            hoverongaps: false
+        };
+        var layout = {
+            title: { text:titleText, font:{color:'#e5e7eb',size:fontSize.title}, y:0.97, x:0.5, xanchor:'center' },
+            paper_bgcolor:plotBg, plot_bgcolor:plotBg,
+            xaxis: { title:{text:'R\u2095 (RMW + km)',font:{color:'#aaa',size:fontSize.axis}},
+                     tickvals:ticks.tickvals, ticktext:ticks.ticktext,
+                     tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
+            yaxis: { title:{text:'Height (km)',font:{color:'#aaa',size:fontSize.axis}}, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
+            margin:{ l:55, r:24, t:116, b:42 }, shapes:rmwShape,
+            hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
+            showlegend:false, annotations:[_fischerCitation]
+        };
+        Plotly.newPlot(chartId, [hm], layout, plotOpts);
+    }
+
+    // Group A
+    var meanVmaxA = _computeCompositeMeanVmax(filtersA);
+    var vmaxNoteA = meanVmaxA !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxA + ' kt' : '';
+    var titleA = _compositeFilterSummary(filtersA, jsonA.n_cases) + vmaxNoteA +
+                 '<br>Z-score Anomaly: ' + jsonA.variable.display_name + ' (Merge)';
+    buildAnomPlot('comp-diff-anom-a', jsonA.anomaly, titleA, anomColorscale, -3, 3, '\u03c3');
+
+    // Group B
+    var meanVmaxB = _computeCompositeMeanVmax(filtersB);
+    var vmaxNoteB = meanVmaxB !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxB + ' kt' : '';
+    var titleB = _compositeFilterSummary(filtersB, jsonB.n_cases) + vmaxNoteB +
+                 '<br>Z-score Anomaly: ' + jsonB.variable.display_name + ' (Merge)';
+    buildAnomPlot('comp-diff-anom-b', jsonB.anomaly, titleB, anomColorscale, -3, 3, '\u03c3');
+
+    // Difference
+    var diffVarInfo = diffJson.variable;
+    var diffVmaxNote = '';
+    if (meanVmaxA !== null || meanVmaxB !== null) {
+        diffVmaxNote = ' | V\u0305<sub>max</sub>: ';
+        if (meanVmaxA !== null) diffVmaxNote += '<span style="color:#60a5fa;">A=' + meanVmaxA + '</span>';
+        if (meanVmaxA !== null && meanVmaxB !== null) diffVmaxNote += ', ';
+        if (meanVmaxB !== null) diffVmaxNote += '<span style="color:#f59e0b;">B=' + meanVmaxB + '</span> kt';
+    }
+    var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) + diffVmaxNote +
+                 '<br>\u0394 Z-score Anomaly: ' + jsonA.variable.display_name + ' (Merge)';
+
+    _registerShadingTargets('shd-danom-d', ['comp-diff-anom-d'], _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax);
+    buildAnomPlot('comp-diff-anom-d', diffJson.anomaly, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, '\u0394\u03c3');
+}
+
+function generateCompositeVPScatter() {
+    var resultEl = document.getElementById('comp-result-vpsc');
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = _hurricaneLoadingHTML('Loading VP scatter data\u2026', true);
+
+    fetch(API_BASE + '/scatter/vp_favorability?data_type=merge&color_by=dvmax_12h')
+        .then(function(r) {
+            if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); });
+            return r.json();
+        })
+        .then(function(json) {
+            resultEl.innerHTML = '<div id="comp-vpsc-chart" style="width:100%;height:500px;border-radius:8px;overflow:hidden;"></div>' +
+                '<div style="display:flex;gap:6px;justify-content:center;margin-top:6px;">' +
+                '<button class="cs-btn" onclick="reloadCompVPScatter(\'dvmax_12h\')" style="font-size:10px;padding:2px 8px;">12-h \u0394Vmax</button>' +
+                '<button class="cs-btn" onclick="reloadCompVPScatter(\'dvmax_24h\')" style="font-size:10px;padding:2px 8px;">24-h \u0394Vmax</button>' +
+                '</div>';
+            renderVPScatterInto('comp-vpsc-chart', json, true);
+        })
+        .catch(function(err) {
+            resultEl.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + (err.message || String(err)) + '</div>';
+        });
+}
+
+function reloadCompVPScatter(colorBy) {
+    var resultEl = document.getElementById('comp-result-vpsc');
+    if (!resultEl) return;
+    resultEl.innerHTML = _hurricaneLoadingHTML('Reloading VP scatter\u2026', true);
+    fetch(API_BASE + '/scatter/vp_favorability?data_type=merge&color_by=' + colorBy)
+        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function(json) {
+            resultEl.innerHTML = '<div id="comp-vpsc-chart" style="width:100%;height:500px;border-radius:8px;overflow:hidden;"></div>' +
+                '<div style="display:flex;gap:6px;justify-content:center;margin-top:6px;">' +
+                '<button class="cs-btn" onclick="reloadCompVPScatter(\'dvmax_12h\')" style="font-size:10px;padding:2px 8px;">12-h \u0394Vmax</button>' +
+                '<button class="cs-btn" onclick="reloadCompVPScatter(\'dvmax_24h\')" style="font-size:10px;padding:2px 8px;">24-h \u0394Vmax</button>' +
+                '</div>';
+            renderVPScatterInto('comp-vpsc-chart', json, true);
+        })
+        .catch(function(err) {
+            resultEl.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + err.message + '</div>';
+        });
+}
+
+
+// ── CFAD helper functions ──
+
+function _cfadUpdateRadiusUnit() {
+    var unitEl = document.getElementById('cfad-radius-unit');
+    var useRmw = document.getElementById('cfad-use-rmw');
+    if (unitEl && useRmw) {
+        unitEl.textContent = useRmw.checked ? 'R/RMW' : 'km';
+    }
+}
+
+function _cfadToggleQuad(btn) {
+    var quad = btn.getAttribute('data-quad');
+    var allBtns = document.querySelectorAll('#cfad-quad-btns .cfad-quad-btn');
+    var activeStyle = 'padding:4px 10px;font-size:10px;font-weight:600;border:1px solid rgba(34,211,238,0.3);border-radius:4px;background:rgba(34,211,238,0.15);color:#22d3ee;cursor:pointer;font-family:\'JetBrains Mono\',monospace;';
+    var inactiveStyle = 'padding:4px 10px;font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:rgba(255,255,255,0.03);color:#9ca3af;cursor:pointer;font-family:\'JetBrains Mono\',monospace;';
+
+    if (quad === 'ALL' || quad === 'MULTI') {
+        // "All" and "Multi" are exclusive — deselect everything else, activate this one
+        allBtns.forEach(function(b) {
+            var match = b.getAttribute('data-quad') === quad;
+            b.classList.toggle('active', match);
+            b.style.cssText = match ? activeStyle : inactiveStyle;
+        });
+    } else {
+        // Deselect "All" and "Multi" if either is active
+        allBtns.forEach(function(b) {
+            var d = b.getAttribute('data-quad');
+            if ((d === 'ALL' || d === 'MULTI') && b.classList.contains('active')) {
+                b.classList.remove('active');
+                b.style.cssText = inactiveStyle;
+            }
+        });
+        // Toggle this quadrant
+        var isActive = btn.classList.toggle('active');
+        btn.style.cssText = isActive ? activeStyle : inactiveStyle;
+        // If no quadrants are selected, re-activate "All"
+        var anyActive = document.querySelector('#cfad-quad-btns .cfad-quad-btn.active:not([data-quad="ALL"]):not([data-quad="MULTI"])');
+        if (!anyActive) {
+            var allBtn = document.querySelector('#cfad-quad-btns .cfad-quad-btn[data-quad="ALL"]');
+            if (allBtn) {
+                allBtn.classList.add('active');
+                allBtn.style.cssText = activeStyle;
+            }
+        }
+    }
+}
+
+function _cfadGetSelectedQuadrants() {
+    var multiBtn = document.querySelector('#cfad-quad-btns .cfad-quad-btn.active[data-quad="MULTI"]');
+    if (multiBtn) return ['MULTI'];
+    var allBtn = document.querySelector('#cfad-quad-btns .cfad-quad-btn.active[data-quad="ALL"]');
+    if (allBtn) return [];  // empty = all azimuths
+    var selected = [];
+    document.querySelectorAll('#cfad-quad-btns .cfad-quad-btn.active').forEach(function(b) {
+        selected.push(b.getAttribute('data-quad'));
+    });
+    return selected;
+}
+
+function generateCompositeCFAD() {
+    var filters = _getCompositeFilters();
+    var variable = document.getElementById('comp-var').value;
+    var dataType = document.getElementById('comp-dtype').value;
+    var _crp = document.getElementById('comp-result-placeholder') || document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
+    _showCompStatus('loading', 'Computing CFAD \u2014 this may take 30\u201390 seconds for many cases\u2026');
+
+    // Gather CFAD-specific options
+    var binWidth = parseFloat((document.getElementById('cfad-bin-width') || {}).value) || 0;
+    var nBins = parseInt((document.getElementById('cfad-n-bins') || {}).value, 10) || 20;
+    var binMinVal = (document.getElementById('cfad-bin-min') || {}).value;
+    var binMaxVal = (document.getElementById('cfad-bin-max') || {}).value;
+    var normalise = (document.getElementById('cfad-normalise') || {}).value || 'height';
+    var minRadius = parseFloat((document.getElementById('cfad-min-radius') || {}).value) || 0;
+    var maxRadius = parseFloat((document.getElementById('cfad-max-radius') || {}).value) || 200;
+    var useRmw = !!(document.getElementById('cfad-use-rmw') || {}).checked;
+    var quadrants = _cfadGetSelectedQuadrants();
+    var isMulti = quadrants.length === 1 && quadrants[0] === 'MULTI';
+
+    var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType +
+        '&min_radius=' + minRadius + '&max_radius=' + maxRadius + '&normalise=' + encodeURIComponent(normalise) +
+        '&n_bins=' + nBins;
+    if (useRmw) qs += '&use_rmw=true';
+    if (binWidth > 0) qs += '&bin_width=' + binWidth;
+    if (binMinVal !== '' && binMinVal !== undefined && !isNaN(parseFloat(binMinVal))) qs += '&bin_min=' + parseFloat(binMinVal);
+    if (binMaxVal !== '' && binMaxVal !== undefined && !isNaN(parseFloat(binMaxVal))) qs += '&bin_max=' + parseFloat(binMaxVal);
+    if (isMulti) {
+        qs += '&quadrants=MULTI';
+    } else if (quadrants.length > 0) {
+        qs += '&quadrants=' + encodeURIComponent(quadrants.join(','));
+    }
+
+    _fetchCompositeStream(API_BASE + '/composite/cfad?' + qs, 'Computing CFAD')
+        .then(function(json) {
+            _showCompStatus('success', '\u2713 CFAD computed: ' + json.n_cases + ' cases processed');
+            _updateBadgeFromResult(json.n_cases);
+            if (json.multi) {
+                renderCompositeCFADMultiInto('comp-result-cfad', json, filters);
+            } else {
+                renderCompositeCFADInto('comp-result-cfad', json, filters);
+            }
+        })
+        .catch(function(err) { _showCompStatus('error', '\u2717 ' + (err.message || String(err))); });
+}
+
+function renderCompositeCFADInto(targetId, json, filters) {
+    var el = document.getElementById(targetId); if (!el) return;
+    var cfadData = json.cfad;
+    var binCenters = json.bin_centers;
+    var heightKm = json.height_km;
+    var varInfo = json.variable;
+    var normLabel = json.norm_label;
+
+    var fontSize = { title:14, axis:12, tick:10, cbar:12, cbarTick:10, hover:13 };
+
+    // Check if log scale is requested
+    var useLog = !!(document.getElementById('cfad-log-scale') || {}).checked;
+
+    // CFAD colorscale — Spectral_r from the backend (matplotlib), with fallback
+    var cfadColorscale = json.cfad_colorscale || 'RdYlBu';
+
+    // Find the actual min (non-zero) and max for colorbar scaling
+    var zMax = 0, zMinPos = Infinity;
+    for (var h = 0; h < cfadData.length; h++) {
+        for (var b = 0; b < cfadData[h].length; b++) {
+            var v = cfadData[h][b];
+            if (v !== null && v > zMax) zMax = v;
+            if (v !== null && v > 0 && v < zMinPos) zMinPos = v;
+        }
+    }
+    if (zMax === 0) zMax = 1;
+    if (zMinPos === Infinity) zMinPos = 0.001;
+
+    // Apply log10 transform if requested
+    var plotData, plotZmin, plotZmax, cbarTitle, hoverSuffix;
+    if (useLog && zMax > 0) {
+        // Log10 transform: replace 0/null with NaN so they render as gaps
+        plotData = [];
+        for (var h2 = 0; h2 < cfadData.length; h2++) {
+            var row = [];
+            for (var b2 = 0; b2 < cfadData[h2].length; b2++) {
+                var val = cfadData[h2][b2];
+                if (val === null || val <= 0) {
+                    row.push(null);
+                } else {
+                    row.push(Math.log10(val));
+                }
+            }
+            plotData.push(row);
+        }
+        plotZmin = Math.log10(Math.max(zMinPos * 0.5, 1e-6));
+        plotZmax = Math.log10(zMax);
+
+        // Build custom tick values for the colorbar in log space
+        var tickVals = [], tickText = [];
+        // Generate nice tick labels spanning the log range
+        var logMin = Math.floor(plotZmin), logMax = Math.ceil(plotZmax);
+        for (var p = logMin; p <= logMax; p++) {
+            var tv = Math.pow(10, p);
+            tickVals.push(p);
+            if (normLabel === 'count') {
+                tickText.push(tv >= 1 ? String(Math.round(tv)) : tv.toExponential(0));
+            } else {
+                // Percentage labels
+                if (tv >= 1) tickText.push(tv.toFixed(0) + '%');
+                else if (tv >= 0.1) tickText.push(tv.toFixed(1) + '%');
+                else if (tv >= 0.01) tickText.push(tv.toFixed(2) + '%');
+                else tickText.push(tv.toExponential(0) + '%');
+            }
+        }
+        cbarTitle = normLabel + ' (log\u2081\u2080)';
+        hoverSuffix = normLabel;
+    } else {
+        plotData = cfadData;
+        plotZmin = 0;
+        plotZmax = zMax;
+        cbarTitle = normLabel;
+        hoverSuffix = normLabel;
+    }
+
+    var colorbar = {
+        title: { text: cbarTitle, font: { color:'#ccc', size:fontSize.cbar } },
+        tickfont: { color:'#ccc', size:fontSize.cbarTick },
+        thickness:14, len:0.85
+    };
+    if (useLog && typeof tickVals !== 'undefined' && tickVals.length > 0) {
+        colorbar.tickvals = tickVals;
+        colorbar.ticktext = tickText;
+    }
+
+    // Custom hovertemplate: show original (non-log) value on hover
+    var customData = null;
+    if (useLog) {
+        // Store original values in customdata for hover
+        customData = cfadData;
+    }
+    var heatmap = {
+        z: plotData, x: binCenters, y: heightKm, type: 'heatmap',
+        colorscale: cfadColorscale, zmin: plotZmin, zmax: plotZmax,
+        colorbar: colorbar,
+        hoverongaps: false
+    };
+    if (useLog && customData) {
+        heatmap.customdata = customData;
+        heatmap.hovertemplate = '<b>' + varInfo.display_name + '</b>: %{x:.1f} ' + varInfo.units +
+            '<br>Height: %{y:.1f} km<br>Frequency: %{customdata:.3f} ' + hoverSuffix + '<extra></extra>';
+    } else {
+        heatmap.hovertemplate = '<b>' + varInfo.display_name + '</b>: %{x:.1f} ' + varInfo.units +
+            '<br>Height: %{y:.1f} km<br>Frequency: %{z:.2f} ' + hoverSuffix + '<extra></extra>';
+    }
+
+    var dtypeLabel = (document.getElementById('comp-dtype') && document.getElementById('comp-dtype').value === 'merge') ? ' (Merge)' : '';
+    var meanVmax = _computeCompositeMeanVmax(filters);
+    var vmaxNote = meanVmax !== null ? ' | Mean V<sub>max</sub>=' + meanVmax + ' kt' : '';
+    var binNote = ' | Bin=' + json.bin_width + ' ' + varInfo.units;
+    var radialNote = '';
+    if (json.radial_domain) {
+        var rUnit = json.use_rmw ? ' R/RMW' : ' km';
+        radialNote = ' | R=' + json.radial_domain[0] + '\u2013' + json.radial_domain[1] + rUnit;
+    }
+    var quadNote = '';
+    if (json.quadrants && json.quadrants.length > 0) {
+        quadNote = ' | ' + json.quadrants.join('+');
+    }
+    var title = _compositeFilterSummary(filters, json.n_cases) + vmaxNote +
+        '<br>CFAD: ' + varInfo.display_name + dtypeLabel + binNote + radialNote + quadNote +
+        ' | ' + normLabel + (useLog ? ' (log)' : '');
+
+    var plotBg = '#0a1628';
+    var layout = {
+        title: { text: title, font: { color:'#e5e7eb', size:fontSize.title }, y:0.97, x:0.5, xanchor:'center' },
+        paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+        xaxis: { title: { text: varInfo.display_name + ' (' + varInfo.units + ')', font:{color:'#aaa',size:fontSize.axis} }, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
+        yaxis: { title: { text:'Height (km)', font:{color:'#aaa',size:fontSize.axis} }, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
+        margin: { l:55, r:24, t:156, b:50 },
+        hoverlabel: { bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
+        showlegend: false
+    };
+
+    el.style.display = 'block';
+    _lastCompJson = json; _lastCompType = 'cfad';
+    _registerShadingTargets('shd-cfad', ['comp-cfad-chart'], cfadColorscale, plotZmin, plotZmax);
+    el.innerHTML = '<div id="comp-cfad-chart" style="width:100%;height:560px;border-radius:8px;overflow:hidden;"></div>' + _buildShadingControlsRow('shd-cfad', {defaultVmin: plotZmin, defaultVmax: plotZmax}) + _buildCompToolbar();
+    Plotly.newPlot('comp-cfad-chart', [heatmap], layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
+}
+
+function renderCompositeCFADMultiInto(targetId, json, filters) {
+    var el = document.getElementById(targetId); if (!el) return;
+    var cfadMulti = json.cfad_multi;
+    var binCenters = json.bin_centers;
+    var heightKm = json.height_km;
+    var varInfo = json.variable;
+    var normLabel = json.norm_label;
+    var cfadColorscale = json.cfad_colorscale || 'RdYlBu';
+
+    var useLog = !!(document.getElementById('cfad-log-scale') || {}).checked;
+    var fontSize = { title:13, axis:11, tick:9, cbar:11, cbarTick:9, hover:12 };
+
+    // Quadrant layout: 2x2 grid — shear vector points right
+    // Top row: USL (left), DSL (right)  |  Bottom row: USR (left), DSR (right)
+    var quadOrder = ['USL', 'DSL', 'USR', 'DSR'];
+    var quadLabels = { 'USL': 'Upshear Left', 'USR': 'Upshear Right', 'DSL': 'Downshear Left', 'DSR': 'Downshear Right' };
+
+    // Find global min/max across all quadrants for consistent color scaling
+    var gZmax = 0, gZminPos = Infinity;
+    for (var qi = 0; qi < quadOrder.length; qi++) {
+        var qname = quadOrder[qi];
+        var qdata = cfadMulti[qname];
+        if (!qdata) continue;
+        for (var h = 0; h < qdata.length; h++) {
+            for (var b = 0; b < qdata[h].length; b++) {
+                var v = qdata[h][b];
+                if (v !== null && v > gZmax) gZmax = v;
+                if (v !== null && v > 0 && v < gZminPos) gZminPos = v;
+            }
+        }
+    }
+    if (gZmax === 0) gZmax = 1;
+    if (gZminPos === Infinity) gZminPos = 0.001;
+
+    // Determine shared z-range
+    var plotZmin, plotZmax, cbarTitle, hoverSuffix;
+    var tickVals = [], tickText = [];
+    if (useLog && gZmax > 0) {
+        plotZmin = Math.log10(Math.max(gZminPos * 0.5, 1e-6));
+        plotZmax = Math.log10(gZmax);
+        var logMin = Math.floor(plotZmin), logMax = Math.ceil(plotZmax);
+        for (var p = logMin; p <= logMax; p++) {
+            var tv = Math.pow(10, p);
+            tickVals.push(p);
+            if (normLabel === 'count') {
+                tickText.push(tv >= 1 ? String(Math.round(tv)) : tv.toExponential(0));
+            } else {
+                if (tv >= 1) tickText.push(tv.toFixed(0) + '%');
+                else if (tv >= 0.1) tickText.push(tv.toFixed(1) + '%');
+                else if (tv >= 0.01) tickText.push(tv.toFixed(2) + '%');
+                else tickText.push(tv.toExponential(0) + '%');
+            }
+        }
+        cbarTitle = normLabel + ' (log\u2081\u2080)';
+        hoverSuffix = normLabel;
+    } else {
+        plotZmin = 0;
+        plotZmax = gZmax;
+        cbarTitle = normLabel;
+        hoverSuffix = normLabel;
+    }
+
+    // Build 4 heatmap traces for subplots
+    var traces = [];
+    var annotations = [];
+    for (var si = 0; si < quadOrder.length; si++) {
+        var qn = quadOrder[si];
+        var rawData = cfadMulti[qn];
+        if (!rawData) continue;
+
+        var plotData, customData = null;
+        if (useLog && gZmax > 0) {
+            plotData = [];
+            customData = rawData;
+            for (var rh = 0; rh < rawData.length; rh++) {
+                var row = [];
+                for (var rb = 0; rb < rawData[rh].length; rb++) {
+                    var val = rawData[rh][rb];
+                    row.push((val === null || val <= 0) ? null : Math.log10(val));
+                }
+                plotData.push(row);
+            }
+        } else {
+            plotData = rawData;
+        }
+
+        var xRef = 'x' + (si === 0 ? '' : String(si + 1));
+        var yRef = 'y' + (si === 0 ? '' : String(si + 1));
+        var showCbar = (si === 1);  // show colorbar on top-right panel only
+
+        var colorbar = showCbar ? {
+            title: { text: cbarTitle, font: { color:'#ccc', size:fontSize.cbar } },
+            tickfont: { color:'#ccc', size:fontSize.cbarTick },
+            thickness: 12, len: 0.9, x: 1.02
+        } : null;
+        if (showCbar && useLog && tickVals.length > 0) {
+            colorbar.tickvals = tickVals;
+            colorbar.ticktext = tickText;
+        }
+
+        var trace = {
+            z: plotData, x: binCenters, y: heightKm, type: 'heatmap',
+            colorscale: cfadColorscale, zmin: plotZmin, zmax: plotZmax,
+            xaxis: xRef, yaxis: yRef,
+            showscale: showCbar, hoverongaps: false
+        };
+        if (showCbar && colorbar) trace.colorbar = colorbar;
+        if (useLog && customData) {
+            trace.customdata = customData;
+            trace.hovertemplate = '<b>' + quadLabels[qn] + '</b><br>' + varInfo.display_name + ': %{x:.1f} ' + varInfo.units +
+                '<br>Height: %{y:.1f} km<br>Frequency: %{customdata:.3f} ' + hoverSuffix + '<extra></extra>';
+        } else {
+            trace.hovertemplate = '<b>' + quadLabels[qn] + '</b><br>' + varInfo.display_name + ': %{x:.1f} ' + varInfo.units +
+                '<br>Height: %{y:.1f} km<br>Frequency: %{z:.2f} ' + hoverSuffix + '<extra></extra>';
+        }
+        traces.push(trace);
+
+        // Add annotation for quadrant label
+        var row2 = si < 2 ? 0 : 1;
+        var col2 = si % 2;
+        annotations.push({
+            text: '<b>' + quadLabels[qn] + '</b>',
+            xref: xRef.replace('x', 'x') + ' domain',
+            yref: yRef.replace('y', 'y') + ' domain',
+            x: 0.5, y: 1.08, showarrow: false,
+            font: { size: 12, color: '#e5e7eb' },
+            xanchor: 'center', yanchor: 'bottom'
+        });
+    }
+
+    var dtypeLabel = (document.getElementById('comp-dtype') && document.getElementById('comp-dtype').value === 'merge') ? ' (Merge)' : '';
+    var meanVmax = _computeCompositeMeanVmax(filters);
+    var vmaxNote = meanVmax !== null ? ' | Mean V<sub>max</sub>=' + meanVmax + ' kt' : '';
+    var binNote = ' | Bin=' + json.bin_width + ' ' + varInfo.units;
+    var radialNote = '';
+    if (json.radial_domain) {
+        var rUnit = json.use_rmw ? ' R/RMW' : ' km';
+        radialNote = ' | R=' + json.radial_domain[0] + '\u2013' + json.radial_domain[1] + rUnit;
+    }
+    var title = _compositeFilterSummary(filters, json.n_cases) + vmaxNote +
+        '<br>CFAD: ' + varInfo.display_name + dtypeLabel + binNote + radialNote +
+        ' | 4-Quadrant | ' + normLabel + (useLog ? ' (log)' : '');
+
+    var plotBg = '#0a1628';
+    var layout = {
+        title: { text: title, font: { color:'#e5e7eb', size:fontSize.title }, y:0.98, x:0.5, xanchor:'center' },
+        paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+        grid: { rows: 2, columns: 2, pattern: 'independent', xgap: 0.08, ygap: 0.12 },
+        annotations: annotations,
+        margin: { l:55, r:60, t:140, b:50 },
+        hoverlabel: { bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
+        showlegend: false
+    };
+
+    // Configure each subplot axis
+    var axNames = [['xaxis','yaxis'],['xaxis2','yaxis2'],['xaxis3','yaxis3'],['xaxis4','yaxis4']];
+    for (var ai = 0; ai < axNames.length; ai++) {
+        var xName = axNames[ai][0], yName = axNames[ai][1];
+        var isBottom = ai >= 2, isLeft = ai % 2 === 0;
+        layout[xName] = {
+            title: isBottom ? { text: varInfo.display_name + ' (' + varInfo.units + ')', font:{color:'#aaa',size:fontSize.axis} } : undefined,
+            tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false
+        };
+        layout[yName] = {
+            title: isLeft ? { text:'Height (km)', font:{color:'#aaa',size:fontSize.axis} } : undefined,
+            tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false
+        };
+    }
+
+    el.style.display = 'block';
+    _lastCompJson = json; _lastCompType = 'cfad_multi';
+    _registerShadingTargets('shd-cfadm', ['comp-cfad-chart'], cfadColorscale, plotZmin, plotZmax);
+    el.innerHTML = '<div id="comp-cfad-chart" style="width:100%;height:820px;border-radius:8px;overflow:hidden;"></div>' + _buildShadingControlsRow('shd-cfadm', {defaultVmin: plotZmin, defaultVmax: plotZmax}) + _buildCompToolbar();
+    Plotly.newPlot('comp-cfad-chart', traces, layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
 }
 
 function generateCompositeQuadMean() {
@@ -2613,38 +8221,239 @@ function generateCompositeQuadMean() {
     var variable = document.getElementById('comp-var').value;
     var dataType = document.getElementById('comp-dtype').value;
     var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
-    var btnAz = document.getElementById('comp-btn-az'), btnSq = document.getElementById('comp-btn-sq');
-    btnAz.disabled = true; btnSq.disabled = true;
-    btnSq.textContent = '\u23F3 Computing\u2026';
-    document.getElementById('comp-result-placeholder').style.display = 'none';
+    var btnAz = document.getElementById('comp-btn-az'), btnSq = document.getElementById('comp-btn-sq'), btnPv = document.getElementById('comp-btn-pv');
+    if (btnAz) if (btnAz) btnAz.disabled = true; if (btnSq) if (btnSq) btnSq.disabled = true; if (btnPv) if (btnPv) btnPv.disabled = true;
+    if (btnSq) btnSq.textContent = '\u23F3 Computing\u2026';
+    var _crp = document.getElementById('comp-result-placeholder') || document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
     document.getElementById('comp-result-az').style.display = 'none';
+    document.getElementById('comp-result-pv').style.display = 'none';
     _showCompStatus('loading', 'Computing composite shear quadrants \u2014 this may take 30\u201390 seconds for many cases\u2026');
 
     var overlay = (document.getElementById('comp-overlay') || {}).value || '';
-    var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage;
+    var normRmw = !!(document.getElementById('comp-norm-rmw') || {}).checked;
+    var maxRRmw = normRmw ? (parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 8.0) : 8.0;
+    var drRmw   = normRmw ? Math.max(0.05, parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.25) : 0.25;
+    var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage +
+        '&max_r_rmw=' + maxRRmw + '&dr_rmw=' + drRmw;
     if (overlay) qs += '&overlay=' + encodeURIComponent(overlay);
-    fetch(API_BASE + '/composite/quadrant_mean?' + qs)
-        .then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error(e.detail||'API error');}); return r.json(); })
+    _fetchCompositeStream(API_BASE + '/composite/quadrant_mean?' + qs, 'Computing shear quadrants')
         .then(function(json) {
-            _showCompStatus('success', '\u2713 Composite computed: ' + json.n_cases + ' cases processed (' + json.n_with_shear + ' with shear data)');
+            _showCompStatus('success', '\u2713 Composite computed: ' + json.n_cases + ' cases processed (' + (json.n_with_shear_and_rmw || json.n_with_shear || '?') + ' with shear data)');
+            _updateBadgeFromResult(json.n_cases);
             renderCompositeQuadMeanInto('comp-result-sq', json, filters);
+            _showCompShadingToolbar();
             history.replaceState(null, '', '#' + _buildCompPermalinkHash());
         })
-        .catch(function(err) { _showCompStatus('error', '\u2717 ' + err.message); })
+        .catch(function(err) { _showCompStatus('error', '\u2717 ' + (err.message || String(err))); })
         .finally(function() {
-            btnAz.disabled = false; btnSq.disabled = false;
-            btnSq.textContent = '\u25D1 Shear Quadrants';
+            if (btnAz) btnAz.disabled = false; if (btnSq) btnSq.disabled = false; if (btnPv) if (btnPv) btnPv.disabled = false;
+            if (btnSq) btnSq.textContent = '\u25D1 Shear Quadrants';
         });
+}
+
+// ── Composite Plan-View ─────────────────────────────
+
+function _getCompositePlanViewParams() {
+    return {
+        level_km:      parseFloat((document.getElementById('comp-level') || {}).value) || 2.0,
+        normalize_rmw: !!(document.getElementById('comp-norm-rmw') || {}).checked,
+        max_r_rmw:     parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 5.0,
+        dr_rmw:        parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.1,
+        shear_relative: !!(document.getElementById('comp-shear-rel') || {}).checked,
+    };
+}
+
+function generateCompositePlanView() {
+    var filters = _getCompositeFilters();
+    var pvParams = _getCompositePlanViewParams();
+    var variable = document.getElementById('comp-var').value;
+    var dataType = document.getElementById('comp-dtype').value;
+    var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
+
+    var btnPv = document.getElementById('comp-btn-pv');
+    var btnAz = document.getElementById('comp-btn-az');
+    var btnSq = document.getElementById('comp-btn-sq');
+    if (btnPv) btnPv.disabled = true; if (btnAz) btnAz.disabled = true; if (btnSq) btnSq.disabled = true;
+    if (btnPv) btnPv.textContent = '\u23F3 Computing\u2026';
+    var _crp = document.getElementById('comp-result-placeholder') || document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
+    document.getElementById('comp-result-az').style.display = 'none';
+    document.getElementById('comp-result-sq').style.display = 'none';
+    _showCompStatus('loading', 'Computing plan-view composite at ' + pvParams.level_km + ' km \u2014 this may take 30\u201390 seconds for many cases\u2026');
+
+    var overlay = (document.getElementById('comp-overlay') || {}).value || '';
+    var qs = _compositeQueryString(filters) +
+        '&variable=' + encodeURIComponent(variable) +
+        '&data_type=' + dataType +
+        '&coverage_min=' + coverage +
+        '&level_km=' + pvParams.level_km +
+        '&normalize_rmw=' + (pvParams.normalize_rmw ? 'true' : 'false') +
+        '&max_r_rmw=' + pvParams.max_r_rmw +
+        '&dr_rmw=' + pvParams.dr_rmw +
+        '&shear_relative=' + (pvParams.shear_relative ? 'true' : 'false');
+    if (overlay) qs += '&overlay=' + encodeURIComponent(overlay);
+
+    _fetchCompositeStream(API_BASE + '/composite/plan_view?' + qs, 'Computing plan-view composite at ' + pvParams.level_km + ' km')
+        .then(function(json) {
+            _showCompStatus('success', '\u2713 Plan-view composite computed: ' + json.n_cases + ' cases processed');
+            _updateBadgeFromResult(json.n_cases);
+            renderCompositePlanViewInto('comp-result-pv', json, filters, pvParams);
+            _showCompShadingToolbar();
+            history.replaceState(null, '', '#' + _buildCompPermalinkHash());
+        })
+        .catch(function(err) { _showCompStatus('error', '\u2717 ' + (err.message || String(err))); })
+        .finally(function() {
+            if (btnPv) btnPv.disabled = false; if (btnAz) btnAz.disabled = false; if (btnSq) btnSq.disabled = false;
+            if (btnPv) btnPv.textContent = '\uD83D\uDDFA Plan View';
+        });
+}
+
+function buildCompPlanViewOverlayContours(json, xAxis, yAxis) {
+    if (!json.overlay || !json.overlay.plan_view) return [];
+    var ov = json.overlay;
+    var ovData = ov.plan_view;
+    try {
+        var interval = _compContourInterval(ovData);
+        var baseContour = {
+            z: ovData, x: xAxis, y: yAxis, type: 'contour',
+            showscale: false, hoverongaps: false,
+            contours: { coloring: 'none', showlabels: true,
+                        labelfont: { size: 9, color: 'rgba(255,255,255,0.85)' } }
+        };
+        var traces = [];
+        if (ov.vmax > interval) {
+            traces.push(Object.assign({}, baseContour, {
+                contours: Object.assign({}, baseContour.contours, { start: interval, end: ov.vmax, size: interval }),
+                line: { color: 'rgba(0,0,0,0.7)', width: 1.2, dash: 'solid' },
+                hovertemplate: '<b>' + ov.display_name + '</b>: %{z:.2f} ' + ov.units + '<extra>contour</extra>',
+                name: ov.display_name + ' (+)', showlegend: false
+            }));
+        }
+        if (ov.vmin < -interval) {
+            traces.push(Object.assign({}, baseContour, {
+                contours: Object.assign({}, baseContour.contours, { start: ov.vmin, end: -interval, size: interval }),
+                line: { color: 'rgba(0,0,0,0.7)', width: 1.2, dash: 'dash' },
+                hovertemplate: '<b>' + ov.display_name + '</b>: %{z:.2f} ' + ov.units + '<extra>contour</extra>',
+                name: ov.display_name + ' (\u2212)', showlegend: false
+            }));
+        }
+        return traces;
+    } catch (e) { console.warn('Plan-view overlay error:', e); return []; }
+}
+
+function renderCompositePlanViewInto(targetId, json, filters, pvParams) {
+    var el = document.getElementById(targetId); if (!el) return;
+    var planData = json.plan_view;
+    var xAxis = json.x_axis, yAxis = json.y_axis;
+    var varInfo = json.variable;
+    var xLabel = json.x_label, yLabel = json.y_label;
+    var levelKm = json.level_km;
+
+    var fontSize = { title:14, axis:12, tick:10, cbar:12, cbarTick:10, hover:13 };
+
+    var heatmap = {
+        z: planData, x: xAxis, y: yAxis, type: 'heatmap',
+        colorscale: varInfo.colorscale, zmin: varInfo.vmin, zmax: varInfo.vmax,
+        colorbar: { title: { text: varInfo.units, font: { color:'#ccc', size:fontSize.cbar } },
+                    tickfont: { color:'#ccc', size:fontSize.cbarTick }, thickness:14, len:0.85 },
+        hovertemplate: '<b>' + varInfo.display_name + '</b>: %{z:.2f} ' + varInfo.units +
+                       '<br>' + xLabel + ': %{x:.1f}<br>' + yLabel + ': %{y:.1f}<extra></extra>',
+        hoverongaps: false
+    };
+
+    // Build title
+    var normLabel = json.normalize_rmw ? ' (RMW-norm)' : '';
+    var shearLabel = json.shear_relative ? ' [Shear \u2192 Right]' : '';
+    var dtypeLabel = (document.getElementById('comp-dtype') && document.getElementById('comp-dtype').value === 'merge') ? ' (Merge)' : '';
+    var meanVmax = _computeCompositeMeanVmax(filters);
+    var vmaxNote = meanVmax !== null ? ' | Mean V<sub>max</sub>=' + meanVmax + ' kt' : '';
+    var overlayLabel = json.overlay ? '<br><span style="font-size:0.85em;color:#9ca3af;">Contours: ' + json.overlay.display_name + ' (' + json.overlay.units + ')</span>' : '';
+    var title = _compositeFilterSummary(filters, json.n_cases) + vmaxNote +
+                '<br>Plan View @ ' + levelKm + ' km: ' + varInfo.display_name + dtypeLabel + normLabel + shearLabel + overlayLabel;
+
+    var plotBg = '#0a1628';
+    var shapes = [];
+    var annotations = [];
+
+    // If RMW-normalised, draw a circle at R/RMW = 1
+    if (json.normalize_rmw) {
+        var nPts = 100;
+        var circleX = [], circleY = [];
+        for (var i = 0; i <= nPts; i++) {
+            var angle = 2 * Math.PI * i / nPts;
+            circleX.push(Math.cos(angle));
+            circleY.push(Math.sin(angle));
+        }
+        // Add as a scatter trace (drawn after heatmap)
+    }
+
+    // Shear arrow annotation if shear-relative
+    if (json.shear_relative) {
+        var shearInset = buildShearInset(90, true);
+        if (shearInset) {
+            shapes = shapes.concat(shearInset.shapes || []);
+            annotations = annotations.concat(shearInset.annotations || []);
+        }
+    }
+
+    // Compute tight axis range from actual non-NaN data extent
+    var ext = _tightDataExtent(planData, xAxis, yAxis, 0.25);
+    var layout = {
+        title: { text: title, font: { color:'#e5e7eb', size:fontSize.title }, y:0.97, x:0.5, xanchor:'center' },
+        paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+        xaxis: { title: { text:xLabel, font:{color:'#aaa',size:fontSize.axis} },
+                 tickfont:{color:'#aaa',size:fontSize.tick},
+                 gridcolor:'rgba(255,255,255,0.04)', zeroline:true,
+                 zerolinecolor:'rgba(255,255,255,0.12)',
+                 range:[ext.xMin, ext.xMax] },
+        yaxis: { title: { text:yLabel, font:{color:'#aaa',size:fontSize.axis} },
+                 tickfont:{color:'#aaa',size:fontSize.tick},
+                 gridcolor:'rgba(255,255,255,0.04)', zeroline:true,
+                 zerolinecolor:'rgba(255,255,255,0.12)',
+                 scaleanchor:'x', scaleratio:1,
+                 range:[ext.yMin, ext.yMax] },
+        margin: { l:60, r:24, t: json.overlay ? 170 : 156, b:50 },
+        shapes: shapes, annotations: annotations,
+        hoverlabel: { bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
+        showlegend: false
+    };
+
+    // Build overlay contours
+    var pvOverlay = buildCompPlanViewOverlayContours(json, xAxis, yAxis);
+
+    // Optional RMW circle trace
+    var extraTraces = [];
+    if (json.normalize_rmw) {
+        var nPts2 = 120;
+        var cx = [], cy = [];
+        for (var j = 0; j <= nPts2; j++) {
+            var a = 2 * Math.PI * j / nPts2;
+            cx.push(parseFloat(Math.cos(a).toFixed(4)));
+            cy.push(parseFloat(Math.sin(a).toFixed(4)));
+        }
+        extraTraces.push({
+            x: cx, y: cy, type: 'scatter', mode: 'lines',
+            line: { color: 'white', width: 1.5, dash: 'dash' },
+            showlegend: false, hoverinfo: 'skip',
+            name: 'RMW'
+        });
+    }
+
+    el.style.display = 'block';
+    _lastCompJson = json; _lastCompType = 'pv';
+    _registerShadingTargets('shd-pv', ['comp-pv-chart'], varInfo.colorscale, varInfo.vmin, varInfo.vmax);
+    el.innerHTML = '<div id="comp-pv-chart" style="width:100%;height:620px;border-radius:8px;overflow:hidden;"></div>' + _buildShadingControlsRow('shd-pv', {defaultVmin: varInfo.vmin, defaultVmax: varInfo.vmax}) + _buildCompToolbar();
+    Plotly.newPlot('comp-pv-chart', [heatmap].concat(pvOverlay).concat(extraTraces), layout,
+        { responsive:true, displayModeBar:true, displaylogo:false,
+          modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
 }
 
 // ── Composite Difference Mode ───────────────────────
 var _groupBCountTimeout;
 
 function _toggleDiffMode() {
-    var on = document.getElementById('comp-diff-check').checked;
-    document.getElementById('comp-group-b-wrap').style.display = on ? 'block' : 'none';
-    var groupALabel = document.getElementById('comp-group-a-label');
-    if (groupALabel) groupALabel.style.display = on ? 'inline' : 'none';
+    // Now handled by wizard mode cards (_wizardSetMode)
+    // Keep as no-op for backward compatibility
+    var on = _wizardMode === 'diff';
     if (on) _updateGroupBCount();
 }
 
@@ -2662,6 +8471,8 @@ function _getCompGroupBFilters() {
         max_shear_mag:   parseFloat(document.getElementById('compb-shrmag-max').value) || 100,
         min_shear_dir:   parseFloat(document.getElementById('compb-shrdir-min').value) || 0,
         max_shear_dir:   parseFloat(document.getElementById('compb-shrdir-max').value) || 360,
+        min_dtl:         parseFloat(document.getElementById('compb-dtl-min').value) || 0,
+        dtl_window:      document.getElementById('compb-dtl-win').value || '24h',
     };
 }
 
@@ -2678,7 +8489,22 @@ function _updateGroupBCount() {
     el.textContent = '\u2026';
     fetch(API_BASE + '/composite/count?' + _compositeQueryString(filters) + '&data_type=' + dataType)
         .then(function(r) { return r.json(); })
-        .then(function(json) { el.textContent = json.count; })
+        .then(function(json) {
+            el.textContent = json.count;
+            var capNote = document.getElementById('compb-cap-note');
+            if (json.capped) {
+                el.textContent = json.count + ' (max ' + json.max_cases + ')';
+                el.style.color = '#fbbf24';
+                el.title = 'Only the first ' + json.max_cases + ' cases will be composited.';
+                if (capNote) { capNote.classList.add('capped'); capNote.textContent = 'Cap exceeded \u2014 only the first ' + json.max_cases + ' matching cases will be composited.'; }
+            } else {
+                el.style.color = '';
+                el.title = '';
+                if (capNote) { capNote.classList.remove('capped'); capNote.textContent = 'Composites are limited to ' + json.max_cases + ' cases per group.'; }
+            }
+            // Keep the summary badge in sync with the latest count
+            _wizardUpdateSummary();
+        })
         .catch(function() { el.textContent = '?'; });
 }
 
@@ -2739,24 +8565,32 @@ function generateCompDiffAzMean() {
     var overlay = (document.getElementById('comp-overlay') || {}).value || '';
 
     // Disable buttons
-    var btns = ['comp-btn-az','comp-btn-sq','comp-btn-diff-az','comp-btn-diff-sq'];
+    var btns = ['comp-btn-az','comp-btn-sq','comp-btn-pv','comp-btn-diff-az','comp-btn-diff-sq','comp-btn-diff-pv'];
     btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = true; });
     var btnDiffAz = document.getElementById('comp-btn-diff-az');
-    btnDiffAz.textContent = '\u23F3 Computing\u2026';
-    document.getElementById('comp-result-placeholder').style.display = 'none';
+    if (btnDiffAz) btnDiffAz.textContent = '\u23F3 Computing\u2026';
+    var _crp = document.getElementById('comp-result-placeholder') || document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
     document.getElementById('comp-result-sq').style.display = 'none';
+    document.getElementById('comp-result-pv').style.display = 'none';
     _showCompStatus('loading', 'Computing difference composite (A\u2212B) azimuthal mean\u2026');
 
-    var baseQS = '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage;
+    var normRmw = !!(document.getElementById('comp-norm-rmw') || {}).checked;
+    var maxRRmw = normRmw ? (parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 8.0) : 8.0;
+    var drRmw   = normRmw ? Math.max(0.05, parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.25) : 0.25;
+    var baseQS = '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage +
+        '&max_r_rmw=' + maxRRmw + '&dr_rmw=' + drRmw;
     if (overlay) baseQS += '&overlay=' + encodeURIComponent(overlay);
     var urlA = API_BASE + '/composite/azimuthal_mean?' + _compositeQueryString(filtersA) + baseQS;
     var urlB = API_BASE + '/composite/azimuthal_mean?' + _compositeQueryString(filtersB) + baseQS;
 
-    Promise.all([
-        fetch(urlA).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group A: '+(e.detail||'error'));}); return r.json(); }),
-        fetch(urlB).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group B: '+(e.detail||'error'));}); return r.json(); })
-    ]).then(function(results) {
-        var jsonA = results[0], jsonB = results[1];
+    // Sequential streaming: fetch Group A first, then Group B, to avoid
+    // doubling memory/thread pressure on the server.
+    var jsonA;
+    _fetchCompositeStream(urlA, 'Group A azimuthal mean').then(function(result) {
+        jsonA = result;
+        _showCompStatus('loading', 'Group A done (' + jsonA.n_cases + ' cases). Computing Group B\u2026');
+        return _fetchCompositeStream(urlB, 'Group B azimuthal mean');
+    }).then(function(jsonB) {
         var diffData = _subtractArrays2D(jsonA.azimuthal_mean, jsonB.azimuthal_mean);
         var symRange = _symmetricRange(diffData);
 
@@ -2770,6 +8604,7 @@ function generateCompDiffAzMean() {
             n_cases: jsonA.n_cases,
             n_with_rmw: jsonA.n_with_rmw,
             case_list: jsonA.case_list,
+            case_list_b: jsonB.case_list,
             _isDiff: true,
             _nA: jsonA.n_cases,
             _nB: jsonB.n_cases,
@@ -2799,11 +8634,12 @@ function generateCompDiffAzMean() {
 
         _showCompStatus('success', '\u2713 Difference computed: Group A (' + jsonA.n_cases + ' cases) \u2212 Group B (' + jsonB.n_cases + ' cases)');
         _renderDiffAzMean('comp-result-az', diffJson, jsonA, jsonB, filtersA, filtersB);
+        _showCompShadingToolbar();
     }).catch(function(err) {
-        _showCompStatus('error', '\u2717 ' + err.message);
+        _showCompStatus('error', '\u2717 ' + (err.message || String(err)));
     }).finally(function() {
         btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = false; });
-        btnDiffAz.textContent = '\u0394 Az Mean (A\u2212B)';
+        if (btnDiffAz) btnDiffAz.textContent = '\u0394 Az Mean (A\u2212B)';
     });
 }
 
@@ -2815,24 +8651,32 @@ function generateCompDiffQuadMean() {
     var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
     var overlay = (document.getElementById('comp-overlay') || {}).value || '';
 
-    var btns = ['comp-btn-az','comp-btn-sq','comp-btn-diff-az','comp-btn-diff-sq'];
+    var btns = ['comp-btn-az','comp-btn-sq','comp-btn-pv','comp-btn-diff-az','comp-btn-diff-sq','comp-btn-diff-pv'];
     btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = true; });
     var btnDiffSq = document.getElementById('comp-btn-diff-sq');
-    btnDiffSq.textContent = '\u23F3 Computing\u2026';
-    document.getElementById('comp-result-placeholder').style.display = 'none';
+    if (btnDiffSq) btnDiffSq.textContent = '\u23F3 Computing\u2026';
+    var _crp = document.getElementById('comp-result-placeholder') || document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
     document.getElementById('comp-result-az').style.display = 'none';
+    document.getElementById('comp-result-pv').style.display = 'none';
     _showCompStatus('loading', 'Computing difference composite (A\u2212B) shear quadrants\u2026');
 
-    var baseQS = '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage;
+    var normRmw = !!(document.getElementById('comp-norm-rmw') || {}).checked;
+    var maxRRmw = normRmw ? (parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 8.0) : 8.0;
+    var drRmw   = normRmw ? Math.max(0.05, parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.25) : 0.25;
+    var baseQS = '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage +
+        '&max_r_rmw=' + maxRRmw + '&dr_rmw=' + drRmw;
     if (overlay) baseQS += '&overlay=' + encodeURIComponent(overlay);
     var urlA = API_BASE + '/composite/quadrant_mean?' + _compositeQueryString(filtersA) + baseQS;
     var urlB = API_BASE + '/composite/quadrant_mean?' + _compositeQueryString(filtersB) + baseQS;
 
-    Promise.all([
-        fetch(urlA).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group A: '+(e.detail||'error'));}); return r.json(); }),
-        fetch(urlB).then(function(r) { if (!r.ok) return r.json().then(function(e){throw new Error('Group B: '+(e.detail||'error'));}); return r.json(); })
-    ]).then(function(results) {
-        var jsonA = results[0], jsonB = results[1];
+    // Sequential streaming: fetch Group A first, then Group B, to avoid
+    // doubling memory/thread pressure on the server.
+    var jsonA;
+    _fetchCompositeStream(urlA, 'Group A shear quadrants').then(function(result) {
+        jsonA = result;
+        _showCompStatus('loading', 'Group A done (' + jsonA.n_cases + ' cases). Computing Group B\u2026');
+        return _fetchCompositeStream(urlB, 'Group B shear quadrants');
+    }).then(function(jsonB) {
         var diffQuads = {};
         var allDiffVals = [];
         var quadKeys = ['DSL','DSR','USL','USR'];
@@ -2859,6 +8703,7 @@ function generateCompDiffQuadMean() {
             n_with_shear: jsonA.n_with_shear,
             n_with_shear_and_rmw: jsonA.n_with_shear_and_rmw,
             case_list: jsonA.case_list,
+            case_list_b: jsonB.case_list,
             _isDiff: true,
             _nA: jsonA.n_cases,
             _nB: jsonB.n_cases,
@@ -2893,11 +8738,12 @@ function generateCompDiffQuadMean() {
 
         _showCompStatus('success', '\u2713 Difference computed: Group A (' + jsonA.n_cases + ' cases) \u2212 Group B (' + jsonB.n_cases + ' cases)');
         _renderDiffQuadMean('comp-result-sq', diffJson, jsonA, jsonB, filtersA, filtersB);
+        _showCompShadingToolbar();
     }).catch(function(err) {
-        _showCompStatus('error', '\u2717 ' + err.message);
+        _showCompStatus('error', '\u2717 ' + (err.message || String(err)));
     }).finally(function() {
         btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = false; });
-        btnDiffSq.textContent = '\u0394 Quad Mean (A\u2212B)';
+        if (btnDiffSq) btnDiffSq.textContent = '\u0394 Quad Mean (A\u2212B)';
     });
 }
 
@@ -2907,28 +8753,34 @@ function _renderDiffAzMean(targetId, diffJson, jsonA, jsonB, filtersA, filtersB)
     _lastCompJson = diffJson; _lastCompType = 'az';
 
     // Create 3 stacked chart containers + toolbar
+    var varInfoA = jsonA.variable;
+    var diffVarInfo = diffJson.variable;
+
     el.innerHTML =
         '<div style="margin-bottom:4px;padding:6px 10px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#60a5fa;">\uD83D\uDD35 Group A</div>' +
         '<div id="comp-diff-az-a" style="width:100%;height:460px;border-radius:8px;overflow:hidden;"></div>' +
         '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#f59e0b;">\uD83D\uDFE0 Group B</div>' +
         '<div id="comp-diff-az-b" style="width:100%;height:460px;border-radius:8px;overflow:hidden;"></div>' +
+        _buildShadingControlsRow('shd-daz-ab', {label: 'Panels A &amp; B', defaultVmin: varInfoA.vmin, defaultVmax: varInfoA.vmax}) +
         '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#ef4444;">\u0394 Difference (A \u2212 B)</div>' +
         '<div id="comp-diff-az-d" style="width:100%;height:460px;border-radius:8px;overflow:hidden;"></div>' +
+        _buildShadingControlsRow('shd-daz-d', {label: 'Difference', defaultVmin: diffVarInfo.vmin, defaultVmax: diffVarInfo.vmax}) +
         _buildCompToolbar();
+
+    _registerShadingTargets('shd-daz-ab', ['comp-diff-az-a', 'comp-diff-az-b'], varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax);
 
     var plotOpts = { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] };
     var plotBg = '#0a1628';
     var isNorm = jsonA.normalized;
     var rLabel = isNorm ? 'R / RMW' : 'Radius (km)';
     var radius = jsonA.radius_rrmw, height_km = jsonA.height_km;
-    var varInfoA = jsonA.variable;
     var covPct = Math.round((jsonA.coverage_min || 0.5) * 100);
     var dtypeLabel = (document.getElementById('comp-dtype') && document.getElementById('comp-dtype').value === 'merge') ? ' (Merge)' : '';
     var fontSize = { title:13, axis:11, tick:10, cbar:11, cbarTick:10, hover:12 };
     var rmwShape = isNorm ? [{ type:'line', xref:'x', yref:'paper', x0:1, x1:1, y0:0, y1:1, line:{ color:'white', width:1.5, dash:'dash' } }] : [];
 
-    // Helper to build a single az mean plot
-    function buildAzPlot(chartId, data, titleText, colorscale, zmin, zmax, units) {
+    // Helper to build a single az mean plot (overlayJson optional)
+    function buildAzPlot(chartId, data, titleText, colorscale, zmin, zmax, units, overlayJson) {
         var hm = {
             z: data, x: radius, y: height_km, type: 'heatmap',
             colorscale: colorscale, zmin: zmin, zmax: zmax,
@@ -2936,31 +8788,35 @@ function _renderDiffAzMean(targetId, diffJson, jsonA, jsonB, filtersA, filtersB)
             hovertemplate: '%{z:.2f} ' + units + '<br>' + rLabel + ': %{x:.2f}<br>Height: %{y:.1f} km<extra></extra>',
             hoverongaps: false
         };
+        var ovTraces = overlayJson ? buildCompAzOverlayContours(overlayJson, radius, height_km) : [];
         var layout = {
             title: { text:titleText, font:{color:'#e5e7eb',size:fontSize.title}, y:0.97, x:0.5, xanchor:'center' },
             paper_bgcolor:plotBg, plot_bgcolor:plotBg,
             xaxis: { title:{text:rLabel,font:{color:'#aaa',size:fontSize.axis}}, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
             yaxis: { title:{text:'Height (km)',font:{color:'#aaa',size:fontSize.axis}}, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false },
-            margin:{ l:55, r:24, t:96, b:42 }, shapes:rmwShape,
+            margin:{ l:55, r:24, t:116, b:42 }, shapes:rmwShape,
             hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
             showlegend:false
         };
-        Plotly.newPlot(chartId, [hm], layout, plotOpts);
+        Plotly.newPlot(chartId, [hm].concat(ovTraces), layout, plotOpts);
     }
+
+    var activeColorscale = varInfoA.colorscale;
+    var activeVmin = varInfoA.vmin;
+    var activeVmax = varInfoA.vmax;
 
     var meanVmaxA = _computeCompositeMeanVmax(filtersA);
     var vmaxNoteA = meanVmaxA !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxA + ' kt' : '';
     var titleA = _compositeFilterSummary(filtersA, jsonA.n_cases) + vmaxNoteA +
                  '<br>Azimuthal Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
-    buildAzPlot('comp-diff-az-a', jsonA.azimuthal_mean, titleA, varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax, varInfoA.units);
+    buildAzPlot('comp-diff-az-a', jsonA.azimuthal_mean, titleA, activeColorscale, activeVmin, activeVmax, varInfoA.units, jsonA);
 
     var meanVmaxB = _computeCompositeMeanVmax(filtersB);
     var vmaxNoteB = meanVmaxB !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxB + ' kt' : '';
     var titleB = _compositeFilterSummary(filtersB, jsonB.n_cases) + vmaxNoteB +
                  '<br>Azimuthal Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
-    buildAzPlot('comp-diff-az-b', jsonB.azimuthal_mean, titleB, varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax, varInfoA.units);
+    buildAzPlot('comp-diff-az-b', jsonB.azimuthal_mean, titleB, activeColorscale, activeVmin, activeVmax, varInfoA.units, jsonB);
 
-    var diffVarInfo = diffJson.variable;
     var diffVmaxNote = '';
     if (meanVmaxA !== null || meanVmaxB !== null) {
         diffVmaxNote = ' | V\u0305<sub>max</sub>: ';
@@ -2970,7 +8826,9 @@ function _renderDiffAzMean(targetId, diffJson, jsonA, jsonB, filtersA, filtersB)
     }
     var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) + diffVmaxNote +
                  '<br>\u0394 Azimuthal Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
-    buildAzPlot('comp-diff-az-d', diffJson.azimuthal_mean, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, diffVarInfo.units);
+
+    _registerShadingTargets('shd-daz-d', ['comp-diff-az-d'], _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax);
+    buildAzPlot('comp-diff-az-d', diffJson.azimuthal_mean, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, diffVarInfo.units, diffJson);
 }
 
 function _renderDiffQuadMean(targetId, diffJson, jsonA, jsonB, filtersA, filtersB) {
@@ -2978,21 +8836,27 @@ function _renderDiffQuadMean(targetId, diffJson, jsonA, jsonB, filtersA, filters
     el.style.display = 'block';
     _lastCompJson = diffJson; _lastCompType = 'sq';
 
+    var varInfoA = jsonA.variable;
+    var diffVarInfo = diffJson.variable;
+
     el.innerHTML =
         '<div style="margin-bottom:4px;padding:6px 10px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#60a5fa;">\uD83D\uDD35 Group A</div>' +
         '<div id="comp-diff-sq-a" style="width:100%;height:640px;border-radius:8px;overflow:hidden;"></div>' +
         '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#f59e0b;">\uD83D\uDFE0 Group B</div>' +
         '<div id="comp-diff-sq-b" style="width:100%;height:640px;border-radius:8px;overflow:hidden;"></div>' +
+        _buildShadingControlsRow('shd-dsq-ab', {label: 'Panels A &amp; B', defaultVmin: varInfoA.vmin, defaultVmax: varInfoA.vmax}) +
         '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#ef4444;">\u0394 Difference (A \u2212 B)</div>' +
         '<div id="comp-diff-sq-d" style="width:100%;height:640px;border-radius:8px;overflow:hidden;"></div>' +
+        _buildShadingControlsRow('shd-dsq-d', {label: 'Difference', defaultVmin: diffVarInfo.vmin, defaultVmax: diffVarInfo.vmax}) +
         _buildCompToolbar();
+
+    _registerShadingTargets('shd-dsq-ab', ['comp-diff-sq-a', 'comp-diff-sq-b'], varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax);
 
     var plotOpts = { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] };
     var plotBg = '#0a1628';
     var isNorm = jsonA.normalized;
     var rLabel = isNorm ? 'R / RMW' : 'Radius (km)';
     var radius = jsonA.radius_rrmw, height_km = jsonA.height_km;
-    var varInfoA = jsonA.variable;
     var covPct = Math.round((jsonA.coverage_min || 0.5) * 100);
     var dtypeLabel = (document.getElementById('comp-dtype') && document.getElementById('comp-dtype').value === 'merge') ? ' (Merge)' : '';
     var fontSize = { title:12, axis:10, tick:9, cbar:10, cbarTick:9, hover:11, panel:11 };
@@ -3005,7 +8869,7 @@ function _renderDiffQuadMean(targetId, diffJson, jsonA, jsonB, filtersA, filters
     ];
     var quadColors = { DSL:'#f59e0b', DSR:'#f59e0b', USL:'#60a5fa', USR:'#60a5fa' };
 
-    function buildQuadPlot(chartId, quads, titleText, colorscale, zmin, zmax, units) {
+    function buildQuadPlot(chartId, quads, titleText, colorscale, zmin, zmax, units, overlayJson) {
         var traces = [], annotations = [], shapes = [];
         var gap=0.08, cbarW=0.04, leftM=0.06, rightM=0.02+cbarW+0.02, topM=0.18, botM=0.06;
         var pw = (1-leftM-rightM-gap)/2, ph = (1-topM-botM-gap)/2;
@@ -3058,31 +8922,35 @@ function _renderDiffQuadMean(targetId, diffJson, jsonA, jsonB, filtersA, filters
         var layout = Object.assign({
             title:{ text:titleText, font:{color:'#e5e7eb',size:fontSize.title}, y:0.99, x:0.5, xanchor:'center' },
             paper_bgcolor:plotBg, plot_bgcolor:plotBg,
-            margin:{ l:50, r:60, t:100, b:44 },
+            margin:{ l:50, r:60, t:140, b:44 },
             annotations:annotations, shapes:shapes.concat(shearInset.shapes || []),
             hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
             showlegend:false
         }, layoutAxes);
 
-        Plotly.newPlot(chartId, traces, layout, plotOpts);
+        var ovTraces = overlayJson ? buildCompQuadOverlayContours(overlayJson, radius, height_km, panelOrder) : [];
+        Plotly.newPlot(chartId, traces.concat(ovTraces), layout, plotOpts);
     }
+
+    var activeColorscale = varInfoA.colorscale;
+    var activeVmin = varInfoA.vmin;
+    var activeVmax = varInfoA.vmax;
 
     // Group A
     var meanVmaxA = _computeCompositeMeanVmax(filtersA);
     var vmaxNoteA = meanVmaxA !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxA + ' kt' : '';
     var titleA = _compositeFilterSummary(filtersA, jsonA.n_cases) + vmaxNoteA +
                  '<br>Shear-Relative Quadrant Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
-    buildQuadPlot('comp-diff-sq-a', jsonA.quadrant_means, titleA, varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax, varInfoA.units);
+    buildQuadPlot('comp-diff-sq-a', jsonA.quadrant_means, titleA, activeColorscale, activeVmin, activeVmax, varInfoA.units, jsonA);
 
     // Group B
     var meanVmaxB = _computeCompositeMeanVmax(filtersB);
     var vmaxNoteB = meanVmaxB !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxB + ' kt' : '';
     var titleB = _compositeFilterSummary(filtersB, jsonB.n_cases) + vmaxNoteB +
                  '<br>Shear-Relative Quadrant Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
-    buildQuadPlot('comp-diff-sq-b', jsonB.quadrant_means, titleB, varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax, varInfoA.units);
+    buildQuadPlot('comp-diff-sq-b', jsonB.quadrant_means, titleB, activeColorscale, activeVmin, activeVmax, varInfoA.units, jsonB);
 
     // Difference
-    var diffVarInfo = diffJson.variable;
     var diffVmaxNote = '';
     if (meanVmaxA !== null || meanVmaxB !== null) {
         diffVmaxNote = ' | V\u0305<sub>max</sub>: ';
@@ -3092,14 +8960,2438 @@ function _renderDiffQuadMean(targetId, diffJson, jsonA, jsonB, filtersA, filters
     }
     var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) + diffVmaxNote +
                  '<br>\u0394 Shear-Relative Quadrant Mean: ' + varInfoA.display_name + dtypeLabel + ' (\u2265' + covPct + '% cov.)';
-    buildQuadPlot('comp-diff-sq-d', diffJson.quadrant_means, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, diffVarInfo.units);
+
+    _registerShadingTargets('shd-dsq-d', ['comp-diff-sq-d'], _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax);
+    buildQuadPlot('comp-diff-sq-d', diffJson.quadrant_means, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, diffVarInfo.units, diffJson);
 }
+
+// ── Composite Difference Plan View ──────────────────
+
+function generateCompDiffPlanView() {
+    var filtersA = _getCompositeFilters();
+    var filtersB = _getCompGroupBFilters();
+    var pvParams = _getCompositePlanViewParams();
+    var variable = document.getElementById('comp-var').value;
+    var dataType = document.getElementById('comp-dtype').value;
+    var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
+    var overlay = (document.getElementById('comp-overlay') || {}).value || '';
+
+    // Disable all buttons
+    var btns = ['comp-btn-az','comp-btn-sq','comp-btn-pv','comp-btn-diff-az','comp-btn-diff-sq','comp-btn-diff-pv'];
+    btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = true; });
+    var btnDiffPv = document.getElementById('comp-btn-diff-pv');
+    if (btnDiffPv) btnDiffPv.textContent = '\u23F3 Computing\u2026';
+    var _crp = document.getElementById('comp-result-placeholder') || document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
+    document.getElementById('comp-result-az').style.display = 'none';
+    document.getElementById('comp-result-sq').style.display = 'none';
+    _showCompStatus('loading', 'Computing difference plan-view composite (A\u2212B) at ' + pvParams.level_km + ' km\u2026');
+
+    var baseQS = '&variable=' + encodeURIComponent(variable) +
+        '&data_type=' + dataType + '&coverage_min=' + coverage +
+        '&level_km=' + pvParams.level_km +
+        '&normalize_rmw=' + (pvParams.normalize_rmw ? 'true' : 'false') +
+        '&max_r_rmw=' + pvParams.max_r_rmw +
+        '&dr_rmw=' + pvParams.dr_rmw +
+        '&shear_relative=' + (pvParams.shear_relative ? 'true' : 'false');
+    if (overlay) baseQS += '&overlay=' + encodeURIComponent(overlay);
+    var urlA = API_BASE + '/composite/plan_view?' + _compositeQueryString(filtersA) + baseQS;
+    var urlB = API_BASE + '/composite/plan_view?' + _compositeQueryString(filtersB) + baseQS;
+
+    // Sequential streaming: fetch Group A first, then Group B, to avoid
+    // doubling memory/thread pressure on the server.
+    var jsonA;
+    _fetchCompositeStream(urlA, 'Group A plan view').then(function(result) {
+        jsonA = result;
+        _showCompStatus('loading', 'Group A done (' + jsonA.n_cases + ' cases). Computing Group B\u2026');
+        return _fetchCompositeStream(urlB, 'Group B plan view');
+    }).then(function(jsonB) {
+        var diffData = _subtractArrays2D(jsonA.plan_view, jsonB.plan_view);
+        var symRange = _symmetricRange(diffData);
+
+        var diffJson = {
+            plan_view: diffData,
+            x_axis: jsonA.x_axis,
+            y_axis: jsonA.y_axis,
+            x_label: jsonA.x_label,
+            y_label: jsonA.y_label,
+            level_km: jsonA.level_km,
+            normalize_rmw: jsonA.normalize_rmw,
+            shear_relative: jsonA.shear_relative,
+            coverage_min: jsonA.coverage_min,
+            n_cases: jsonA.n_cases,
+            case_list: jsonA.case_list,
+            case_list_b: jsonB.case_list,
+            _isDiff: true,
+            _nA: jsonA.n_cases,
+            _nB: jsonB.n_cases,
+            _filtersA: filtersA,
+            _filtersB: filtersB,
+            variable: {
+                key: jsonA.variable.key,
+                display_name: '\u0394 ' + jsonA.variable.display_name,
+                units: jsonA.variable.units,
+                vmin: -symRange,
+                vmax: symRange,
+                colorscale: _DIFF_COLORSCALE,
+            }
+        };
+        // Overlay difference
+        if (jsonA.overlay && jsonB.overlay) {
+            var ovDiff = _subtractArrays2D(jsonA.overlay.plan_view, jsonB.overlay.plan_view);
+            diffJson.overlay = {
+                display_name: '\u0394 ' + jsonA.overlay.display_name,
+                key: jsonA.overlay.key,
+                units: jsonA.overlay.units,
+                plan_view: ovDiff,
+                vmin: jsonA.overlay.vmin,
+                vmax: jsonA.overlay.vmax,
+            };
+        }
+
+        _showCompStatus('success', '\u2713 Difference computed: Group A (' + jsonA.n_cases + ' cases) \u2212 Group B (' + jsonB.n_cases + ' cases)');
+        _renderDiffPlanView('comp-result-pv', diffJson, jsonA, jsonB, filtersA, filtersB, pvParams);
+        _showCompShadingToolbar();
+    }).catch(function(err) {
+        _showCompStatus('error', '\u2717 ' + (err.message || String(err)));
+    }).finally(function() {
+        btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = false; });
+        if (btnDiffPv) btnDiffPv.textContent = '\u0394 Plan View (A\u2212B)';
+    });
+}
+
+function _renderDiffPlanView(targetId, diffJson, jsonA, jsonB, filtersA, filtersB, pvParams) {
+    var el = document.getElementById(targetId); if (!el) return;
+    el.style.display = 'block';
+    _lastCompJson = diffJson; _lastCompType = 'pv';
+
+    var varInfoA = jsonA.variable;
+    var diffVarInfo = diffJson.variable;
+
+    // Create 3 stacked chart containers + toolbar
+    el.innerHTML =
+        '<div style="margin-bottom:4px;padding:6px 10px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#60a5fa;">\uD83D\uDD35 Group A</div>' +
+        '<div id="comp-diff-pv-a" style="width:100%;height:520px;border-radius:8px;overflow:hidden;"></div>' +
+        '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#f59e0b;">\uD83D\uDFE0 Group B</div>' +
+        '<div id="comp-diff-pv-b" style="width:100%;height:520px;border-radius:8px;overflow:hidden;"></div>' +
+        _buildShadingControlsRow('shd-dpv-ab', {label: 'Panels A &amp; B', defaultVmin: varInfoA.vmin, defaultVmax: varInfoA.vmax}) +
+        '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#ef4444;">\u0394 Difference (A \u2212 B)</div>' +
+        '<div id="comp-diff-pv-d" style="width:100%;height:520px;border-radius:8px;overflow:hidden;"></div>' +
+        _buildShadingControlsRow('shd-dpv-d', {label: 'Difference', defaultVmin: diffVarInfo.vmin, defaultVmax: diffVarInfo.vmax}) +
+        _buildCompToolbar();
+
+    _registerShadingTargets('shd-dpv-ab', ['comp-diff-pv-a', 'comp-diff-pv-b'], varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax);
+
+    var plotOpts = { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] };
+    var plotBg = '#0a1628';
+    var levelKm = jsonA.level_km;
+    var xAxis = jsonA.x_axis, yAxis = jsonA.y_axis;
+    var xLabel = jsonA.x_label, yLabel = jsonA.y_label;
+    var dtypeLabel = (document.getElementById('comp-dtype') && document.getElementById('comp-dtype').value === 'merge') ? ' (Merge)' : '';
+    var normLabel = jsonA.normalize_rmw ? ' (RMW-norm)' : '';
+    var shearLabel = jsonA.shear_relative ? ' [Shear \u2192 Right]' : '';
+    var fontSize = { title:13, axis:11, tick:10, cbar:11, cbarTick:10, hover:12 };
+
+    // Helper: build an RMW circle scatter trace
+    function rmwCircleTrace() {
+        if (!jsonA.normalize_rmw) return [];
+        var nPts = 120, cx = [], cy = [];
+        for (var j = 0; j <= nPts; j++) {
+            var a = 2 * Math.PI * j / nPts;
+            cx.push(parseFloat(Math.cos(a).toFixed(4)));
+            cy.push(parseFloat(Math.sin(a).toFixed(4)));
+        }
+        return [{ x:cx, y:cy, type:'scatter', mode:'lines', line:{color:'white',width:1.5,dash:'dash'}, showlegend:false, hoverinfo:'skip' }];
+    }
+
+    // Helper: build a shear arrow
+    function shearShapes() {
+        if (!jsonA.shear_relative) return { shapes:[], annotations:[] };
+        return buildShearInset(90, true);
+    }
+
+    // Helper to build a single plan-view plot
+    function buildPvPlot(chartId, data, titleText, colorscale, zmin, zmax, units, overlayJson) {
+        // Compute tight axis range from actual non-NaN data extent
+        var ext = _tightDataExtent(data, xAxis, yAxis, 0.25);
+        var hm = {
+            z: data, x: xAxis, y: yAxis, type: 'heatmap',
+            colorscale: colorscale, zmin: zmin, zmax: zmax,
+            colorbar: { title:{text:units,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:14, len:0.85 },
+            hovertemplate: '%{z:.2f} ' + units + '<br>' + xLabel + ': %{x:.1f}<br>' + yLabel + ': %{y:.1f}<extra></extra>',
+            hoverongaps: false
+        };
+        var ovTraces = overlayJson ? buildCompPlanViewOverlayContours(overlayJson, xAxis, yAxis) : [];
+        var sInset = shearShapes();
+        var layout = {
+            title: { text:titleText, font:{color:'#e5e7eb',size:fontSize.title}, y:0.97, x:0.5, xanchor:'center' },
+            paper_bgcolor:plotBg, plot_bgcolor:plotBg,
+            xaxis: { title:{text:xLabel,font:{color:'#aaa',size:fontSize.axis}}, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:true, zerolinecolor:'rgba(255,255,255,0.12)', range:[ext.xMin, ext.xMax] },
+            yaxis: { title:{text:yLabel,font:{color:'#aaa',size:fontSize.axis}}, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:true, zerolinecolor:'rgba(255,255,255,0.12)', scaleanchor:'x', scaleratio:1, range:[ext.yMin, ext.yMax] },
+            margin:{ l:60, r:24, t:140, b:50 },
+            shapes: sInset.shapes || [], annotations: sInset.annotations || [],
+            hoverlabel:{ bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
+            showlegend:false
+        };
+        Plotly.newPlot(chartId, [hm].concat(ovTraces).concat(rmwCircleTrace()), layout, plotOpts);
+    }
+
+    var activeColorscale = varInfoA.colorscale;
+    var activeVmin = varInfoA.vmin;
+    var activeVmax = varInfoA.vmax;
+
+    // ── Group A plot ──
+    var meanVmaxA = _computeCompositeMeanVmax(filtersA);
+    var vmaxNoteA = meanVmaxA !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxA + ' kt' : '';
+    var titleA = _compositeFilterSummary(filtersA, jsonA.n_cases) + vmaxNoteA +
+                 '<br>Plan View @ ' + levelKm + ' km: ' + varInfoA.display_name + dtypeLabel + normLabel + shearLabel;
+    buildPvPlot('comp-diff-pv-a', jsonA.plan_view, titleA, activeColorscale, activeVmin, activeVmax, varInfoA.units, jsonA);
+
+    // ── Group B plot ──
+    var meanVmaxB = _computeCompositeMeanVmax(filtersB);
+    var vmaxNoteB = meanVmaxB !== null ? ' | Mean V<sub>max</sub>=' + meanVmaxB + ' kt' : '';
+    var titleB = _compositeFilterSummary(filtersB, jsonB.n_cases) + vmaxNoteB +
+                 '<br>Plan View @ ' + levelKm + ' km: ' + varInfoA.display_name + dtypeLabel + normLabel + shearLabel;
+    buildPvPlot('comp-diff-pv-b', jsonB.plan_view, titleB, activeColorscale, activeVmin, activeVmax, varInfoA.units, jsonB);
+
+    // ── Difference plot ──
+    var diffVmaxNote = '';
+    if (meanVmaxA !== null || meanVmaxB !== null) {
+        diffVmaxNote = ' | V\u0305<sub>max</sub>: ';
+        if (meanVmaxA !== null) diffVmaxNote += '<span style="color:#60a5fa;">A=' + meanVmaxA + '</span>';
+        if (meanVmaxA !== null && meanVmaxB !== null) diffVmaxNote += ', ';
+        if (meanVmaxB !== null) diffVmaxNote += '<span style="color:#f59e0b;">B=' + meanVmaxB + '</span>';
+    }
+    var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) + diffVmaxNote +
+                 '<br>\u0394 Plan View @ ' + levelKm + ' km: ' + varInfoA.display_name + dtypeLabel + normLabel + shearLabel;
+
+    _registerShadingTargets('shd-dpv-d', ['comp-diff-pv-d'], _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax);
+    buildPvPlot('comp-diff-pv-d', diffJson.plan_view, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, diffVarInfo.units, diffJson);
+}
+
+// ── CFAD Difference ──
+
+function generateCompDiffCFAD() {
+    var filtersA = _getCompositeFilters();
+    var filtersB = _getCompGroupBFilters();
+    var variable = document.getElementById('comp-var').value;
+    var dataType = document.getElementById('comp-dtype').value;
+    var _crp = document.getElementById('comp-result-placeholder') || document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
+    _showCompStatus('loading', 'Computing CFAD difference (A\u2212B)\u2026');
+
+    // Gather CFAD options (shared for A and B)
+    var binWidth = parseFloat((document.getElementById('cfad-bin-width') || {}).value) || 0;
+    var nBins = parseInt((document.getElementById('cfad-n-bins') || {}).value, 10) || 20;
+    var binMinVal = (document.getElementById('cfad-bin-min') || {}).value;
+    var binMaxVal = (document.getElementById('cfad-bin-max') || {}).value;
+    var normalise = (document.getElementById('cfad-normalise') || {}).value || 'height';
+    var minRadius = parseFloat((document.getElementById('cfad-min-radius') || {}).value) || 0;
+    var maxRadius = parseFloat((document.getElementById('cfad-max-radius') || {}).value) || 200;
+    var useRmw = !!(document.getElementById('cfad-use-rmw') || {}).checked;
+    var quadrants = _cfadGetSelectedQuadrants();
+    var isMulti = quadrants.length === 1 && quadrants[0] === 'MULTI';
+
+    var cfadQS = '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType +
+        '&min_radius=' + minRadius + '&max_radius=' + maxRadius + '&normalise=' + encodeURIComponent(normalise) +
+        '&n_bins=' + nBins;
+    if (useRmw) cfadQS += '&use_rmw=true';
+    if (binWidth > 0) cfadQS += '&bin_width=' + binWidth;
+    if (binMinVal !== '' && binMinVal !== undefined && !isNaN(parseFloat(binMinVal))) cfadQS += '&bin_min=' + parseFloat(binMinVal);
+    if (binMaxVal !== '' && binMaxVal !== undefined && !isNaN(parseFloat(binMaxVal))) cfadQS += '&bin_max=' + parseFloat(binMaxVal);
+    if (isMulti) {
+        cfadQS += '&quadrants=MULTI';
+    } else if (quadrants.length > 0) {
+        cfadQS += '&quadrants=' + encodeURIComponent(quadrants.join(','));
+    }
+
+    var urlA = API_BASE + '/composite/cfad?' + _compositeQueryString(filtersA) + cfadQS;
+    var urlB = API_BASE + '/composite/cfad?' + _compositeQueryString(filtersB) + cfadQS;
+
+    var jsonA;
+    _fetchCompositeStream(urlA, 'Group A CFAD').then(function(result) {
+        jsonA = result;
+        _showCompStatus('loading', 'Group A done (' + jsonA.n_cases + ' cases). Computing Group B\u2026');
+        return _fetchCompositeStream(urlB, 'Group B CFAD');
+    }).then(function(jsonB) {
+        _showCompStatus('success', '\u2713 CFAD difference computed: A (' + jsonA.n_cases + ') \u2212 B (' + jsonB.n_cases + ')');
+        _updateBadgeFromResult(jsonA.n_cases);
+
+        if (jsonA.multi && jsonB.multi) {
+            _renderDiffCFADMulti('comp-result-cfad', jsonA, jsonB, filtersA, filtersB);
+        } else {
+            _renderDiffCFAD('comp-result-cfad', jsonA, jsonB, filtersA, filtersB);
+        }
+    }).catch(function(err) {
+        _showCompStatus('error', '\u2717 ' + (err.message || String(err)));
+    });
+}
+
+function _buildCfadHeatmap(plotData, binCenters, heightKm, zmin, zmax, colorscale, cbar, xRef, yRef, varInfo, hoverSuffix, customData, showScale) {
+    var trace = {
+        z: plotData, x: binCenters, y: heightKm, type: 'heatmap',
+        colorscale: colorscale, zmin: zmin, zmax: zmax,
+        xaxis: xRef || 'x', yaxis: yRef || 'y',
+        showscale: !!showScale, hoverongaps: false
+    };
+    if (cbar) trace.colorbar = cbar;
+    if (customData) {
+        trace.customdata = customData;
+        trace.hovertemplate = varInfo.display_name + ': %{x:.1f} ' + varInfo.units +
+            '<br>Height: %{y:.1f} km<br>Frequency: %{customdata:.3f} ' + hoverSuffix + '<extra></extra>';
+    } else {
+        trace.hovertemplate = varInfo.display_name + ': %{x:.1f} ' + varInfo.units +
+            '<br>Height: %{y:.1f} km<br>Frequency: %{z:.2f} ' + hoverSuffix + '<extra></extra>';
+    }
+    return trace;
+}
+
+function _cfadApplyLog(rawData, zMinPos) {
+    var plotData = [];
+    for (var h = 0; h < rawData.length; h++) {
+        var row = [];
+        for (var b = 0; b < rawData[h].length; b++) {
+            var val = rawData[h][b];
+            row.push((val === null || val <= 0) ? null : Math.log10(val));
+        }
+        plotData.push(row);
+    }
+    return plotData;
+}
+
+function _cfadSignedLog(data2d) {
+    // sign(x) * log10(1 + |x|) — preserves sign, compresses magnitude
+    var result = [];
+    for (var h = 0; h < data2d.length; h++) {
+        var row = [];
+        for (var b = 0; b < data2d[h].length; b++) {
+            var v = data2d[h][b];
+            if (v === null || v === undefined || isNaN(v)) { row.push(null); }
+            else { row.push(v >= 0 ? Math.log10(1 + v) : -Math.log10(1 + Math.abs(v))); }
+        }
+        result.push(row);
+    }
+    return result;
+}
+
+function _cfadSignedLogTicks(symRange) {
+    // Build colorbar ticks for signed-log space
+    // symRange is in signed-log space (the max absolute transformed value)
+    var tickVals = [0], tickText = ['0'];
+    // Generate nice positive/negative ticks
+    var origVals = [0.1, 0.5, 1, 2, 5, 10, 20, 50, 100];
+    for (var i = 0; i < origVals.length; i++) {
+        var ov = origVals[i];
+        var tv = Math.log10(1 + ov);
+        if (tv > symRange * 1.05) break;
+        tickVals.push(tv);  tickText.push('+' + ov + '%');
+        tickVals.push(-tv); tickText.push('\u2212' + ov + '%');
+    }
+    return { vals: tickVals, text: tickText };
+}
+
+function _renderDiffCFAD(targetId, jsonA, jsonB, filtersA, filtersB) {
+    var el = document.getElementById(targetId); if (!el) return;
+    var binCenters = jsonA.bin_centers;
+    var heightKm = jsonA.height_km;
+    var varInfo = jsonA.variable;
+    var normLabel = jsonA.norm_label;
+    var cfadColorscale = jsonA.cfad_colorscale || 'RdYlBu';
+    var useLog = !!(document.getElementById('cfad-log-scale') || {}).checked;
+    var fontSize = { title:13, axis:11, tick:9, cbar:11, cbarTick:9, hover:12 };
+
+    // Compute difference (no log for diff — subtract raw percentages)
+    var diffData = _subtractArrays2D(jsonA.cfad, jsonB.cfad);
+    var symRange = _symmetricRange(diffData);
+
+    // For groups A and B, find shared z range
+    var gZmax = 0, gZminPos = Infinity;
+    [jsonA.cfad, jsonB.cfad].forEach(function(data) {
+        for (var h = 0; h < data.length; h++) {
+            for (var b = 0; b < data[h].length; b++) {
+                var v = data[h][b];
+                if (v !== null && v > gZmax) gZmax = v;
+                if (v !== null && v > 0 && v < gZminPos) gZminPos = v;
+            }
+        }
+    });
+    if (gZmax === 0) gZmax = 1;
+    if (gZminPos === Infinity) gZminPos = 0.001;
+
+    // Determine A/B plot params
+    var plotZmin, plotZmax, cbarTitle;
+    var cbarTickVals, cbarTickText;
+    if (useLog) {
+        plotZmin = Math.log10(Math.max(gZminPos * 0.5, 1e-6));
+        plotZmax = Math.log10(gZmax);
+        cbarTickVals = []; cbarTickText = [];
+        for (var p = Math.floor(plotZmin); p <= Math.ceil(plotZmax); p++) {
+            var tv = Math.pow(10, p);
+            cbarTickVals.push(p);
+            if (normLabel === 'count') cbarTickText.push(tv >= 1 ? String(Math.round(tv)) : tv.toExponential(0));
+            else if (tv >= 1) cbarTickText.push(tv.toFixed(0) + '%');
+            else if (tv >= 0.1) cbarTickText.push(tv.toFixed(1) + '%');
+            else if (tv >= 0.01) cbarTickText.push(tv.toFixed(2) + '%');
+            else cbarTickText.push(tv.toExponential(0) + '%');
+        }
+        cbarTitle = normLabel + ' (log\u2081\u2080)';
+    } else {
+        plotZmin = 0; plotZmax = gZmax;
+        cbarTitle = normLabel;
+    }
+
+    var plotBg = '#0a1628';
+    var radialNote = '';
+    if (jsonA.radial_domain) {
+        var rUnit = jsonA.use_rmw ? ' R/RMW' : ' km';
+        radialNote = ' | R=' + jsonA.radial_domain[0] + '\u2013' + jsonA.radial_domain[1] + rUnit;
+    }
+    var quadNote = '';
+    if (jsonA.quadrants && jsonA.quadrants.length > 0) quadNote = ' | ' + jsonA.quadrants.join('+');
+    var binNote = ' | Bin=' + jsonA.bin_width + ' ' + varInfo.units;
+
+    // Build 3 panels: A, B, Difference
+    var panels = ['A', 'B', 'Diff'];
+    var panelHtml = '';
+    for (var pi = 0; pi < 3; pi++) {
+        panelHtml += '<div id="comp-diff-cfad-' + panels[pi].toLowerCase() + '" style="width:100%;height:460px;border-radius:8px;overflow:hidden;margin-bottom:8px;"></div>';
+    }
+
+    el.style.display = 'block';
+    jsonA._isDiff = true; jsonA.case_list_b = jsonB.case_list; jsonA._nA = jsonA.n_cases; jsonA._nB = jsonB.n_cases;
+    _lastCompJson = jsonA; _lastCompType = 'cfad_diff';
+    el.innerHTML = panelHtml +
+        _buildShadingControlsRow('shd-dcfad-ab', {label: 'Panels A &amp; B', defaultVmin: plotZmin, defaultVmax: plotZmax}) +
+        _buildShadingControlsRow('shd-dcfad-d', {label: 'Difference', defaultVmin: 'min', defaultVmax: 'max'}) +
+        _buildCompToolbar();
+
+    _registerShadingTargets('shd-dcfad-ab', ['comp-diff-cfad-a', 'comp-diff-cfad-b'], cfadColorscale, plotZmin, plotZmax);
+
+    // Render A
+    var dataA = useLog ? _cfadApplyLog(jsonA.cfad) : jsonA.cfad;
+    var cbarA = { title:{text:cbarTitle,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:12, len:0.85 };
+    if (useLog && cbarTickVals) { cbarA.tickvals = cbarTickVals; cbarA.ticktext = cbarTickText; }
+    var trA = _buildCfadHeatmap(dataA, binCenters, heightKm, plotZmin, plotZmax, cfadColorscale, cbarA, 'x', 'y', varInfo, normLabel, useLog ? jsonA.cfad : null, true);
+    var titleA = '<span style="color:#60a5fa;">Group A</span> (N=' + jsonA.n_cases + ')' + binNote + radialNote + quadNote;
+    var layA = { title:{text:titleA,font:{color:'#e5e7eb',size:fontSize.title},y:0.97,x:0.5,xanchor:'center'}, paper_bgcolor:plotBg, plot_bgcolor:plotBg,
+        xaxis:{title:{text:varInfo.display_name+' ('+varInfo.units+')',font:{color:'#aaa',size:fontSize.axis}},tickfont:{color:'#aaa',size:fontSize.tick},gridcolor:'rgba(255,255,255,0.04)',zeroline:false},
+        yaxis:{title:{text:'Height (km)',font:{color:'#aaa',size:fontSize.axis}},tickfont:{color:'#aaa',size:fontSize.tick},gridcolor:'rgba(255,255,255,0.04)',zeroline:false},
+        margin:{l:55,r:24,t:80,b:50}, hoverlabel:{bgcolor:'#1f2937',font:{color:'#e5e7eb',size:fontSize.hover}}, showlegend:false };
+    Plotly.newPlot('comp-diff-cfad-a', [trA], layA, {responsive:true,displayModeBar:false});
+
+    // Render B
+    var dataB = useLog ? _cfadApplyLog(jsonB.cfad) : jsonB.cfad;
+    var cbarB = { title:{text:cbarTitle,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:12, len:0.85 };
+    if (useLog && cbarTickVals) { cbarB.tickvals = cbarTickVals; cbarB.ticktext = cbarTickText; }
+    var trB = _buildCfadHeatmap(dataB, binCenters, heightKm, plotZmin, plotZmax, cfadColorscale, cbarB, 'x', 'y', varInfo, normLabel, useLog ? jsonB.cfad : null, true);
+    var titleB = '<span style="color:#f59e0b;">Group B</span> (N=' + jsonB.n_cases + ')' + binNote + radialNote + quadNote;
+    var layB = JSON.parse(JSON.stringify(layA));
+    layB.title.text = titleB;
+    Plotly.newPlot('comp-diff-cfad-b', [trB], layB, {responsive:true,displayModeBar:false});
+
+    // Render Difference — apply signed log transform if log-scale enabled
+    var diffPlotData, diffZmin, diffZmax, diffCbarTitle, diffCustomData = null;
+    if (useLog) {
+        diffPlotData = _cfadSignedLog(diffData);
+        diffCustomData = diffData;
+        var sLogMax = 0;
+        for (var dh = 0; dh < diffPlotData.length; dh++) {
+            for (var db = 0; db < diffPlotData[dh].length; db++) {
+                var dv = diffPlotData[dh][db];
+                if (dv !== null && Math.abs(dv) > sLogMax) sLogMax = Math.abs(dv);
+            }
+        }
+        if (sLogMax === 0) sLogMax = 1;
+        diffZmin = -sLogMax; diffZmax = sLogMax;
+        diffCbarTitle = '\u0394 ' + normLabel + ' (signed log)';
+    } else {
+        diffPlotData = diffData;
+        diffZmin = -symRange; diffZmax = symRange;
+        diffCbarTitle = '\u0394 ' + normLabel;
+    }
+
+    var cbarD = { title:{text:diffCbarTitle,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:12, len:0.85 };
+    if (useLog) {
+        var slTicks = _cfadSignedLogTicks(diffZmax);
+        cbarD.tickvals = slTicks.vals; cbarD.ticktext = slTicks.text;
+    }
+    var trD = _buildCfadHeatmap(diffPlotData, binCenters, heightKm, diffZmin, diffZmax, _DIFF_COLORSCALE, cbarD, 'x', 'y', varInfo,
+        '\u0394 ' + normLabel, diffCustomData, true);
+    var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) +
+        '<br>\u0394 CFAD: ' + varInfo.display_name + binNote + radialNote + quadNote + (useLog ? ' (signed log)' : '');
+    var layD = JSON.parse(JSON.stringify(layA));
+    layD.title.text = titleD;
+
+    _registerShadingTargets('shd-dcfad-d', ['comp-diff-cfad-diff'], _DIFF_COLORSCALE, diffZmin, diffZmax);
+    Plotly.newPlot('comp-diff-cfad-diff', [trD], layD, {responsive:true,displayModeBar:true,displaylogo:false,modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines']});
+}
+
+function _renderDiffCFADMulti(targetId, jsonA, jsonB, filtersA, filtersB) {
+    var el = document.getElementById(targetId); if (!el) return;
+    var binCenters = jsonA.bin_centers;
+    var heightKm = jsonA.height_km;
+    var varInfo = jsonA.variable;
+    var normLabel = jsonA.norm_label;
+    var cfadColorscale = jsonA.cfad_colorscale || 'RdYlBu';
+    var useLog = !!(document.getElementById('cfad-log-scale') || {}).checked;
+    var fontSize = { title:12, axis:10, tick:9, cbar:10, cbarTick:9, hover:11 };
+    // Shear vector points right: USL/DSL top, USR/DSR bottom
+    var quadOrder = ['USL', 'DSL', 'USR', 'DSR'];
+    var quadLabels = { 'USL': 'Upshear Left', 'USR': 'Upshear Right', 'DSL': 'Downshear Left', 'DSR': 'Downshear Right' };
+
+    // Compute differences per quadrant
+    var diffMulti = {};
+    for (var qi = 0; qi < quadOrder.length; qi++) {
+        var qn = quadOrder[qi];
+        if (jsonA.cfad_multi[qn] && jsonB.cfad_multi[qn]) {
+            diffMulti[qn] = _subtractArrays2D(jsonA.cfad_multi[qn], jsonB.cfad_multi[qn]);
+        }
+    }
+
+    // Global z-range for A/B panels
+    var gZmax = 0, gZminPos = Infinity;
+    [jsonA.cfad_multi, jsonB.cfad_multi].forEach(function(multi) {
+        for (var qi2 = 0; qi2 < quadOrder.length; qi2++) {
+            var data = multi[quadOrder[qi2]];
+            if (!data) continue;
+            for (var h = 0; h < data.length; h++) {
+                for (var b = 0; b < data[h].length; b++) {
+                    var v = data[h][b];
+                    if (v !== null && v > gZmax) gZmax = v;
+                    if (v !== null && v > 0 && v < gZminPos) gZminPos = v;
+                }
+            }
+        }
+    });
+    if (gZmax === 0) gZmax = 1;
+    if (gZminPos === Infinity) gZminPos = 0.001;
+
+    // Symmetric range for diff
+    var allDiffVals = [];
+    for (var qi3 = 0; qi3 < quadOrder.length; qi3++) {
+        var dd = diffMulti[quadOrder[qi3]];
+        if (!dd) continue;
+        for (var h2 = 0; h2 < dd.length; h2++) {
+            for (var b2 = 0; b2 < dd[h2].length; b2++) {
+                if (dd[h2][b2] !== null) allDiffVals.push(dd[h2][b2]);
+            }
+        }
+    }
+    var symRange = _symmetricRange([allDiffVals]);
+
+    var plotZmin, plotZmax, cbarTitle, cbarTickVals, cbarTickText;
+    if (useLog) {
+        plotZmin = Math.log10(Math.max(gZminPos * 0.5, 1e-6));
+        plotZmax = Math.log10(gZmax);
+        cbarTickVals = []; cbarTickText = [];
+        for (var p = Math.floor(plotZmin); p <= Math.ceil(plotZmax); p++) {
+            var tv = Math.pow(10, p);
+            cbarTickVals.push(p);
+            if (normLabel === 'count') cbarTickText.push(tv >= 1 ? String(Math.round(tv)) : tv.toExponential(0));
+            else if (tv >= 1) cbarTickText.push(tv.toFixed(0) + '%');
+            else if (tv >= 0.1) cbarTickText.push(tv.toFixed(1) + '%');
+            else cbarTickText.push(tv.toExponential(0) + '%');
+        }
+        cbarTitle = normLabel + ' (log\u2081\u2080)';
+    } else {
+        plotZmin = 0; plotZmax = gZmax;
+        cbarTitle = normLabel;
+    }
+
+    var plotBg = '#0a1628';
+    var radialNote = '';
+    if (jsonA.radial_domain) {
+        var rUnit = jsonA.use_rmw ? ' R/RMW' : ' km';
+        radialNote = ' | R=' + jsonA.radial_domain[0] + '\u2013' + jsonA.radial_domain[1] + rUnit;
+    }
+    var binNote = ' | Bin=' + jsonA.bin_width + ' ' + varInfo.units;
+
+    // Create 3 chart containers: A (2x2), B (2x2), Diff (2x2)
+    el.style.display = 'block';
+    jsonA._isDiff = true; jsonA.case_list_b = jsonB.case_list; jsonA._nA = jsonA.n_cases; jsonA._nB = jsonB.n_cases;
+    _lastCompJson = jsonA; _lastCompType = 'cfad_diff_multi';
+    el.innerHTML =
+        '<div id="comp-diff-cfadm-a" style="width:100%;height:720px;border-radius:8px;overflow:hidden;margin-bottom:8px;"></div>' +
+        '<div id="comp-diff-cfadm-b" style="width:100%;height:720px;border-radius:8px;overflow:hidden;margin-bottom:8px;"></div>' +
+        _buildShadingControlsRow('shd-dcfadm-ab', {label: 'Panels A &amp; B', defaultVmin: plotZmin, defaultVmax: plotZmax}) +
+        '<div id="comp-diff-cfadm-diff" style="width:100%;height:720px;border-radius:8px;overflow:hidden;margin-bottom:8px;"></div>' +
+        _buildShadingControlsRow('shd-dcfadm-d', {label: 'Difference', defaultVmin: 'min', defaultVmax: 'max'}) +
+        _buildCompToolbar();
+
+    _registerShadingTargets('shd-dcfadm-ab', ['comp-diff-cfadm-a', 'comp-diff-cfadm-b'], cfadColorscale, plotZmin, plotZmax);
+
+    // Helper: build 2x2 subplot for a set of 4 quadrant CFADs
+    // diffSignedLog: if true, apply signed log transform to data and use custom ticks
+    function build2x2(chartId, multiData, titleText, colorscale, zMin, zMax, cbarObj, isLog, isDiff, diffSignedLog) {
+        var traces = [];
+        var anns = [];
+        for (var si = 0; si < quadOrder.length; si++) {
+            var qk = quadOrder[si];
+            var raw = multiData[qk];
+            if (!raw) continue;
+            var pData, cData = null;
+            if (diffSignedLog) {
+                pData = _cfadSignedLog(raw);
+                cData = raw;
+            } else if (isLog && !isDiff) {
+                pData = _cfadApplyLog(raw);
+                cData = raw;
+            } else {
+                pData = raw;
+            }
+            var xR = 'x' + (si === 0 ? '' : String(si + 1));
+            var yR = 'y' + (si === 0 ? '' : String(si + 1));
+            var showCbar = (si === 1);
+            var cb = showCbar ? JSON.parse(JSON.stringify(cbarObj)) : null;
+            var tr = {
+                z: pData, x: binCenters, y: heightKm, type: 'heatmap',
+                colorscale: colorscale, zmin: zMin, zmax: zMax,
+                xaxis: xR, yaxis: yR, showscale: showCbar, hoverongaps: false
+            };
+            if (cb) { cb.x = 1.02; tr.colorbar = cb; }
+            if (cData) {
+                tr.customdata = cData;
+                tr.hovertemplate = '<b>' + quadLabels[qk] + '</b><br>' + varInfo.display_name + ': %{x:.1f} ' + varInfo.units +
+                    '<br>Height: %{y:.1f} km<br>Freq: %{customdata:.3f} ' + (isDiff ? '\u0394 ' : '') + normLabel + '<extra></extra>';
+            } else {
+                tr.hovertemplate = '<b>' + quadLabels[qk] + '</b><br>' + varInfo.display_name + ': %{x:.1f} ' + varInfo.units +
+                    '<br>Height: %{y:.1f} km<br>Freq: %{z:.2f} ' + (isDiff ? '\u0394 ' : '') + normLabel + '<extra></extra>';
+            }
+            traces.push(tr);
+            anns.push({
+                text: '<b>' + quadLabels[qk] + '</b>', showarrow: false,
+                xref: xR + ' domain', yref: yR + ' domain',
+                x: 0.5, y: 1.08, font: {size:11, color:'#e5e7eb'}, xanchor:'center', yanchor:'bottom'
+            });
+        }
+        var layout = {
+            title: { text: titleText, font:{color:'#e5e7eb',size:fontSize.title}, y:0.98, x:0.5, xanchor:'center' },
+            paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+            grid: { rows:2, columns:2, pattern:'independent', xgap:0.08, ygap:0.12 },
+            annotations: anns,
+            margin: { l:55, r:60, t:140, b:50 },
+            hoverlabel: { bgcolor:'#1f2937', font:{color:'#e5e7eb',size:fontSize.hover} },
+            showlegend: false
+        };
+        var axNames = [['xaxis','yaxis'],['xaxis2','yaxis2'],['xaxis3','yaxis3'],['xaxis4','yaxis4']];
+        for (var ai = 0; ai < axNames.length; ai++) {
+            var isBottom = ai >= 2, isLeft = ai % 2 === 0;
+            layout[axNames[ai][0]] = {
+                title: isBottom ? {text:varInfo.display_name+' ('+varInfo.units+')',font:{color:'#aaa',size:fontSize.axis}} : undefined,
+                tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false
+            };
+            layout[axNames[ai][1]] = {
+                title: isLeft ? {text:'Height (km)',font:{color:'#aaa',size:fontSize.axis}} : undefined,
+                tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false
+            };
+        }
+        Plotly.newPlot(chartId, traces, layout, {responsive:true, displayModeBar: isDiff, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines']});
+    }
+
+    // Render A
+    var cbarAB = { title:{text:cbarTitle,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:12, len:0.9 };
+    if (useLog && cbarTickVals) { cbarAB.tickvals = cbarTickVals; cbarAB.ticktext = cbarTickText; }
+    build2x2('comp-diff-cfadm-a', jsonA.cfad_multi,
+        '<span style="color:#60a5fa;">Group A</span> (N=' + jsonA.n_cases + ') | 4-Quadrant CFAD' + binNote + radialNote,
+        cfadColorscale, plotZmin, plotZmax, cbarAB, useLog, false, false);
+
+    // Render B
+    build2x2('comp-diff-cfadm-b', jsonB.cfad_multi,
+        '<span style="color:#f59e0b;">Group B</span> (N=' + jsonB.n_cases + ') | 4-Quadrant CFAD' + binNote + radialNote,
+        cfadColorscale, plotZmin, plotZmax, cbarAB, useLog, false, false);
+
+    // Render Difference — apply signed log if log-scale enabled
+    var diffDZmin, diffDZmax, diffCbarTitle;
+    var diffSignedLog = useLog;
+    if (diffSignedLog) {
+        // Compute signed-log range across all quadrant diffs
+        var sLogMax = 0;
+        for (var qi4 = 0; qi4 < quadOrder.length; qi4++) {
+            var dq = diffMulti[quadOrder[qi4]];
+            if (!dq) continue;
+            var slData = _cfadSignedLog(dq);
+            for (var sh = 0; sh < slData.length; sh++) {
+                for (var sb = 0; sb < slData[sh].length; sb++) {
+                    var sv = slData[sh][sb];
+                    if (sv !== null && Math.abs(sv) > sLogMax) sLogMax = Math.abs(sv);
+                }
+            }
+        }
+        if (sLogMax === 0) sLogMax = 1;
+        diffDZmin = -sLogMax; diffDZmax = sLogMax;
+        diffCbarTitle = '\u0394 ' + normLabel + ' (signed log)';
+    } else {
+        diffDZmin = -symRange; diffDZmax = symRange;
+        diffCbarTitle = '\u0394 ' + normLabel;
+    }
+    var cbarDiff = { title:{text:diffCbarTitle,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:12, len:0.9 };
+    if (diffSignedLog) {
+        var slTicks = _cfadSignedLogTicks(diffDZmax);
+        cbarDiff.tickvals = slTicks.vals; cbarDiff.ticktext = slTicks.text;
+    }
+
+    _registerShadingTargets('shd-dcfadm-d', ['comp-diff-cfadm-diff'], _DIFF_COLORSCALE, diffDZmin, diffDZmax);
+    build2x2('comp-diff-cfadm-diff', diffMulti,
+        _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) + '<br>\u0394 4-Quadrant CFAD: ' + varInfo.display_name + binNote + radialNote + (diffSignedLog ? ' (signed log)' : ''),
+        _DIFF_COLORSCALE, diffDZmin, diffDZmax, cbarDiff, false, true, diffSignedLog);
+}
+
+// ══════════════════════════════════════════════════════════════
+// Environmental Composite Functions
+// ══════════════════════════════════════════════════════════════
+
+function _switchCompTab(tab) {
+    // Tab system replaced by wizard steps. No-op for backward compatibility.
+    // Results now display in unified Step 4.
+}
+
+function _showEnvCompStatus(cls, msg) {
+    var el = document.getElementById('comp-env-status');
+    if (!el) return;
+    el.style.display = 'block';
+    el.className = 'explorer-status ' + cls;
+    el.innerHTML = msg;
+}
+
+// ── Main generation function ──
+function generateEnvComposite() {
+    var filters = _getCompositeFilters();
+    var dataType = document.getElementById('comp-dtype').value || 'swath';
+    var field = document.getElementById('comp-env-field').value || 'shear_mag';
+    var includeVec = document.getElementById('comp-env-vectors').checked;
+    var envShearRel = !!(document.getElementById('comp-env-shear-rel') || {}).checked;
+    var radiusKm = parseInt(document.getElementById('comp-env-radius').value) || 500;
+    var qs = _compositeQueryString(filters) + '&data_type=' + dataType;
+
+    // Switch to env tab and show loading
+    _switchCompTab('env');
+    var _cep = document.getElementById('comp-env-placeholder') || document.getElementById('wiz-result-placeholder'); if (_cep) _cep.style.display = 'none';
+    _showEnvCompStatus('loading', '\u23F3 Computing environmental composites\u2026');
+
+    // Hide previous results
+    ['comp-env-scalars', 'comp-env-plan-view', 'comp-env-thermo-row'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    });
+
+    // Serialize requests: run the heavy plan view first, then profiles + scalars.
+    // This avoids queuing multiple heavy requests on the single-worker backend.
+    var planViewUrl = API_BASE + '/composite/era5_plan_view?' + qs +
+        '&field=' + field + '&radius_km=' + radiusKm + '&include_vectors=' + includeVec +
+        '&shear_relative=' + envShearRel;
+    var profilesUrl = API_BASE + '/composite/era5_profiles?' + qs;
+    var scalarsUrl = API_BASE + '/composite/era5_scalars?' + qs;
+
+    var pvData, profData, scalarData;
+
+    _fetchCompositeStream(planViewUrl, 'Computing ERA5 plan view').then(function(pv) {
+        pvData = pv;
+        _showEnvCompStatus('loading', '\u23F3 Plan view done. Computing profiles & scalars\u2026');
+        // Profiles and scalars are lightweight — safe to run in parallel
+        return Promise.all([
+            _fetchWithTimeout(profilesUrl).then(function(r) { return r.ok ? r.json() : null; }),
+            _fetchWithTimeout(scalarsUrl).then(function(r) { return r.ok ? r.json() : null; })
+        ]);
+    }).then(function(results) {
+        profData = results[0];
+        scalarData = results[1];
+        var nCases = (pvData && pvData.n_cases) || (profData && profData.n_cases) || (scalarData && scalarData.n_cases) || 0;
+
+        if (!pvData && !profData && !scalarData) {
+            _showEnvCompStatus('error', '\u2717 No environmental data available for matching cases.');
+            return;
+        }
+
+        _updateBadgeFromResult(nCases);
+        var summary = _compositeFilterSummary(filters, nCases);
+        _showEnvCompStatus('', '\u2713 ' + summary);
+
+        if (scalarData) renderEnvCompositeScalars(scalarData);
+        if (pvData) renderEnvCompositePlanView(pvData, filters);
+        if (profData) renderEnvCompositeThermo(profData, filters);
+    }).catch(function(err) {
+        _showEnvCompStatus('error', '\u2717 Error: ' + err.message);
+    });
+}
+
+// ── Scalar cards rendering ──
+function renderEnvCompositeScalars(data) {
+    var container = document.getElementById('comp-env-scalars');
+    if (!container || !data.scalars) return;
+    container.style.display = 'block';
+
+    var html = '<div class="comp-env-section-title">\uD83D\uDCCA Scalar Diagnostics <span style="font-size:10px;color:#6b7280;">(N=' + data.n_cases + ')</span></div>';
+    html += '<div class="env-comp-scalars-grid">';
+
+    var order = ['shear_mag_env', 'rh_mid_env', 'sst_env', 'chi_m', 'v_pi', 'vent_index', 'div200_env', 'shear_dir_env'];
+    for (var i = 0; i < order.length; i++) {
+        var key = order[i];
+        var s = data.scalars[key];
+        if (!s) continue;
+
+        var highlightClass = '';
+        if (key === 'shear_mag_env') highlightClass = s.mean > 10 ? 'highlight-bad' : s.mean > 5 ? 'highlight-warn' : 'highlight-good';
+        else if (key === 'rh_mid_env') highlightClass = s.mean > 60 ? 'highlight-good' : s.mean > 40 ? 'highlight-warn' : 'highlight-bad';
+        else if (key === 'sst_env') highlightClass = s.mean > 28 ? 'highlight-good' : s.mean > 26 ? 'highlight-warn' : 'highlight-bad';
+
+        html += '<div class="env-scard ' + highlightClass + '" data-scalar-key="' + key + '" onclick="_toggleScalarBoxWhisker(this, \'' + key + '\')" style="cursor:pointer;" title="Click for box-whisker">';
+        html += '<div class="env-scard-value">' + s.mean + '</div>';
+        html += '<div class="env-scard-unit">\u00b1 ' + s.std + ' ' + s.units + '</div>';
+        html += '<div class="env-scard-label">' + s.display_name + '</div>';
+        html += '<div class="env-scard-sub">med: ' + s.median + ' | IQR: ' + s.p25 + '\u2013' + s.p75 + '</div>';
+        html += '</div>';
+    }
+    html += '</div>';
+    html += '<div id="comp-env-boxwhisker" style="display:none;height:200px;margin-top:8px;"></div>';
+    container.innerHTML = html;
+
+    // Store scalar data for box-whisker expansion
+    container._scalarData = data.scalars;
+}
+
+var _activeBoxWhiskerKey = null;
+function _toggleScalarBoxWhisker(card, key) {
+    var container = document.getElementById('comp-env-boxwhisker');
+    var scalarsEl = document.getElementById('comp-env-scalars');
+    if (!container || !scalarsEl || !scalarsEl._scalarData) return;
+
+    if (_activeBoxWhiskerKey === key) {
+        container.style.display = 'none';
+        _activeBoxWhiskerKey = null;
+        return;
+    }
+    _activeBoxWhiskerKey = key;
+    var s = scalarsEl._scalarData[key];
+    if (!s || !s.values) return;
+
+    container.style.display = 'block';
+    var trace = {
+        y: s.values,
+        type: 'box',
+        name: s.display_name,
+        marker: { color: 'rgba(0,212,255,0.6)' },
+        line: { color: '#00d4ff' },
+        boxpoints: 'outliers',
+        jitter: 0.3,
+        pointpos: -1.5
+    };
+    var layout = {
+        paper_bgcolor: '#0a1628', plot_bgcolor: '#0f2140',
+        font: { color: '#e2e8f0', family: 'DM Sans, sans-serif', size: 11 },
+        margin: { t: 30, b: 30, l: 50, r: 20 },
+        yaxis: { title: s.display_name + ' (' + s.units + ')', gridcolor: 'rgba(255,255,255,0.06)' },
+        showlegend: false
+    };
+    Plotly.newPlot(container, [trace], layout, { responsive: true, displayModeBar: false });
+}
+
+// ── Plan-view composite rendering ──
+function renderEnvCompositePlanView(data, filters) {
+    var container = document.getElementById('comp-env-plan-view');
+    if (!container) return;
+    container.style.display = 'block';
+    container.innerHTML = '<div id="comp-env-pv-plot" style="width:100%;height:500px;"></div>';
+
+    var cfg = data.field_config || {};
+    var colorscale = cfg.colorscale || 'Viridis';
+    var traces = [];
+
+    // Main heatmap
+    traces.push({
+        z: data.mean, x: data.x_km, y: data.y_km,
+        type: 'heatmap',
+        colorscale: colorscale,
+        zmin: cfg.vmin, zmax: cfg.vmax,
+        colorbar: { title: cfg.units || '', titleside: 'right', thickness: 14, len: 0.8 },
+        hovertemplate: '%{z:.2f} ' + (cfg.units || '') + '<br>x: %{x} km<br>y: %{y} km<extra></extra>'
+    });
+
+    // Vector arrows overlay
+    if (data.vectors) {
+        var stride = data.vectors.stride || 1;
+        var xSub = [], ySub = [], uArr = [], vArr = [];
+        var vU = data.vectors.u, vV = data.vectors.v;
+        for (var j = 0; j < vU.length; j++) {
+            for (var k = 0; k < vU[j].length; k++) {
+                if (vU[j][k] !== null && vV[j][k] !== null) {
+                    xSub.push(data.x_km[k * stride]);
+                    ySub.push(data.y_km[j * stride]);
+                    var u = vU[j][k], v = vV[j][k];
+                    var mag = Math.sqrt(u * u + v * v);
+                    var scale = 35;
+                    uArr.push(u / Math.max(mag, 0.01) * scale);
+                    vArr.push(v / Math.max(mag, 0.01) * scale);
+                }
+            }
+        }
+        // Draw arrows as annotation arrows
+        var annotations = [];
+        for (var a = 0; a < xSub.length; a++) {
+            annotations.push({
+                x: xSub[a] + uArr[a], y: ySub[a] + vArr[a],
+                ax: xSub[a], ay: ySub[a],
+                xref: 'x', yref: 'y', axref: 'x', ayref: 'y',
+                showarrow: true,
+                arrowhead: 2, arrowsize: 1, arrowwidth: 1.5,
+                arrowcolor: 'rgba(255,255,255,0.6)'
+            });
+        }
+    }
+
+    // TC center marker
+    traces.push({
+        x: [0], y: [0], mode: 'markers',
+        marker: { symbol: 'x', size: 12, color: '#fff', line: { width: 1 } },
+        showlegend: false, hoverinfo: 'skip'
+    });
+
+    var shearRel = data.shear_relative;
+    var shearLabel = shearRel ? ' [Shear \u2192 Right]' : '';
+    var title = (cfg.display_name || data.field) + ' Composite (N=' + data.n_cases + ')' + shearLabel;
+    var xLabel = shearRel ? 'Downshear Left/Right (km)' : 'East\u2013West (km)';
+    var yLabel = shearRel ? 'Upshear/Downshear (km)' : 'North\u2013South (km)';
+    var shearAnnotations = [];
+    if (shearRel) {
+        // Shear arrow pointing right
+        shearAnnotations.push({
+            x: 0.97, y: 0.97, xref: 'paper', yref: 'paper',
+            text: 'Shear \u2192', font: { size: 12, color: '#fbbf24', family: 'JetBrains Mono, monospace' },
+            showarrow: false, xanchor: 'right', yanchor: 'top',
+            bgcolor: 'rgba(0,0,0,0.5)', borderpad: 3
+        });
+    }
+    var layout = {
+        paper_bgcolor: '#0a1628', plot_bgcolor: '#0f2140',
+        font: { color: '#e2e8f0', family: 'DM Sans, sans-serif', size: 11 },
+        title: { text: title, font: { size: 13 } },
+        xaxis: { title: xLabel, gridcolor: 'rgba(255,255,255,0.06)', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)' },
+        yaxis: { title: yLabel, gridcolor: 'rgba(255,255,255,0.06)', scaleanchor: 'x', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)' },
+        margin: { t: 50, b: 50, l: 60, r: 20 },
+        annotations: (annotations || []).concat(shearAnnotations)
+    };
+
+    Plotly.newPlot('comp-env-pv-plot', traces, layout, { responsive: true });
+}
+
+// ── Composite Skew-T + Hodograph rendering ──
+function renderEnvCompositeThermo(profData, filters) {
+    var thermoRow = document.getElementById('comp-env-thermo-row');
+    if (!thermoRow) return;
+    thermoRow.style.display = 'flex';
+
+    renderCompositeSkewT(profData);
+    renderCompositeHodograph(profData);
+}
+
+// ── Composite Skew-T with mean ± 1σ envelope ──
+function renderCompositeSkewT(profData) {
+    var container = document.getElementById('comp-env-skewt');
+    if (!container) return;
+    container.innerHTML = '<div id="comp-env-skewt-plot" style="width:100%;height:520px;"></div>';
+
+    var plev = profData.plev;
+    var tMean = profData.t.mean;
+    var tStd = profData.t.std;
+    var tdMean = profData.td.mean;
+    var tdStd = profData.td.std;
+    var nCases = profData.n_cases;
+
+    // Skew-T coordinate: skewX = T_C + skewFactor * log10(1000/p)
+    var skewFactor = 70;
+    function skewX(tc, p) { return tc + skewFactor * Math.log10(1000 / p); }
+
+    // Convert K to C
+    function kToC(k) { return k !== null ? k - 273.15 : null; }
+
+    var traces = [];
+
+    // Background isotherms
+    for (var iso = -80; iso <= 50; iso += 10) {
+        var isoX = [], isoY = [];
+        for (var pp = 1050; pp >= 100; pp -= 10) {
+            isoX.push(skewX(iso, pp));
+            isoY.push(pp);
+        }
+        traces.push({
+            x: isoX, y: isoY, mode: 'lines',
+            line: { color: iso === 0 ? 'rgba(0,212,255,0.4)' : 'rgba(100,150,200,0.15)', width: iso === 0 ? 1.5 : 0.5 },
+            showlegend: false, hoverinfo: 'skip'
+        });
+    }
+
+    // ±1σ envelope for Temperature (red shading)
+    var tUpperX = [], tUpperY = [], tLowerX = [], tLowerY = [];
+    for (var i = 0; i < plev.length; i++) {
+        if (tMean[i] !== null && tStd[i] !== null) {
+            var tc = kToC(tMean[i]);
+            var sd = tStd[i];
+            tUpperX.push(skewX(tc + sd, plev[i]));
+            tUpperY.push(plev[i]);
+        }
+    }
+    for (var i = plev.length - 1; i >= 0; i--) {
+        if (tMean[i] !== null && tStd[i] !== null) {
+            var tc = kToC(tMean[i]);
+            var sd = tStd[i];
+            tLowerX.push(skewX(tc - sd, plev[i]));
+            tLowerY.push(plev[i]);
+        }
+    }
+    if (tUpperX.length > 0) {
+        traces.push({
+            x: tUpperX.concat(tLowerX), y: tUpperY.concat(tLowerY),
+            fill: 'toself', fillcolor: 'rgba(255,80,80,0.15)',
+            line: { color: 'transparent' }, showlegend: false, hoverinfo: 'skip'
+        });
+    }
+
+    // ±1σ envelope for Dewpoint (blue shading)
+    var tdUpperX = [], tdUpperY = [], tdLowerX = [], tdLowerY = [];
+    for (var i = 0; i < plev.length; i++) {
+        if (tdMean[i] !== null && tdStd[i] !== null) {
+            var tdc = kToC(tdMean[i]);
+            var sd = tdStd[i];
+            tdUpperX.push(skewX(tdc + sd, plev[i]));
+            tdUpperY.push(plev[i]);
+        }
+    }
+    for (var i = plev.length - 1; i >= 0; i--) {
+        if (tdMean[i] !== null && tdStd[i] !== null) {
+            var tdc = kToC(tdMean[i]);
+            var sd = tdStd[i];
+            tdLowerX.push(skewX(tdc - sd, plev[i]));
+            tdLowerY.push(plev[i]);
+        }
+    }
+    if (tdUpperX.length > 0) {
+        traces.push({
+            x: tdUpperX.concat(tdLowerX), y: tdUpperY.concat(tdLowerY),
+            fill: 'toself', fillcolor: 'rgba(80,150,255,0.15)',
+            line: { color: 'transparent' }, showlegend: false, hoverinfo: 'skip'
+        });
+    }
+
+    // Mean temperature line
+    var tLineX = [], tLineY = [];
+    for (var i = 0; i < plev.length; i++) {
+        if (tMean[i] !== null) {
+            tLineX.push(skewX(kToC(tMean[i]), plev[i]));
+            tLineY.push(plev[i]);
+        }
+    }
+    traces.push({
+        x: tLineX, y: tLineY, mode: 'lines',
+        line: { color: '#ff4444', width: 2.5 },
+        name: 'T (mean)', hovertemplate: '%{text}\u00b0C @ %{y} hPa<extra></extra>',
+        text: plev.map(function(p, i) { return tMean[i] !== null ? kToC(tMean[i]).toFixed(1) : ''; })
+    });
+
+    // Mean dewpoint line
+    var tdLineX = [], tdLineY = [];
+    for (var i = 0; i < plev.length; i++) {
+        if (tdMean[i] !== null) {
+            tdLineX.push(skewX(kToC(tdMean[i]), plev[i]));
+            tdLineY.push(plev[i]);
+        }
+    }
+    traces.push({
+        x: tdLineX, y: tdLineY, mode: 'lines',
+        line: { color: '#4488ff', width: 2.5 },
+        name: 'Td (mean)', hovertemplate: '%{text}\u00b0C @ %{y} hPa<extra></extra>',
+        text: plev.map(function(p, i) { return tdMean[i] !== null ? kToC(tdMean[i]).toFixed(1) : ''; })
+    });
+
+    var layout = {
+        paper_bgcolor: '#0a1628', plot_bgcolor: '#0f2140',
+        font: { color: '#e2e8f0', family: 'DM Sans, sans-serif', size: 10 },
+        title: { text: 'Composite Skew-T (N=' + nCases + ')', font: { size: 12 } },
+        xaxis: {
+            range: [-40, 90], showticklabels: false,
+            gridcolor: 'rgba(255,255,255,0.04)', zeroline: false
+        },
+        yaxis: {
+            type: 'log', autorange: 'reversed',
+            range: [Math.log10(1050), Math.log10(100)],
+            title: 'Pressure (hPa)',
+            tickvals: [1000, 850, 700, 500, 300, 200, 100],
+            ticktext: ['1000', '850', '700', '500', '300', '200', '100'],
+            gridcolor: 'rgba(255,255,255,0.08)'
+        },
+        margin: { t: 40, b: 40, l: 50, r: 10 },
+        legend: { x: 0.01, y: 0.01, bgcolor: 'rgba(10,22,40,0.8)', font: { size: 10 } },
+        showlegend: true
+    };
+
+    Plotly.newPlot('comp-env-skewt-plot', traces, layout, { responsive: true, displayModeBar: false });
+}
+
+// ── Composite Hodograph with spread ellipses ──
+function renderCompositeHodograph(profData) {
+    var container = document.getElementById('comp-env-hodo');
+    if (!container) return;
+    container.innerHTML = '<div id="comp-env-hodo-plot" style="width:100%;height:520px;"></div>';
+
+    var plev = profData.plev;
+    var uMean = profData.u.mean;
+    var vMean = profData.v.mean;
+    var uStd = profData.u.std;
+    var vStd = profData.v.std;
+    var nCases = profData.n_cases;
+
+    // Color scale by pressure level (warm colors low, cool colors high)
+    var colors = [];
+    for (var i = 0; i < plev.length; i++) {
+        var frac = i / Math.max(plev.length - 1, 1);
+        var r = Math.round(255 * (1 - frac));
+        var g = Math.round(100 + 100 * (1 - Math.abs(frac - 0.5) * 2));
+        var b = Math.round(255 * frac);
+        colors.push('rgb(' + r + ',' + g + ',' + b + ')');
+    }
+
+    var traces = [];
+
+    // Spread ellipses at each level
+    for (var i = 0; i < plev.length; i++) {
+        if (uMean[i] === null || vMean[i] === null || uStd[i] === null || vStd[i] === null) continue;
+        var eX = [], eY = [];
+        var su = uStd[i], sv = vStd[i];
+        for (var a = 0; a <= 360; a += 10) {
+            var rad = a * Math.PI / 180;
+            eX.push(uMean[i] + su * Math.cos(rad));
+            eY.push(vMean[i] + sv * Math.sin(rad));
+        }
+        traces.push({
+            x: eX, y: eY, mode: 'lines',
+            line: { color: colors[i], width: 0.8 },
+            fill: 'toself', fillcolor: colors[i].replace('rgb', 'rgba').replace(')', ',0.08)'),
+            showlegend: false, hoverinfo: 'skip'
+        });
+    }
+
+    // Mean hodograph line
+    var hodoU = [], hodoV = [], hodoText = [];
+    for (var i = 0; i < plev.length; i++) {
+        if (uMean[i] !== null && vMean[i] !== null) {
+            hodoU.push(uMean[i]);
+            hodoV.push(vMean[i]);
+            hodoText.push(plev[i] + ' hPa');
+        }
+    }
+    traces.push({
+        x: hodoU, y: hodoV, mode: 'lines+markers',
+        line: { color: '#00d4ff', width: 2 },
+        marker: { size: 6, color: colors.slice(0, hodoU.length), line: { width: 1, color: '#fff' } },
+        name: 'Mean Hodograph',
+        text: hodoText, hovertemplate: '%{text}<br>u=%{x:.1f} m/s<br>v=%{y:.1f} m/s<extra></extra>'
+    });
+
+    // Range circles (10, 20, 30 m/s)
+    for (var r = 10; r <= 30; r += 10) {
+        var cx = [], cy = [];
+        for (var a = 0; a <= 360; a += 5) {
+            cx.push(r * Math.cos(a * Math.PI / 180));
+            cy.push(r * Math.sin(a * Math.PI / 180));
+        }
+        traces.push({
+            x: cx, y: cy, mode: 'lines',
+            line: { color: 'rgba(255,255,255,0.1)', width: 0.5, dash: 'dot' },
+            showlegend: false, hoverinfo: 'skip'
+        });
+    }
+
+    // Find max extent for axes
+    var maxVal = 10;
+    for (var i = 0; i < hodoU.length; i++) {
+        maxVal = Math.max(maxVal, Math.abs(hodoU[i]) + 5, Math.abs(hodoV[i]) + 5);
+    }
+    maxVal = Math.ceil(maxVal / 5) * 5;
+
+    var layout = {
+        paper_bgcolor: '#0a1628', plot_bgcolor: '#0f2140',
+        font: { color: '#e2e8f0', family: 'DM Sans, sans-serif', size: 10 },
+        title: { text: 'Composite Hodograph (N=' + nCases + ')', font: { size: 12 } },
+        xaxis: {
+            title: 'u (m/s)', range: [-maxVal, maxVal],
+            gridcolor: 'rgba(255,255,255,0.06)', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)',
+            scaleanchor: 'y'
+        },
+        yaxis: {
+            title: 'v (m/s)', range: [-maxVal, maxVal],
+            gridcolor: 'rgba(255,255,255,0.06)', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)'
+        },
+        margin: { t: 40, b: 50, l: 50, r: 10 },
+        showlegend: false
+    };
+
+    // Level annotations
+    var annotations = [];
+    for (var i = 0; i < plev.length; i++) {
+        if (uMean[i] !== null && vMean[i] !== null && (plev[i] === 1000 || plev[i] === 850 || plev[i] === 500 || plev[i] === 200)) {
+            annotations.push({
+                x: uMean[i], y: vMean[i],
+                text: plev[i] + '', font: { size: 9, color: colors[i] },
+                showarrow: false, xshift: 10, yshift: 5
+            });
+        }
+    }
+    layout.annotations = annotations;
+
+    Plotly.newPlot('comp-env-hodo-plot', traces, layout, { responsive: true, displayModeBar: false });
+}
+
+// ══════════════════════════════════════════════════════════════
+// Environmental Composite Difference Mode (A − B)
+// ══════════════════════════════════════════════════════════════
+
+function generateEnvCompDiff() {
+    var filtersA = _getCompositeFilters();
+    var filtersB = _getCompGroupBFilters();
+    var dataType = document.getElementById('comp-dtype').value || 'swath';
+    var field = document.getElementById('comp-env-field').value || 'shear_mag';
+    var includeVec = document.getElementById('comp-env-vectors').checked;
+    var envShearRel = !!(document.getElementById('comp-env-shear-rel') || {}).checked;
+    var radiusKm = parseInt(document.getElementById('comp-env-radius').value) || 500;
+
+    _switchCompTab('env');
+    _showEnvCompStatus('loading', '\u23F3 Computing \u0394 environmental composites (A\u2212B)\u2026');
+    ['comp-env-scalars', 'comp-env-plan-view', 'comp-env-thermo-row'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    });
+
+    var qsA = _compositeQueryString(filtersA) + '&data_type=' + dataType;
+    var qsB = _compositeQueryString(filtersB) + '&data_type=' + dataType;
+    var pvSuffix = '&field=' + field + '&radius_km=' + radiusKm + '&include_vectors=' + includeVec + '&shear_relative=' + envShearRel;
+
+    // Serialize: fetch Group A first, then Group B, to avoid overwhelming
+    // the single-worker backend with 6 concurrent heavy requests.
+    var pvA, pvB, profA, profB, scA, scB;
+
+    _showEnvCompStatus('loading', '\u23F3 Computing Group A environmental composites\u2026');
+
+    Promise.all([
+        _fetchWithTimeout(API_BASE + '/composite/era5_plan_view?' + qsA + pvSuffix).then(function(r) { return r.ok ? r.json() : null; }),
+        _fetchWithTimeout(API_BASE + '/composite/era5_profiles?' + qsA).then(function(r) { return r.ok ? r.json() : null; }),
+        _fetchWithTimeout(API_BASE + '/composite/era5_scalars?' + qsA).then(function(r) { return r.ok ? r.json() : null; })
+    ]).then(function(resultsA) {
+        pvA = resultsA[0]; profA = resultsA[1]; scA = resultsA[2];
+
+        if (!pvA && !profA && !scA) {
+            _showEnvCompStatus('error', '\u2717 No data for Group A.');
+            return Promise.reject('no_data_a');
+        }
+
+        _showEnvCompStatus('loading', '\u23F3 Group A done. Computing Group B environmental composites\u2026');
+
+        return Promise.all([
+            _fetchWithTimeout(API_BASE + '/composite/era5_plan_view?' + qsB + pvSuffix).then(function(r) { return r.ok ? r.json() : null; }),
+            _fetchWithTimeout(API_BASE + '/composite/era5_profiles?' + qsB).then(function(r) { return r.ok ? r.json() : null; }),
+            _fetchWithTimeout(API_BASE + '/composite/era5_scalars?' + qsB).then(function(r) { return r.ok ? r.json() : null; })
+        ]);
+    }).then(function(resultsB) {
+        pvB = resultsB[0]; profB = resultsB[1]; scB = resultsB[2];
+
+        if (!pvB && !profB && !scB) {
+            _showEnvCompStatus('error', '\u2717 No data for Group B.');
+            return;
+        }
+
+        var nA = (pvA && pvA.n_cases) || 0, nB = (pvB && pvB.n_cases) || 0;
+        _showEnvCompStatus('', '\u2713 \u0394 Environment: A (N=' + nA + ') \u2212 B (N=' + nB + ')');
+
+        // Difference scalars
+        if (scA && scB) renderEnvDiffScalars(scA, scB);
+
+        // Difference plan-view
+        if (pvA && pvB) renderEnvDiffPlanView(pvA, pvB);
+
+        // Overlay Skew-Ts
+        if (profA && profB) renderEnvDiffThermo(profA, profB);
+    }).catch(function(err) {
+        if (err === 'no_data_a') return; // Already handled above
+        _showEnvCompStatus('error', '\u2717 \u0394 Error: ' + err.message);
+    });
+}
+
+function renderEnvDiffScalars(scA, scB) {
+    var container = document.getElementById('comp-env-scalars');
+    if (!container) return;
+    container.style.display = 'block';
+
+    var html = '<div class="comp-env-section-title">\u0394 Scalar Diagnostics (A: N=' + scA.n_cases + ' | B: N=' + scB.n_cases + ')</div>';
+    html += '<div class="env-comp-scalars-grid">';
+
+    var order = ['shear_mag_env', 'rh_mid_env', 'sst_env', 'chi_m', 'v_pi', 'vent_index', 'div200_env', 'shear_dir_env'];
+    for (var i = 0; i < order.length; i++) {
+        var key = order[i];
+        var a = scA.scalars[key], b = scB.scalars[key];
+        if (!a || !b) continue;
+        var diff = (a.mean - b.mean);
+        var diffStr = (diff >= 0 ? '+' : '') + diff.toFixed(a.units === '' ? 2 : 1);
+
+        html += '<div class="env-scard">';
+        html += '<div class="env-scard-value" style="color:' + (diff > 0 ? '#f87171' : diff < 0 ? '#60a5fa' : '#e2e8f0') + ';">\u0394 ' + diffStr + '</div>';
+        html += '<div class="env-scard-unit">' + a.units + '</div>';
+        html += '<div class="env-scard-label">' + a.display_name + '</div>';
+        html += '<div class="env-scard-sub"><span style="color:#60a5fa;">A: ' + a.mean + '</span> | <span style="color:#f59e0b;">B: ' + b.mean + '</span></div>';
+        html += '</div>';
+    }
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function renderEnvDiffPlanView(pvA, pvB) {
+    var container = document.getElementById('comp-env-plan-view');
+    if (!container) return;
+    container.style.display = 'block';
+    container.innerHTML = '<div id="comp-env-pv-plot" style="width:100%;height:500px;"></div>';
+
+    // Element-wise A - B
+    var diff2d = [];
+    for (var j = 0; j < pvA.mean.length; j++) {
+        var row = [];
+        for (var k = 0; k < pvA.mean[j].length; k++) {
+            var a = pvA.mean[j][k], b = pvB.mean[j][k];
+            row.push(a !== null && b !== null ? a - b : null);
+        }
+        diff2d.push(row);
+    }
+
+    // Symmetric color range
+    var maxAbs = 0;
+    for (var j = 0; j < diff2d.length; j++) {
+        for (var k = 0; k < diff2d[j].length; k++) {
+            if (diff2d[j][k] !== null) maxAbs = Math.max(maxAbs, Math.abs(diff2d[j][k]));
+        }
+    }
+    maxAbs = maxAbs || 1;
+
+    var diffColorscale = [
+        [0, 'rgb(5,48,97)'], [0.1, 'rgb(33,102,172)'], [0.2, 'rgb(67,147,195)'],
+        [0.3, 'rgb(146,197,222)'], [0.4, 'rgb(209,229,240)'], [0.5, 'rgb(255,255,255)'],
+        [0.6, 'rgb(253,219,199)'], [0.7, 'rgb(244,165,130)'], [0.8, 'rgb(214,96,77)'],
+        [0.9, 'rgb(178,24,43)'], [1.0, 'rgb(103,0,31)']
+    ];
+
+    var cfg = pvA.field_config || {};
+    var traces = [{
+        z: diff2d, x: pvA.x_km, y: pvA.y_km,
+        type: 'heatmap', colorscale: diffColorscale,
+        zmin: -maxAbs, zmax: maxAbs,
+        colorbar: { title: '\u0394 ' + (cfg.units || ''), titleside: 'right', thickness: 14, len: 0.8 },
+        hovertemplate: '\u0394 %{z:.3f}<br>x: %{x} km<br>y: %{y} km<extra></extra>'
+    }, {
+        x: [0], y: [0], mode: 'markers',
+        marker: { symbol: 'x', size: 12, color: '#fff' },
+        showlegend: false, hoverinfo: 'skip'
+    }];
+
+    var title = '\u0394 ' + (cfg.display_name || pvA.field) + ' (A: N=' + pvA.n_cases + ' \u2212 B: N=' + pvB.n_cases + ')';
+    Plotly.newPlot('comp-env-pv-plot', traces, {
+        paper_bgcolor: '#0a1628', plot_bgcolor: '#0f2140',
+        font: { color: '#e2e8f0', family: 'DM Sans, sans-serif', size: 11 },
+        title: { text: title, font: { size: 13 } },
+        xaxis: { title: 'East\u2013West (km)', gridcolor: 'rgba(255,255,255,0.06)', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)' },
+        yaxis: { title: 'North\u2013South (km)', gridcolor: 'rgba(255,255,255,0.06)', scaleanchor: 'x', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)' },
+        margin: { t: 50, b: 50, l: 60, r: 20 }
+    }, { responsive: true });
+}
+
+function renderEnvDiffThermo(profA, profB) {
+    var thermoRow = document.getElementById('comp-env-thermo-row');
+    if (!thermoRow) return;
+    thermoRow.style.display = 'flex';
+
+    // Overlay both group Skew-Ts on same diagram
+    renderDiffCompositeSkewT(profA, profB);
+    renderDiffCompositeHodograph(profA, profB);
+}
+
+function renderDiffCompositeSkewT(profA, profB) {
+    var container = document.getElementById('comp-env-skewt');
+    if (!container) return;
+    container.innerHTML = '<div id="comp-env-skewt-plot" style="width:100%;height:520px;"></div>';
+
+    var plev = profA.plev;
+    var skewFactor = 70;
+    function skewX(tc, p) { return tc + skewFactor * Math.log10(1000 / p); }
+    function kToC(k) { return k !== null ? k - 273.15 : null; }
+
+    var traces = [];
+
+    // Background isotherms
+    for (var iso = -80; iso <= 50; iso += 10) {
+        var isoX = [], isoY = [];
+        for (var pp = 1050; pp >= 100; pp -= 10) { isoX.push(skewX(iso, pp)); isoY.push(pp); }
+        traces.push({
+            x: isoX, y: isoY, mode: 'lines',
+            line: { color: iso === 0 ? 'rgba(0,212,255,0.4)' : 'rgba(100,150,200,0.15)', width: iso === 0 ? 1.5 : 0.5 },
+            showlegend: false, hoverinfo: 'skip'
+        });
+    }
+
+    // Group A: T and Td (blue)
+    function addProfile(tArr, color, name, dash) {
+        var lx = [], ly = [];
+        for (var i = 0; i < plev.length; i++) {
+            if (tArr[i] !== null) { lx.push(skewX(kToC(tArr[i]), plev[i])); ly.push(plev[i]); }
+        }
+        traces.push({ x: lx, y: ly, mode: 'lines', line: { color: color, width: 2, dash: dash || 'solid' }, name: name });
+    }
+
+    addProfile(profA.t.mean, '#60a5fa', 'T (Group A)');
+    addProfile(profA.td.mean, '#93c5fd', 'Td (Group A)', 'dash');
+    addProfile(profB.t.mean, '#f59e0b', 'T (Group B)');
+    addProfile(profB.td.mean, '#fbbf24', 'Td (Group B)', 'dash');
+
+    Plotly.newPlot('comp-env-skewt-plot', traces, {
+        paper_bgcolor: '#0a1628', plot_bgcolor: '#0f2140',
+        font: { color: '#e2e8f0', family: 'DM Sans, sans-serif', size: 10 },
+        title: { text: '\u0394 Skew-T (A: N=' + profA.n_cases + ', B: N=' + profB.n_cases + ')', font: { size: 12 } },
+        xaxis: { range: [-40, 90], showticklabels: false, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
+        yaxis: {
+            type: 'log', autorange: 'reversed',
+            range: [Math.log10(1050), Math.log10(100)],
+            title: 'Pressure (hPa)',
+            tickvals: [1000, 850, 700, 500, 300, 200, 100],
+            ticktext: ['1000', '850', '700', '500', '300', '200', '100'],
+            gridcolor: 'rgba(255,255,255,0.08)'
+        },
+        margin: { t: 40, b: 40, l: 50, r: 10 },
+        legend: { x: 0.01, y: 0.01, bgcolor: 'rgba(10,22,40,0.8)', font: { size: 9 } },
+        showlegend: true
+    }, { responsive: true, displayModeBar: false });
+}
+
+function renderDiffCompositeHodograph(profA, profB) {
+    var container = document.getElementById('comp-env-hodo');
+    if (!container) return;
+    container.innerHTML = '<div id="comp-env-hodo-plot" style="width:100%;height:520px;"></div>';
+
+    var plev = profA.plev;
+    var traces = [];
+
+    // Range circles
+    for (var r = 10; r <= 30; r += 10) {
+        var cx = [], cy = [];
+        for (var a = 0; a <= 360; a += 5) { cx.push(r * Math.cos(a * Math.PI / 180)); cy.push(r * Math.sin(a * Math.PI / 180)); }
+        traces.push({ x: cx, y: cy, mode: 'lines', line: { color: 'rgba(255,255,255,0.1)', width: 0.5, dash: 'dot' }, showlegend: false, hoverinfo: 'skip' });
+    }
+
+    // Group A hodograph (blue)
+    var uA = [], vA = [], textA = [];
+    for (var i = 0; i < plev.length; i++) {
+        if (profA.u.mean[i] !== null && profA.v.mean[i] !== null) {
+            uA.push(profA.u.mean[i]); vA.push(profA.v.mean[i]); textA.push(plev[i] + ' hPa');
+        }
+    }
+    traces.push({ x: uA, y: vA, mode: 'lines+markers', line: { color: '#60a5fa', width: 2 }, marker: { size: 5 }, name: 'Group A', text: textA, hovertemplate: '%{text}<br>u=%{x:.1f}<br>v=%{y:.1f}<extra></extra>' });
+
+    // Group B hodograph (orange)
+    var uB = [], vB = [], textB = [];
+    for (var i = 0; i < plev.length; i++) {
+        if (profB.u.mean[i] !== null && profB.v.mean[i] !== null) {
+            uB.push(profB.u.mean[i]); vB.push(profB.v.mean[i]); textB.push(plev[i] + ' hPa');
+        }
+    }
+    traces.push({ x: uB, y: vB, mode: 'lines+markers', line: { color: '#f59e0b', width: 2 }, marker: { size: 5 }, name: 'Group B', text: textB, hovertemplate: '%{text}<br>u=%{x:.1f}<br>v=%{y:.1f}<extra></extra>' });
+
+    var maxVal = 10;
+    uA.concat(uB).forEach(function(v) { maxVal = Math.max(maxVal, Math.abs(v) + 5); });
+    vA.concat(vB).forEach(function(v) { maxVal = Math.max(maxVal, Math.abs(v) + 5); });
+    maxVal = Math.ceil(maxVal / 5) * 5;
+
+    Plotly.newPlot('comp-env-hodo-plot', traces, {
+        paper_bgcolor: '#0a1628', plot_bgcolor: '#0f2140',
+        font: { color: '#e2e8f0', family: 'DM Sans, sans-serif', size: 10 },
+        title: { text: '\u0394 Hodograph (A vs B)', font: { size: 12 } },
+        xaxis: { title: 'u (m/s)', range: [-maxVal, maxVal], gridcolor: 'rgba(255,255,255,0.06)', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)', scaleanchor: 'y' },
+        yaxis: { title: 'v (m/s)', range: [-maxVal, maxVal], gridcolor: 'rgba(255,255,255,0.06)', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)' },
+        margin: { t: 40, b: 50, l: 50, r: 10 },
+        legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(10,22,40,0.8)', font: { size: 10 } },
+        showlegend: true
+    }, { responsive: true, displayModeBar: false });
+}
+
+
+// =====================================================================
+// Flight-Level Archive Overlay (HRD historical data)
+// =====================================================================
+var _archiveFLActive = false;
+var _archiveFLData = null;
+var _archiveFLTraceIndices = [];  // Plotly trace indices to remove
+
+// Variable config for archive time series (matches real-time _FL_TS_CONFIG)
+var _ARCH_FL_TS_CONFIG = {
+    'fl_wspd_ms':       { label: 'FL Wind Speed',    btn: 'FL Wind',   units: 'm/s',  color: '#60a5fa', yaxis: 'y'  },
+    'tdr_wspd_fl_alt':  { label: 'TDR at FL Alt',    btn: 'TDR@FL',    units: 'm/s',  color: '#f472b6', yaxis: 'y'  },
+    'tdr_wspd_0p5km':   { label: 'TDR Wind 0.5 km',  btn: 'TDR 0.5km', units: 'm/s',  color: '#34d399', yaxis: 'y'  },
+    'tdr_wspd_2km':     { label: 'TDR Wind 2.0 km',  btn: 'TDR 2km',   units: 'm/s',  color: '#c084fc', yaxis: 'y'  },
+    'static_pres_hpa':  { label: 'Static Pressure',   btn: 'Static P',  units: 'hPa',  color: '#fb923c', yaxis: 'y2' },
+    'sfcpr_hpa':        { label: 'Sfc Pressure',      btn: 'Sfc P',     units: 'hPa',  color: '#fbbf24', yaxis: 'y2' },
+    'temp_c':           { label: 'Temperature',       btn: 'Temp',      units: '\u00b0C',   color: '#f87171', yaxis: 'y3' },
+    'dewpoint_c':       { label: 'Dewpoint',          btn: 'Dewpt',     units: '\u00b0C',   color: '#a78bfa', yaxis: 'y3' },
+    'theta_e':          { label: '\u03b8e',            btn: '\u03b8e',   units: 'K',    color: '#e879f9', yaxis: 'y3' },
+    'gps_alt_m':        { label: 'GPS Altitude',      btn: 'Alt',       units: 'm',    color: '#6b7280', yaxis: 'y4' },
+};
+
+// Multi-resolution config (matches real-time _FL_RES_STYLE)
+var _ARCH_FL_RES_STYLE = {
+    '1s':  { width: 0.7, opacity: 0.35, dash: 'solid', suffix: ' (1 s)'  },
+    '10s': { width: 1.8, opacity: 0.85, dash: 'solid', suffix: ' (10 s)' },
+    '30s': { width: 3.0, opacity: 1.0,  dash: 'solid', suffix: ' (30 s)' },
+};
+var _archFLResVisible = { '1s': true, '10s': true, '30s': true };
+
+var _archFLTSXAxis = 'time'; // 'time' or 'radius'
+
+function archiveToggleFlightLevel() {
+    var btn = document.getElementById('btn-archive-fl');
+    if (_archiveFLActive) {
+        // Deactivate
+        _archiveFLActive = false;
+        _archiveRemoveFLOverlay();
+        _archiveHideFLTimeSeries();
+        if (btn) { btn.textContent = '\u2708 FL Off'; btn.classList.remove('fl-active'); }
+        return;
+    }
+
+    // Activate: fetch FL data for current case
+    if (currentCaseIndex === null) return;
+    _archiveFLActive = true;
+    if (btn) { btn.textContent = '\u2708 Loading\u2026'; btn.classList.add('fl-active'); btn.disabled = true; }
+
+    if (_archiveFLData && _archiveFLData._caseIndex === currentCaseIndex) {
+        _archiveRenderFLOverlay(_archiveFLData);
+        _archiveRenderFLTimeSeries(_archiveFLData);
+        if (btn) { btn.textContent = '\u2708 FL On'; btn.disabled = false; }
+        return;
+    }
+
+    var url = API_BASE + '/flightlevel/archive?case_index=' + currentCaseIndex + '&data_type=' + _activeDataType;
+    fetch(url)
+        .then(function(r) { return r.json(); })
+        .then(function(json) {
+            if (!_archiveFLActive) return;
+            json._caseIndex = currentCaseIndex;
+            _archiveFLData = json;
+
+            if (!json.success) {
+                var msg = json.message || 'No flight-level data available for this case.';
+                if (btn) { btn.textContent = '\u2708 FL N/A'; btn.disabled = false; btn.classList.remove('fl-active'); }
+                _archiveFLActive = false;
+                var flStatus = document.getElementById('fl-archive-status');
+                if (flStatus) {
+                    flStatus.textContent = '\u2708 ' + msg;
+                    flStatus.style.display = 'block';
+                    setTimeout(function() { flStatus.style.display = 'none'; }, 5000);
+                }
+                return;
+            }
+
+            _archiveRenderFLOverlay(json);
+            _archiveRenderFLTimeSeries(json);
+            if (btn) { btn.textContent = '\u2708 FL On'; btn.disabled = false; }
+        })
+        .catch(function(err) {
+            console.warn('FL archive fetch error:', err);
+            _archiveFLActive = false;
+            if (btn) { btn.textContent = '\u2708 FL Off'; btn.disabled = false; btn.classList.remove('fl-active'); }
+        });
+}
+
+function _archiveRemoveFLOverlay() {
+    var plotDiv = document.getElementById('plotly-chart');
+    if (!plotDiv || !plotDiv.data) return;
+
+    if (_archiveFLTraceIndices.length > 0) {
+        var indicesToRemove = _archiveFLTraceIndices.slice().sort(function(a,b){return b-a;});
+        for (var i = 0; i < indicesToRemove.length; i++) {
+            if (indicesToRemove[i] < plotDiv.data.length) {
+                Plotly.deleteTraces('plotly-chart', indicesToRemove[i]);
+            }
+        }
+        _archiveFLTraceIndices = [];
+    }
+}
+
+function _archiveRenderFLOverlay(flData) {
+    var plotDiv = document.getElementById('plotly-chart');
+    // Use obs_10s if available (multi-resolution response), fall back to observations
+    var obs = flData.obs_10s || flData.observations;
+    if (!plotDiv || !plotDiv.data || !obs || obs.length === 0) return;
+
+    _archiveRemoveFLOverlay();
+    var x = [], y = [], colors = [], texts = [], sizes = [];
+    for (var i = 0; i < obs.length; i++) {
+        var o = obs[i];
+        if (o.x_km == null || o.y_km == null) continue;
+        x.push(o.x_km);
+        y.push(o.y_km);
+        var ws = o.fl_wspd_ms;
+        colors.push(ws != null ? ws : 0);
+        sizes.push(ws != null ? Math.max(5, Math.min(12, ws / 5)) : 5);
+
+        var tdrStr = '';
+        if (o.tdr_wspd_fl_alt != null) {
+            var altKm = (o.gps_alt_m != null) ? (o.gps_alt_m / 1000).toFixed(2) + ' km' : '?';
+            tdrStr += 'TDR@FL (' + altKm + '): ' + o.tdr_wspd_fl_alt.toFixed(1) + ' m/s';
+        }
+        if (o.tdr_wspd_2km != null) tdrStr += (tdrStr ? '<br>' : '') + 'TDR 2km: ' + o.tdr_wspd_2km.toFixed(1) + ' m/s';
+        if (o.tdr_wspd_0p5km != null) tdrStr += (tdrStr ? '<br>' : '') + 'TDR 0.5km: ' + o.tdr_wspd_0p5km.toFixed(1) + ' m/s';
+
+        // Build time offset string, handling null/undefined
+        var tOffsetMin = (o.time_offset_s != null && isFinite(o.time_offset_s)) ? (o.time_offset_s / 60) : null;
+        var timeStr = (o.time || '') + ' UTC';
+        if (tOffsetMin != null) {
+            timeStr += ' (T' + (tOffsetMin >= 0 ? '+' : '') + tOffsetMin.toFixed(1) + ' min)';
+        }
+
+        // Flight altitude string
+        var altStr = '';
+        if (o.gps_alt_m != null && isFinite(o.gps_alt_m)) {
+            var altFt = Math.round(o.gps_alt_m * 3.28084);
+            altStr = 'Alt: ' + o.gps_alt_m.toFixed(0) + ' m (' + altFt + ' ft)<br>';
+        }
+
+        texts.push(
+            '<b>\u2708 Flight Level</b><br>' +
+            'Wind: ' + (ws != null ? ws.toFixed(1) + ' m/s (' + (ws * 1.94384).toFixed(0) + ' kt)' : 'N/A') + '<br>' +
+            'Dir: ' + (o.fl_wdir_deg != null ? o.fl_wdir_deg.toFixed(0) + '\u00b0' : 'N/A') + '<br>' +
+            altStr +
+            (tdrStr ? tdrStr + '<br>' : '') +
+            'R: ' + (o.r_km != null ? o.r_km.toFixed(1) + ' km' : '') + '<br>' +
+            'Time: ' + timeStr
+        );
+    }
+
+    // Inherit the TDR heatmap's colorscale + range so scatter matches shading
+    var tdrColorscale = 'Inferno';
+    var tdrCmin = 0, tdrCmax = 80;
+    if (plotDiv.data && plotDiv.data.length > 0) {
+        var tdrTrace = plotDiv.data[0];
+        if (tdrTrace.colorscale) tdrColorscale = tdrTrace.colorscale;
+        if (tdrTrace.zmin != null) tdrCmin = tdrTrace.zmin;
+        if (tdrTrace.zmax != null) tdrCmax = tdrTrace.zmax;
+    }
+
+    var flTrackTrace = {
+        x: x,
+        y: y,
+        type: 'scatter',
+        mode: 'markers',
+        marker: {
+            color: colors,
+            colorscale: tdrColorscale,
+            cmin: tdrCmin,
+            cmax: tdrCmax,
+            size: sizes,
+            line: { width: 1, color: 'rgba(255,255,255,0.6)' },
+            showscale: false,  // No separate colorbar — use legend in time series
+        },
+        text: texts,
+        hovertemplate: '%{text}<extra></extra>',
+        name: '\u2708 Flight Level',
+        showlegend: true,
+    };
+
+    // Track line connecting points
+    var flLineTrace = {
+        x: x,
+        y: y,
+        type: 'scatter',
+        mode: 'lines',
+        line: { color: 'rgba(255,255,255,0.3)', width: 1.5 },
+        hoverinfo: 'skip',
+        showlegend: false,
+        name: 'FL Track Line',
+    };
+
+    var baseCount = plotDiv.data.length;
+    Plotly.addTraces('plotly-chart', [flLineTrace, flTrackTrace]);
+    _archiveFLTraceIndices = [baseCount, baseCount + 1];
+}
+
+function _archiveHideFLTimeSeries() {
+    var container = document.getElementById('fl-archive-ts');
+    if (container) container.style.display = 'none';
+    // Purge plot to free memory
+    var plotDiv = document.getElementById('fl-ts-chart');
+    if (plotDiv) try { Plotly.purge(plotDiv); } catch(e) {}
+}
+
+function _archiveRenderFLTimeSeries(flData) {
+    // Use obs_10s as primary; fall back to observations for backward compat
+    var primaryObs = flData.obs_10s || flData.observations;
+    if (!primaryObs || primaryObs.length === 0) return;
+
+    // Get pre-rendered container from the openSidePanel() template
+    var container = document.getElementById('fl-archive-ts');
+    if (!container) return;
+    container.style.display = 'block';
+
+    // Populate the dynamic sections
+    _archivePopulateFLResButtons(flData);
+    _archivePopulateFLVarButtons(flData);
+    _archivePopulateFLInfo(flData);
+    _archFLTSRender(flData);
+}
+
+// ── FL Panel Helper: Populate resolution toggle buttons ──
+function _archivePopulateFLResButtons(flData) {
+    var el = document.getElementById('arch-fl-res-group');
+    if (!el) return;
+    var html = '<span style="color:#64748b;font-size:10px;margin-right:2px;">Avg:</span>';
+    var resLabels = { '1s': '1 s', '10s': '10 s', '30s': '30 s' };
+    var resOrder = ['1s', '10s', '30s'];
+    for (var ri = 0; ri < resOrder.length; ri++) {
+        var rk = resOrder[ri];
+        var hasResData = (rk === '1s' && flData.obs_1s && flData.obs_1s.length > 0) ||
+                         (rk === '10s' && (flData.obs_10s || flData.observations) && (flData.obs_10s || flData.observations).length > 0) ||
+                         (rk === '30s' && flData.obs_30s && flData.obs_30s.length > 0);
+        if (!hasResData) continue;
+        html += '<button class="fl-ts-res-btn' + (_archFLResVisible[rk] ? ' active' : '') +
+            '" id="arch-fl-res-' + rk + '" onclick="archFLToggleRes(\'' + rk + '\')">' + resLabels[rk] + '</button>';
+    }
+    el.innerHTML = html;
+}
+
+// ── FL Panel Helper: Populate variable toggle buttons ──
+function _archivePopulateFLVarButtons(flData) {
+    var el = document.getElementById('arch-fl-ts-vars');
+    if (!el) return;
+    var html = '';
+    var defaultActive = ['fl_wspd_ms', 'tdr_wspd_fl_alt', 'tdr_wspd_0p5km', 'tdr_wspd_2km'];
+    var varKeys = Object.keys(_ARCH_FL_TS_CONFIG);
+    for (var vi = 0; vi < varKeys.length; vi++) {
+        var vk = varKeys[vi];
+        var vcfg = _ARCH_FL_TS_CONFIG[vk];
+        var isActive = defaultActive.indexOf(vk) >= 0;
+        // Skip variables that have no data in any resolution
+        var hasData = false;
+        var allObs = [flData.obs_1s, flData.obs_10s, flData.obs_30s, flData.observations];
+        for (var ai = 0; ai < allObs.length && !hasData; ai++) {
+            var checkObs = allObs[ai];
+            if (!checkObs) continue;
+            for (var di = 0; di < checkObs.length; di++) {
+                if (checkObs[di][vk] != null) { hasData = true; break; }
+            }
+        }
+        if (!hasData) continue;
+        html += '<button class="fl-ts-var-btn' + (isActive ? ' active' : '') +
+            '" data-var="' + vk + '" onclick="archFLToggleVar(this)" style="--var-color:' + vcfg.color + '">' +
+            (vcfg.btn || vcfg.label) + '</button>';
+    }
+    el.innerHTML = html;
+}
+
+// ── FL Panel Helper: Populate info bar ──
+function _archivePopulateFLInfo(flData) {
+    var el = document.getElementById('fl-ts-info');
+    if (!el) return;
+    var primaryObs = flData.obs_10s || flData.observations;
+    var n1s = flData.obs_1s ? flData.obs_1s.length : 0;
+    var n10s = primaryObs ? primaryObs.length : 0;
+    var n30s = flData.obs_30s ? flData.obs_30s.length : 0;
+    el.innerHTML = flData.mission_id + ' \u00b7 1s/' + n1s + ', 10s/' + n10s + ', 30s/' + n30s +
+        ' (' + flData.n_obs_raw + ' raw) \u00b7 \u00b1' + flData.time_window_min + ' min \u00b7 ' +
+        '<a href="' + (flData.source_url || '#') + '" target="_blank" style="color:#60a5fa;font-size:10px;">HRD Archive</a>';
+}
+
+function _archFLSetXAxis(mode) {
+    _archFLTSXAxis = mode;
+    var tBtn = document.getElementById('fl-ts-xbtn-time');
+    var rBtn = document.getElementById('fl-ts-xbtn-radius');
+    if (tBtn) tBtn.classList.toggle('active', mode === 'time');
+    if (rBtn) rBtn.classList.toggle('active', mode === 'radius');
+    if (_archiveFLData && _archiveFLData.success) _archFLTSRender(_archiveFLData);
+}
+
+function archFLToggleVar(btnEl) {
+    btnEl.classList.toggle('active');
+    if (_archiveFLData && _archiveFLData.success) _archFLTSRender(_archiveFLData);
+}
+
+function archFLToggleRes(resKey) {
+    _archFLResVisible[resKey] = !_archFLResVisible[resKey];
+    var btn = document.getElementById('arch-fl-res-' + resKey);
+    if (btn) {
+        if (_archFLResVisible[resKey]) { btn.classList.add('active'); }
+        else { btn.classList.remove('active'); }
+    }
+    if (_archiveFLData && _archiveFLData.success) _archFLTSRender(_archiveFLData);
+}
+
+function archFLCloseTimeSeries() {
+    _archiveHideFLTimeSeries();
+}
+
+// Helper: get observation array for a given resolution key
+function _archFLDataForRes(flData, resKey) {
+    if (resKey === '1s')  return flData.obs_1s  || null;
+    if (resKey === '10s') return flData.obs_10s  || flData.observations || null;
+    if (resKey === '30s') return flData.obs_30s  || null;
+    return null;
+}
+
+function _archFLTSRender(flData) {
+    // Primary obs for stats (use 10s)
+    var primaryObs = flData.obs_10s || flData.observations;
+    if (!primaryObs || primaryObs.length === 0) return;
+
+    // Get selected variables from toggle buttons
+    var varContainer = document.getElementById('arch-fl-ts-vars');
+    var selectedVars = [];
+    if (varContainer) {
+        var btns = varContainer.querySelectorAll('.fl-ts-var-btn.active');
+        for (var bi = 0; bi < btns.length; bi++) {
+            selectedVars.push(btns[bi].getAttribute('data-var'));
+        }
+    }
+    if (selectedVars.length === 0) selectedVars = ['fl_wspd_ms'];
+
+    // Build traces: iterate resolutions × selected variables (matching real-time pattern)
+    var usedAxes = {};
+    var traces = [];
+    var resKeys = ['1s', '10s', '30s'];  // render order: 1s behind, 30s on top
+
+    for (var si = 0; si < selectedVars.length; si++) {
+        var varName = selectedVars[si];
+        var cfg = _ARCH_FL_TS_CONFIG[varName];
+        if (!cfg) continue;
+
+        var isWind = (varName === 'fl_wspd_ms' || varName === 'tdr_wspd_fl_alt' ||
+                      varName === 'tdr_wspd_0p5km' || varName === 'tdr_wspd_2km');
+
+        for (var rr = 0; rr < resKeys.length; rr++) {
+            var resKey = resKeys[rr];
+            if (!_archFLResVisible[resKey]) continue;
+            var obs = _archFLDataForRes(flData, resKey);
+            if (!obs || obs.length === 0) continue;
+
+            usedAxes[cfg.yaxis] = true;
+            var style = _ARCH_FL_RES_STYLE[resKey];
+
+            var xVals = [], yVals = [], customdata = [];
+            for (var oi = 0; oi < obs.length; oi++) {
+                var o = obs[oi];
+                var tOffMin = (o.time_offset_s != null && isFinite(o.time_offset_s)) ? Math.round(o.time_offset_s / 6.0) / 10.0 : null;
+                var xVal = _archFLTSXAxis === 'radius' ? o.r_km : tOffMin;
+                if (xVal == null) continue;
+                xVals.push(xVal);
+                var v = o[varName];
+                yVals.push((v != null && isFinite(v)) ? Math.round(v * 10) / 10 : null);
+
+                var utc = o.time || '';
+                var kt = '';
+                if (isWind && v != null && isFinite(v)) kt = (v * 1.94384).toFixed(1);
+                // For TDR at FL Alt, include the altitude in hover
+                var altStr = '';
+                if (varName === 'tdr_wspd_fl_alt' && o.gps_alt_m != null && isFinite(o.gps_alt_m)) {
+                    altStr = (o.gps_alt_m / 1000).toFixed(2) + ' km';
+                }
+                customdata.push([utc, kt, altStr]);
+            }
+
+            var hoverTpl;
+            if (varName === 'tdr_wspd_fl_alt') {
+                hoverTpl = cfg.label + style.suffix + ': %{y} ' + cfg.units +
+                    ' (%{customdata[1]} kt) @ %{customdata[2]}<br>%{customdata[0]} UTC<extra></extra>';
+            } else if (isWind) {
+                hoverTpl = cfg.label + style.suffix + ': %{y} ' + cfg.units +
+                    ' (%{customdata[1]} kt)<br>%{customdata[0]} UTC<extra></extra>';
+            } else {
+                hoverTpl = cfg.label + style.suffix + ': %{y} ' + cfg.units +
+                    '<br>%{customdata[0]} UTC<extra></extra>';
+            }
+
+            traces.push({
+                x: xVals,
+                y: yVals,
+                customdata: customdata,
+                name: cfg.label + style.suffix,
+                legendgroup: varName,
+                showlegend: resKey === '10s',  // only one legend entry per variable
+                type: 'scatter',
+                mode: 'lines',
+                line: { color: cfg.color, width: style.width, dash: style.dash },
+                opacity: style.opacity,
+                yaxis: cfg.yaxis,
+                hovertemplate: hoverTpl,
+                connectgaps: false,
+            });
+        }
+    }
+
+    // Layout with multi-axis support
+    var gridColor = 'rgba(148,163,184,0.08)';
+    var layout = {
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(10,15,25,0.5)',
+        margin: { l: 55, r: 55, t: 8, b: 40 },
+        font: { family: 'DM Sans, sans-serif', size: 11, color: '#94a3b8' },
+        legend: {
+            orientation: 'v', x: 1.0, xanchor: 'right', y: 1.0, yanchor: 'top',
+            font: { size: 9 }, bgcolor: 'rgba(10,15,25,0.7)',
+            bordercolor: 'rgba(148,163,184,0.15)', borderwidth: 1,
+            traceorder: 'grouped', tracegroupgap: 4,
+        },
+        hovermode: 'x unified',
+        xaxis: {
+            title: { text: _archFLTSXAxis === 'radius' ? 'Distance from Center (km)' : 'Minutes from TDR Scan', font: { size: 11 } },
+            color: '#94a3b8',
+            gridcolor: gridColor,
+            zeroline: _archFLTSXAxis === 'time',
+            zerolinecolor: 'rgba(96,165,250,0.5)',
+            zerolinewidth: 2,
+        },
+        yaxis: {
+            title: usedAxes['y'] ? { text: 'Wind Speed (m/s)', font: { size: 10, color: '#60a5fa' } } : undefined,
+            color: '#60a5fa',
+            gridcolor: gridColor,
+            side: 'left',
+            visible: !!usedAxes['y'],
+        },
+        yaxis2: {
+            title: usedAxes['y2'] ? { text: 'Pressure (hPa)', font: { size: 10, color: '#fbbf24' } } : undefined,
+            color: '#fbbf24',
+            overlaying: 'y',
+            side: 'right',
+            gridcolor: 'transparent',
+            visible: !!usedAxes['y2'],
+            autorange: 'reversed',
+        },
+        yaxis3: {
+            title: usedAxes['y3'] ? { text: 'Temp (\u00b0C) / \u03b8e (K)', font: { size: 10, color: '#f87171' } } : undefined,
+            color: '#f87171',
+            overlaying: 'y',
+            side: 'left',
+            position: 0.0,
+            anchor: 'free',
+            gridcolor: 'transparent',
+            visible: !!usedAxes['y3'],
+        },
+        yaxis4: {
+            title: usedAxes['y4'] ? { text: 'Altitude (m)', font: { size: 10, color: '#6b7280' } } : undefined,
+            color: '#6b7280',
+            overlaying: 'y',
+            side: 'right',
+            anchor: 'free',
+            position: 1.0,
+            gridcolor: 'transparent',
+            visible: !!usedAxes['y4'],
+        },
+    };
+
+    // Add TDR scan time marker when in time mode
+    if (_archFLTSXAxis === 'time') {
+        layout.shapes = [{
+            type: 'line',
+            x0: 0, x1: 0, y0: 0, y1: 1, yref: 'paper',
+            line: { color: 'rgba(96,165,250,0.6)', width: 2, dash: 'dash' },
+        }];
+        layout.annotations = [{
+            x: 0.5, y: 0, yref: 'paper', xref: 'x',
+            text: 'TDR Analysis', showarrow: false,
+            font: { size: 9, color: 'rgba(96,165,250,0.7)' },
+            yanchor: 'top', yshift: 8,
+        }];
+    }
+
+    // Build max-wind / min-pressure inset annotation with per-resolution values
+    // (matches real-time format: "FL Wind max — 1s: 98.7  10s: 83.7  30s: 78.7")
+    var insetLines = [];
+    var windVars = [
+        { key: 'fl_wspd_ms',      label: 'FL Wind' },
+        { key: 'tdr_wspd_fl_alt', label: 'TDR@FL' },
+        { key: 'tdr_wspd_0p5km',  label: 'TDR 0.5 km' },
+        { key: 'tdr_wspd_2km',    label: 'TDR 2.0 km' },
+    ];
+    for (var wi = 0; wi < windVars.length; wi++) {
+        var wv = windVars[wi];
+        if (selectedVars.indexOf(wv.key) === -1) continue;
+        var row = [];
+        for (var wr = 0; wr < resKeys.length; wr++) {
+            var wResKey = resKeys[wr];
+            if (!_archFLResVisible[wResKey]) continue;
+            var wObs = _archFLDataForRes(flData, wResKey);
+            if (!wObs || wObs.length === 0) continue;
+            var maxVal = null;
+            for (var mi = 0; mi < wObs.length; mi++) {
+                var wval = wObs[mi][wv.key];
+                if (wval != null && (maxVal === null || wval > maxVal)) maxVal = wval;
+            }
+            if (maxVal != null) {
+                row.push(wResKey + ': <b>' + maxVal.toFixed(1) + '</b>');
+            }
+        }
+        if (row.length > 0) {
+            insetLines.push(wv.label + ' max \u2014 ' + row.join('  '));
+        }
+    }
+    var presVars = [
+        { key: 'static_pres_hpa', label: 'Static P min' },
+        { key: 'sfcpr_hpa',       label: 'Sfc P min' },
+    ];
+    for (var pi = 0; pi < presVars.length; pi++) {
+        var pv = presVars[pi];
+        if (selectedVars.indexOf(pv.key) === -1) continue;
+        var prow = [];
+        for (var pr = 0; pr < resKeys.length; pr++) {
+            var pResKey = resKeys[pr];
+            if (!_archFLResVisible[pResKey]) continue;
+            var pObs = _archFLDataForRes(flData, pResKey);
+            if (!pObs || pObs.length === 0) continue;
+            var minVal = null;
+            for (var pj = 0; pj < pObs.length; pj++) {
+                var pval = pObs[pj][pv.key];
+                if (pval != null && (minVal === null || pval < minVal)) minVal = pval;
+            }
+            if (minVal != null) {
+                prow.push(pResKey + ': <b>' + minVal.toFixed(1) + '</b>');
+            }
+        }
+        if (prow.length > 0) {
+            insetLines.push(pv.label + ' \u2014 ' + prow.join('  '));
+        }
+    }
+    if (insetLines.length > 0) {
+        if (!layout.annotations) layout.annotations = [];
+        layout.annotations.push({
+            x: 0.01, y: 0.98, xref: 'paper', yref: 'paper',
+            text: insetLines.join('<br>'),
+            showarrow: false,
+            font: { family: 'DM Sans, sans-serif', size: 10, color: '#cbd5e1' },
+            align: 'left', xanchor: 'left', yanchor: 'top',
+            bgcolor: 'rgba(10,15,25,0.75)',
+            bordercolor: 'rgba(96,165,250,0.3)',
+            borderwidth: 1, borderpad: 6,
+        });
+    }
+
+    Plotly.newPlot('fl-ts-chart', traces, layout, { responsive: true, displayModeBar: false, scrollZoom: false });
+}
+
+// Clear FL state when case changes
+function _archiveFLReset() {
+    _archiveFLActive = false;
+    _archiveFLData = null;
+    _archiveFLTraceIndices = [];
+    var btn = document.getElementById('btn-archive-fl');
+    if (btn) { btn.textContent = '\u2708 FL Off'; btn.classList.remove('fl-active'); btn.disabled = false; }
+    _archiveHideFLTimeSeries();
+    var status = document.getElementById('fl-archive-status');
+    if (status) status.style.display = 'none';
+}
+
+
+// =====================================================================
+// Archive Dropsonde Overlay (HRD .frd historical data)
+// =====================================================================
+var _archiveSondeActive = false;
+var _archiveSondeData = null;
+var _archiveSondeTraceIndices = [];
+var _SONDE_COLORS = [
+    '#34d399','#60a5fa','#f472b6','#fbbf24','#a78bfa',
+    '#fb923c','#38bdf8','#f87171','#4ade80','#e879f9',
+    '#facc15','#2dd4bf','#f97316','#818cf8','#fb7185'
+];
+
+function _archSondeColor(idx) {
+    return _SONDE_COLORS[idx % _SONDE_COLORS.length];
+}
+
+function archiveToggleDropsondes() {
+    var btn = document.getElementById('btn-archive-sonde');
+    if (_archiveSondeActive) {
+        _archiveSondeActive = false;
+        _archiveRemoveSondeOverlay();
+        _archiveHideSondePanel();
+        if (btn) { btn.textContent = '\uD83E\uDE82 Sondes Off'; btn.classList.remove('sonde-active'); }
+        return;
+    }
+
+    if (currentCaseIndex === null) return;
+    _archiveSondeActive = true;
+    if (btn) { btn.textContent = '\uD83E\uDE82 Loading\u2026'; btn.classList.add('sonde-active'); btn.disabled = true; }
+
+    if (_archiveSondeData && _archiveSondeData._caseIndex === currentCaseIndex) {
+        _archiveRenderSondeOverlay(_archiveSondeData);
+        _archiveRenderSondePanel(_archiveSondeData);
+        if (btn) { btn.textContent = '\uD83E\uDE82 Sondes On'; btn.disabled = false; }
+        return;
+    }
+
+    var url = API_BASE + '/dropsondes/archive?case_index=' + currentCaseIndex + '&data_type=' + _activeDataType;
+    fetch(url)
+        .then(function(r) { return r.json(); })
+        .then(function(json) {
+            if (!_archiveSondeActive) return;
+            json._caseIndex = currentCaseIndex;
+            _archiveSondeData = json;
+
+            if (!json.success && json.success !== undefined) {
+                var msg = json.message || 'No dropsonde data available.';
+                var status = document.getElementById('fl-archive-status');
+                if (status) { status.textContent = '\uD83E\uDE82 ' + msg; status.style.display = 'block'; }
+                if (btn) { btn.textContent = '\uD83E\uDE82 Sondes Off'; btn.disabled = false; }
+                _archiveSondeActive = false;
+                return;
+            }
+
+            _archiveRenderSondeOverlay(json);
+            _archiveRenderSondePanel(json);
+            if (btn) { btn.textContent = '\uD83E\uDE82 Sondes On'; btn.disabled = false; }
+        })
+        .catch(function(err) {
+            console.error('Archive sonde fetch error:', err);
+            if (btn) { btn.textContent = '\uD83E\uDE82 Sondes Off'; btn.disabled = false; }
+            _archiveSondeActive = false;
+        });
+}
+
+function _archiveRemoveSondeOverlay() {
+    var plotDiv = document.getElementById('plotly-chart');
+    if (!plotDiv || !plotDiv.data) return;
+
+    if (_archiveSondeTraceIndices.length > 0) {
+        var indicesToRemove = _archiveSondeTraceIndices.slice().sort(function(a,b){return b-a;});
+        for (var i = 0; i < indicesToRemove.length; i++) {
+            if (indicesToRemove[i] < plotDiv.data.length) {
+                Plotly.deleteTraces('plotly-chart', indicesToRemove[i]);
+            }
+        }
+        _archiveSondeTraceIndices = [];
+    }
+}
+
+function _archiveRenderSondeOverlay(data) {
+    var plotDiv = document.getElementById('plotly-chart');
+    if (!plotDiv || !plotDiv.data || !data.dropsondes || !data.dropsondes.length) return;
+    _archiveRemoveSondeOverlay();
+
+    var traces = [];
+    var baseCount = plotDiv.data.length;
+
+    data.dropsondes.forEach(function(sonde, idx) {
+        var p = sonde.profile;
+        if (!p.x_km || p.x_km.length < 2) return;
+
+        var color = _archSondeColor(idx);
+
+        // Trajectory line on plan view
+        var lineTrace = {
+            x: p.x_km,
+            y: p.y_km,
+            type: 'scatter',
+            mode: 'lines',
+            line: { color: color, width: 2, dash: 'dot' },
+            hoverinfo: 'skip',
+            showlegend: false,
+            name: 'Sonde ' + (sonde.sonde_id || idx),
+        };
+        traces.push(lineTrace);
+
+        // Surface marker (or bottom of drop)
+        var sfcIdx = p.x_km.length - 1;
+        var launchIdx = 0;
+
+        // Max wind
+        var maxWspd = -Infinity;
+        for (var w = 0; w < p.wspd.length; w++) {
+            if (p.wspd[w] != null && p.wspd[w] > maxWspd) maxWspd = p.wspd[w];
+        }
+        var maxWspdStr = isFinite(maxWspd) ? maxWspd.toFixed(1) + ' m/s (' + (maxWspd * 1.94384).toFixed(0) + ' kt)' : 'N/A';
+
+        var tOffStr = sonde.time_offset_min != null ?
+            (sonde.time_offset_min >= 0 ? '+' : '') + sonde.time_offset_min.toFixed(0) + ' min' : '';
+
+        var launchAltStr = sonde.launch.alt_m != null ? (sonde.launch.alt_m / 1000).toFixed(1) + ' km' : '?';
+        var sfcAltStr = sonde.surface.alt_m != null ? sonde.surface.alt_m.toFixed(0) + ' m' : '?';
+
+        var hoverHtml =
+            '<b>\uD83E\uDE82 ' + (sonde.sonde_id || 'Sonde ' + (idx+1)) + '</b><br>' +
+            sonde.launch_time + ' (' + tOffStr + ')<br>' +
+            (sonde.aircraft || '') + '<br>' +
+            'Max wind: <b>' + maxWspdStr + '</b><br>' +
+            'Alt: ' + launchAltStr + ' \u2192 ' + sfcAltStr +
+            (sonde.hit_surface ? ' | Hit sfc' : ' | No sfc') +
+            (sonde.estimated_pr_used ? ' | Est P' : '') +
+            '<extra></extra>';
+
+        // Surface/bottom marker
+        var markerTrace = {
+            x: [p.x_km[sfcIdx]],
+            y: [p.y_km[sfcIdx]],
+            type: 'scatter',
+            mode: 'markers+text',
+            marker: {
+                color: color,
+                size: 10,
+                symbol: sonde.hit_surface ? 'circle' : 'circle-open',
+                line: { width: 2, color: '#fff' },
+            },
+            text: [String(idx + 1)],
+            textposition: 'top right',
+            textfont: { color: color, size: 10, family: 'monospace' },
+            hovertemplate: hoverHtml,
+            showlegend: idx === 0,
+            name: '\uD83E\uDE82 Dropsondes',
+        };
+        traces.push(markerTrace);
+    });
+
+    if (traces.length > 0) {
+        Plotly.addTraces('plotly-chart', traces);
+        for (var t = 0; t < traces.length; t++) {
+            _archiveSondeTraceIndices.push(baseCount + t);
+        }
+    }
+}
+
+function _archiveHideSondePanel() {
+    var panel = document.getElementById('archive-sonde-panel');
+    if (panel) panel.style.display = 'none';
+}
+
+function _archiveRenderSondePanel(data) {
+    if (!data.dropsondes || !data.dropsondes.length) return;
+
+    // Get or create the sonde info panel
+    var panel = document.getElementById('archive-sonde-panel');
+    if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'archive-sonde-panel';
+        panel.style.cssText = 'margin-top:8px;padding:8px 12px;background:rgba(6,78,59,0.15);border:1px solid rgba(52,211,153,0.3);border-radius:6px;font-size:11px;color:#d1d5db;';
+        // Insert after the FL time series panel or after the side panel content
+        var flTs = document.getElementById('fl-archive-ts');
+        if (flTs && flTs.parentNode) {
+            flTs.parentNode.insertBefore(panel, flTs.nextSibling);
+        } else {
+            var sp = document.getElementById('side-panel');
+            if (sp) sp.appendChild(panel);
+        }
+    }
+    panel.style.display = 'block';
+
+    var nSondes = data.dropsondes.length;
+    var nHitSfc = data.dropsondes.filter(function(s) { return s.hit_surface; }).length;
+    var nEstPr = data.dropsondes.filter(function(s) { return s.estimated_pr_used; }).length;
+    var timeWindow = data.time_window_min ? '\u00b1' + data.time_window_min + ' min' : 'all flight';
+
+    var html = '<div style="margin-bottom:6px;">' +
+        '<strong style="color:#6ee7b7;">\uD83E\uDE82 Archive Dropsondes</strong>' +
+        '<span style="margin-left:8px;color:#9ca3af;">' + nSondes + ' sondes (' + timeWindow + ')</span>' +
+        '<span style="margin-left:8px;color:#9ca3af;">' + nHitSfc + ' hit sfc' +
+        (nEstPr > 0 ? ', ' + nEstPr + ' est P' : '') + '</span>' +
+        '</div>';
+
+    // Sonde table
+    html += '<div style="max-height:180px;overflow-y:auto;">';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:10px;">';
+    html += '<tr style="color:#9ca3af;border-bottom:1px solid rgba(255,255,255,0.1);">' +
+        '<th style="text-align:left;padding:2px 4px;">#</th>' +
+        '<th style="text-align:left;padding:2px 4px;">ID</th>' +
+        '<th style="text-align:left;padding:2px 4px;">Time</th>' +
+        '<th style="text-align:right;padding:2px 4px;">\u0394t</th>' +
+        '<th style="text-align:right;padding:2px 4px;">Vmax</th>' +
+        '<th style="text-align:right;padding:2px 4px;">Pmin</th>' +
+        '<th style="text-align:center;padding:2px 4px;">Sfc</th>' +
+        '<th style="text-align:left;padding:2px 4px;">Skew-T</th>' +
+        '</tr>';
+
+    data.dropsondes.forEach(function(sonde, idx) {
+        var color = _archSondeColor(idx);
+        var maxWspd = null;
+        var minPres = null;
+        var p = sonde.profile;
+        for (var j = 0; j < p.wspd.length; j++) {
+            if (p.wspd[j] != null && (maxWspd === null || p.wspd[j] > maxWspd)) maxWspd = p.wspd[j];
+        }
+        for (var j = 0; j < p.pres.length; j++) {
+            if (p.pres[j] != null && (minPres === null || p.pres[j] < minPres)) minPres = p.pres[j];
+        }
+
+        var timeStr = sonde.launch_time ? sonde.launch_time.substring(11, 19) : '?';
+        var dtStr = sonde.time_offset_min != null ?
+            (sonde.time_offset_min >= 0 ? '+' : '') + sonde.time_offset_min.toFixed(0) : '';
+        var wspdStr = maxWspd != null ? maxWspd.toFixed(1) : '-';
+        var presStr = minPres != null ? minPres.toFixed(0) : '-';
+
+        html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;" ' +
+            'onclick="archiveShowSondeSkewT(' + idx + ')" ' +
+            'onmouseover="this.style.background=\'rgba(52,211,153,0.1)\'" ' +
+            'onmouseout="this.style.background=\'none\'">' +
+            '<td style="padding:2px 4px;color:' + color + ';font-weight:bold;">' + (idx+1) + '</td>' +
+            '<td style="padding:2px 4px;">' + (sonde.sonde_id || '-') + '</td>' +
+            '<td style="padding:2px 4px;">' + timeStr + '</td>' +
+            '<td style="padding:2px 4px;text-align:right;">' + dtStr + '</td>' +
+            '<td style="padding:2px 4px;text-align:right;">' + wspdStr + '</td>' +
+            '<td style="padding:2px 4px;text-align:right;">' + presStr + '</td>' +
+            '<td style="padding:2px 4px;text-align:center;">' + (sonde.hit_surface ? '\u2713' : '\u2717') + '</td>' +
+            '<td style="padding:2px 4px;"><button class="cs-btn" style="padding:1px 6px;font-size:9px;color:' + color + ';" ' +
+            'onclick="event.stopPropagation();archiveShowSondeSkewT(' + idx + ')">View</button></td>' +
+            '</tr>';
+    });
+
+    html += '</table></div>';
+
+    // Skew-T chart container
+    html += '<div id="archive-skewt-container" style="display:none;margin-top:8px;">' +
+        '<div id="archive-skewt-chart" style="width:100%;height:400px;"></div>' +
+        '</div>';
+
+    panel.innerHTML = html;
+}
+
+function archiveShowSondeSkewT(idx) {
+    if (!_archiveSondeData || !_archiveSondeData.dropsondes[idx]) return;
+
+    var sonde = _archiveSondeData.dropsondes[idx];
+    var p = sonde.profile;
+    var container = document.getElementById('archive-skewt-container');
+    if (container) container.style.display = 'block';
+
+    var chartDiv = document.getElementById('archive-skewt-chart');
+    if (!chartDiv) return;
+
+    var color = _archSondeColor(idx);
+
+    // Filter valid T/P pairs for temperature trace
+    var tempX = [], tempY = [], dewX = [], dewY = [];
+    for (var i = 0; i < p.pres.length; i++) {
+        if (p.pres[i] != null && p.temp[i] != null) {
+            tempX.push(p.temp[i]);
+            tempY.push(p.pres[i]);
+        }
+    }
+
+    // Compute dewpoint from RH and T if not provided
+    for (var i = 0; i < p.pres.length; i++) {
+        if (p.pres[i] != null && p.temp[i] != null && p.rh[i] != null && p.rh[i] > 0) {
+            // Magnus formula
+            var T = p.temp[i];
+            var RH = p.rh[i];
+            var a = 17.27, b = 237.7;
+            var gamma = (a * T) / (b + T) + Math.log(RH / 100.0);
+            var Td = (b * gamma) / (a - gamma);
+            dewX.push(Td);
+            dewY.push(p.pres[i]);
+        }
+    }
+
+    // Wind speed profile
+    var wspdX = [], wspdY = [];
+    for (var i = 0; i < p.pres.length; i++) {
+        if (p.pres[i] != null && p.wspd[i] != null) {
+            wspdX.push(p.wspd[i]);
+            wspdY.push(p.pres[i]);
+        }
+    }
+
+    var traces = [];
+
+    // Temperature
+    traces.push({
+        x: tempX, y: tempY,
+        type: 'scatter', mode: 'lines',
+        line: { color: '#ef4444', width: 2 },
+        name: 'Temperature',
+        yaxis: 'y',
+    });
+
+    // Dewpoint
+    if (dewX.length > 0) {
+        traces.push({
+            x: dewX, y: dewY,
+            type: 'scatter', mode: 'lines',
+            line: { color: '#3b82f6', width: 2, dash: 'dash' },
+            name: 'Dewpoint',
+            yaxis: 'y',
+        });
+    }
+
+    // Wind speed on secondary x-axis
+    traces.push({
+        x: wspdX, y: wspdY,
+        type: 'scatter', mode: 'lines',
+        line: { color: '#22c55e', width: 2 },
+        name: 'Wind Speed (m/s)',
+        xaxis: 'x2', yaxis: 'y',
+    });
+
+    var tOffStr = sonde.time_offset_min != null ?
+        ' (T' + (sonde.time_offset_min >= 0 ? '+' : '') + sonde.time_offset_min.toFixed(0) + ' min)' : '';
+
+    var titleText = '\uD83E\uDE82 ' + (sonde.sonde_id || 'Sonde ' + (idx+1)) +
+        '  ' + sonde.launch_time + tOffStr +
+        (sonde.hit_surface ? '  \u2713 Sfc' : '  \u2717 No sfc');
+
+    // Pressure range
+    var pMin = 100, pMax = 1050;
+    if (tempY.length > 0) {
+        pMin = Math.min.apply(null, tempY);
+        pMax = Math.max.apply(null, tempY);
+    }
+    // Round to nice values
+    pMin = Math.max(50, Math.floor(pMin / 50) * 50);
+    pMax = Math.min(1060, Math.ceil(pMax / 50) * 50);
+
+    var layout = {
+        title: { text: titleText, font: { color: '#e5e7eb', size: 12 }, y: 0.98 },
+        paper_bgcolor: '#111827',
+        plot_bgcolor: '#111827',
+        xaxis: {
+            title: { text: 'Temperature (\u00b0C)', font: { color: '#ef4444', size: 11 } },
+            tickfont: { color: '#aaa', size: 10 },
+            gridcolor: 'rgba(255,255,255,0.06)',
+            zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)',
+            side: 'bottom',
+            domain: [0, 0.75],
+        },
+        xaxis2: {
+            title: { text: 'Wind Speed (m/s)', font: { color: '#22c55e', size: 11 } },
+            tickfont: { color: '#22c55e', size: 10 },
+            gridcolor: 'rgba(34,197,94,0.1)',
+            side: 'top',
+            overlaying: 'x',
+            domain: [0, 0.75],
+            anchor: 'y',
+        },
+        yaxis: {
+            title: { text: 'Pressure (hPa)', font: { color: '#aaa', size: 11 } },
+            tickfont: { color: '#aaa', size: 10 },
+            gridcolor: 'rgba(255,255,255,0.06)',
+            autorange: 'reversed',
+            type: 'log',
+            range: [Math.log10(pMax), Math.log10(pMin)],
+            dtick: 'D1',
+        },
+        margin: { l: 55, r: 15, t: 35, b: 45 },
+        legend: { x: 0.78, y: 0.98, bgcolor: 'rgba(17,24,39,0.8)', font: { color: '#d1d5db', size: 10 } },
+        showlegend: true,
+        hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 11 } },
+    };
+
+    Plotly.newPlot(chartDiv, traces, layout, { responsive: true, displayModeBar: false });
+}
+
+// Clear sonde state when case changes (called from openSidePanel)
+function _archiveSondeReset() {
+    _archiveSondeActive = false;
+    _archiveSondeData = null;
+    _archiveSondeTraceIndices = [];
+    var btn = document.getElementById('btn-archive-sonde');
+    if (btn) { btn.textContent = '\uD83E\uDE82 Sondes Off'; btn.classList.remove('sonde-active'); btn.disabled = false; }
+    _archiveHideSondePanel();
+}
+
 
 // Close composite panel on Escape
 (function() {
     var orig = document.onkeydown;
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
+            var ep = document.getElementById('env-overlay');
+            if (ep && ep.classList.contains('active')) { toggleEnvOverlay(); e.stopPropagation(); return; }
             var cp = document.getElementById('composite-panel');
             if (cp && cp.classList.contains('active')) { toggleCompositePanel(); e.stopPropagation(); }
         }
