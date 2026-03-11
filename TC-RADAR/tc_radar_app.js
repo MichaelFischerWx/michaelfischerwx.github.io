@@ -235,6 +235,7 @@ function exploreCaseGo() {
 // ── Side panel ───────────────────────────────────────────────
 function openSidePanel(caseData, fromQuickSelect) {
     _archiveFLReset();
+    _archiveSondeReset();
     currentCaseIndex = caseData.case_index;
     currentCaseData = caseData;
     _currentSddc = (caseData.sddc !== null && caseData.sddc !== undefined && caseData.sddc !== 9999) ? caseData.sddc : null;
@@ -287,6 +288,7 @@ function openSidePanel(caseData, fromQuickSelect) {
                     '<button class="cs-btn" id="vol-btn" onclick="fetch3DVolume()" disabled>\uD83D\uDDA5 3D Volume</button>' +
                     '<button class="cs-btn" id="ir-underlay-btn" onclick="toggleIRPlotlyUnderlay()" disabled>\uD83D\uDEF0 IR Off</button>' +
                     '<button class="cs-btn" id="btn-archive-fl" onclick="archiveToggleFlightLevel()" style="background:rgba(96,165,250,0.12);border-color:rgba(96,165,250,0.35);color:#93c5fd;">\u2708 FL Off</button>' +
+                    '<button class="cs-btn" id="btn-archive-sonde" onclick="archiveToggleDropsondes()" style="background:rgba(52,211,153,0.12);border-color:rgba(52,211,153,0.35);color:#6ee7b7;">\uD83E\uDE82 Sondes Off</button>' +
                 '</div>' +
                 '<div class="fl-archive-status" id="fl-archive-status" style="display:none;font-size:10px;color:#fbbf24;padding:2px 8px;"></div>' +
                 '<div class="display-actions" style="margin-top:4px;">' +
@@ -10978,6 +10980,408 @@ function _archiveFLReset() {
     _archiveHideFLTimeSeries();
     var status = document.getElementById('fl-archive-status');
     if (status) status.style.display = 'none';
+}
+
+
+// =====================================================================
+// Archive Dropsonde Overlay (HRD .frd historical data)
+// =====================================================================
+var _archiveSondeActive = false;
+var _archiveSondeData = null;
+var _archiveSondeTraceIndices = [];
+var _SONDE_COLORS = [
+    '#34d399','#60a5fa','#f472b6','#fbbf24','#a78bfa',
+    '#fb923c','#38bdf8','#f87171','#4ade80','#e879f9',
+    '#facc15','#2dd4bf','#f97316','#818cf8','#fb7185'
+];
+
+function _archSondeColor(idx) {
+    return _SONDE_COLORS[idx % _SONDE_COLORS.length];
+}
+
+function archiveToggleDropsondes() {
+    var btn = document.getElementById('btn-archive-sonde');
+    if (_archiveSondeActive) {
+        _archiveSondeActive = false;
+        _archiveRemoveSondeOverlay();
+        _archiveHideSondePanel();
+        if (btn) { btn.textContent = '\uD83E\uDE82 Sondes Off'; btn.classList.remove('sonde-active'); }
+        return;
+    }
+
+    if (currentCaseIndex === null) return;
+    _archiveSondeActive = true;
+    if (btn) { btn.textContent = '\uD83E\uDE82 Loading\u2026'; btn.classList.add('sonde-active'); btn.disabled = true; }
+
+    if (_archiveSondeData && _archiveSondeData._caseIndex === currentCaseIndex) {
+        _archiveRenderSondeOverlay(_archiveSondeData);
+        _archiveRenderSondePanel(_archiveSondeData);
+        if (btn) { btn.textContent = '\uD83E\uDE82 Sondes On'; btn.disabled = false; }
+        return;
+    }
+
+    var url = API_BASE + '/dropsondes/archive?case_index=' + currentCaseIndex + '&data_type=' + _activeDataType;
+    fetch(url)
+        .then(function(r) { return r.json(); })
+        .then(function(json) {
+            if (!_archiveSondeActive) return;
+            json._caseIndex = currentCaseIndex;
+            _archiveSondeData = json;
+
+            if (!json.success && json.success !== undefined) {
+                var msg = json.message || 'No dropsonde data available.';
+                var status = document.getElementById('fl-archive-status');
+                if (status) { status.textContent = '\uD83E\uDE82 ' + msg; status.style.display = 'block'; }
+                if (btn) { btn.textContent = '\uD83E\uDE82 Sondes Off'; btn.disabled = false; }
+                _archiveSondeActive = false;
+                return;
+            }
+
+            _archiveRenderSondeOverlay(json);
+            _archiveRenderSondePanel(json);
+            if (btn) { btn.textContent = '\uD83E\uDE82 Sondes On'; btn.disabled = false; }
+        })
+        .catch(function(err) {
+            console.error('Archive sonde fetch error:', err);
+            if (btn) { btn.textContent = '\uD83E\uDE82 Sondes Off'; btn.disabled = false; }
+            _archiveSondeActive = false;
+        });
+}
+
+function _archiveRemoveSondeOverlay() {
+    var plotDiv = document.getElementById('plotly-chart');
+    if (!plotDiv || !plotDiv.data) return;
+
+    if (_archiveSondeTraceIndices.length > 0) {
+        var indicesToRemove = _archiveSondeTraceIndices.slice().sort(function(a,b){return b-a;});
+        for (var i = 0; i < indicesToRemove.length; i++) {
+            if (indicesToRemove[i] < plotDiv.data.length) {
+                Plotly.deleteTraces('plotly-chart', indicesToRemove[i]);
+            }
+        }
+        _archiveSondeTraceIndices = [];
+    }
+}
+
+function _archiveRenderSondeOverlay(data) {
+    var plotDiv = document.getElementById('plotly-chart');
+    if (!plotDiv || !plotDiv.data || !data.dropsondes || !data.dropsondes.length) return;
+    _archiveRemoveSondeOverlay();
+
+    var traces = [];
+    var baseCount = plotDiv.data.length;
+
+    data.dropsondes.forEach(function(sonde, idx) {
+        var p = sonde.profile;
+        if (!p.x_km || p.x_km.length < 2) return;
+
+        var color = _archSondeColor(idx);
+
+        // Trajectory line on plan view
+        var lineTrace = {
+            x: p.x_km,
+            y: p.y_km,
+            type: 'scatter',
+            mode: 'lines',
+            line: { color: color, width: 2, dash: 'dot' },
+            hoverinfo: 'skip',
+            showlegend: false,
+            name: 'Sonde ' + (sonde.sonde_id || idx),
+        };
+        traces.push(lineTrace);
+
+        // Surface marker (or bottom of drop)
+        var sfcIdx = p.x_km.length - 1;
+        var launchIdx = 0;
+
+        // Max wind
+        var maxWspd = -Infinity;
+        for (var w = 0; w < p.wspd.length; w++) {
+            if (p.wspd[w] != null && p.wspd[w] > maxWspd) maxWspd = p.wspd[w];
+        }
+        var maxWspdStr = isFinite(maxWspd) ? maxWspd.toFixed(1) + ' m/s (' + (maxWspd * 1.94384).toFixed(0) + ' kt)' : 'N/A';
+
+        var tOffStr = sonde.time_offset_min != null ?
+            (sonde.time_offset_min >= 0 ? '+' : '') + sonde.time_offset_min.toFixed(0) + ' min' : '';
+
+        var launchAltStr = sonde.launch.alt_m != null ? (sonde.launch.alt_m / 1000).toFixed(1) + ' km' : '?';
+        var sfcAltStr = sonde.surface.alt_m != null ? sonde.surface.alt_m.toFixed(0) + ' m' : '?';
+
+        var hoverHtml =
+            '<b>\uD83E\uDE82 ' + (sonde.sonde_id || 'Sonde ' + (idx+1)) + '</b><br>' +
+            sonde.launch_time + ' (' + tOffStr + ')<br>' +
+            (sonde.aircraft || '') + '<br>' +
+            'Max wind: <b>' + maxWspdStr + '</b><br>' +
+            'Alt: ' + launchAltStr + ' \u2192 ' + sfcAltStr +
+            (sonde.hit_surface ? ' | Hit sfc' : ' | No sfc') +
+            (sonde.estimated_pr_used ? ' | Est P' : '') +
+            '<extra></extra>';
+
+        // Surface/bottom marker
+        var markerTrace = {
+            x: [p.x_km[sfcIdx]],
+            y: [p.y_km[sfcIdx]],
+            type: 'scatter',
+            mode: 'markers+text',
+            marker: {
+                color: color,
+                size: 10,
+                symbol: sonde.hit_surface ? 'circle' : 'circle-open',
+                line: { width: 2, color: '#fff' },
+            },
+            text: [String(idx + 1)],
+            textposition: 'top right',
+            textfont: { color: color, size: 10, family: 'monospace' },
+            hovertemplate: hoverHtml,
+            showlegend: idx === 0,
+            name: '\uD83E\uDE82 Dropsondes',
+        };
+        traces.push(markerTrace);
+    });
+
+    if (traces.length > 0) {
+        Plotly.addTraces('plotly-chart', traces);
+        for (var t = 0; t < traces.length; t++) {
+            _archiveSondeTraceIndices.push(baseCount + t);
+        }
+    }
+}
+
+function _archiveHideSondePanel() {
+    var panel = document.getElementById('archive-sonde-panel');
+    if (panel) panel.style.display = 'none';
+}
+
+function _archiveRenderSondePanel(data) {
+    if (!data.dropsondes || !data.dropsondes.length) return;
+
+    // Get or create the sonde info panel
+    var panel = document.getElementById('archive-sonde-panel');
+    if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'archive-sonde-panel';
+        panel.style.cssText = 'margin-top:8px;padding:8px 12px;background:rgba(6,78,59,0.15);border:1px solid rgba(52,211,153,0.3);border-radius:6px;font-size:11px;color:#d1d5db;';
+        // Insert after the FL time series panel or after the side panel content
+        var flTs = document.getElementById('fl-archive-ts');
+        if (flTs && flTs.parentNode) {
+            flTs.parentNode.insertBefore(panel, flTs.nextSibling);
+        } else {
+            var sp = document.getElementById('side-panel');
+            if (sp) sp.appendChild(panel);
+        }
+    }
+    panel.style.display = 'block';
+
+    var nSondes = data.dropsondes.length;
+    var nHitSfc = data.dropsondes.filter(function(s) { return s.hit_surface; }).length;
+    var nEstPr = data.dropsondes.filter(function(s) { return s.estimated_pr_used; }).length;
+    var timeWindow = data.time_window_min ? '\u00b1' + data.time_window_min + ' min' : 'all flight';
+
+    var html = '<div style="margin-bottom:6px;">' +
+        '<strong style="color:#6ee7b7;">\uD83E\uDE82 Archive Dropsondes</strong>' +
+        '<span style="margin-left:8px;color:#9ca3af;">' + nSondes + ' sondes (' + timeWindow + ')</span>' +
+        '<span style="margin-left:8px;color:#9ca3af;">' + nHitSfc + ' hit sfc' +
+        (nEstPr > 0 ? ', ' + nEstPr + ' est P' : '') + '</span>' +
+        '</div>';
+
+    // Sonde table
+    html += '<div style="max-height:180px;overflow-y:auto;">';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:10px;">';
+    html += '<tr style="color:#9ca3af;border-bottom:1px solid rgba(255,255,255,0.1);">' +
+        '<th style="text-align:left;padding:2px 4px;">#</th>' +
+        '<th style="text-align:left;padding:2px 4px;">ID</th>' +
+        '<th style="text-align:left;padding:2px 4px;">Time</th>' +
+        '<th style="text-align:right;padding:2px 4px;">\u0394t</th>' +
+        '<th style="text-align:right;padding:2px 4px;">Vmax</th>' +
+        '<th style="text-align:right;padding:2px 4px;">Pmin</th>' +
+        '<th style="text-align:center;padding:2px 4px;">Sfc</th>' +
+        '<th style="text-align:left;padding:2px 4px;">Skew-T</th>' +
+        '</tr>';
+
+    data.dropsondes.forEach(function(sonde, idx) {
+        var color = _archSondeColor(idx);
+        var maxWspd = null;
+        var minPres = null;
+        var p = sonde.profile;
+        for (var j = 0; j < p.wspd.length; j++) {
+            if (p.wspd[j] != null && (maxWspd === null || p.wspd[j] > maxWspd)) maxWspd = p.wspd[j];
+        }
+        for (var j = 0; j < p.pres.length; j++) {
+            if (p.pres[j] != null && (minPres === null || p.pres[j] < minPres)) minPres = p.pres[j];
+        }
+
+        var timeStr = sonde.launch_time ? sonde.launch_time.substring(11, 19) : '?';
+        var dtStr = sonde.time_offset_min != null ?
+            (sonde.time_offset_min >= 0 ? '+' : '') + sonde.time_offset_min.toFixed(0) : '';
+        var wspdStr = maxWspd != null ? maxWspd.toFixed(1) : '-';
+        var presStr = minPres != null ? minPres.toFixed(0) : '-';
+
+        html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;" ' +
+            'onclick="archiveShowSondeSkewT(' + idx + ')" ' +
+            'onmouseover="this.style.background=\'rgba(52,211,153,0.1)\'" ' +
+            'onmouseout="this.style.background=\'none\'">' +
+            '<td style="padding:2px 4px;color:' + color + ';font-weight:bold;">' + (idx+1) + '</td>' +
+            '<td style="padding:2px 4px;">' + (sonde.sonde_id || '-') + '</td>' +
+            '<td style="padding:2px 4px;">' + timeStr + '</td>' +
+            '<td style="padding:2px 4px;text-align:right;">' + dtStr + '</td>' +
+            '<td style="padding:2px 4px;text-align:right;">' + wspdStr + '</td>' +
+            '<td style="padding:2px 4px;text-align:right;">' + presStr + '</td>' +
+            '<td style="padding:2px 4px;text-align:center;">' + (sonde.hit_surface ? '\u2713' : '\u2717') + '</td>' +
+            '<td style="padding:2px 4px;"><button class="cs-btn" style="padding:1px 6px;font-size:9px;color:' + color + ';" ' +
+            'onclick="event.stopPropagation();archiveShowSondeSkewT(' + idx + ')">View</button></td>' +
+            '</tr>';
+    });
+
+    html += '</table></div>';
+
+    // Skew-T chart container
+    html += '<div id="archive-skewt-container" style="display:none;margin-top:8px;">' +
+        '<div id="archive-skewt-chart" style="width:100%;height:400px;"></div>' +
+        '</div>';
+
+    panel.innerHTML = html;
+}
+
+function archiveShowSondeSkewT(idx) {
+    if (!_archiveSondeData || !_archiveSondeData.dropsondes[idx]) return;
+
+    var sonde = _archiveSondeData.dropsondes[idx];
+    var p = sonde.profile;
+    var container = document.getElementById('archive-skewt-container');
+    if (container) container.style.display = 'block';
+
+    var chartDiv = document.getElementById('archive-skewt-chart');
+    if (!chartDiv) return;
+
+    var color = _archSondeColor(idx);
+
+    // Filter valid T/P pairs for temperature trace
+    var tempX = [], tempY = [], dewX = [], dewY = [];
+    for (var i = 0; i < p.pres.length; i++) {
+        if (p.pres[i] != null && p.temp[i] != null) {
+            tempX.push(p.temp[i]);
+            tempY.push(p.pres[i]);
+        }
+    }
+
+    // Compute dewpoint from RH and T if not provided
+    for (var i = 0; i < p.pres.length; i++) {
+        if (p.pres[i] != null && p.temp[i] != null && p.rh[i] != null && p.rh[i] > 0) {
+            // Magnus formula
+            var T = p.temp[i];
+            var RH = p.rh[i];
+            var a = 17.27, b = 237.7;
+            var gamma = (a * T) / (b + T) + Math.log(RH / 100.0);
+            var Td = (b * gamma) / (a - gamma);
+            dewX.push(Td);
+            dewY.push(p.pres[i]);
+        }
+    }
+
+    // Wind speed profile
+    var wspdX = [], wspdY = [];
+    for (var i = 0; i < p.pres.length; i++) {
+        if (p.pres[i] != null && p.wspd[i] != null) {
+            wspdX.push(p.wspd[i]);
+            wspdY.push(p.pres[i]);
+        }
+    }
+
+    var traces = [];
+
+    // Temperature
+    traces.push({
+        x: tempX, y: tempY,
+        type: 'scatter', mode: 'lines',
+        line: { color: '#ef4444', width: 2 },
+        name: 'Temperature',
+        yaxis: 'y',
+    });
+
+    // Dewpoint
+    if (dewX.length > 0) {
+        traces.push({
+            x: dewX, y: dewY,
+            type: 'scatter', mode: 'lines',
+            line: { color: '#3b82f6', width: 2, dash: 'dash' },
+            name: 'Dewpoint',
+            yaxis: 'y',
+        });
+    }
+
+    // Wind speed on secondary x-axis
+    traces.push({
+        x: wspdX, y: wspdY,
+        type: 'scatter', mode: 'lines',
+        line: { color: '#22c55e', width: 2 },
+        name: 'Wind Speed (m/s)',
+        xaxis: 'x2', yaxis: 'y',
+    });
+
+    var tOffStr = sonde.time_offset_min != null ?
+        ' (T' + (sonde.time_offset_min >= 0 ? '+' : '') + sonde.time_offset_min.toFixed(0) + ' min)' : '';
+
+    var titleText = '\uD83E\uDE82 ' + (sonde.sonde_id || 'Sonde ' + (idx+1)) +
+        '  ' + sonde.launch_time + tOffStr +
+        (sonde.hit_surface ? '  \u2713 Sfc' : '  \u2717 No sfc');
+
+    // Pressure range
+    var pMin = 100, pMax = 1050;
+    if (tempY.length > 0) {
+        pMin = Math.min.apply(null, tempY);
+        pMax = Math.max.apply(null, tempY);
+    }
+    // Round to nice values
+    pMin = Math.max(50, Math.floor(pMin / 50) * 50);
+    pMax = Math.min(1060, Math.ceil(pMax / 50) * 50);
+
+    var layout = {
+        title: { text: titleText, font: { color: '#e5e7eb', size: 12 }, y: 0.98 },
+        paper_bgcolor: '#111827',
+        plot_bgcolor: '#111827',
+        xaxis: {
+            title: { text: 'Temperature (\u00b0C)', font: { color: '#ef4444', size: 11 } },
+            tickfont: { color: '#aaa', size: 10 },
+            gridcolor: 'rgba(255,255,255,0.06)',
+            zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)',
+            side: 'bottom',
+            domain: [0, 0.75],
+        },
+        xaxis2: {
+            title: { text: 'Wind Speed (m/s)', font: { color: '#22c55e', size: 11 } },
+            tickfont: { color: '#22c55e', size: 10 },
+            gridcolor: 'rgba(34,197,94,0.1)',
+            side: 'top',
+            overlaying: 'x',
+            domain: [0, 0.75],
+            anchor: 'y',
+        },
+        yaxis: {
+            title: { text: 'Pressure (hPa)', font: { color: '#aaa', size: 11 } },
+            tickfont: { color: '#aaa', size: 10 },
+            gridcolor: 'rgba(255,255,255,0.06)',
+            autorange: 'reversed',
+            type: 'log',
+            range: [Math.log10(pMax), Math.log10(pMin)],
+            dtick: 'D1',
+        },
+        margin: { l: 55, r: 15, t: 35, b: 45 },
+        legend: { x: 0.78, y: 0.98, bgcolor: 'rgba(17,24,39,0.8)', font: { color: '#d1d5db', size: 10 } },
+        showlegend: true,
+        hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 11 } },
+    };
+
+    Plotly.newPlot(chartDiv, traces, layout, { responsive: true, displayModeBar: false });
+}
+
+// Clear sonde state when case changes (called from openSidePanel)
+function _archiveSondeReset() {
+    _archiveSondeActive = false;
+    _archiveSondeData = null;
+    _archiveSondeTraceIndices = [];
+    var btn = document.getElementById('btn-archive-sonde');
+    if (btn) { btn.textContent = '\uD83E\uDE82 Sondes Off'; btn.classList.remove('sonde-active'); btn.disabled = false; }
+    _archiveHideSondePanel();
 }
 
 
