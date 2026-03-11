@@ -11244,6 +11244,7 @@ function _archiveRenderSondePanel(data) {
         '<th style="text-align:left;padding:2px 4px;">ID</th>' +
         '<th style="text-align:left;padding:2px 4px;">Time</th>' +
         '<th style="text-align:right;padding:2px 4px;">\u0394t</th>' +
+        '<th style="text-align:right;padding:2px 4px;">WL150</th>' +
         '<th style="text-align:right;padding:2px 4px;">Vmax</th>' +
         '<th style="text-align:right;padding:2px 4px;">Psfc</th>' +
         '<th style="text-align:center;padding:2px 4px;">Sfc</th>' +
@@ -11254,9 +11255,35 @@ function _archiveRenderSondePanel(data) {
         var color = _archSondeColor(idx);
         var maxWspd = null;
         var sfcPres = null;
+        var wl150 = null;
         var p = sonde.profile;
         for (var j = 0; j < p.wspd.length; j++) {
             if (p.wspd[j] != null && (maxWspd === null || p.wspd[j] > maxWspd)) maxWspd = p.wspd[j];
+        }
+        // WL150: interpolate wind speed to 150 m (0.15 km) altitude
+        if (p.alt_km && p.wspd) {
+            // Find the two nearest valid points bracketing 0.15 km
+            var below = null, above = null;
+            for (var j = 0; j < p.alt_km.length; j++) {
+                if (p.alt_km[j] != null && p.wspd[j] != null) {
+                    if (p.alt_km[j] <= 0.15) {
+                        if (below === null || p.alt_km[j] > p.alt_km[below]) below = j;
+                    }
+                    if (p.alt_km[j] >= 0.15) {
+                        if (above === null || p.alt_km[j] < p.alt_km[above]) above = j;
+                    }
+                }
+            }
+            if (below !== null && above !== null && below !== above) {
+                var a0 = p.alt_km[below], a1 = p.alt_km[above];
+                var w0 = p.wspd[below], w1 = p.wspd[above];
+                var frac = (a1 - a0) > 0 ? (0.15 - a0) / (a1 - a0) : 0;
+                wl150 = w0 + frac * (w1 - w0);
+            } else if (below !== null && p.alt_km[below] === 0.15) {
+                wl150 = p.wspd[below];
+            } else if (above !== null && p.alt_km[above] === 0.15) {
+                wl150 = p.wspd[above];
+            }
         }
         // Surface pressure: use splash_pr or hyd_sfcp from .frd metadata, else max pressure
         var splashSource = 'none';  // Track splash measurement source
@@ -11276,6 +11303,7 @@ function _archiveRenderSondePanel(data) {
         var timeStr = sonde.launch_time ? sonde.launch_time.substring(11, 19) : '?';
         var dtStr = sonde.time_offset_min != null ?
             (sonde.time_offset_min >= 0 ? '+' : '') + sonde.time_offset_min.toFixed(0) : '';
+        var wl150Str = wl150 != null ? wl150.toFixed(1) : '-';
         var wspdStr = maxWspd != null ? maxWspd.toFixed(1) : '-';
         var presStr = sfcPres != null ? sfcPres.toFixed(0) : '-';
         // Color-code Psfc: green if measured splash, yellow if hydrostatic, red/dim if estimated from profile
@@ -11303,6 +11331,7 @@ function _archiveRenderSondePanel(data) {
             '<td style="padding:2px 4px;">' + (sonde.sonde_id || '-') + '</td>' +
             '<td style="padding:2px 4px;">' + timeStr + '</td>' +
             '<td style="padding:2px 4px;text-align:right;">' + dtStr + '</td>' +
+            '<td style="padding:2px 4px;text-align:right;" title="Wind at 150 m AGL (m/s)">' + wl150Str + '</td>' +
             '<td style="padding:2px 4px;text-align:right;">' + wspdStr + '</td>' +
             '<td style="padding:2px 4px;text-align:right;color:' + presColor + ';" title="' + presTip + '">' + presStr + '</td>' +
             '<td style="padding:2px 4px;text-align:center;color:' + sfcColor + ';" title="' + sfcTip + '">' + sfcIcon + '</td>' +
