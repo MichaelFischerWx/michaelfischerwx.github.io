@@ -11235,9 +11235,15 @@ function _archiveRenderSondePanel(data) {
 
     html += '</table></div>';
 
-    // Skew-T chart container
+    // Skew-T chart container + info panel
     html += '<div id="archive-skewt-container" style="display:none;margin-top:8px;">' +
-        '<div id="archive-skewt-chart" style="width:100%;height:400px;"></div>' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;padding:2px 6px;">' +
+            '<span id="archive-skewt-title" style="color:#e5e7eb;font-size:11px;font-weight:600;"></span>' +
+            '<button onclick="document.getElementById(\'archive-skewt-container\').style.display=\'none\'" ' +
+                'class="cs-btn" style="padding:0 6px;font-size:13px;line-height:1;">&times;</button>' +
+        '</div>' +
+        '<div id="archive-skewt-chart" style="width:100%;height:460px;"></div>' +
+        '<div id="archive-skewt-info" style="padding:4px 8px;"></div>' +
         '</div>';
 
     panel.innerHTML = html;
@@ -11254,125 +11260,208 @@ function archiveShowSondeSkewT(idx) {
     var chartDiv = document.getElementById('archive-skewt-chart');
     if (!chartDiv) return;
 
-    var color = _archSondeColor(idx);
+    if (!p.pres || !p.temp || p.pres.length < 5) return;
 
-    // Filter valid T/P pairs for temperature trace
-    var tempX = [], tempY = [], dewX = [], dewY = [];
+    // Build profiles object expected by renderSkewT():
+    //   { plev: hPa[], t: Kelvin[], q: kg/kg[], u: m/s[], v: m/s[] }
+    var plev = [], tK = [], qArr = [], uArr = [], vArr = [];
+    var eps = 0.622;
+
     for (var i = 0; i < p.pres.length; i++) {
-        if (p.pres[i] != null && p.temp[i] != null) {
-            tempX.push(p.temp[i]);
-            tempY.push(p.pres[i]);
+        if (p.pres[i] == null || p.temp[i] == null) continue;
+        var pHpa = p.pres[i];
+        var tCel = p.temp[i];
+        if (pHpa < 50 || pHpa > 1100) continue;
+
+        plev.push(pHpa);
+        tK.push(tCel + 273.15);
+
+        // Compute specific humidity q from RH
+        var q = null;
+        if (p.rh && p.rh[i] != null && p.rh[i] > 0) {
+            var es = 6.112 * Math.exp(17.67 * tCel / (tCel + 243.5));
+            var e = (p.rh[i] / 100.0) * es;
+            if (e < pHpa) q = eps * e / (pHpa - e);
         }
+        qArr.push(q);
+
+        uArr.push(p.uwnd ? p.uwnd[i] : null);
+        vArr.push(p.vwnd ? p.vwnd[i] : null);
     }
 
-    // Compute dewpoint from RH and T if not provided
-    for (var i = 0; i < p.pres.length; i++) {
-        if (p.pres[i] != null && p.temp[i] != null && p.rh[i] != null && p.rh[i] > 0) {
-            // Magnus formula
-            var T = p.temp[i];
-            var RH = p.rh[i];
-            var a = 17.27, b = 237.7;
-            var gamma = (a * T) / (b + T) + Math.log(RH / 100.0);
-            var Td = (b * gamma) / (a - gamma);
-            dewX.push(Td);
-            dewY.push(p.pres[i]);
-        }
+    if (plev.length < 5) return;
+
+    var profiles = { plev: plev, t: tK, q: qArr, u: uArr, v: vArr };
+
+    // Set title
+    var titleEl = document.getElementById('archive-skewt-title');
+    if (titleEl) {
+        var tOff = sonde.time_offset_min != null ?
+            (sonde.time_offset_min >= 0 ? '+' : '') + sonde.time_offset_min.toFixed(0) + ' min' : '';
+        titleEl.textContent = '\uD83E\uDE82 ' + (sonde.sonde_id || 'Sonde ' + (idx + 1)) +
+            ' \u2014 ' + sonde.launch_time +
+            (tOff ? ' (T' + tOff + ')' : '') +
+            (sonde.hit_surface ? ' \u2713 Sfc' : ' \u2717 No sfc');
     }
 
-    // Wind speed profile
-    var wspdX = [], wspdY = [];
-    for (var i = 0; i < p.pres.length; i++) {
-        if (p.pres[i] != null && p.wspd[i] != null) {
-            wspdX.push(p.wspd[i]);
-            wspdY.push(p.pres[i]);
-        }
+    // Render proper Skew-T using the global renderSkewT function
+    if (typeof renderSkewT === 'function') {
+        renderSkewT(profiles, 'archive-skewt-chart');
     }
 
-    var traces = [];
+    // Dynamic vertical scaling: adjust y-axis to sonde's data range + rebuild barbs
+    _archiveAdjustSkewTYAxis(plev, profiles);
 
-    // Temperature
-    traces.push({
-        x: tempX, y: tempY,
-        type: 'scatter', mode: 'lines',
-        line: { color: '#ef4444', width: 2 },
-        name: 'Temperature',
-        yaxis: 'y',
-    });
+    // Render info panel with WL150 / WL500
+    _archiveRenderSondeSkewTInfo(profiles, sonde);
 
-    // Dewpoint
-    if (dewX.length > 0) {
-        traces.push({
-            x: dewX, y: dewY,
-            type: 'scatter', mode: 'lines',
-            line: { color: '#3b82f6', width: 2, dash: 'dash' },
-            name: 'Dewpoint',
-            yaxis: 'y',
+    // Scroll into view
+    if (container) container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ── Dynamic y-axis adjustment for archive Skew-T ──
+function _archiveAdjustSkewTYAxis(plev, profiles) {
+    var el = document.getElementById('archive-skewt-chart');
+    if (!el || !el.layout) return;
+
+    var pMin = 1100, pMax = 0;
+    for (var i = 0; i < plev.length; i++) {
+        if (plev[i] < pMin) pMin = plev[i];
+        if (plev[i] > pMax) pMax = plev[i];
+    }
+    // Pad: 10 hPa above max, extend bottom to at least 1020
+    pMax = Math.min(1060, Math.max(pMax + 10, 1020));
+    pMin = Math.max(50, pMin - 10);
+
+    var newRange = [Math.log10(pMax), Math.log10(pMin)];
+    if (Math.abs(newRange[0] - el.layout.yaxis.range[0]) < 0.01 &&
+        Math.abs(newRange[1] - el.layout.yaxis.range[1]) < 0.01) return;
+
+    // Rebuild wind barbs for new y-range
+    var xRange = el.layout.xaxis.range || [-30, 50];
+    var barbShapes = [];
+    if (typeof _buildWindBarbShapes === 'function' && profiles.u && profiles.v) {
+        var barbX = xRange[1] - 3;
+        barbShapes = _buildWindBarbShapes(profiles.u, profiles.v, profiles.plev, barbX, 0.045, {
+            xMin: xRange[0], xMax: xRange[1],
+            logPMin: newRange[0], logPMax: newRange[1],
         });
     }
 
-    // Wind speed on secondary x-axis
-    traces.push({
-        x: wspdX, y: wspdY,
-        type: 'scatter', mode: 'lines',
-        line: { color: '#22c55e', width: 2 },
-        name: 'Wind Speed (m/s)',
-        xaxis: 'x2', yaxis: 'y',
+    var existingShapes = (el.layout.shapes || []).filter(function(s) {
+        return !(s.line && s.line.color && s.line.color.indexOf('220,220,240') >= 0);
     });
 
-    var tOffStr = sonde.time_offset_min != null ?
-        ' (T' + (sonde.time_offset_min >= 0 ? '+' : '') + sonde.time_offset_min.toFixed(0) + ' min)' : '';
+    Plotly.relayout('archive-skewt-chart', {
+        'yaxis.range': newRange,
+        shapes: existingShapes.concat(barbShapes),
+    });
+}
 
-    var titleText = '\uD83E\uDE82 ' + (sonde.sonde_id || 'Sonde ' + (idx+1)) +
-        '  ' + sonde.launch_time + tOffStr +
-        (sonde.hit_surface ? '  \u2713 Sfc' : '  \u2717 No sfc');
+// ── Info panel with thermodynamic indices + WL150 / WL500 ──
+function _archiveRenderSondeSkewTInfo(profiles, sonde) {
+    var el = document.getElementById('archive-skewt-info');
+    if (!el || !profiles || !profiles.t || !profiles.plev) { if (el) el.innerHTML = ''; return; }
 
-    // Pressure range
-    var pMin = 100, pMax = 1050;
-    if (tempY.length > 0) {
-        pMin = Math.min.apply(null, tempY);
-        pMax = Math.max.apply(null, tempY);
+    var plev = profiles.plev;
+    var tK = profiles.t;
+    var q = profiles.q;
+    var eps = 0.622, Rd = 287.04, Cp = 1005.7, Lv = 2.501e6, g = 9.81;
+
+    var tC = tK.map(function(v) { return v != null ? v - 273.15 : null; });
+
+    // Dewpoint from q
+    var tdC = [];
+    for (var i = 0; i < plev.length; i++) {
+        if (q[i] != null && q[i] > 0 && plev[i] != null) {
+            var e = q[i] * plev[i] / (eps + q[i]);
+            if (e > 0) {
+                var lnE = Math.log(e / 6.112);
+                tdC.push(243.5 * lnE / (17.67 - lnE));
+            } else { tdC.push(null); }
+        } else { tdC.push(null); }
     }
-    // Round to nice values
-    pMin = Math.max(50, Math.floor(pMin / 50) * 50);
-    pMax = Math.min(1060, Math.ceil(pMax / 50) * 50);
 
-    var layout = {
-        title: { text: titleText, font: { color: '#e5e7eb', size: 12 }, y: 0.98 },
-        paper_bgcolor: '#111827',
-        plot_bgcolor: '#111827',
-        xaxis: {
-            title: { text: 'Temperature (\u00b0C)', font: { color: '#ef4444', size: 11 } },
-            tickfont: { color: '#aaa', size: 10 },
-            gridcolor: 'rgba(255,255,255,0.06)',
-            zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)',
-            side: 'bottom',
-            domain: [0, 0.75],
-        },
-        xaxis2: {
-            title: { text: 'Wind Speed (m/s)', font: { color: '#22c55e', size: 11 } },
-            tickfont: { color: '#22c55e', size: 10 },
-            gridcolor: 'rgba(34,197,94,0.1)',
-            side: 'top',
-            overlaying: 'x',
-            domain: [0, 0.75],
-            anchor: 'y',
-        },
-        yaxis: {
-            title: { text: 'Pressure (hPa)', font: { color: '#aaa', size: 11 } },
-            tickfont: { color: '#aaa', size: 10 },
-            gridcolor: 'rgba(255,255,255,0.06)',
-            autorange: 'reversed',
-            type: 'log',
-            range: [Math.log10(pMax), Math.log10(pMin)],
-            dtick: 'D1',
-        },
-        margin: { l: 55, r: 15, t: 35, b: 45 },
-        legend: { x: 0.78, y: 0.98, bgcolor: 'rgba(17,24,39,0.8)', font: { color: '#d1d5db', size: 10 } },
-        showlegend: true,
-        hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 11 } },
-    };
+    // -- Precipitable Water (PWAT) via pressure integration --
+    var pwat = null;
+    var pw = 0;
+    for (var i = 0; i < plev.length - 1; i++) {
+        if (q[i] != null && q[i + 1] != null && plev[i] != null && plev[i + 1] != null) {
+            var qAvg = (q[i] + q[i + 1]) / 2.0;
+            var dp = Math.abs(plev[i] - plev[i + 1]) * 100; // Pa
+            pw += qAvg * dp / g;
+        }
+    }
+    if (pw > 0) pwat = pw * 1000; // mm (= kg/m²)
 
-    Plotly.newPlot(chartDiv, traces, layout, { responsive: true, displayModeBar: false });
+    // -- Freezing level --
+    var frzLvl = null;
+    for (var i = 0; i < plev.length - 1; i++) {
+        if (tC[i] != null && tC[i + 1] != null && tC[i] > 0 && tC[i + 1] <= 0) {
+            var frac = tC[i] / (tC[i] - tC[i + 1]);
+            frzLvl = plev[i] + frac * (plev[i + 1] - plev[i]);
+            break;
+        }
+    }
+
+    // -- WL150 and WL500: mean wind speed over lowest 150m and 500m AGL --
+    var sp = sonde.profile;
+    var wl150 = null, wl500 = null;
+    if (sp && sp.alt_km && sp.wspd && sp.alt_km.length > 3) {
+        // Find surface altitude (lowest valid altitude near end of arrays)
+        var sfcAltKm = null;
+        for (var ai = sp.alt_km.length - 1; ai >= 0; ai--) {
+            if (sp.alt_km[ai] != null) { sfcAltKm = sp.alt_km[ai]; break; }
+        }
+        if (sfcAltKm != null) {
+            var layers = [
+                { name: 'WL150', top: 0.15, sum: 0, cnt: 0 },
+                { name: 'WL500', top: 0.50, sum: 0, cnt: 0 },
+            ];
+            for (var li = 0; li < layers.length; li++) {
+                var topKm = sfcAltKm + layers[li].top;
+                for (var wi = 0; wi < sp.alt_km.length; wi++) {
+                    if (sp.alt_km[wi] == null || sp.wspd[wi] == null) continue;
+                    if (sp.alt_km[wi] >= sfcAltKm && sp.alt_km[wi] <= topKm) {
+                        layers[li].sum += sp.wspd[wi];
+                        layers[li].cnt++;
+                    }
+                }
+            }
+            if (layers[0].cnt >= 2) wl150 = layers[0].sum / layers[0].cnt;
+            if (layers[1].cnt >= 2) wl500 = layers[1].sum / layers[1].cnt;
+        }
+    }
+
+    // -- Surface pressure & max wind --
+    var sfcP = null;
+    if (plev.length > 0) sfcP = plev[plev.length - 1] > plev[0] ? plev[plev.length - 1] : plev[0];
+    var maxWspd = null;
+    if (sp && sp.wspd) {
+        for (var i = 0; i < sp.wspd.length; i++) {
+            if (sp.wspd[i] != null && (maxWspd === null || sp.wspd[i] > maxWspd)) maxWspd = sp.wspd[i];
+        }
+    }
+
+    // Build HTML table
+    var items = [];
+    if (sfcP != null) items.push(['Psfc', sfcP.toFixed(1) + ' hPa']);
+    if (maxWspd != null) items.push(['Vmax', maxWspd.toFixed(1) + ' m/s (' + (maxWspd * 1.944).toFixed(0) + ' kt)']);
+    if (wl150 != null) items.push(['WL150', wl150.toFixed(1) + ' m/s (' + (wl150 * 1.944).toFixed(0) + ' kt)']);
+    if (wl500 != null) items.push(['WL500', wl500.toFixed(1) + ' m/s (' + (wl500 * 1.944).toFixed(0) + ' kt)']);
+    if (pwat != null) items.push(['PWAT', pwat.toFixed(1) + ' mm']);
+    if (frzLvl != null) items.push(['0\u00b0C', frzLvl.toFixed(0) + ' hPa']);
+    items.push(['Aircraft', sonde.aircraft || '\u2014']);
+    if (sonde.gps_verr != null) items.push(['GPS err', sonde.gps_verr.toFixed(1) + ' m']);
+
+    if (items.length === 0) { el.innerHTML = ''; return; }
+
+    var h = '<div style="display:flex;flex-wrap:wrap;gap:4px 12px;font-size:10px;color:#94a3b8;">';
+    for (var i = 0; i < items.length; i++) {
+        h += '<span><b style="color:#e2e8f0;">' + items[i][0] + ':</b> ' + items[i][1] + '</span>';
+    }
+    h += '</div>';
+    el.innerHTML = h;
 }
 
 // Clear sonde state when case changes (called from openSidePanel)
