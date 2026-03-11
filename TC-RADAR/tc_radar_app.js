@@ -287,6 +287,7 @@ function openSidePanel(caseData, fromQuickSelect) {
                     '<button class="cs-btn" id="sq-btn" onclick="fetchShearQuadrants()" disabled>\u25D1 Shear Quads</button>' +
                     '<button class="cs-btn" id="vol-btn" onclick="fetch3DVolume()" disabled>\uD83D\uDDA5 3D Volume</button>' +
                     '<button class="cs-btn" id="ir-underlay-btn" onclick="toggleIRPlotlyUnderlay()" disabled>\uD83D\uDEF0 IR Off</button>' +
+                    '<button class="cs-btn" id="tdr-toggle-btn" onclick="toggleTDRVisibility()" style="background:rgba(239,68,68,0.12);border-color:rgba(239,68,68,0.35);color:#fca5a5;">\uD83C\uDF00 TDR On</button>' +
                     '<button class="cs-btn" id="btn-archive-fl" onclick="archiveToggleFlightLevel()" style="background:rgba(96,165,250,0.12);border-color:rgba(96,165,250,0.35);color:#93c5fd;">\u2708 FL Off</button>' +
                     '<button class="cs-btn" id="btn-archive-sonde" onclick="archiveToggleDropsondes()" style="background:rgba(52,211,153,0.12);border-color:rgba(52,211,153,0.35);color:#6ee7b7;">\uD83E\uDE82 Sondes Off</button>' +
                 '</div>' +
@@ -2675,6 +2676,7 @@ var _irAnimTimer = null;
 var _irAnimPlaying = false;
 var _irMapVisible = true;
 var _irPlotlyVisible = false;
+var _tdrVisible = true;
 var _irFetching = false;
 var _irBoundsSet = false;
 var _irDecodedImages = [];
@@ -3063,6 +3065,55 @@ function toggleIRPlotlyUnderlay() {
 }
 
 
+
+// ── Toggle TDR contour fill visibility ──
+function toggleTDRVisibility() {
+    _tdrVisible = !_tdrVisible;
+    var plotDiv = document.getElementById('plotly-chart');
+    if (!plotDiv || !plotDiv.data) { _tdrVisible = true; return; }
+
+    // Trace 0 is the TDR heatmap; also hide any contour overlay traces
+    // that belong to the TDR data (but keep sonde, FL, tilt, etc.)
+    var updates = {};
+    var lastPlotData = window._lastPlotlyData;
+    var nBaseTDR = 1; // heatmap is always trace 0
+    if (lastPlotData) {
+        // overlayTraces are contour lines from TDR (contour overlay variable)
+        nBaseTDR = 1 + (lastPlotData.overlayTraces ? lastPlotData.overlayTraces.length : 0) +
+                       (lastPlotData.maxTraces ? lastPlotData.maxTraces.length : 0);
+    }
+
+    for (var i = 0; i < nBaseTDR && i < plotDiv.data.length; i++) {
+        updates['data[' + i + '].visible'] = _tdrVisible;
+    }
+
+    // Also toggle colorbar — hide when TDR hidden
+    if (!_tdrVisible) {
+        updates['data[0].showscale'] = false;
+    } else {
+        updates['data[0].showscale'] = true;
+    }
+
+    Plotly.update('plotly-chart', {}, {});  // force redraw
+    // Use restyle for trace visibility
+    var indices = [];
+    for (var i = 0; i < nBaseTDR && i < plotDiv.data.length; i++) indices.push(i);
+    Plotly.restyle('plotly-chart', { visible: _tdrVisible, showscale: _tdrVisible ? true : undefined }, indices);
+
+    // Also update fullscreen if open
+    var fsdiv = document.getElementById('plotly-fullscreen');
+    if (fsdiv && fsdiv.data) {
+        var fsIndices = [];
+        for (var i = 0; i < nBaseTDR && i < fsdiv.data.length; i++) fsIndices.push(i);
+        Plotly.restyle('plotly-fullscreen', { visible: _tdrVisible, showscale: _tdrVisible ? true : undefined }, fsIndices);
+    }
+
+    var btn = document.getElementById('tdr-toggle-btn');
+    if (btn) {
+        btn.textContent = _tdrVisible ? '\uD83C\uDF00 TDR On' : '\uD83C\uDF00 TDR Off';
+        btn.classList.toggle('active', !_tdrVisible);
+    }
+}
 
 function _hurricaneLoadingHTML(message, compact) {
     var id = 'hurricane-anim-' + Date.now();
@@ -11196,7 +11247,7 @@ function _archiveRenderSondePanel(data) {
         '<th style="text-align:right;padding:2px 4px;">Vmax</th>' +
         '<th style="text-align:right;padding:2px 4px;">Psfc</th>' +
         '<th style="text-align:center;padding:2px 4px;">Sfc</th>' +
-        '<th style="text-align:left;padding:2px 4px;">Skew-T</th>' +
+        '<th style="text-align:left;padding:2px 4px;" colspan="2">Plots</th>' +
         '</tr>';
 
     data.dropsondes.forEach(function(sonde, idx) {
@@ -11236,7 +11287,9 @@ function _archiveRenderSondePanel(data) {
             '<td style="padding:2px 4px;text-align:right;">' + presStr + '</td>' +
             '<td style="padding:2px 4px;text-align:center;">' + (sonde.hit_surface ? '\u2713' : '\u2717') + '</td>' +
             '<td style="padding:2px 4px;"><button class="cs-btn" style="padding:1px 6px;font-size:9px;color:' + color + ';" ' +
-            'onclick="event.stopPropagation();archiveShowSondeSkewT(' + idx + ')">View</button></td>' +
+            'onclick="event.stopPropagation();archiveShowSondeSkewT(' + idx + ')">Skew-T</button></td>' +
+            '<td style="padding:2px 4px;"><button class="cs-btn" style="padding:1px 6px;font-size:9px;color:#22c55e;" ' +
+            'onclick="event.stopPropagation();archiveShowSondeWind(' + idx + ')">Wind</button></td>' +
             '</tr>';
     });
 
@@ -11251,6 +11304,17 @@ function _archiveRenderSondePanel(data) {
         '</div>' +
         '<div id="archive-skewt-chart" style="width:100%;height:460px;"></div>' +
         '<div id="archive-skewt-info" style="padding:4px 8px;"></div>' +
+        '</div>';
+
+    // Wind profile chart container
+    html += '<div id="archive-wind-container" style="display:none;margin-top:8px;">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;padding:2px 6px;">' +
+            '<span id="archive-wind-title" style="color:#e5e7eb;font-size:11px;font-weight:600;"></span>' +
+            '<button onclick="document.getElementById(\'archive-wind-container\').style.display=\'none\'" ' +
+                'class="cs-btn" style="padding:0 6px;font-size:13px;line-height:1;">&times;</button>' +
+        '</div>' +
+        '<div id="archive-wind-chart" style="width:100%;height:420px;"></div>' +
+        '<div id="archive-wind-info" style="padding:4px 8px;"></div>' +
         '</div>';
 
     panel.innerHTML = html;
@@ -11469,6 +11533,216 @@ function _archiveRenderSondeSkewTInfo(profiles, sonde) {
     }
     h += '</div>';
     el.innerHTML = h;
+}
+
+// ── Wind profile plot for archive dropsondes ──
+function archiveShowSondeWind(idx) {
+    if (!_archiveSondeData || !_archiveSondeData.dropsondes[idx]) return;
+
+    var sonde = _archiveSondeData.dropsondes[idx];
+    var p = sonde.profile;
+    var container = document.getElementById('archive-wind-container');
+    if (container) container.style.display = 'block';
+    // Hide Skew-T if open
+    var skContainer = document.getElementById('archive-skewt-container');
+    if (skContainer) skContainer.style.display = 'none';
+
+    var chartDiv = document.getElementById('archive-wind-chart');
+    if (!chartDiv) return;
+
+    if (!p.pres || !p.wspd || p.pres.length < 5) return;
+
+    var color = _archSondeColor(idx);
+
+    // Build filtered arrays for wind speed and direction vs pressure
+    var wspdArr = [], wdirArr = [], presWspd = [], presWdir = [];
+    var uwndArr = [], vwndArr = [], presUV = [];
+    for (var i = 0; i < p.pres.length; i++) {
+        if (p.pres[i] == null) continue;
+        if (p.wspd[i] != null) { wspdArr.push(p.wspd[i]); presWspd.push(p.pres[i]); }
+        if (p.wdir && p.wdir[i] != null) { wdirArr.push(p.wdir[i]); presWdir.push(p.pres[i]); }
+        if (p.uwnd && p.uwnd[i] != null && p.vwnd && p.vwnd[i] != null) {
+            uwndArr.push(p.uwnd[i]); vwndArr.push(p.vwnd[i]); presUV.push(p.pres[i]);
+        }
+    }
+
+    // Compute WL150 and WL500
+    var wl150 = null, wl500 = null, wl150Top = null, wl500Top = null;
+    var sfcAltKm = null;
+    if (p.alt_km && p.alt_km.length > 3) {
+        for (var ai = p.alt_km.length - 1; ai >= 0; ai--) {
+            if (p.alt_km[ai] != null) { sfcAltKm = p.alt_km[ai]; break; }
+        }
+    }
+    // Also find sfc pressure for WL layer annotation
+    var sfcPresWL = null;
+    if (presWspd.length > 0) sfcPresWL = Math.max.apply(null, presWspd);
+
+    if (sfcAltKm != null) {
+        var layers = [
+            { top: 0.15, sum: 0, cnt: 0, topP: null },
+            { top: 0.50, sum: 0, cnt: 0, topP: null },
+        ];
+        for (var li = 0; li < layers.length; li++) {
+            var topKm = sfcAltKm + layers[li].top;
+            for (var wi = 0; wi < p.alt_km.length; wi++) {
+                if (p.alt_km[wi] == null || p.wspd[wi] == null || p.pres[wi] == null) continue;
+                if (p.alt_km[wi] >= sfcAltKm && p.alt_km[wi] <= topKm) {
+                    layers[li].sum += p.wspd[wi];
+                    layers[li].cnt++;
+                }
+                // Find pressure at the top of the layer
+                if (p.alt_km[wi] != null && Math.abs(p.alt_km[wi] - topKm) < 0.02 && layers[li].topP === null) {
+                    layers[li].topP = p.pres[wi];
+                }
+            }
+        }
+        if (layers[0].cnt >= 2) wl150 = layers[0].sum / layers[0].cnt;
+        if (layers[1].cnt >= 2) wl500 = layers[1].sum / layers[1].cnt;
+        wl150Top = layers[0].topP;
+        wl500Top = layers[1].topP;
+    }
+
+    // Pressure range
+    var pMin = Math.min.apply(null, presWspd);
+    var pMax = Math.max.apply(null, presWspd);
+    pMin = Math.max(50, Math.floor(pMin / 50) * 50);
+    pMax = Math.min(1060, Math.ceil(pMax / 50) * 50 + 10);
+
+    var traces = [];
+
+    // Wind speed trace
+    traces.push({
+        x: wspdArr, y: presWspd,
+        type: 'scatter', mode: 'lines',
+        line: { color: '#22c55e', width: 2.5 },
+        name: 'Wind Speed (m/s)',
+        hovertemplate: '%{y:.0f} hPa: %{x:.1f} m/s (%{text} kt)<extra>Wspd</extra>',
+        text: wspdArr.map(function(w) { return (w * 1.944).toFixed(0); }),
+    });
+
+    // U-wind and V-wind components
+    if (uwndArr.length > 10) {
+        traces.push({
+            x: uwndArr, y: presUV,
+            type: 'scatter', mode: 'lines',
+            line: { color: '#f59e0b', width: 1.5, dash: 'dot' },
+            name: 'U-wind (m/s)',
+            hovertemplate: '%{y:.0f} hPa: U = %{x:.1f} m/s<extra></extra>',
+        });
+        traces.push({
+            x: vwndArr, y: presUV,
+            type: 'scatter', mode: 'lines',
+            line: { color: '#8b5cf6', width: 1.5, dash: 'dot' },
+            name: 'V-wind (m/s)',
+            hovertemplate: '%{y:.0f} hPa: V = %{x:.1f} m/s<extra></extra>',
+        });
+    }
+
+    // WL150 and WL500 horizontal annotation lines + shading
+    var shapes = [];
+    var annotations = [];
+
+    if (wl150 != null && sfcPresWL != null) {
+        var p150Top = wl150Top || (sfcPresWL - 15); // rough estimate if no exact pressure
+        shapes.push({
+            type: 'rect', xref: 'paper', yref: 'y',
+            x0: 0, x1: 1, y0: sfcPresWL, y1: p150Top,
+            fillcolor: 'rgba(59,130,246,0.08)', line: { width: 0 },
+        });
+        // WL150 value line
+        shapes.push({
+            type: 'line', xref: 'x', yref: 'y',
+            x0: wl150, x1: wl150, y0: sfcPresWL, y1: p150Top,
+            line: { color: '#3b82f6', width: 2, dash: 'dash' },
+        });
+        annotations.push({
+            x: wl150, y: p150Top, xref: 'x', yref: 'y',
+            text: '<b>WL150</b> ' + wl150.toFixed(1) + ' m/s (' + (wl150 * 1.944).toFixed(0) + ' kt)',
+            showarrow: true, arrowhead: 0, arrowcolor: '#3b82f6', ax: 40, ay: -18,
+            font: { color: '#3b82f6', size: 10 },
+            bgcolor: 'rgba(17,24,39,0.85)', bordercolor: '#3b82f6', borderwidth: 1, borderpad: 2,
+        });
+    }
+
+    if (wl500 != null && sfcPresWL != null) {
+        var p500Top = wl500Top || (sfcPresWL - 55); // rough estimate
+        shapes.push({
+            type: 'rect', xref: 'paper', yref: 'y',
+            x0: 0, x1: 1, y0: sfcPresWL, y1: p500Top,
+            fillcolor: 'rgba(251,191,36,0.06)', line: { width: 0 },
+        });
+        // WL500 value line
+        shapes.push({
+            type: 'line', xref: 'x', yref: 'y',
+            x0: wl500, x1: wl500, y0: sfcPresWL, y1: p500Top,
+            line: { color: '#f59e0b', width: 2, dash: 'dash' },
+        });
+        annotations.push({
+            x: wl500, y: p500Top, xref: 'x', yref: 'y',
+            text: '<b>WL500</b> ' + wl500.toFixed(1) + ' m/s (' + (wl500 * 1.944).toFixed(0) + ' kt)',
+            showarrow: true, arrowhead: 0, arrowcolor: '#f59e0b', ax: 50, ay: -18,
+            font: { color: '#f59e0b', size: 10 },
+            bgcolor: 'rgba(17,24,39,0.85)', bordercolor: '#f59e0b', borderwidth: 1, borderpad: 2,
+        });
+    }
+
+    // Title
+    var tOffStr = sonde.time_offset_min != null ?
+        ' (T' + (sonde.time_offset_min >= 0 ? '+' : '') + sonde.time_offset_min.toFixed(0) + ' min)' : '';
+    var titleEl = document.getElementById('archive-wind-title');
+    if (titleEl) {
+        titleEl.textContent = '\uD83C\uDF2C\uFE0F ' + (sonde.sonde_id || 'Sonde ' + (idx + 1)) +
+            ' \u2014 ' + sonde.launch_time + tOffStr +
+            (sonde.hit_surface ? ' \u2713 Sfc' : ' \u2717 No sfc');
+    }
+
+    var layout = {
+        paper_bgcolor: '#111827',
+        plot_bgcolor: '#111827',
+        xaxis: {
+            title: { text: 'Wind Speed (m/s)', font: { color: '#22c55e', size: 12 } },
+            tickfont: { color: '#aaa', size: 10 },
+            gridcolor: 'rgba(255,255,255,0.08)',
+            zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)',
+        },
+        yaxis: {
+            title: { text: 'Pressure (hPa)', font: { color: '#aaa', size: 12 } },
+            tickfont: { color: '#aaa', size: 10 },
+            gridcolor: 'rgba(255,255,255,0.08)',
+            autorange: 'reversed',
+            type: 'log',
+            range: [Math.log10(pMax), Math.log10(pMin)],
+            dtick: 'D1',
+        },
+        margin: { l: 55, r: 15, t: 10, b: 45 },
+        legend: { x: 0.01, y: 0.01, bgcolor: 'rgba(17,24,39,0.85)', font: { color: '#d1d5db', size: 10 },
+                  xanchor: 'left', yanchor: 'bottom' },
+        showlegend: true,
+        shapes: shapes,
+        annotations: annotations,
+        hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 11 } },
+    };
+
+    Plotly.newPlot(chartDiv, traces, layout, { responsive: true, displayModeBar: false });
+
+    // Info line
+    var infoEl = document.getElementById('archive-wind-info');
+    if (infoEl) {
+        var items = [];
+        var maxW = null;
+        for (var i = 0; i < wspdArr.length; i++) {
+            if (maxW === null || wspdArr[i] > maxW) maxW = wspdArr[i];
+        }
+        if (maxW != null) items.push('Vmax: ' + maxW.toFixed(1) + ' m/s (' + (maxW * 1.944).toFixed(0) + ' kt)');
+        if (wl150 != null) items.push('WL150: ' + wl150.toFixed(1) + ' m/s (' + (wl150 * 1.944).toFixed(0) + ' kt)');
+        if (wl500 != null) items.push('WL500: ' + wl500.toFixed(1) + ' m/s (' + (wl500 * 1.944).toFixed(0) + ' kt)');
+        items.push('Aircraft: ' + (sonde.aircraft || '\u2014'));
+        infoEl.innerHTML = '<div style="font-size:10px;color:#94a3b8;">' + items.join(' &middot; ') + '</div>';
+    }
+
+    // Scroll into view
+    if (container) container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 // Clear sonde state when case changes (called from openSidePanel)
