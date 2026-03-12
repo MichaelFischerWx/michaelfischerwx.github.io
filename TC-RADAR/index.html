@@ -189,6 +189,19 @@
                             <div id="rt-cs-result"></div>
                             <div id="rt-cs-status" class="cs-status"></div>
                             <div id="rt-az-result"></div>
+                            <!-- Dropsonde Table + Wind Profile (shown when sondes loaded) -->
+                            <div id="rt-sonde-table-panel" style="display:none;"></div>
+                            <div id="rt-sonde-wind-panel" style="display:none;">
+                                <div style="display:flex;align-items:flex-start;justify-content:space-between;padding:2px 6px;">
+                                    <div id="rt-wind-title" style="color:#e5e7eb;font-size:11px;font-weight:600;flex:1;min-width:0;"></div>
+                                    <div style="display:flex;align-items:center;flex-shrink:0;margin-left:4px;">
+                                        <button onclick="rtSavePlotPNG('rt-sonde-wind','WindProfile')" title="Save as PNG" class="rt-save-png-btn" style="margin-right:4px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
+                                        <button onclick="document.getElementById('rt-sonde-wind-panel').style.display='none'" class="cs-btn" style="padding:0 6px;font-size:13px;line-height:1;">&times;</button>
+                                    </div>
+                                </div>
+                                <div id="rt-sonde-wind" style="width:100%;height:420px;"></div>
+                                <div id="rt-sonde-wind-info" style="padding:4px 8px;"></div>
+                            </div>
                             <!-- Dropsonde Skew-T panel (shown on sonde click) -->
                             <div id="rt-sonde-skewt-panel" style="display:none;">
                                 <div style="display:flex; align-items:center; padding:6px 12px; background:rgba(168,85,247,0.08); border-top:1px solid rgba(168,85,247,0.2);">
