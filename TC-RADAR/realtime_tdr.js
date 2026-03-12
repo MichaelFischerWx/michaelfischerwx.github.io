@@ -1900,8 +1900,11 @@
             }
             traces.push({
                 x: [sonde.surface.x_km], y: [sonde.surface.y_km],
-                type: 'scatter', mode: 'markers',
+                type: 'scatter', mode: 'markers+text',
                 marker: { symbol: 'diamond', size: isBold ? 11 : 8, color: color },
+                text: [String(idx + 1)],
+                textposition: 'top right',
+                textfont: { color: color, size: isBold ? 12 : 10, family: 'monospace' },
                 hoverinfo: 'text',
                 hovertext: ['<b>\uD83E\uDE82 ' + sondeLabel + ' \u2014 SURFACE</b>' +
                     '<br>Alt: ' + sfcAlt +
@@ -2765,12 +2768,12 @@
             optionsHtml += '<option value="' + i + '">' + label + '</option>';
         }
 
-        // Main dropdown (below action buttons)
+        // Main dropdown (below action buttons) — keep hidden since we have the table
         var sel = document.getElementById('rt-sonde-select');
         if (sel) {
             sel.innerHTML = optionsHtml;
             sel.disabled = false;
-            sel.style.display = '';
+            // sel.style.display = '';  // hidden — table replaces this
         }
 
         // Skew-T panel dropdown (for quick switching)
