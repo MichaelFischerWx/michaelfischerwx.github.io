@@ -11864,6 +11864,29 @@ function archiveShowSondeWind(idx) {
             ' \u2014 ' + sonde.launch_time + tOffStr + '</span>' + sfcTag;
     }
 
+    // Build info strings for on-plot annotations (visible in saved PNG)
+    var maxW = null;
+    for (var wi2 = 0; wi2 < wspdArr.length; wi2++) {
+        if (maxW === null || wspdArr[wi2] > maxW) maxW = wspdArr[wi2];
+    }
+    var plotSplashSrc = 'none';
+    if (sonde.splash_pr != null && sonde.splash_pr > 0) plotSplashSrc = 'splash';
+    else if (sonde.hyd_sfcp != null && sonde.hyd_sfcp > 0) plotSplashSrc = 'hyd';
+    else plotSplashSrc = 'est';
+    var plotSplashTag = plotSplashSrc === 'splash' ? ' (GPS)' : plotSplashSrc === 'hyd' ? ' (hyd)' : ' (est)';
+
+    var plotTitleLine = (stormLabel || 'Unknown') +
+        (missionLabel ? ' (' + missionLabel + ')' : '') +
+        ' | ' + (sonde.sonde_id || '?') +
+        ' | ' + sonde.launch_time + tOffStr;
+
+    var plotInfoParts = [];
+    if (maxW != null) plotInfoParts.push('Vmax: ' + maxW.toFixed(1) + ' m/s (' + (maxW * 1.944).toFixed(0) + ' kt)');
+    if (wl150 != null) plotInfoParts.push('WL150: ' + wl150.toFixed(1) + ' m/s (' + (wl150 * 1.944).toFixed(0) + ' kt)');
+    if (wl500 != null) plotInfoParts.push('WL500: ' + wl500.toFixed(1) + ' m/s (' + (wl500 * 1.944).toFixed(0) + ' kt)');
+    plotInfoParts.push('Psfc: ' + (sfcPresWL ? sfcPresWL.toFixed(0) : '?') + ' hPa' + plotSplashTag);
+    if (sonde.aircraft) plotInfoParts.push('Aircraft: ' + sonde.aircraft);
+
     // Build right-side altitude tick labels at standard pressure levels
     var altTickVals = [], altTickText = [];
     var stdLevels = [1000, 925, 850, 700, 500, 400, 300, 200, 150, 100];
@@ -11916,7 +11939,7 @@ function archiveShowSondeWind(idx) {
             ticktext: altTickText,
             showgrid: false,
         },
-        margin: { l: 55, r: 55, t: 30, b: 45 },
+        margin: { l: 55, r: 55, t: 42, b: 58 },
         legend: { x: 0.01, y: 0.01, bgcolor: 'rgba(17,24,39,0.85)', font: { color: '#d1d5db', size: 10 },
                   xanchor: 'left', yanchor: 'bottom' },
         showlegend: true,
@@ -11924,6 +11947,24 @@ function archiveShowSondeWind(idx) {
         annotations: annotations,
         hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 11 } },
     };
+
+    // Add on-plot title and info annotations (visible in saved PNG)
+    layout.annotations.push({
+        text: plotTitleLine,
+        xref: 'paper', yref: 'paper',
+        x: 0.5, y: 1.07,
+        showarrow: false,
+        font: { color: '#e5e7eb', size: 11 },
+        xanchor: 'center',
+    });
+    layout.annotations.push({
+        text: plotInfoParts.join(' \u00b7 '),
+        xref: 'paper', yref: 'paper',
+        x: 0.5, y: -0.1,
+        showarrow: false,
+        font: { color: '#94a3b8', size: 9.5 },
+        xanchor: 'center', yanchor: 'top',
+    });
 
     Plotly.newPlot(chartDiv, traces, layout, { responsive: true, displayModeBar: false });
 
