@@ -2708,7 +2708,7 @@
                 tickvals: altTickVals, ticktext: altTickText,
                 showgrid: false,
             },
-            margin: { l: 55, r: 55, t: 42, b: 58 },
+            margin: { l: 55, r: 55, t: 70, b: 72 },
             legend: { x: 0.01, y: 0.01, bgcolor: 'rgba(17,24,39,0.85)', font: { color: '#d1d5db', size: 10 },
                       xanchor: 'left', yanchor: 'bottom' },
             showlegend: true,
@@ -2718,14 +2718,15 @@
         };
 
         // On-plot title and info annotations (visible in saved PNG)
+        // Position title above the top x-axis (temperature) so they don't overlap
         layout.annotations.push({
             text: plotTitleLine,
-            xref: 'paper', yref: 'paper', x: 0.5, y: 1.07,
+            xref: 'paper', yref: 'paper', x: 0.5, y: 1.14,
             showarrow: false, font: { color: '#e5e7eb', size: 11 }, xanchor: 'center',
         });
         layout.annotations.push({
             text: plotInfoParts.join(' \u00b7 '),
-            xref: 'paper', yref: 'paper', x: 0.5, y: -0.1,
+            xref: 'paper', yref: 'paper', x: 0.5, y: -0.14,
             showarrow: false, font: { color: '#94a3b8', size: 9.5 }, xanchor: 'center', yanchor: 'top',
         });
 
