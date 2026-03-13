@@ -1532,6 +1532,41 @@ footer a:hover { text-decoration: underline; }
 }
 
 /* Responsive: hide toggle text on small screens */
+/* ── Storm intensity timeline + Hovmöller panels ── */
+.storm-timeline-panel {
+    margin-top: 8px;
+    background: rgba(10, 22, 40, 0.6);
+    border: 1px solid rgba(0, 212, 255, 0.12);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.storm-timeline-panel .fl-ts-header {
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    background: rgba(0, 212, 255, 0.06);
+    border-bottom: 1px solid rgba(0, 212, 255, 0.12);
+    gap: 6px;
+}
+.storm-timeline-panel .fl-ts-title {
+    color: #67e8f9;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.storm-timeline-panel .fl-ts-close {
+    background: none;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    padding: 0 4px;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+.storm-timeline-panel .fl-ts-close:hover { color: #fff; }
+
 @media (max-width: 900px) {
     .archive-view-btn {
         padding: 4px 8px;
