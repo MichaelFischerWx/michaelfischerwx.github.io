@@ -704,6 +704,14 @@ function applyFilters() {
     };
     if (comparators[sortBy]) filteredStorms.sort(comparators[sortBy]);
 
+    // Clear the previously selected individual storm track and card
+    if (trackLayer) trackLayer.clearLayers();
+    if (selectedStorm) {
+        selectedStorm = null;
+        var card = document.getElementById('storm-card');
+        if (card) card.style.display = 'none';
+    }
+
     if (mapViewMode === 'tracks') {
         renderTracks(filteredStorms);
     } else {
