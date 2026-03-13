@@ -305,26 +305,59 @@ function openSidePanel(caseData, fromQuickSelect) {
                     '<div class="sq-result" id="sq-result"></div>' +
                     '<div class="cs-status" id="cs-status"></div>' +
                 '</div>' +
-                '<div class="display-actions">' +
-                    '<button class="cs-btn" id="cs-btn" onclick="toggleCrossSection()" disabled>\u2702 Cross Section</button>' +
-                    '<button class="cs-btn" id="az-btn" onclick="fetchAzimuthalMean()" disabled>\u27F3 Azim. Mean</button>' +
-                    '<button class="cs-btn" id="sq-btn" onclick="fetchShearQuadrants()" disabled>\u25D1 Shear Quads</button>' +
-                    '<button class="cs-btn" id="vol-btn" onclick="fetch3DVolume()" disabled>\uD83D\uDDA5 3D Volume</button>' +
-                    '<button class="cs-btn" id="ir-underlay-btn" onclick="toggleIRPlotlyUnderlay()" disabled>\uD83D\uDEF0 IR Off</button>' +
-                    '<button class="cs-btn" id="tdr-toggle-btn" onclick="toggleTDRVisibility()" style="background:rgba(239,68,68,0.12);border-color:rgba(239,68,68,0.35);color:#fca5a5;">\uD83C\uDF00 TDR On</button>' +
-                    '<button class="cs-btn" id="btn-archive-fl" onclick="archiveToggleFlightLevel()" style="background:rgba(96,165,250,0.12);border-color:rgba(96,165,250,0.35);color:#93c5fd;">\u2708 FL Off</button>' +
-                    '<button class="cs-btn" id="btn-archive-sonde" onclick="archiveToggleDropsondes()" style="background:rgba(52,211,153,0.12);border-color:rgba(52,211,153,0.35);color:#6ee7b7;">\uD83E\uDE82 Sondes Off</button>' +
+                // ── OVERLAYS: compact pill toggle strip ──
+                '<div class="overlay-strip">' +
+                    '<span class="overlay-strip-label">Layers</span>' +
+                    '<button class="overlay-pill" id="ir-underlay-btn" onclick="toggleIRPlotlyUnderlay()" disabled data-color="cyan" title="IR Satellite Underlay">\uD83D\uDEF0 IR</button>' +
+                    '<button class="overlay-pill active" id="tdr-toggle-btn" onclick="toggleTDRVisibility()" data-color="red" title="TDR Radar Visibility">\uD83C\uDF00 TDR</button>' +
+                    '<button class="overlay-pill" id="btn-archive-fl" onclick="archiveToggleFlightLevel()" data-color="blue" title="Flight-Level Data">\u2708 FL</button>' +
+                    '<button class="overlay-pill" id="btn-archive-sonde" onclick="archiveToggleDropsondes()" data-color="green" title="Dropsonde Data">\uD83E\uDE82 Sondes</button>' +
+                    '<button class="overlay-pill" id="barb-btn" onclick="toggleWindBarbs()" disabled data-color="slate" title="Wind Barbs">\uD83C\uDF2C Barbs</button>' +
+                    '<button class="overlay-pill" id="tilt-btn" onclick="toggleTiltProfile()" data-color="pink" title="Vortex Tilt Profile">\uD83C\uDFAF Tilt</button>' +
+                    '<button class="overlay-pill" id="env-case-btn" onclick="toggleEnvOverlay()" data-color="emerald" title="ERA5 Environment Diagnostics">\uD83C\uDF0D Env</button>' +
                 '</div>' +
                 '<div class="fl-archive-status" id="fl-archive-status" style="display:none;font-size:10px;color:#fbbf24;padding:2px 8px;"></div>' +
-                '<div class="display-actions" style="margin-top:4px;">' +
-                    '<button class="cs-btn" id="hybrid-az-btn" onclick="fetchHybridAzimuthalMean()" disabled style="background:rgba(168,85,247,0.12);border-color:rgba(168,85,247,0.35);color:#c4b5fd;">R\u2095 Hybrid</button>' +
-                    '<button class="cs-btn" id="anomaly-az-btn" onclick="fetchAnomalyAzimuthalMean()" disabled style="background:rgba(239,68,68,0.12);border-color:rgba(239,68,68,0.35);color:#fca5a5;">Z* Anomaly</button>' +
-                    '<button class="cs-btn" id="vp-scatter-btn" onclick="fetchVPScatter()" style="background:rgba(251,191,36,0.12);border-color:rgba(251,191,36,0.35);color:#fde68a;">\u2B24 VP Scatter</button>' +
-                    '<button class="cs-btn" id="barb-btn" onclick="toggleWindBarbs()" disabled>\uD83C\uDF2C\uFE0F Barbs Off</button>' +
-                    '<button class="cs-btn" id="tilt-btn" onclick="toggleTiltProfile()">\uD83C\uDFAF Tilt Off</button>' +
+                // ── ANALYSIS: primary action buttons ──
+                '<div class="action-section">' +
+                    '<span class="action-section-label">Analysis</span>' +
+                    '<div class="display-actions">' +
+                        '<button class="cs-btn" id="cs-btn" onclick="toggleCrossSection()" disabled>\u2702 Cross Section</button>' +
+                        '<button class="cs-btn" id="az-btn" onclick="dispatchAzimuthalMean()" disabled>\u27F3 Azim. Mean</button>' +
+                        '<button class="cs-btn" id="sq-btn" onclick="fetchShearQuadrants()" disabled>\u25D1 Shear Quads</button>' +
+                        '<button class="cs-btn" id="vol-btn" onclick="fetch3DVolume()" disabled>\uD83D\uDDA5 3D Volume</button>' +
+                        '<button class="cs-btn" id="vp-scatter-btn" onclick="fetchVPScatter()" style="background:rgba(251,191,36,0.12);border-color:rgba(251,191,36,0.35);color:#fde68a;">\u2B24 VP Scatter</button>' +
+                    '</div>' +
                 '</div>' +
-                '<div class="display-actions" style="margin-top:4px;">' +
-                    '<button class="cs-btn env-case-btn" id="env-case-btn" onclick="toggleEnvOverlay()" style="background:rgba(0,180,100,0.12);border-color:rgba(0,180,100,0.35);color:#6ee7b7;flex:1;">\uD83C\uDF0D Environment Diagnostics</button>' +
+                // ── STORM EVOLUTION: temporal context ──
+                '<div class="action-section">' +
+                    '<span class="action-section-label">Storm Evolution</span>' +
+                    '<div class="display-actions">' +
+                        '<button class="cs-btn" id="storm-timeline-btn" onclick="toggleStormTimeline()" style="background:rgba(0,212,255,0.12);border-color:rgba(0,212,255,0.35);color:#67e8f9;">\uD83D\uDCCA Intensity</button>' +
+                        '<button class="cs-btn" id="hovmoller-btn" onclick="toggleHovmoller()" style="background:rgba(251,146,60,0.12);border-color:rgba(251,146,60,0.35);color:#fdba74;">\u2630 Hovm\u00f6ller</button>' +
+                    '</div>' +
+                '</div>' +
+                // ── Storm intensity timeline (hidden by default) ──
+                '<div id="storm-timeline-panel" class="storm-timeline-panel" style="display:none;">' +
+                    '<div class="fl-ts-header">' +
+                        '<span class="fl-ts-title">\uD83C\uDF00 Best-Track Intensity</span>' +
+                        '<div style="display:flex;align-items:center;gap:4px;">' +
+                            '<button class="cs-btn" id="fdeck-archive-btn" onclick="toggleArchiveFDeck()" style="font-size:9px;padding:3px 8px;margin:0;min-width:0;flex:none;background:rgba(255,159,67,0.12);border-color:rgba(255,159,67,0.35);color:#ff9f43;">F-Deck</button>' +
+                            '<span id="fdeck-archive-status" style="font-size:9px;color:#64748b;"></span>' +
+                        '</div>' +
+                        '<button onclick="archiveSavePlotPNG(\'storm-timeline-chart\',\'StormTimeline\')" class="rt-save-png-btn" style="margin-left:4px;" title="Save as PNG"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></button>' +
+                        '<button onclick="closeStormTimeline()" class="fl-ts-close" title="Close">&times;</button>' +
+                    '</div>' +
+                    '<div id="storm-timeline-chart" style="width:100%;height:280px;"></div>' +
+                '</div>' +
+                // ── Hovmöller panel (hidden by default) ──
+                '<div id="hovmoller-panel" class="storm-timeline-panel" style="display:none;">' +
+                    '<div class="fl-ts-header">' +
+                        '<span class="fl-ts-title">\u2630 Hovm\u00f6ller (Time \u00d7 Radius)</span>' +
+                        '<button onclick="archiveSavePlotPNG(\'hovmoller-chart\',\'Hovmoller\')" class="rt-save-png-btn" style="margin-left:auto;" title="Save as PNG"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></button>' +
+                        '<button onclick="closeHovmoller()" class="fl-ts-close" title="Close">&times;</button>' +
+                    '</div>' +
+                    '<div id="hovmoller-status" style="font-size:10px;color:#64748b;padding:2px 8px;"></div>' +
+                    '<div id="hovmoller-chart" style="width:100%;height:340px;"></div>' +
                 '</div>' +
                 // ── Pre-rendered FL time-series panel (hidden by default) ──
                 '<div id="fl-archive-ts" class="fl-archive-ts" style="display:none;">' +
@@ -441,12 +474,19 @@ function openSidePanel(caseData, fromQuickSelect) {
                         '<span class="anim-speed" id="anim-speed-label">0.8s / level</span>' +
                     '</div>' +
                 '</div>' +
-                '<button class="generate-btn" id="ep-btn" onclick="generateCustomPlot()">Generate Plot</button>' +
+                '<button class="generate-btn" id="ep-btn" onclick="generateCustomPlot()">Generate Plan View</button>' +
                 '<div class="explorer-row" id="az-controls" style="margin-top:6px;"><label>Min. Coverage Threshold</label>' +
                     '<div style="display:flex;align-items:center;gap:6px;">' +
                         '<input type="range" id="az-coverage" min="0" max="100" step="5" value="50" class="az-cov-slider" oninput="document.getElementById(\'az-cov-val\').textContent = this.value+\'%\'">' +
                         '<span style="font-size:11px;font-weight:600;color:var(--cyan);min-width:32px;font-family:\'JetBrains Mono\',monospace;" id="az-cov-val">50%</span>' +
                     '</div>' +
+                '</div>' +
+                '<div class="explorer-row" style="margin-top:6px;"><label>Azim. Mean Coordinate</label>' +
+                    '<select class="explorer-select" id="az-coord-mode" style="font-size:11px;">' +
+                        '<option value="standard">Standard (km)</option>' +
+                        '<option value="hybrid">R\u2095 Hybrid (Fischer et al. 2025)</option>' +
+                        '<option value="anomaly">Z* Anomaly (Fischer et al. 2025)</option>' +
+                    '</select>' +
                 '</div>' +
             '</div>' +
         '</div>';
@@ -759,10 +799,9 @@ function toggleERA5PlotlyUnderlay() {
 }
 
 function _updateERA5Buttons() {
-    var btn = document.getElementById('era5-underlay-btn');
+    var btn = document.getElementById('env-case-btn');
     if (btn) {
         btn.classList.toggle('active', _era5PlotlyVisible);
-        btn.textContent = _era5PlotlyVisible ? '\uD83C\uDF0D ' + (_era5Data ? _era5Data.field_config.display_name.split('(')[0].trim() : 'Env') : '\uD83C\uDF0D Env Off';
     }
 }
 
@@ -770,7 +809,7 @@ function _updateERA5Buttons() {
 function showERA5FieldMenu() {
     var existing = document.getElementById('era5-field-menu');
     if (existing) { existing.remove(); return; }
-    var btn = document.getElementById('era5-underlay-btn');
+    var btn = document.getElementById('env-case-btn');
     if (!btn) return;
     var menu = document.createElement('div');
     menu.id = 'era5-field-menu';
@@ -1143,17 +1182,7 @@ function toggleWindBarbs() {
     _windBarbsEnabled = !_windBarbsEnabled;
     var btn = document.getElementById('barb-btn');
     if (btn) {
-        btn.textContent = _windBarbsEnabled ? '\uD83C\uDF2C\uFE0F Barbs On' : '\uD83C\uDF2C\uFE0F Barbs Off';
         btn.classList.toggle('active', _windBarbsEnabled);
-        if (_windBarbsEnabled) {
-            btn.style.background = 'rgba(96,165,250,0.18)';
-            btn.style.borderColor = 'rgba(96,165,250,0.45)';
-            btn.style.color = '#93c5fd';
-        } else {
-            btn.style.background = '';
-            btn.style.borderColor = '';
-            btn.style.color = '';
-        }
     }
     // Re-generate current plot with or without barbs
     if (currentCaseIndex !== null) {
@@ -1168,15 +1197,10 @@ function toggleTiltProfile() {
     _tiltProfileEnabled = !_tiltProfileEnabled;
     var btn = document.getElementById('tilt-btn');
     if (btn) {
-        btn.textContent = _tiltProfileEnabled ? '\uD83C\uDFAF Tilt On' : '\uD83C\uDFAF Tilt Off';
         btn.classList.toggle('active', _tiltProfileEnabled);
         if (_tiltProfileEnabled) {
-            btn.style.background = 'rgba(251,191,36,0.18)';
-            btn.style.borderColor = 'rgba(251,191,36,0.45)';
-            btn.style.color = '#fde68a';
+            // keep for backward compat — no-op since pills handle via CSS
         } else {
-            btn.style.background = '';
-            btn.style.borderColor = '';
             btn.style.color = '';
         }
     }
@@ -3084,7 +3108,6 @@ function toggleIRPlotlyUnderlay() {
     var btn = document.getElementById('ir-underlay-btn');
     if (btn) {
         btn.classList.toggle('active', _irPlotlyVisible);
-        btn.textContent = _irPlotlyVisible ? '\uD83D\uDEF0 IR On' : '\uD83D\uDEF0 IR Off';
     }
 }
 
@@ -3134,8 +3157,7 @@ function toggleTDRVisibility() {
 
     var btn = document.getElementById('tdr-toggle-btn');
     if (btn) {
-        btn.textContent = _tdrVisible ? '\uD83C\uDF00 TDR On' : '\uD83C\uDF00 TDR Off';
-        btn.classList.toggle('active', !_tdrVisible);
+        btn.classList.toggle('active', _tdrVisible);
     }
 }
 
@@ -3375,9 +3397,8 @@ function generateCustomPlot(callback) {
         barbBtn.disabled = !_BARB_ELIGIBLE_VARS[variable];
         if (!_BARB_ELIGIBLE_VARS[variable] && _windBarbsEnabled) {
             _windBarbsEnabled = false;
-            barbBtn.textContent = '\uD83C\uDF2C\uFE0F Barbs Off';
+            barbBtn.textContent = '\uD83C\uDF2C Barbs';
             barbBtn.classList.remove('active');
-            barbBtn.style.background = ''; barbBtn.style.borderColor = ''; barbBtn.style.color = '';
         }
     }
     var wantBarbs = _windBarbsEnabled && _BARB_ELIGIBLE_VARS[variable];
@@ -3385,7 +3406,7 @@ function generateCustomPlot(callback) {
     var cacheKey = _activeDataType + '_' + currentCaseIndex + '_' + variable + '_' + level_km + '_' + overlay + (wantBarbs ? '_barbs' : '') + (wantTilt ? '_tilt' : '');
     if (_dataCache[cacheKey]) {
         renderPlotFromJSON(_dataCache[cacheKey], resultDiv);
-        btn.disabled = false; btn.textContent = 'Generate Plot';
+        btn.disabled = false; btn.textContent = 'Generate Plan View';
         if (callback) callback(); return;
     }
     var controller = new AbortController();
@@ -3401,7 +3422,7 @@ function generateCustomPlot(callback) {
             var msg = err.name === 'AbortError' ? '\u26A0\uFE0F Request timed out (90s). The API may be cold-starting \u2014 try again in a minute.' : '\u26A0\uFE0F ' + err.message;
             resultDiv.innerHTML = '<div class="explorer-status error">' + msg + '</div>'; animStop();
         })
-        .finally(function() { clearTimeout(timeout); btn.disabled = false; btn.textContent = 'Generate Plot'; });
+        .finally(function() { clearTimeout(timeout); btn.disabled = false; btn.textContent = 'Generate Plan View'; });
 }
 
 // ── Contour overlay helper ────────────────────────────────────
@@ -3849,8 +3870,7 @@ function renderPlotFromJSON(json, resultDiv) {
     var azBtn = document.getElementById('az-btn'); if (azBtn) azBtn.disabled = false;
     var sqBtn = document.getElementById('sq-btn'); if (sqBtn) sqBtn.disabled = false;
     var volBtn = document.getElementById('vol-btn'); if (volBtn) volBtn.disabled = false;
-    var hybBtn = document.getElementById('hybrid-az-btn'); if (hybBtn) hybBtn.disabled = false;
-    var anomBtn = document.getElementById('anomaly-az-btn'); if (anomBtn) anomBtn.disabled = false;
+    // (Rh Hybrid and Z* Anomaly are now in the az-coord-mode dropdown)
     document.getElementById('plotly-chart').on('plotly_click', handlePlotClick);
 
     // Auto-scroll the side panel to show the plot (skip during animation)
@@ -3957,7 +3977,19 @@ function renderCrossSectionInto(targetId, json, fullsize) {
     Plotly.newPlot(targetId, [heatmap].concat(csOverlayTraces).concat(csMaxTraces), layout, { responsive: true, displayModeBar: fullsize, displaylogo: false, modeBarButtonsToRemove: ['lasso2d','select2d','toggleSpikelines'] });
 }
 
-// ── Azimuthal Mean ─────────────────────────────────────────────
+// ── Azimuthal Mean (dispatcher for coordinate mode selector) ──
+// Routes to the correct fetch function based on the az-coord-mode dropdown
+function dispatchAzimuthalMean() {
+    var mode = (document.getElementById('az-coord-mode') || {}).value || 'standard';
+    if (mode === 'hybrid') {
+        fetchHybridAzimuthalMean();
+    } else if (mode === 'anomaly') {
+        fetchAnomalyAzimuthalMean();
+    } else {
+        fetchAzimuthalMean();
+    }
+}
+
 var _lastAzJson = null;
 
 function fetchAzimuthalMean() {
@@ -3991,9 +4023,9 @@ function fetchHybridAzimuthalMean() {
     var overlay = (document.getElementById('ep-overlay') || {}).value || '';
     var covSlider = document.getElementById('az-coverage');
     var coverage = covSlider ? (parseInt(covSlider.value) / 100) : 0.5;
-    var resultDiv = document.getElementById('az-result'), btn = document.getElementById('hybrid-az-btn');
+    var resultDiv = document.getElementById('az-result'), btn = document.getElementById('az-btn');
     resultDiv.innerHTML = _hurricaneLoadingHTML('Computing hybrid R\u2095 azimuthal mean\u2026', true);
-    btn.disabled = true; btn.textContent = '\u27F3 Computing\u2026';
+    if (btn) { btn.disabled = true; btn.textContent = '\u27F3 Computing\u2026'; }
     var url = API_BASE + '/hybrid/azimuthal_mean?case_index=' + currentCaseIndex +
               '&variable=' + variable + '&data_type=' + _activeDataType +
               '&coverage_min=' + coverage;
@@ -4004,7 +4036,7 @@ function fetchHybridAzimuthalMean() {
         .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
         .then(function(json) { _lastHybridAzJson = json; _lastAzJson = null; _lastAnomalyAzJson = null; _lastVPScatterJson = null; renderHybridAzimuthalMeanInto('az-result', json, false); openPlotModal(); })
         .catch(function(err) { resultDiv.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + (err.name === 'AbortError' ? 'Request timed out (90s).' : err.message) + '</div>'; })
-        .finally(function() { clearTimeout(timeout); btn.disabled = false; btn.textContent = 'R\u2095 Hybrid'; });
+        .finally(function() { clearTimeout(timeout); if (btn) { btn.disabled = false; btn.textContent = '\u27F3 Azim. Mean'; } });
 }
 
 
@@ -4015,9 +4047,9 @@ var _lastAnomalyAzJson = null;
 function fetchAnomalyAzimuthalMean() {
     if (currentCaseIndex === null) return;
     var variable = document.getElementById('ep-var').value;
-    var resultDiv = document.getElementById('az-result'), btn = document.getElementById('anomaly-az-btn');
+    var resultDiv = document.getElementById('az-result'), btn = document.getElementById('az-btn');
     resultDiv.innerHTML = _hurricaneLoadingHTML('Computing Z-score anomaly\u2026', true);
-    btn.disabled = true; btn.textContent = '\u27F3 Computing\u2026';
+    if (btn) { btn.disabled = true; btn.textContent = '\u27F3 Computing\u2026'; }
     var url = API_BASE + '/anomaly/azimuthal_mean?case_index=' + currentCaseIndex +
               '&variable=' + variable + '&data_type=' + _activeDataType;
     var controller = new AbortController();
@@ -4026,7 +4058,7 @@ function fetchAnomalyAzimuthalMean() {
         .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
         .then(function(json) { _lastAnomalyAzJson = json; _lastAzJson = null; _lastHybridAzJson = null; _lastVPScatterJson = null; renderAnomalyAzimuthalMeanInto('az-result', json, false); openPlotModal(); })
         .catch(function(err) { resultDiv.innerHTML = '<div class="explorer-status error">\u26A0\uFE0F ' + (err.name === 'AbortError' ? 'Request timed out (90s).' : err.message) + '</div>'; })
-        .finally(function() { clearTimeout(timeout); btn.disabled = false; btn.textContent = 'Z* Anomaly'; });
+        .finally(function() { clearTimeout(timeout); if (btn) { btn.disabled = false; btn.textContent = '\u27F3 Azim. Mean'; } });
 }
 
 
@@ -5112,6 +5144,512 @@ _injectDataTypeToggle();
 var _mapViewMode = 'tracks';    // 'cluster' or 'tracks'
 var _trackViewLayer = null;     // L.layerGroup for track polylines + markers
 var _trackCanvasRenderer = null;
+// ── Storm Intensity Timeline (in main archive side panel) ─────────────
+var _stormTimelineVisible = false;
+var _stormTimelineBaseShapes = [];
+var _archFdeckLoaded = false;
+var _archFdeckVisible = false;
+var _archFdeckData = null;
+var _archFdeckTraceCount = 0;
+
+// Saffir-Simpson intensity color for a given wind speed (kt)
+function _getSSColor(w) {
+    if (w == null) return '#64748b';
+    if (w >= 137) return '#dc2626';
+    if (w >= 113) return '#ef4444';
+    if (w >= 96)  return '#f87171';
+    if (w >= 83)  return '#fb923c';
+    if (w >= 64)  return '#fbbf24';
+    if (w >= 34)  return '#34d399';
+    return '#60a5fa';
+}
+
+function toggleStormTimeline() {
+    var panel = document.getElementById('storm-timeline-panel');
+    var btn = document.getElementById('storm-timeline-btn');
+    if (!panel || !btn) return;
+
+    _stormTimelineVisible = !_stormTimelineVisible;
+    if (_stormTimelineVisible) {
+        panel.style.display = '';
+        btn.classList.add('active');
+        _loadAndRenderStormTimeline();
+    } else {
+        panel.style.display = 'none';
+        btn.classList.remove('active');
+    }
+}
+
+function closeStormTimeline() {
+    _stormTimelineVisible = false;
+    var panel = document.getElementById('storm-timeline-panel');
+    var btn = document.getElementById('storm-timeline-btn');
+    if (panel) panel.style.display = 'none';
+    if (btn) btn.classList.remove('active');
+}
+
+function _loadAndRenderStormTimeline() {
+    if (!currentCaseData) return;
+    var stormName = currentCaseData.storm_name;
+    var year = currentCaseData.year;
+    var key = stormName + '|' + year;
+
+    // Ensure IBTrACS is loaded (already loaded if Tracks view was activated)
+    function doRender() {
+        var sid = _tdrToSID[key];
+        if (!sid || !_allTracks[sid]) {
+            document.getElementById('storm-timeline-chart').innerHTML =
+                '<div style="padding:20px;color:#64748b;text-align:center;font-size:11px;">No IBTrACS track found for ' + stormName + ' (' + year + ')</div>';
+            return;
+        }
+        var track = _allTracks[sid];
+        var storm = _ibtStormsBySID[sid];
+        _renderArchiveIntensityTimeline(track, storm);
+    }
+
+    if (_tracksLoaded) {
+        doRender();
+    } else {
+        document.getElementById('storm-timeline-chart').innerHTML =
+            '<div style="padding:20px;color:#60a5fa;text-align:center;font-size:11px;">Loading IBTrACS data...</div>';
+        _loadIBTrACSData(doRender);
+    }
+}
+
+function _renderArchiveIntensityTimeline(track, storm) {
+    var times = [], winds = [], pres = [], colors = [];
+    track.forEach(function(pt) {
+        if (!pt.t) return;
+        times.push(pt.t);
+        winds.push(pt.w);
+        pres.push(pt.p);
+        colors.push(_getSSColor(pt.w));
+    });
+
+    // Saffir-Simpson category shading bands
+    var shapes = [
+        { type: 'rect', xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 0,   y1: 34,  fillcolor: 'rgba(96,165,250,0.06)', line: { width: 0 } },
+        { type: 'rect', xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 34,  y1: 64,  fillcolor: 'rgba(52,211,153,0.06)', line: { width: 0 } },
+        { type: 'rect', xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 64,  y1: 83,  fillcolor: 'rgba(251,191,36,0.06)', line: { width: 0 } },
+        { type: 'rect', xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 83,  y1: 96,  fillcolor: 'rgba(251,146,60,0.06)', line: { width: 0 } },
+        { type: 'rect', xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 96,  y1: 113, fillcolor: 'rgba(248,113,113,0.06)', line: { width: 0 } },
+        { type: 'rect', xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 113, y1: 137, fillcolor: 'rgba(239,68,68,0.06)', line: { width: 0 } },
+        { type: 'rect', xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 137, y1: 200, fillcolor: 'rgba(220,38,38,0.06)', line: { width: 0 } }
+    ];
+
+    // Add vertical line at current case time
+    if (currentCaseData && currentCaseData.datetime) {
+        var dtParts = currentCaseData.datetime.replace(' UTC', '').split(' ');
+        if (dtParts.length >= 2) {
+            var isoTime = dtParts[0] + 'T' + dtParts[1];
+            shapes.push({
+                type: 'line', xref: 'x', yref: 'paper',
+                x0: isoTime, x1: isoTime, y0: 0, y1: 1,
+                line: { color: 'rgba(255,200,50,0.8)', width: 2.5, dash: 'solid' }
+            });
+        }
+    }
+
+    // Add TDR analysis markers — show all cases for this storm
+    var stormName = currentCaseData.storm_name;
+    var year = currentCaseData.year;
+    var tdrTimes = [], tdrWinds = [], tdrHovers = [], tdrColors = [];
+    var allCases = _getActiveData().cases.filter(function(c) {
+        return c.storm_name === stormName && c.year === year;
+    });
+    allCases.forEach(function(c) {
+        var dtParts = c.datetime.replace(' UTC', '').split(' ');
+        if (dtParts.length >= 2) {
+            tdrTimes.push(dtParts[0] + 'T' + dtParts[1]);
+            tdrWinds.push(c.vmax_kt);
+            tdrHovers.push('<b>TDR Analysis</b><br>' + c.datetime + '<br>Mission: ' + c.mission_id +
+                '<br>Vmax: ' + c.vmax_kt + ' kt' +
+                (c.rmw_km ? '<br>RMW: ' + c.rmw_km + ' km' : ''));
+            tdrColors.push(c.case_index === currentCaseData.case_index ? '#ffd700' : '#00d4ff');
+        }
+    });
+
+    _stormTimelineBaseShapes = shapes.slice();
+
+    var windTrace = {
+        x: times, y: winds,
+        type: 'scatter', mode: 'lines+markers',
+        name: 'Wind (kt)',
+        line: { color: '#00d4ff', width: 2.5 },
+        marker: { color: colors, size: 5, line: { color: 'rgba(255,255,255,0.3)', width: 0.5 } },
+        hovertemplate: '<b>%{x}</b><br>Wind: %{y} kt<extra></extra>',
+        yaxis: 'y'
+    };
+
+    var presTrace = {
+        x: times, y: pres,
+        type: 'scatter', mode: 'lines',
+        name: 'Pressure (hPa)',
+        line: { color: '#a78bfa', width: 1.5, dash: 'dot' },
+        hovertemplate: '<b>%{x}</b><br>Pressure: %{y} hPa<extra></extra>',
+        yaxis: 'y2'
+    };
+
+    var tdrTrace = {
+        x: tdrTimes, y: tdrWinds,
+        type: 'scatter', mode: 'markers',
+        name: 'TDR Analyses',
+        marker: {
+            color: tdrColors, size: 10, symbol: 'diamond',
+            line: { color: '#fff', width: 1.5 }
+        },
+        text: tdrHovers,
+        hovertemplate: '%{text}<extra></extra>',
+        yaxis: 'y'
+    };
+
+    var maxWind = Math.max.apply(null, winds.filter(function(w) { return w != null; })) || 100;
+
+    var layout = {
+        paper_bgcolor: '#0a1628', plot_bgcolor: '#0a1628',
+        xaxis: {
+            title: { text: 'Date/Time', font: { size: 10, color: '#8b9ec2' } },
+            tickfont: { size: 9, color: '#8b9ec2' },
+            gridcolor: 'rgba(255,255,255,0.04)',
+            linecolor: 'rgba(255,255,255,0.08)'
+        },
+        yaxis: {
+            title: { text: 'Max Wind (kt)', font: { size: 10, color: '#00d4ff' } },
+            tickfont: { size: 9, color: '#8b9ec2', family: 'JetBrains Mono' },
+            gridcolor: 'rgba(255,255,255,0.04)',
+            range: [0, Math.min(maxWind + 20, 200)],
+            side: 'left'
+        },
+        yaxis2: {
+            title: { text: 'Pressure (hPa)', font: { size: 10, color: '#a78bfa' } },
+            tickfont: { size: 9, color: '#8b9ec2', family: 'JetBrains Mono' },
+            overlaying: 'y', side: 'right',
+            autorange: 'reversed',
+            gridcolor: 'transparent'
+        },
+        shapes: shapes,
+        showlegend: true,
+        legend: {
+            x: 0.01, y: 0.99,
+            bgcolor: 'rgba(15,33,64,0.8)',
+            bordercolor: 'rgba(255,255,255,0.08)',
+            borderwidth: 1,
+            font: { size: 9, color: '#e2e8f0' }
+        },
+        margin: { l: 50, r: 50, t: 8, b: 38 },
+        hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 11 } }
+    };
+
+    Plotly.newPlot('storm-timeline-chart', [windTrace, presTrace, tdrTrace], layout, {
+        responsive: true, displayModeBar: false, displaylogo: false
+    });
+
+    // Reset F-deck state for new storm
+    _archFdeckLoaded = false;
+    _archFdeckVisible = false;
+    _archFdeckData = null;
+    _archFdeckTraceCount = 0;
+    var fBtn = document.getElementById('fdeck-archive-btn');
+    var fSt = document.getElementById('fdeck-archive-status');
+    if (fBtn) { fBtn.textContent = 'F-Deck'; fBtn.classList.remove('active'); }
+    if (fSt) fSt.textContent = '';
+}
+
+// ── F-Deck for archive intensity timeline ──
+
+var ARCHIVE_FDECK_STYLES = {
+    DVTS:       { name: 'Subjective Dvorak', color: '#ff9f43', symbol: 'diamond',      size: 7 },
+    DVTO:       { name: 'Objective Dvorak',  color: '#feca57', symbol: 'circle',        size: 6 },
+    SFMR:       { name: 'SFMR',             color: '#ff6b6b', symbol: 'triangle-up',   size: 7 },
+    FL_WIND:    { name: 'Flight-Level',      color: '#ee5a24', symbol: 'triangle-down', size: 7 },
+    DROPSONDE:  { name: 'Dropsonde',         color: '#f8b739', symbol: 'square',        size: 6 },
+    AIRC_OTHER: { name: 'Aircraft (Other)',  color: '#e17055', symbol: 'cross',         size: 6 }
+};
+
+function toggleArchiveFDeck() {
+    if (!currentCaseData) return;
+
+    // Need atcf_id — look up from IBTrACS
+    var key = currentCaseData.storm_name + '|' + currentCaseData.year;
+    var sid = _tdrToSID[key];
+    var storm = sid ? _ibtStormsBySID[sid] : null;
+    if (!storm || !storm.atcf_id) {
+        var st = document.getElementById('fdeck-archive-status');
+        if (st) { st.textContent = 'No ATCF ID'; st.style.color = '#f87171'; }
+        return;
+    }
+
+    var btn = document.getElementById('fdeck-archive-btn');
+    var status = document.getElementById('fdeck-archive-status');
+
+    if (!_archFdeckLoaded) {
+        btn.textContent = 'Loading...';
+        btn.disabled = true;
+        fetch(API_BASE + '/global/fdeck?atcf_id=' + encodeURIComponent(storm.atcf_id))
+            .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+            .then(function(data) {
+                _archFdeckData = data.fixes;
+                _archFdeckLoaded = true;
+                _archFdeckVisible = true;
+                btn.textContent = 'Hide F-Deck';
+                btn.classList.add('active');
+                btn.disabled = false;
+                var total = 0;
+                Object.keys(data.counts).forEach(function(k) { total += data.counts[k] || 0; });
+                status.textContent = total + ' fixes';
+                status.style.color = '#64748b';
+                _addArchiveFDeckTraces();
+            })
+            .catch(function(err) {
+                btn.textContent = 'F-Deck';
+                btn.disabled = false;
+                status.textContent = 'Not available';
+                status.style.color = '#f87171';
+            });
+        return;
+    }
+
+    _archFdeckVisible = !_archFdeckVisible;
+    if (_archFdeckVisible) {
+        btn.textContent = 'Hide F-Deck';
+        btn.classList.add('active');
+        _addArchiveFDeckTraces();
+    } else {
+        btn.textContent = 'F-Deck';
+        btn.classList.remove('active');
+        _removeArchiveFDeckTraces();
+    }
+}
+
+function _addArchiveFDeckTraces() {
+    var chartEl = document.getElementById('storm-timeline-chart');
+    if (!chartEl || !chartEl.data || !_archFdeckData) return;
+    _removeArchiveFDeckTraces();
+
+    var newTraces = [];
+    var fixTypes = ['DVTS', 'DVTO', 'SFMR', 'FL_WIND', 'DROPSONDE', 'AIRC_OTHER'];
+    fixTypes.forEach(function(ft) {
+        var fixes = _archFdeckData[ft];
+        if (!fixes || fixes.length === 0) return;
+        var style = ARCHIVE_FDECK_STYLES[ft];
+        var ftTimes = [], ftWinds = [], ftHovers = [];
+        fixes.forEach(function(f) {
+            ftTimes.push(f.time);
+            ftWinds.push(f.wind_kt);
+            var ht = '<b>' + style.name + '</b><br>' + f.time + '<br>Wind: ' + f.wind_kt + ' kt';
+            if (f.ci !== undefined) ht += '<br>CI#: ' + f.ci.toFixed(1);
+            if (f.agency) ht += '<br>Agency: ' + f.agency;
+            ftHovers.push(ht);
+        });
+        newTraces.push({
+            x: ftTimes, y: ftWinds,
+            type: 'scatter', mode: 'markers',
+            name: style.name,
+            marker: { color: style.color, symbol: style.symbol, size: style.size, line: { color: 'rgba(255,255,255,0.5)', width: 1 } },
+            hovertemplate: '%{text}<extra></extra>',
+            text: ftHovers, yaxis: 'y'
+        });
+    });
+
+    if (newTraces.length > 0) {
+        Plotly.addTraces(chartEl, newTraces);
+        _archFdeckTraceCount = newTraces.length;
+    }
+}
+
+function _removeArchiveFDeckTraces() {
+    var chartEl = document.getElementById('storm-timeline-chart');
+    if (!chartEl || !chartEl.data || _archFdeckTraceCount === 0) return;
+    var totalTraces = chartEl.data.length;
+    var indices = [];
+    for (var i = totalTraces - _archFdeckTraceCount; i < totalTraces; i++) indices.push(i);
+    Plotly.deleteTraces(chartEl, indices);
+    _archFdeckTraceCount = 0;
+}
+
+
+// ── Hovmöller (Time × Radius) ────────────────────────────────────────
+var _hovmollerVisible = false;
+
+function toggleHovmoller() {
+    var panel = document.getElementById('hovmoller-panel');
+    var btn = document.getElementById('hovmoller-btn');
+    if (!panel || !btn) return;
+
+    _hovmollerVisible = !_hovmollerVisible;
+    if (_hovmollerVisible) {
+        panel.style.display = '';
+        btn.classList.add('active');
+        _fetchAndRenderHovmoller();
+    } else {
+        panel.style.display = 'none';
+        btn.classList.remove('active');
+    }
+}
+
+function closeHovmoller() {
+    _hovmollerVisible = false;
+    var panel = document.getElementById('hovmoller-panel');
+    var btn = document.getElementById('hovmoller-btn');
+    if (panel) panel.style.display = 'none';
+    if (btn) btn.classList.remove('active');
+}
+
+function _fetchAndRenderHovmoller() {
+    if (!currentCaseData) return;
+    var statusEl = document.getElementById('hovmoller-status');
+    var chartEl = document.getElementById('hovmoller-chart');
+    var variable = document.getElementById('ep-var').value || 'recentered_tangential_wind';
+    var heightKm = parseFloat(document.getElementById('ep-level').value) || 2.0;
+
+    statusEl.textContent = 'Loading ' + currentCaseData.storm_name + ' (' + currentCaseData.year + ') at ' + heightKm.toFixed(1) + ' km...';
+    statusEl.style.color = '#60a5fa';
+
+    var url = API_BASE + '/hovmoller?' +
+        'storm_name=' + encodeURIComponent(currentCaseData.storm_name) +
+        '&year=' + currentCaseData.year +
+        '&variable=' + encodeURIComponent(variable) +
+        '&data_type=' + _activeDataType +
+        '&height_km=' + heightKm +
+        '&max_radius_km=200&dr_km=2&coverage_min=0.5';
+
+    fetch(url)
+        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function(data) {
+            statusEl.textContent = data.n_cases + ' analyses';
+            statusEl.style.color = '#64748b';
+            _renderHovmoller(data);
+        })
+        .catch(function(err) {
+            statusEl.textContent = 'Error: ' + err.message;
+            statusEl.style.color = '#f87171';
+            console.warn('Hovmöller fetch failed:', err);
+        });
+}
+
+function _renderHovmoller(data) {
+    var profiles = data.profiles;
+    var radiusKm = data.radius_km;
+    var varInfo = data.variable;
+
+    // Build scatter data: one point per (time, radius) cell with valid data
+    var scatterX = [];      // datetime strings
+    var scatterY = [];      // radius values
+    var scatterZ = [];      // variable values (for color)
+    var scatterText = [];   // hover text
+    var rmwValues = [];     // For RMW line
+
+    profiles.forEach(function(p) {
+        // Parse "YYYY-MM-DD HH:MM UTC" → ISO for Plotly
+        var dtParts = p.datetime.replace(' UTC', '').split(' ');
+        var isoTime = dtParts.length >= 2 ? dtParts[0] + 'T' + dtParts[1] : p.datetime;
+
+        if (p.rmw_km) rmwValues.push({ x: isoTime, y: p.rmw_km });
+
+        p.profile.forEach(function(val, ri) {
+            if (val === null) return;
+            scatterX.push(isoTime);
+            scatterY.push(radiusKm[ri]);
+            scatterZ.push(val);
+            scatterText.push(
+                '<b>' + varInfo.display_name + '</b>: ' + val.toFixed(2) + ' ' + varInfo.units +
+                '<br>Radius: ' + radiusKm[ri] + ' km' +
+                '<br>' + p.datetime +
+                '<br>Mission: ' + p.mission_id +
+                '<br>Vmax: ' + (p.vmax_kt || '?') + ' kt' +
+                (p.rmw_km ? '<br>RMW: ' + p.rmw_km + ' km' : '')
+            );
+        });
+    });
+
+    // Use scatter with colored markers — each point is a (time, radius) cell
+    var mainTrace = {
+        x: scatterX, y: scatterY,
+        type: 'scatter', mode: 'markers',
+        name: varInfo.display_name,
+        marker: {
+            color: scatterZ,
+            colorscale: varInfo.colorscale,
+            cmin: varInfo.vmin,
+            cmax: varInfo.vmax,
+            size: 4,
+            symbol: 'square',
+            colorbar: {
+                title: { text: varInfo.units, font: { color: '#ccc', size: 9 } },
+                tickfont: { color: '#ccc', size: 8 },
+                thickness: 10, len: 0.85
+            }
+        },
+        text: scatterText,
+        hovertemplate: '%{text}<extra></extra>',
+        showlegend: false
+    };
+
+    var traces = [mainTrace];
+
+    // Add RMW markers
+    if (rmwValues.length > 0) {
+        traces.push({
+            x: rmwValues.map(function(r) { return r.x; }),
+            y: rmwValues.map(function(r) { return r.y; }),
+            type: 'scatter', mode: 'markers',
+            name: 'RMW',
+            marker: { color: 'rgba(255,255,255,0)', size: 8, symbol: 'circle-open',
+                      line: { color: '#fff', width: 1.5 } },
+            hovertemplate: '<b>RMW</b>: %{y:.0f} km<br>%{x}<extra></extra>'
+        });
+    }
+
+    // Add vertical marker for current case
+    var shapes = [];
+    if (currentCaseData && currentCaseData.datetime) {
+        var curParts = currentCaseData.datetime.replace(' UTC', '').split(' ');
+        if (curParts.length >= 2) {
+            shapes.push({
+                type: 'line', xref: 'x', yref: 'paper',
+                x0: curParts[0] + 'T' + curParts[1],
+                x1: curParts[0] + 'T' + curParts[1],
+                y0: 0, y1: 1,
+                line: { color: 'rgba(255,200,50,0.7)', width: 2, dash: 'solid' }
+            });
+        }
+    }
+
+    var layout = {
+        paper_bgcolor: '#0a1628', plot_bgcolor: '#0a1628',
+        title: {
+            text: data.storm_name + ' (' + data.year + ') | ' + varInfo.display_name + ' @ ' + data.height_km.toFixed(1) + ' km',
+            font: { color: '#e5e7eb', size: 11 }, x: 0.5, xanchor: 'center', y: 0.98
+        },
+        xaxis: {
+            title: { text: 'Date/Time', font: { size: 10, color: '#8b9ec2' } },
+            tickfont: { size: 9, color: '#8b9ec2' },
+            gridcolor: 'rgba(255,255,255,0.04)',
+            linecolor: 'rgba(255,255,255,0.08)'
+        },
+        yaxis: {
+            title: { text: 'Radius (km)', font: { size: 10, color: '#8b9ec2' } },
+            tickfont: { size: 9, color: '#8b9ec2', family: 'JetBrains Mono' },
+            gridcolor: 'rgba(255,255,255,0.04)',
+            range: [0, 200]
+        },
+        shapes: shapes,
+        showlegend: true,
+        legend: {
+            x: 0.01, y: 0.99, bgcolor: 'rgba(15,33,64,0.8)',
+            bordercolor: 'rgba(255,255,255,0.08)', borderwidth: 1,
+            font: { size: 9, color: '#e2e8f0' }
+        },
+        margin: { l: 45, r: 12, t: 30, b: 38 },
+        hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 11 } }
+    };
+
+    Plotly.newPlot('hovmoller-chart', traces, layout, {
+        responsive: true, displayModeBar: false, displaylogo: false
+    });
+}
+
+
 var _allTracks = {};            // IBTrACS track data keyed by SID
 var _tracksLoaded = false;
 var _tracksLoading = false;
@@ -10525,19 +11063,19 @@ function archiveToggleFlightLevel() {
         _archiveFLActive = false;
         _archiveRemoveFLOverlay();
         _archiveHideFLTimeSeries();
-        if (btn) { btn.textContent = '\u2708 FL Off'; btn.classList.remove('fl-active'); }
+        if (btn) { btn.textContent = '\u2708 FL'; btn.classList.remove('fl-active'); btn.classList.remove('active'); }
         return;
     }
 
     // Activate: fetch FL data for current case
     if (currentCaseIndex === null) return;
     _archiveFLActive = true;
-    if (btn) { btn.textContent = '\u2708 Loading\u2026'; btn.classList.add('fl-active'); btn.disabled = true; }
+    if (btn) { btn.textContent = '\u2708 FL'; btn.classList.add('fl-active'); btn.disabled = true; }
 
     if (_archiveFLData && _archiveFLData._caseIndex === currentCaseIndex) {
         _archiveRenderFLOverlay(_archiveFLData);
         _archiveRenderFLTimeSeries(_archiveFLData);
-        if (btn) { btn.textContent = '\u2708 FL On'; btn.disabled = false; }
+        if (btn) { btn.textContent = '\u2708 FL'; btn.disabled = false; btn.classList.add('active'); }
         return;
     }
 
@@ -10551,7 +11089,7 @@ function archiveToggleFlightLevel() {
 
             if (!json.success) {
                 var msg = json.message || 'No flight-level data available for this case.';
-                if (btn) { btn.textContent = '\u2708 FL N/A'; btn.disabled = false; btn.classList.remove('fl-active'); }
+                if (btn) { btn.textContent = '\u2708 FL'; btn.disabled = false; btn.classList.remove('fl-active'); btn.classList.remove('active'); }
                 _archiveFLActive = false;
                 var flStatus = document.getElementById('fl-archive-status');
                 if (flStatus) {
@@ -10564,12 +11102,12 @@ function archiveToggleFlightLevel() {
 
             _archiveRenderFLOverlay(json);
             _archiveRenderFLTimeSeries(json);
-            if (btn) { btn.textContent = '\u2708 FL On'; btn.disabled = false; }
+            if (btn) { btn.textContent = '\u2708 FL'; btn.disabled = false; btn.classList.add('active'); }
         })
         .catch(function(err) {
             console.warn('FL archive fetch error:', err);
             _archiveFLActive = false;
-            if (btn) { btn.textContent = '\u2708 FL Off'; btn.disabled = false; btn.classList.remove('fl-active'); }
+            if (btn) { btn.textContent = '\u2708 FL'; btn.disabled = false; btn.classList.remove('fl-active'); btn.classList.remove('active'); }
         });
 }
 
@@ -11051,7 +11589,7 @@ function _archiveFLReset() {
     _archiveFLData = null;
     _archiveFLTraceIndices = [];
     var btn = document.getElementById('btn-archive-fl');
-    if (btn) { btn.textContent = '\u2708 FL Off'; btn.classList.remove('fl-active'); btn.disabled = false; }
+    if (btn) { btn.textContent = '\u2708 FL'; btn.classList.remove('fl-active'); btn.classList.remove('active'); btn.disabled = false; }
     _archiveHideFLTimeSeries();
     var status = document.getElementById('fl-archive-status');
     if (status) status.style.display = 'none';
@@ -11080,7 +11618,7 @@ function archiveToggleDropsondes() {
         _archiveSondeActive = false;
         _archiveRemoveSondeOverlay();
         _archiveHideSondePanel();
-        if (btn) { btn.textContent = '\uD83E\uDE82 Sondes Off'; btn.classList.remove('sonde-active'); }
+        if (btn) { btn.textContent = '\uD83E\uDE82 Sondes'; btn.classList.remove('sonde-active'); btn.classList.remove('active'); }
         return;
     }
 
@@ -11091,7 +11629,7 @@ function archiveToggleDropsondes() {
     if (_archiveSondeData && _archiveSondeData._caseIndex === currentCaseIndex) {
         _archiveRenderSondeOverlay(_archiveSondeData);
         _archiveRenderSondePanel(_archiveSondeData);
-        if (btn) { btn.textContent = '\uD83E\uDE82 Sondes On'; btn.disabled = false; }
+        if (btn) { btn.textContent = '\uD83E\uDE82 Sondes'; btn.disabled = false; btn.classList.add('active'); }
         return;
     }
 
@@ -11114,18 +11652,18 @@ function archiveToggleDropsondes() {
                 if (json._diag) console.log('Sonde diag:', JSON.stringify(json._diag, null, 2));
                 var status = document.getElementById('fl-archive-status');
                 if (status) { status.textContent = '\uD83E\uDE82 ' + msg; status.style.display = 'block'; }
-                if (btn) { btn.textContent = '\uD83E\uDE82 Sondes Off'; btn.disabled = false; }
+                if (btn) { btn.textContent = '\uD83E\uDE82 Sondes'; btn.disabled = false; btn.classList.remove('active'); }
                 _archiveSondeActive = false;
                 return;
             }
 
             _archiveRenderSondeOverlay(json);
             _archiveRenderSondePanel(json);
-            if (btn) { btn.textContent = '\uD83E\uDE82 Sondes On'; btn.disabled = false; }
+            if (btn) { btn.textContent = '\uD83E\uDE82 Sondes'; btn.disabled = false; btn.classList.add('active'); }
         })
         .catch(function(err) {
             console.error('Archive sonde fetch error:', err);
-            if (btn) { btn.textContent = '\uD83E\uDE82 Sondes Off'; btn.disabled = false; }
+            if (btn) { btn.textContent = '\uD83E\uDE82 Sondes'; btn.disabled = false; btn.classList.remove('active'); }
             _archiveSondeActive = false;
         });
 }
@@ -11983,7 +12521,7 @@ function _archiveSondeReset() {
     _archiveSondeData = null;
     _archiveSondeTraceIndices = [];
     var btn = document.getElementById('btn-archive-sonde');
-    if (btn) { btn.textContent = '\uD83E\uDE82 Sondes Off'; btn.classList.remove('sonde-active'); btn.disabled = false; }
+    if (btn) { btn.textContent = '\uD83E\uDE82 Sondes'; btn.classList.remove('sonde-active'); btn.classList.remove('active'); btn.disabled = false; }
     _archiveHideSondePanel();
 }
 
