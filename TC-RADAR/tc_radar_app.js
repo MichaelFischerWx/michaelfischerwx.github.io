@@ -312,7 +312,7 @@ function openSidePanel(caseData, fromQuickSelect) {
                     '<button class="overlay-pill active" id="tdr-toggle-btn" onclick="toggleTDRVisibility()" data-color="red" title="TDR Radar Visibility">\uD83C\uDF00 TDR</button>' +
                     '<button class="overlay-pill" id="btn-archive-fl" onclick="archiveToggleFlightLevel()" data-color="blue" title="Flight-Level Data">\u2708 FL</button>' +
                     '<button class="overlay-pill" id="btn-archive-sonde" onclick="archiveToggleDropsondes()" data-color="green" title="Dropsonde Data">\uD83E\uDE82 Sondes</button>' +
-                    '<button class="overlay-pill" id="barb-btn" onclick="toggleWindBarbs()" disabled data-color="slate" title="Wind Barbs">\uD83C\uDF2C Barbs</button>' +
+                    '<button class="overlay-pill" id="barb-btn" onclick="toggleWindBarbs()" data-color="slate" title="Wind Barbs">\uD83C\uDF2C Barbs</button>' +
                     '<button class="overlay-pill" id="tilt-btn" onclick="toggleTiltProfile()" data-color="pink" title="Vortex Tilt Profile">\uD83C\uDFAF Tilt</button>' +
                     '<button class="overlay-pill" id="env-case-btn" onclick="toggleEnvOverlay()" data-color="emerald" title="ERA5 Environment Diagnostics">\uD83C\uDF0D Env</button>' +
                 '</div>' +
@@ -353,7 +353,17 @@ function openSidePanel(caseData, fromQuickSelect) {
                 '<div id="hovmoller-panel" class="storm-timeline-panel" style="display:none;">' +
                     '<div class="fl-ts-header">' +
                         '<span class="fl-ts-title">\u2630 Hovm\u00f6ller (Time \u00d7 Radius)</span>' +
-                        '<button onclick="archiveSavePlotPNG(\'hovmoller-chart\',\'Hovmoller\')" class="rt-save-png-btn" style="margin-left:auto;" title="Save as PNG"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></button>' +
+                        '<div style="display:flex;align-items:center;gap:4px;margin-left:auto;">' +
+                            '<label style="font-size:9px;color:#8b9ec2;">Coverage:</label>' +
+                            '<select id="hovmoller-coverage" style="font-size:9px;background:#0f2140;color:#e2e8f0;border:1px solid rgba(255,255,255,0.12);border-radius:4px;padding:1px 4px;" onchange="_fetchAndRenderHovmoller()">' +
+                                '<option value="0.0">0%</option>' +
+                                '<option value="0.1">10%</option>' +
+                                '<option value="0.25" selected>25%</option>' +
+                                '<option value="0.5">50%</option>' +
+                                '<option value="0.75">75%</option>' +
+                            '</select>' +
+                        '</div>' +
+                        '<button onclick="archiveSavePlotPNG(\'hovmoller-chart\',\'Hovmoller\')" class="rt-save-png-btn" style="margin-left:4px;" title="Save as PNG"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></button>' +
                         '<button onclick="closeHovmoller()" class="fl-ts-close" title="Close">&times;</button>' +
                     '</div>' +
                     '<div id="hovmoller-status" style="font-size:10px;color:#64748b;padding:2px 8px;"></div>' +
@@ -1167,15 +1177,9 @@ function _buildPlanViewWindBarbs(barbData, axRanges) {
 }
 
 // Set of variable keys eligible for wind barbs (wind speed variables)
-var _BARB_ELIGIBLE_VARS = {
-    'recentered_wind_speed': true,
-    'recentered_earth_relative_wind_speed': true,
-    'total_recentered_wind_speed': true,
-    'total_recentered_earth_relative_wind_speed': true,
-    'swath_wind_speed': true,
-    'swath_earth_relative_wind_speed': true,
-    'merged_wind_speed': true
-};
+// Wind barbs are now available for ALL plan-view variables.
+// The backend falls back to storm-relative recentered winds for non-wind-speed vars.
+var _BARB_ELIGIBLE_VARS = null;  // null = all variables eligible
 var _windBarbsEnabled = false;
 
 function toggleWindBarbs() {
@@ -3391,17 +3395,10 @@ function generateCustomPlot(callback) {
         var panelInner = document.getElementById('side-panel-inner');
         if (panelInner) panelInner.scrollTop = 0;
     }
-    // Enable/disable wind barb button based on variable eligibility
+    // Wind barbs are available for all variables (backend uses fallback U/V)
     var barbBtn = document.getElementById('barb-btn');
-    if (barbBtn) {
-        barbBtn.disabled = !_BARB_ELIGIBLE_VARS[variable];
-        if (!_BARB_ELIGIBLE_VARS[variable] && _windBarbsEnabled) {
-            _windBarbsEnabled = false;
-            barbBtn.textContent = '\uD83C\uDF2C Barbs';
-            barbBtn.classList.remove('active');
-        }
-    }
-    var wantBarbs = _windBarbsEnabled && _BARB_ELIGIBLE_VARS[variable];
+    if (barbBtn) { barbBtn.disabled = false; }
+    var wantBarbs = _windBarbsEnabled;
     var wantTilt = _tiltProfileEnabled;
     var cacheKey = _activeDataType + '_' + currentCaseIndex + '_' + variable + '_' + level_km + '_' + overlay + (wantBarbs ? '_barbs' : '') + (wantTilt ? '_tilt' : '');
     if (_dataCache[cacheKey]) {
@@ -5261,9 +5258,12 @@ function _renderArchiveIntensityTimeline(track, storm) {
         var dtParts = c.datetime.replace(' UTC', '').split(' ');
         if (dtParts.length >= 2) {
             tdrTimes.push(dtParts[0] + 'T' + dtParts[1]);
-            tdrWinds.push(c.vmax_kt);
+            // Show max earth-relative wind speed at 2.0 km (m/s → kt)
+            var maxErWind = (c.max_er_wspd_20km != null) ? Math.round(c.max_er_wspd_20km * 1.944) : null;
+            tdrWinds.push(maxErWind);
             tdrHovers.push('<b>TDR Analysis</b><br>' + c.datetime + '<br>Mission: ' + c.mission_id +
-                '<br>Vmax: ' + c.vmax_kt + ' kt' +
+                (maxErWind != null ? '<br>Max ER Wind (2 km): ' + maxErWind + ' kt' : '') +
+                '<br>BT Vmax: ' + c.vmax_kt + ' kt' +
                 (c.rmw_km ? '<br>RMW: ' + c.rmw_km + ' km' : ''));
             tdrColors.push(c.case_index === currentCaseData.case_index ? '#ffd700' : '#00d4ff');
         }
@@ -5336,7 +5336,12 @@ function _renderArchiveIntensityTimeline(track, storm) {
             borderwidth: 1,
             font: { size: 9, color: '#e2e8f0' }
         },
-        margin: { l: 50, r: 50, t: 8, b: 38 },
+        title: {
+            text: stormName + ' (' + year + ')',
+            font: { color: '#e5e7eb', size: 13 },
+            x: 0.5, xanchor: 'center', y: 0.98
+        },
+        margin: { l: 50, r: 50, t: 28, b: 38 },
         hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 11 } }
     };
 
@@ -5505,13 +5510,16 @@ function _fetchAndRenderHovmoller() {
     statusEl.textContent = 'Loading ' + currentCaseData.storm_name + ' (' + currentCaseData.year + ') at ' + heightKm.toFixed(1) + ' km...';
     statusEl.style.color = '#60a5fa';
 
+    var covEl = document.getElementById('hovmoller-coverage');
+    var coverageMin = covEl ? parseFloat(covEl.value) : 0.25;
+
     var url = API_BASE + '/hovmoller?' +
         'storm_name=' + encodeURIComponent(currentCaseData.storm_name) +
         '&year=' + currentCaseData.year +
         '&variable=' + encodeURIComponent(variable) +
         '&data_type=' + _activeDataType +
         '&height_km=' + heightKm +
-        '&max_radius_km=200&dr_km=2&coverage_min=0.5';
+        '&max_radius_km=200&dr_km=2&coverage_min=' + coverageMin;
 
     fetch(url)
         .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
@@ -5592,10 +5600,11 @@ function _renderHovmoller(data) {
         traces.push({
             x: rmwValues.map(function(r) { return r.x; }),
             y: rmwValues.map(function(r) { return r.y; }),
-            type: 'scatter', mode: 'markers',
+            type: 'scatter', mode: 'markers+lines',
             name: 'RMW',
-            marker: { color: 'rgba(255,255,255,0)', size: 8, symbol: 'circle-open',
-                      line: { color: '#fff', width: 1.5 } },
+            marker: { color: '#ffd700', size: 7, symbol: 'diamond',
+                      line: { color: '#fff', width: 1 } },
+            line: { color: 'rgba(255,215,0,0.3)', width: 1, dash: 'dot' },
             hovertemplate: '<b>RMW</b>: %{y:.0f} km<br>%{x}<extra></extra>'
         });
     }
