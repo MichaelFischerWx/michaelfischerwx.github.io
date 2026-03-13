@@ -2711,7 +2711,7 @@
                 tickvals: altTickVals, ticktext: altTickText,
                 showgrid: false,
             },
-            margin: { l: 55, r: 55, t: 70, b: 72 },
+            margin: { l: 55, r: 55, t: 70, b: 82 },
             legend: { x: 0.01, y: 0.01, bgcolor: 'rgba(17,24,39,0.85)', font: { color: '#d1d5db', size: 10 },
                       xanchor: 'left', yanchor: 'bottom' },
             showlegend: true,
@@ -2729,25 +2729,15 @@
         });
         layout.annotations.push({
             text: plotInfoParts.join(' \u00b7 '),
-            xref: 'paper', yref: 'paper', x: 0.5, y: -0.14,
+            xref: 'paper', yref: 'paper', x: 0.5, y: -0.18,
             showarrow: false, font: { color: '#94a3b8', size: 9.5 }, xanchor: 'center', yanchor: 'top',
         });
 
         Plotly.newPlot(chartDiv, traces, layout, { responsive: true, displayModeBar: false });
 
-        // Info line below chart
+        // Clear the info div (info is now shown as on-plot annotation)
         var infoEl = document.getElementById('rt-sonde-wind-info');
-        if (infoEl) {
-            var items = [];
-            if (maxW != null) items.push('Vmax: ' + maxW.toFixed(1) + ' m/s (' + (maxW * 1.944).toFixed(0) + ' kt)');
-            if (wl150 != null) items.push('WL150: ' + wl150.toFixed(1) + ' m/s (' + (wl150 * 1.944).toFixed(0) + ' kt)');
-            else items.push('<span style="color:#6b7280;">WL150: N/A</span>');
-            if (wl500 != null) items.push('WL500: ' + wl500.toFixed(1) + ' m/s (' + (wl500 * 1.944).toFixed(0) + ' kt)');
-            else items.push('<span style="color:#6b7280;">WL500: N/A</span>');
-            items.push('Psfc: ' + (sfcPresWL ? sfcPresWL.toFixed(0) : '?') + ' hPa');
-            items.push(sonde.platform || '\u2014');
-            infoEl.innerHTML = '<div style="font-size:10px;color:#94a3b8;">' + items.join(' &middot; ') + '</div>';
-        }
+        if (infoEl) infoEl.innerHTML = '';
 
         if (container) container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     };
