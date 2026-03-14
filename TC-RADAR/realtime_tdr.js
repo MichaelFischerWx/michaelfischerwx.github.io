@@ -52,6 +52,10 @@
     var _rtIRMapBoundsSet = false;
     var _rtMaxWind2km = null;
 
+    // SHIPS environmental data state
+    var _rtShipsData = null;      // Parsed SHIPS data from backend
+    var _rtShipsLoading = false;
+
     // ── PNG Save helper ──────────────────────────────────────────
     // Downloads a Plotly chart div as a high-res PNG.
     window.rtSavePlotPNG = function (chartDivId, defaultName) {
@@ -258,11 +262,18 @@
         document.getElementById('rt-cs-result').innerHTML = '';
         document.getElementById('rt-cs-status').textContent = '';
         var azResult = document.getElementById('rt-az-result'); if (azResult) azResult.innerHTML = '';
+        var quadResult = document.getElementById('rt-quad-result'); if (quadResult) quadResult.innerHTML = '';
+        var anomalyResult = document.getElementById('rt-anomaly-result'); if (anomalyResult) anomalyResult.innerHTML = '';
+        var shipsPanel = document.getElementById('rt-ships-panel'); if (shipsPanel) shipsPanel.style.display = 'none';
+        _rtShipsData = null;
 
         // Disable action buttons until plot renders
         var csBtn = document.getElementById('rt-cs-btn'); if (csBtn) csBtn.disabled = true;
         var volBtn = document.getElementById('rt-vol-btn'); if (volBtn) volBtn.disabled = true;
         var azBtn = document.getElementById('rt-az-btn'); if (azBtn) azBtn.disabled = true;
+        var shipsBtn = document.getElementById('rt-ships-btn'); if (shipsBtn) shipsBtn.disabled = false;
+        var quadBtn = document.getElementById('rt-quad-btn'); if (quadBtn) quadBtn.disabled = true;
+        var anomalyBtn = document.getElementById('rt-anomaly-btn'); if (anomalyBtn) anomalyBtn.disabled = true;
 
         // Generate initial plot
         rtGeneratePlot();
@@ -513,6 +524,7 @@
         var csBtn = document.getElementById('rt-cs-btn'); if (csBtn) csBtn.disabled = false;
         var volBtn = document.getElementById('rt-vol-btn'); if (volBtn) volBtn.disabled = false;
         var azBtn = document.getElementById('rt-az-btn'); if (azBtn) azBtn.disabled = false;
+        var anomalyBtn = document.getElementById('rt-anomaly-btn'); if (anomalyBtn) anomalyBtn.disabled = false;
 
         // Click handler for cross-section
         document.getElementById('rt-plotly-chart').on('plotly_click', rtHandlePlotClick);
@@ -3731,5 +3743,361 @@
         }
         _origCleanupMap2();
     };
+
+    // ── SHIPS Environmental Data ──────────────────────────────────
+    window.rtFetchSHIPS = function () {
+        if (!_currentFileUrl) { rtToast('Load a TDR file first', 'warn'); return; }
+        var btn = document.getElementById('rt-ships-btn');
+        var panel = document.getElementById('rt-ships-panel');
+        if (!btn) return;
+
+        btn.disabled = true;
+        btn.textContent = 'Loading SHIPS...';
+        _rtShipsLoading = true;
+
+        // Extract storm info from current metadata
+        var metaPanel = document.getElementById('rt-meta-panel');
+        var stormName = '';
+        var year = '';
+        var analysisDt = '';
+        // Try to get from last plotted data
+        if (_rtDataCache[_currentFileUrl]) {
+            var meta = _rtDataCache[_currentFileUrl].case_meta || {};
+            stormName = (meta.storm_name || '').toUpperCase();
+            year = meta.datetime ? meta.datetime.substring(0, 4) : '';
+            analysisDt = meta.datetime ? meta.datetime.replace('Z', '').replace(' ', 'T') : '';
+        }
+
+        var basin = document.getElementById('rt-ships-basin').value || 'AL';
+        var stNum = parseInt(document.getElementById('rt-ships-stnum').value) || 1;
+
+        if (!stormName || !year || !analysisDt) {
+            rtToast('Generate a plot first to get storm metadata', 'warn');
+            btn.disabled = false;
+            btn.textContent = '📡 Fetch SHIPS Data';
+            return;
+        }
+
+        var url = API_BASE + RT_PREFIX + '/ships?' +
+            'storm_name=' + encodeURIComponent(stormName) +
+            '&year=' + year +
+            '&basin=' + basin +
+            '&storm_number=' + stNum +
+            '&analysis_dt=' + encodeURIComponent(analysisDt);
+
+        fetch(url)
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function (data) {
+                _rtShipsData = data;
+                _rtShipsLoading = false;
+                _rtRenderSHIPSPanel(data);
+                // Enable diagnostic buttons that need SHIPS data
+                var quadBtn = document.getElementById('rt-quad-btn');
+                var anomalyBtn = document.getElementById('rt-anomaly-btn');
+                if (quadBtn) quadBtn.disabled = false;
+                if (anomalyBtn) anomalyBtn.disabled = false;
+                btn.textContent = '✓ SHIPS Loaded';
+                btn.style.borderColor = 'rgba(52,211,153,0.5)';
+                btn.disabled = false;
+                rtToast('SHIPS data loaded: Vmax=' + (data.ships_data.vmax_kt || '?') + ' kt, Shear=' + (data.ships_data.shear_kt || '?') + ' kt', 'success');
+            })
+            .catch(function (err) {
+                _rtShipsLoading = false;
+                btn.textContent = '📡 Fetch SHIPS Data';
+                btn.disabled = false;
+                rtToast('SHIPS: ' + err.message, 'error');
+            });
+    };
+
+    function _rtRenderSHIPSPanel(data) {
+        var panel = document.getElementById('rt-ships-panel');
+        if (!panel) return;
+
+        var sd = data.ships_data || {};
+        var vp = data.ventilation_proxy;
+
+        var rows = [
+            '<div style="font-size:11px;font-weight:600;color:#fdba74;margin-bottom:4px;">📡 SHIPS Environmental Data</div>',
+            '<table style="width:100%;font-size:10px;color:#d1d5db;border-collapse:collapse;">',
+        ];
+
+        var fields = [
+            ['Vmax', sd.vmax_kt != null ? sd.vmax_kt + ' kt' : '—'],
+            ['Shear', sd.shear_kt != null ? sd.shear_kt + ' kt / ' + (sd.sddc != null ? sd.sddc + '°' : '?') : '—'],
+            ['SST', sd.sst_c != null ? sd.sst_c + ' °C' : '—'],
+            ['MPI', sd.pot_int_kt != null ? sd.pot_int_kt + ' kt' : '—'],
+            ['RH (700-500)', sd.rhmd != null ? sd.rhmd + '%' : '—'],
+            ['VP', vp != null ? vp.toFixed(2) : '—'],
+        ];
+
+        fields.forEach(function (f) {
+            rows.push('<tr><td style="padding:1px 4px;color:#8b9ec2;white-space:nowrap;">' + f[0] + '</td>' +
+                '<td style="padding:1px 4px;text-align:right;font-family:JetBrains Mono,monospace;">' + f[1] + '</td></tr>');
+        });
+
+        rows.push('</table>');
+        panel.innerHTML = rows.join('');
+        panel.style.display = '';
+    }
+
+    window.rtFetchQuadrants = function () {
+        if (!_currentFileUrl || !_rtShipsData) {
+            rtToast('Load SHIPS data first', 'warn');
+            return;
+        }
+
+        var sddc = _rtShipsData.ships_data.sddc;
+        if (sddc == null) {
+            rtToast('SHIPS shear direction not available', 'warn');
+            return;
+        }
+
+        var btn = document.getElementById('rt-quad-btn');
+        var container = document.getElementById('rt-quad-result');
+        if (!btn || !container) return;
+
+        btn.disabled = true;
+        btn.textContent = 'Loading...';
+
+        var variable = document.getElementById('rt-var').value || 'TANGENTIAL_WIND';
+        var overlay = document.getElementById('rt-overlay').value || '';
+
+        var url = API_BASE + RT_PREFIX + '/quadrant_mean?' +
+            'file_url=' + encodeURIComponent(_currentFileUrl) +
+            '&variable=' + encodeURIComponent(variable) +
+            '&sddc=' + sddc +
+            '&max_radius_km=200&dr_km=2&coverage_min=0.5' +
+            (overlay ? '&overlay=' + encodeURIComponent(overlay) : '');
+
+        fetch(url)
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function (data) {
+                _rtRenderQuadrants(data, variable);
+            })
+            .catch(function (err) {
+                rtToast('Quadrant error: ' + err.message, 'error');
+            })
+            .finally(function () {
+                btn.disabled = false;
+                btn.textContent = '⊙ Shear Quads';
+            });
+    };
+
+    function _rtRenderQuadrants(data, variable) {
+        var container = document.getElementById('rt-quad-result');
+        if (!container) return;
+
+        // Build the quadrant panel HTML
+        container.innerHTML =
+            '<div class="storm-timeline-panel" style="margin-top:10px;">' +
+            '<div class="fl-ts-header">' +
+            '<span class="fl-ts-title">⊙ Shear-Relative Quadrant Means (SDDC: ' + data.sddc + '°)</span>' +
+            _rtSaveBtnHTML('rt-quad-grid', 'QuadrantMeans', 'margin-left:auto;') +
+            '<button onclick="document.getElementById(\'rt-quad-result\').innerHTML=\'\'" class="fl-ts-close" title="Close">&times;</button>' +
+            '</div>' +
+            '<div id="rt-quad-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:0;width:100%;height:600px;"></div>' +
+            '</div>';
+
+        var varInfo = null;
+        // Get variable info from last rendered data
+        if (_rtDataCache[_currentFileUrl] && _rtDataCache[_currentFileUrl].variable) {
+            varInfo = _rtDataCache[_currentFileUrl].variable;
+        }
+        var cmap = varInfo ? varInfo.colorscale : 'RdBu';
+        var vmin = varInfo ? varInfo.vmin : null;
+        var vmax_val = varInfo ? varInfo.vmax : null;
+
+        var quadNames = ['DSL', 'DSR', 'USL', 'USR'];
+        var quadLabels = {
+            'DSL': 'Downshear Left',
+            'DSR': 'Downshear Right',
+            'USL': 'Upshear Left',
+            'USR': 'Upshear Right'
+        };
+
+        var gridEl = document.getElementById('rt-quad-grid');
+        var subplots = [];
+
+        quadNames.forEach(function (qname, idx) {
+            var qData = data.quadrant_means[qname].data;
+            var divId = 'rt-quad-' + qname.toLowerCase();
+            var div = document.createElement('div');
+            div.id = divId;
+            div.style.width = '100%';
+            div.style.height = '100%';
+            gridEl.appendChild(div);
+
+            var trace = {
+                z: qData,
+                x: data.radius_km,
+                y: data.height_km,
+                type: 'heatmap',
+                colorscale: cmap,
+                zmin: vmin,
+                zmax: vmax_val,
+                colorbar: idx === 1 ? {
+                    title: { text: variable, font: { color: '#ccc', size: 8 } },
+                    tickfont: { color: '#ccc', size: 7 },
+                    thickness: 8, len: 0.8, x: 1.02
+                } : { thickness: 0, len: 0 },
+                hovertemplate: '<b>' + qname + '</b><br>R: %{x} km<br>z: %{y} km<br>Value: %{z:.2f}<extra></extra>'
+            };
+
+            var layout = {
+                paper_bgcolor: '#0a1628', plot_bgcolor: '#0a1628',
+                title: { text: quadLabels[qname], font: { color: '#e5e7eb', size: 11 }, x: 0.5, y: 0.97 },
+                xaxis: {
+                    title: idx >= 2 ? { text: 'Radius (km)', font: { size: 9, color: '#8b9ec2' } } : null,
+                    tickfont: { size: 8, color: '#8b9ec2' },
+                    gridcolor: 'rgba(255,255,255,0.04)',
+                    range: [0, 200]
+                },
+                yaxis: {
+                    title: idx % 2 === 0 ? { text: 'Height (km)', font: { size: 9, color: '#8b9ec2' } } : null,
+                    tickfont: { size: 8, color: '#8b9ec2' },
+                    gridcolor: 'rgba(255,255,255,0.04)',
+                    range: [0, 15]
+                },
+                margin: { l: idx % 2 === 0 ? 40 : 20, r: idx % 2 === 1 ? 40 : 5, t: 25, b: idx >= 2 ? 35 : 10 },
+                hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 10 } }
+            };
+
+            Plotly.newPlot(divId, [trace], layout, {
+                responsive: true, displayModeBar: false, displaylogo: false
+            });
+        });
+    }
+
+    window.rtFetchAnomaly = function () {
+        if (!_currentFileUrl) {
+            rtToast('Load a TDR file first', 'warn');
+            return;
+        }
+
+        var btn = document.getElementById('rt-anomaly-btn');
+        var container = document.getElementById('rt-anomaly-result');
+        if (!btn || !container) return;
+
+        btn.disabled = true;
+        btn.textContent = 'Loading...';
+
+        var variable = document.getElementById('rt-var').value || 'TANGENTIAL_WIND';
+
+        // Get Vmax from SHIPS if available, otherwise prompt
+        var vmax = null;
+        if (_rtShipsData && _rtShipsData.ships_data && _rtShipsData.ships_data.vmax_kt != null) {
+            vmax = _rtShipsData.ships_data.vmax_kt;
+        } else {
+            var input = prompt('Enter current Vmax (kt) for climatology matching:', '80');
+            if (!input) { btn.disabled = false; btn.textContent = 'Z* Anomaly'; return; }
+            vmax = parseFloat(input);
+            if (isNaN(vmax) || vmax < 0) { rtToast('Invalid Vmax', 'warn'); btn.disabled = false; btn.textContent = 'Z* Anomaly'; return; }
+        }
+
+        var url = API_BASE + RT_PREFIX + '/anomaly_azimuthal_mean?' +
+            'file_url=' + encodeURIComponent(_currentFileUrl) +
+            '&variable=' + encodeURIComponent(variable) +
+            '&vmax_kt=' + vmax;
+
+        fetch(url)
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function (data) {
+                _rtRenderAnomaly(data, variable);
+            })
+            .catch(function (err) {
+                rtToast('Anomaly error: ' + err.message, 'error');
+            })
+            .finally(function () {
+                btn.disabled = false;
+                btn.textContent = 'Z* Anomaly';
+            });
+    };
+
+    function _rtRenderAnomaly(data, variable) {
+        var container = document.getElementById('rt-anomaly-result');
+        if (!container) return;
+
+        var climNote = data.climatology_available ?
+            'Clim. bin: ' + data.climatology_intensity_bin + ' kt (' + data.climatology_count + ' cases)' :
+            'Climatology not available';
+
+        container.innerHTML =
+            '<div class="storm-timeline-panel" style="margin-top:10px;">' +
+            '<div class="fl-ts-header">' +
+            '<span class="fl-ts-title">Z* Anomaly — ' + variable + ' (Vmax: ' + data.vmax_kt + ' kt, RMW: ' + data.rmw_km + ' km)</span>' +
+            _rtSaveBtnHTML('rt-anomaly-chart', 'ZstarAnomaly', 'margin-left:auto;') +
+            '<button onclick="document.getElementById(\'rt-anomaly-result\').innerHTML=\'\'" class="fl-ts-close" title="Close">&times;</button>' +
+            '</div>' +
+            '<div style="font-size:9px;color:#8b9ec2;padding:2px 8px;">' + climNote + '</div>' +
+            '<div id="rt-anomaly-chart" style="width:100%;height:320px;"></div>' +
+            '</div>';
+
+        // Build a diverging colorscale for Z-scores: blue (negative) → white (0) → red (positive)
+        var zColorscale = [
+            [0, 'rgb(5,10,172)'],
+            [0.25, 'rgb(60,120,230)'],
+            [0.5, 'rgb(255,255,255)'],
+            [0.75, 'rgb(230,80,60)'],
+            [1, 'rgb(178,10,28)']
+        ];
+
+        // Draw a vertical white line at R/RMW = 1.0 (the n_inner boundary)
+        var shapes = [];
+        if (data.n_inner > 0 && data.r_h_axis && data.r_h_axis.length > data.n_inner) {
+            var rmwX = data.r_h_axis[data.n_inner - 1];
+            shapes.push({
+                type: 'line', xref: 'x', yref: 'paper',
+                x0: rmwX, x1: rmwX, y0: 0, y1: 1,
+                line: { color: 'rgba(255,255,255,0.5)', width: 1.5, dash: 'dash' }
+            });
+        }
+
+        var trace = {
+            z: data.anomaly,
+            x: data.r_h_axis,
+            y: data.height_km,
+            type: 'heatmap',
+            colorscale: zColorscale,
+            zmin: -3, zmax: 3,
+            colorbar: {
+                title: { text: 'Z-score (σ)', font: { color: '#ccc', size: 9 } },
+                tickfont: { color: '#ccc', size: 8 },
+                thickness: 10, len: 0.85,
+                tickvals: [-3, -2, -1, 0, 1, 2, 3],
+            },
+            hovertemplate: 'R_H: %{x}<br>Height: %{y} km<br>Z*: %{z:.2f}σ<extra></extra>'
+        };
+
+        var layout = {
+            paper_bgcolor: '#0a1628', plot_bgcolor: '#0a1628',
+            xaxis: {
+                title: { text: 'R_H (inner: R/RMW | outer: RMW + km)', font: { size: 10, color: '#8b9ec2' } },
+                tickfont: { size: 9, color: '#8b9ec2' },
+                gridcolor: 'rgba(255,255,255,0.04)',
+            },
+            yaxis: {
+                title: { text: 'Height (km)', font: { size: 10, color: '#8b9ec2' } },
+                tickfont: { size: 9, color: '#8b9ec2', family: 'JetBrains Mono' },
+                gridcolor: 'rgba(255,255,255,0.04)',
+                range: [0, 15]
+            },
+            shapes: shapes,
+            margin: { l: 45, r: 12, t: 8, b: 40 },
+            hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 11 } }
+        };
+
+        Plotly.newPlot('rt-anomaly-chart', [trace], layout, {
+            responsive: true, displayModeBar: false, displaylogo: false
+        });
+    }
 
 })();
