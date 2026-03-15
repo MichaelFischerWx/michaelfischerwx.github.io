@@ -4186,8 +4186,8 @@
             varInfo = _rtLastPlotlyData.json.variable;
         }
         var cmap = varInfo ? varInfo.colorscale : 'RdBu';
-        var vmin = varInfo ? varInfo.vmin : null;
-        var vmax_val = varInfo ? varInfo.vmax : null;
+        var vmin = varInfo ? varInfo.vmin : 0;
+        var vmax_val = varInfo ? varInfo.vmax : 80;
 
         var quadNames = ['DSL', 'DSR', 'USL', 'USR'];
         var quadLabels = {
@@ -4244,9 +4244,14 @@
                 hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 10 } }
             };
 
-            Plotly.newPlot(divId, [trace], layout, {
-                responsive: true, displayModeBar: false, displaylogo: false
-            });
+            try {
+                Plotly.newPlot(divId, [trace], layout, {
+                    responsive: true, displayModeBar: false, displaylogo: false
+                });
+            } catch (plotErr) {
+                console.warn('Plotly quadrant error for ' + qname + ':', plotErr);
+                div.innerHTML = '<p style="color:#f87171;padding:10px;font-size:11px;">Plot error for ' + qname + '</p>';
+            }
         });
     }
 
