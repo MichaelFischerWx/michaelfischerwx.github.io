@@ -271,9 +271,9 @@
         var csBtn = document.getElementById('rt-cs-btn'); if (csBtn) csBtn.disabled = true;
         var volBtn = document.getElementById('rt-vol-btn'); if (volBtn) volBtn.disabled = true;
         var azBtn = document.getElementById('rt-az-btn'); if (azBtn) azBtn.disabled = true;
-        var shipsBtn = document.getElementById('rt-ships-btn'); if (shipsBtn) shipsBtn.disabled = false;
         var quadBtn = document.getElementById('rt-quad-btn'); if (quadBtn) quadBtn.disabled = true;
         var anomalyBtn = document.getElementById('rt-anomaly-btn'); if (anomalyBtn) anomalyBtn.disabled = true;
+        var vpBtn = document.getElementById('rt-vp-btn'); if (vpBtn) vpBtn.disabled = true;
 
         // Generate initial plot
         rtGeneratePlot();
@@ -517,6 +517,17 @@
             }
         }
 
+        // Shear vector inset (from SHIPS data, if available)
+        var shearInset = _rtBuildShearInset(false);
+        if (shearInset.shapes.length) {
+            layout.shapes = (layout.shapes || []).concat(shearInset.shapes);
+            baseLayout.shapes = (baseLayout.shapes || []).concat(shearInset.shapes);
+        }
+        if (shearInset.annotations.length) {
+            layout.annotations = (layout.annotations || []).concat(shearInset.annotations);
+            baseLayout.annotations = (baseLayout.annotations || []).concat(shearInset.annotations);
+        }
+
         Plotly.newPlot('rt-plotly-chart', [heatmap].concat(overlayTraces).concat(maxTraces), layout, config);
         _rtLastPlotlyData = { heatmap: heatmap, overlayTraces: overlayTraces, maxTraces: maxTraces, baseLayout: baseLayout, title: title, config: config, json: json };
 
@@ -534,6 +545,64 @@
 
         // Click handler for cross-section
         document.getElementById('rt-plotly-chart').on('plotly_click', rtHandlePlotClick);
+    }
+
+    // ── Shear vector inset (uses SHIPS SDDC) ─────────────────────
+    function _rtBuildShearInset(isFullsize) {
+        var result = { shapes: [], annotations: [] };
+        if (!_rtShipsData || !_rtShipsData.ships_data) return result;
+        var sddc = _rtShipsData.ships_data.sddc;
+        if (sddc == null || sddc === 9999) return result;
+
+        // Convert SDDC (met heading: 0=N,90=E CW) to math angle (CCW from east)
+        var theta = (90 - sddc) * Math.PI / 180;
+        var cx = isFullsize ? 0.08 : 0.10;
+        var cy = isFullsize ? 0.92 : 0.90;
+        var r = isFullsize ? 0.045 : 0.055;
+        var arrowLen = r * 0.82;
+        var dx = arrowLen * Math.cos(theta);
+        var dy = arrowLen * Math.sin(theta);
+
+        var shapes = [
+            // Background circle
+            { type: 'circle', xref: 'paper', yref: 'paper',
+              x0: cx - r, y0: cy - r, x1: cx + r, y1: cy + r,
+              fillcolor: 'rgba(10,22,40,0.85)', line: { color: 'rgba(255,255,255,0.25)', width: 1 } },
+            // Arrow shaft
+            { type: 'line', xref: 'paper', yref: 'paper',
+              x0: cx - dx * 0.3, y0: cy - dy * 0.3, x1: cx + dx, y1: cy + dy,
+              line: { color: '#f59e0b', width: isFullsize ? 2.5 : 2 } }
+        ];
+        // Arrowhead
+        var headLen = arrowLen * 0.35;
+        var headAngle = 25 * Math.PI / 180;
+        var ha1 = theta + Math.PI - headAngle;
+        var ha2 = theta + Math.PI + headAngle;
+        var tipX = cx + dx, tipY = cy + dy;
+        shapes.push({ type: 'line', xref: 'paper', yref: 'paper',
+            x0: tipX, y0: tipY, x1: tipX + headLen * Math.cos(ha1), y1: tipY + headLen * Math.sin(ha1),
+            line: { color: '#f59e0b', width: isFullsize ? 2.5 : 2 } });
+        shapes.push({ type: 'line', xref: 'paper', yref: 'paper',
+            x0: tipX, y0: tipY, x1: tipX + headLen * Math.cos(ha2), y1: tipY + headLen * Math.sin(ha2),
+            line: { color: '#f59e0b', width: isFullsize ? 2.5 : 2 } });
+        // Center dot
+        var dotR = r * 0.08;
+        shapes.push({ type: 'circle', xref: 'paper', yref: 'paper',
+            x0: cx - dotR, y0: cy - dotR, x1: cx + dotR, y1: cy + dotR,
+            fillcolor: 'rgba(255,255,255,0.5)', line: { width: 0 } });
+
+        var shearKt = _rtShipsData.ships_data.shear_kt;
+        var labelText = '<b>SHR</b>';
+        var subText = sddc.toFixed(0) + '\u00b0' + (shearKt != null ? ' / ' + shearKt + 'kt' : '');
+
+        var annotations = [
+            { text: labelText, xref: 'paper', yref: 'paper', x: cx, y: cy + r + (isFullsize ? 0.025 : 0.03),
+              showarrow: false, font: { color: '#f59e0b', size: isFullsize ? 10 : 8, family: 'JetBrains Mono, monospace' },
+              bgcolor: 'rgba(10,22,40,0.7)', borderpad: 1 },
+            { text: subText, xref: 'paper', yref: 'paper', x: cx, y: cy - r - (isFullsize ? 0.02 : 0.025),
+              showarrow: false, font: { color: 'rgba(245,158,11,0.7)', size: isFullsize ? 8 : 7, family: 'JetBrains Mono, monospace' } }
+        ];
+        return { shapes: shapes, annotations: annotations };
     }
 
     // ── Overlay contours ─────────────────────────────────────────
@@ -3809,20 +3878,21 @@
                 _rtShipsData = data;
                 _rtShipsLoading = false;
                 _rtRenderSHIPSPanel(data);
-                // Enable diagnostic buttons that need SHIPS data
-                var quadBtn = document.getElementById('rt-quad-btn');
-                var anomalyBtn = document.getElementById('rt-anomaly-btn');
-                if (quadBtn) quadBtn.disabled = false;
-                if (anomalyBtn) anomalyBtn.disabled = false;
+                _rtEnableSHIPSDiagnostics();
                 btn.textContent = '\u2713 SHIPS Loaded';
                 btn.style.borderColor = 'rgba(52,211,153,0.5)';
                 btn.disabled = false;
+                // Hide manual override panel and status on success
+                var statusEl = document.getElementById('rt-ships-status');
+                if (statusEl) statusEl.style.display = 'none';
+                var manualEl = document.getElementById('rt-ships-manual');
+                if (manualEl) manualEl.style.display = 'none';
                 // If auto-detected, update basin/storm# controls
                 if (data.auto_detected && data.basin && data.storm_number) {
                     if (basinEl) basinEl.value = data.basin;
                     if (stNumEl) stNumEl.value = data.storm_number;
                 }
-                var autoTag = data.auto_detected ? ' (auto-detected ' + (data.atcf_id || '') + ')' : '';
+                var autoTag = data.auto_detected ? ' (auto ' + (data.atcf_id || '') + ')' : '';
                 rtToast('SHIPS loaded: Vmax=' + (data.ships_data.vmax_kt || '?') + ' kt, Shear=' + (data.ships_data.shear_kt || '?') + ' kt' + autoTag, 'success');
             })
             .catch(function (err) {
@@ -3850,8 +3920,10 @@
         if (!stormName || !year || !analysisDt) return;
 
         _rtShipsLoading = true;
-        var btn = document.getElementById('rt-ships-btn');
-        if (btn) btn.textContent = 'Auto-detecting SHIPS...';
+
+        // Show inline status
+        var statusEl = document.getElementById('rt-ships-status');
+        if (statusEl) { statusEl.style.display = ''; statusEl.innerHTML = '<span style="color:#fdba74;">\u27F3 Auto-detecting SHIPS data for ' + stormName + '...</span>'; }
 
         // Auto-detect mode: omit basin & storm_number, send lat/lon instead
         var url = API_BASE + RT_PREFIX + '/ships?' +
@@ -3870,11 +3942,11 @@
                 _rtShipsData = data;
                 _rtShipsLoading = false;
                 _rtRenderSHIPSPanel(data);
-                var quadBtn = document.getElementById('rt-quad-btn');
-                var anomalyBtn = document.getElementById('rt-anomaly-btn');
-                if (quadBtn) quadBtn.disabled = false;
-                if (anomalyBtn) anomalyBtn.disabled = false;
-                if (btn) { btn.textContent = '\u2713 SHIPS Loaded'; btn.style.borderColor = 'rgba(52,211,153,0.5)'; btn.disabled = false; }
+                _rtEnableSHIPSDiagnostics();
+                // Hide status, hide manual override
+                if (statusEl) statusEl.style.display = 'none';
+                var manualEl = document.getElementById('rt-ships-manual');
+                if (manualEl) manualEl.style.display = 'none';
                 // If auto-detected, update the basin/storm# controls to reflect discovered values
                 if (data.auto_detected && data.basin && data.storm_number) {
                     var basinSel = document.getElementById('rt-ships-basin');
@@ -3882,14 +3954,51 @@
                     if (basinSel) basinSel.value = data.basin;
                     if (stNumInput) stNumInput.value = data.storm_number;
                 }
-                var autoTag = data.auto_detected ? ' (auto-detected ' + (data.atcf_id || '') + ')' : '';
+                var autoTag = data.auto_detected ? ' (auto ' + (data.atcf_id || '') + ')' : '';
                 rtToast('SHIPS loaded: Vmax=' + (data.ships_data.vmax_kt || '?') + ' kt' + autoTag, 'success');
             })
             .catch(function () {
                 _rtShipsLoading = false;
-                if (btn) { btn.textContent = '\ud83d\udce1 Fetch SHIPS Data'; btn.disabled = false; }
-                // Silent failure — user can manually retry with correct basin/storm#
+                // Show failure status and reveal manual override
+                if (statusEl) { statusEl.style.display = ''; statusEl.innerHTML = '<span style="color:#f87171;">SHIPS auto-detect failed. Use manual override below.</span>'; }
+                var manualEl = document.getElementById('rt-ships-manual');
+                if (manualEl) manualEl.style.display = '';
             });
+    }
+
+    // Enable all SHIPS-dependent diagnostic buttons
+    function _rtEnableSHIPSDiagnostics() {
+        var quadBtn = document.getElementById('rt-quad-btn');
+        var anomalyBtn = document.getElementById('rt-anomaly-btn');
+        var vpBtn = document.getElementById('rt-vp-btn');
+        if (quadBtn) quadBtn.disabled = false;
+        if (anomalyBtn) anomalyBtn.disabled = false;
+        if (vpBtn) vpBtn.disabled = false;
+
+        // Add shear vector inset to existing plan-view plot (if rendered)
+        _rtAddShearToPlot();
+    }
+
+    // Add shear vector overlay to existing plan-view plot via Plotly.relayout
+    function _rtAddShearToPlot() {
+        var plotDiv = document.getElementById('rt-plotly-chart');
+        if (!plotDiv || !plotDiv.layout) return;
+        var shearInset = _rtBuildShearInset(false);
+        if (shearInset.shapes.length === 0) return;
+
+        var existingShapes = (plotDiv.layout.shapes || []).slice();
+        var existingAnnot = (plotDiv.layout.annotations || []).slice();
+
+        Plotly.relayout('rt-plotly-chart', {
+            shapes: existingShapes.concat(shearInset.shapes),
+            annotations: existingAnnot.concat(shearInset.annotations)
+        });
+
+        // Also update stored layout data for fullscreen toggle
+        if (_rtLastPlotlyData && _rtLastPlotlyData.baseLayout) {
+            _rtLastPlotlyData.baseLayout.shapes = (_rtLastPlotlyData.baseLayout.shapes || []).concat(shearInset.shapes);
+            _rtLastPlotlyData.baseLayout.annotations = (_rtLastPlotlyData.baseLayout.annotations || []).concat(shearInset.annotations);
+        }
     }
 
     function _rtRenderSHIPSPanel(data) {
@@ -4223,6 +4332,199 @@
 
         Plotly.newPlot('rt-anomaly-chart', [trace], layout, {
             responsive: true, displayModeBar: false, displaylogo: false
+        });
+    }
+
+    // ── VP Favorability Scatter ──────────────────────────────────────
+    // Fetches the archive VP scatter and overlays the current real-time case
+    window.rtFetchVPScatter = function (colorBy) {
+        colorBy = colorBy || 'dvmax_12h';
+        if (!_currentFileUrl || !_rtShipsData) {
+            rtToast('Load SHIPS data first', 'warn');
+            return;
+        }
+
+        var btn = document.getElementById('rt-vp-btn');
+        var container = document.getElementById('rt-vp-result');
+        if (!btn || !container) return;
+
+        btn.disabled = true;
+        btn.textContent = 'Loading...';
+
+        var currentVP = _rtShipsData.ventilation_proxy;
+        var currentVmax = _rtShipsData.ships_data ? _rtShipsData.ships_data.vmax_kt : null;
+        var stormName = _rtShipsData.storm_name || '';
+
+        // Fetch archive VP scatter data
+        var url = API_BASE + '/scatter/vp_favorability?data_type=merge&color_by=' + colorBy;
+
+        fetch(url, { cache: 'no-store' })
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function (json) {
+                _rtRenderVPScatter(json, colorBy, currentVP, currentVmax, stormName);
+            })
+            .catch(function (err) {
+                rtToast('VP Scatter: ' + err.message, 'error');
+            })
+            .finally(function () {
+                btn.disabled = false;
+                btn.textContent = '\u2B24 VP Scatter';
+            });
+    };
+
+    function _rtRenderVPScatter(json, colorBy, currentVP, currentVmax, stormName) {
+        var container = document.getElementById('rt-vp-result');
+        if (!container) return;
+
+        var points = json.points || [];
+        var dvmaxLabel = colorBy === 'dvmax_12h' ? '12-h \u0394Vmax (kt)' : '24-h \u0394Vmax (kt)';
+
+        // Filter points with valid vortex favorability
+        var withVF = points.filter(function (p) {
+            return p.vortex_favorability != null;
+        });
+
+        container.innerHTML =
+            '<div class="storm-timeline-panel" style="margin-top:10px;">' +
+            '<div class="fl-ts-header">' +
+            '<span class="fl-ts-title">\u2B24 VP Favorability Scatter' +
+            (currentVP != null ? ' (VP = ' + currentVP.toFixed(2) + ')' : '') + '</span>' +
+            '<div style="display:flex;gap:4px;margin-left:auto;">' +
+            '<button class="cs-btn" onclick="rtFetchVPScatter(\'dvmax_12h\')" style="font-size:10px;padding:2px 8px;">12-h</button>' +
+            '<button class="cs-btn" onclick="rtFetchVPScatter(\'dvmax_24h\')" style="font-size:10px;padding:2px 8px;">24-h</button>' +
+            '</div>' +
+            _rtSaveBtnHTML('rt-vp-chart', 'VPScatter', '') +
+            '<button onclick="document.getElementById(\'rt-vp-result\').innerHTML=\'\'" class="fl-ts-close" title="Close">&times;</button>' +
+            '</div>' +
+            '<div id="rt-vp-chart" style="width:100%;height:400px;"></div>' +
+            '</div>';
+
+        if (withVF.length === 0) {
+            container.querySelector('#rt-vp-chart').innerHTML =
+                '<div style="color:#8b9ec2;text-align:center;padding:40px;">Archive VP scatter data not yet loaded on server. Try again in ~1 min.</div>';
+            return;
+        }
+
+        var dvmaxColorscale = [
+            [0.0, 'rgb(0,128,128)'], [0.15, 'rgb(64,175,175)'],
+            [0.3, 'rgb(140,210,210)'], [0.4, 'rgb(200,235,235)'],
+            [0.5, 'rgb(245,245,245)'],
+            [0.6, 'rgb(253,219,199)'], [0.7, 'rgb(244,165,130)'],
+            [0.85, 'rgb(214,96,77)'], [1.0, 'rgb(178,24,43)']
+        ];
+
+        var vps = withVF.map(function (p) { return p.vp; });
+        var vfs = withVF.map(function (p) { return p.vortex_favorability; });
+        var dvs = withVF.map(function (p) { return p[colorBy] || 0; });
+        var labels = withVF.map(function (p) { return p.storm_name + ' ' + p.datetime; });
+        var vmaxs = withVF.map(function (p) { return p.vmax_kt != null ? p.vmax_kt : ''; });
+
+        var traces = [];
+
+        // Background scatter: archive cases
+        traces.push({
+            x: vps, y: vfs, mode: 'markers', type: 'scatter',
+            marker: {
+                size: 6, color: dvs, colorscale: dvmaxColorscale, cmin: -30, cmax: 30,
+                opacity: 0.7,
+                line: { color: 'rgba(255,255,255,0.3)', width: 0.5 },
+                colorbar: {
+                    title: { text: dvmaxLabel, font: { color: '#ccc', size: 9 } },
+                    tickfont: { color: '#ccc', size: 8 }, thickness: 10, len: 0.85
+                }
+            },
+            text: labels, customdata: vmaxs,
+            hovertemplate: '<b>%{text}</b><br>Vmax: %{customdata} kt<br>VP: %{x:.2f}<br>Favorability: %{y:.2f}<br>\u0394Vmax: %{marker.color:.0f} kt<extra></extra>',
+            name: 'Archive (' + withVF.length + ')', showlegend: true
+        });
+
+        // 2-sigma ellipses for RI/SI/NI groups
+        var grpColors = { RI: 'rgba(239,68,68,0.6)', SI: 'rgba(251,191,36,0.6)', NI: 'rgba(96,165,250,0.6)' };
+        var groups = { RI: { vp: [], vf: [] }, SI: { vp: [], vf: [] }, NI: { vp: [], vf: [] } };
+
+        for (var i = 0; i < withVF.length; i++) {
+            var p = withVF[i];
+            if (p.vmax_kt != null && p.vmax_kt > 100) continue;
+            var dv = p[colorBy] || 0;
+            var gk = dv >= 20 ? 'RI' : (dv > 0 ? 'SI' : 'NI');
+            groups[gk].vp.push(p.vp);
+            groups[gk].vf.push(p.vortex_favorability);
+        }
+
+        function _ms(arr) {
+            var n = arr.length; if (n === 0) return { m: 0, s: 0 };
+            var m = arr.reduce(function (a, b) { return a + b; }, 0) / n;
+            var s = Math.sqrt(arr.reduce(function (a, b) { return a + (b - m) * (b - m); }, 0) / n);
+            return { m: m, s: s };
+        }
+
+        var grpNames = ['RI', 'SI', 'NI'];
+        for (var gi = 0; gi < grpNames.length; gi++) {
+            var grp = grpNames[gi];
+            var g = groups[grp];
+            if (g.vp.length < 3) continue;
+            var vpS = _ms(g.vp), vfS = _ms(g.vf);
+            var ellX = [], ellY = [];
+            for (var a = 0; a <= 360; a += 5) {
+                var rad = a * Math.PI / 180;
+                ellX.push(vpS.m + 2 * vpS.s * Math.cos(rad));
+                ellY.push(vfS.m + 2 * vfS.s * Math.sin(rad));
+            }
+            traces.push({
+                x: ellX, y: ellY, mode: 'lines', type: 'scatter',
+                line: { color: grpColors[grp], width: 2, dash: 'dot' },
+                name: grp + ' (n=' + g.vp.length + ')', showlegend: true
+            });
+        }
+
+        // Current real-time case: vertical line at VP value
+        var shapes = [];
+        var annotations = [];
+        if (currentVP != null) {
+            shapes.push({
+                type: 'line', xref: 'x', yref: 'paper',
+                x0: currentVP, x1: currentVP, y0: 0, y1: 1,
+                line: { color: '#22d3ee', width: 2.5, dash: 'solid' }
+            });
+            annotations.push({
+                x: currentVP, y: 1.05, xref: 'x', yref: 'paper',
+                text: stormName + ' (VP=' + currentVP.toFixed(2) + ')',
+                showarrow: false,
+                font: { color: '#22d3ee', size: 11, family: 'JetBrains Mono' },
+                xanchor: 'center'
+            });
+        }
+
+        var layout = {
+            paper_bgcolor: '#0a1628', plot_bgcolor: '#0a1628',
+            xaxis: {
+                title: { text: 'Ventilation Proxy (VP)', font: { size: 10, color: '#8b9ec2' } },
+                tickfont: { size: 9, color: '#8b9ec2' },
+                gridcolor: 'rgba(255,255,255,0.04)', zeroline: false,
+            },
+            yaxis: {
+                title: { text: 'Vortex Favorability (VH \u2212 VW)', font: { size: 10, color: '#8b9ec2' } },
+                tickfont: { size: 9, color: '#8b9ec2' },
+                gridcolor: 'rgba(255,255,255,0.04)', zeroline: true,
+                zerolinecolor: 'rgba(255,255,255,0.1)',
+            },
+            shapes: shapes,
+            annotations: annotations,
+            margin: { l: 50, r: 20, t: 30, b: 45 },
+            legend: {
+                x: 0.01, y: 0.99, xanchor: 'left', yanchor: 'top',
+                font: { color: '#aaa', size: 9 },
+                bgcolor: 'rgba(10,22,40,0.8)', bordercolor: 'rgba(255,255,255,0.1)', borderwidth: 1
+            },
+            hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 10 } }
+        };
+
+        Plotly.newPlot('rt-vp-chart', traces, layout, {
+            responsive: true, displayModeBar: true, displaylogo: false,
+            modeBarButtonsToRemove: ['lasso2d', 'select2d', 'toggleSpikelines']
         });
     }
 
