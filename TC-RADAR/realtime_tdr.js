@@ -21,6 +21,7 @@
     var _rtVisible = false;
     var _currentFileUrl = null;
     var _rtDataCache = {};
+    var _rtCaseMeta = null;  // case_meta for current file (keyed by _currentFileUrl)
     var _rtLast3DJson = null;
     var _rtLastPlotlyData = null;
     var _rtCsMode = false;
@@ -242,6 +243,7 @@
         if (!fileUrl) return;
         _currentFileUrl = fileUrl;
         _rtDataCache = {};
+        _rtCaseMeta = null;
         _rtLast3DJson = null;
         _rtLastPlotlyData = null;
         _rtCsMode = false;
@@ -292,6 +294,7 @@
             .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
             .then(function (json) {
                 var m = json.case_meta || {};
+                _rtCaseMeta = m;  // Store for SHIPS auto-fetch
                 var html = '<div class="rt-meta-title">' + (m.storm_name || 'Unknown') + '</div>' +
                     '<div class="rt-meta-row">' + (m.mission_id || '') + ' · ' + (m.datetime || '') + '</div>' +
                     '<div class="rt-meta-grid">' +
@@ -353,7 +356,7 @@
 
         fetch(url, { signal: controller.signal })
             .then(function (r) { if (!r.ok) return r.json().then(function (e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
-            .then(function (json) { _rtDataCache[cacheKey] = json; rtRenderPlot(json, resultDiv); if (callback) callback(); })
+            .then(function (json) { _rtDataCache[cacheKey] = json; if (json.case_meta) _rtCaseMeta = json.case_meta; rtRenderPlot(json, resultDiv); if (callback) callback(); })
             .catch(function (err) {
                 var msg = err.name === 'AbortError' ? '⚠️ Request timed out (120s).' : '⚠️ ' + err.message;
                 resultDiv.innerHTML = '<div class="explorer-status error">' + msg + '</div>';
@@ -3832,8 +3835,8 @@
 
         // Extract storm info from current metadata
         var stormName = '', year = '', analysisDt = '', lat = 0, lon = 0;
-        if (_rtDataCache[_currentFileUrl]) {
-            var meta = _rtDataCache[_currentFileUrl].case_meta || {};
+        if (_rtCaseMeta) {
+            var meta = _rtCaseMeta;
             stormName = (meta.storm_name || '').toUpperCase();
             year = meta.datetime ? meta.datetime.substring(0, 4) : '';
             analysisDt = meta.datetime ? meta.datetime.replace('Z', '').replace(' ', 'T') : '';
@@ -3910,8 +3913,8 @@
         if (!_currentFileUrl || _rtShipsData || _rtShipsLoading) return;
 
         var stormName = '', year = '', analysisDt = '', lat = 0, lon = 0;
-        if (_rtDataCache[_currentFileUrl]) {
-            var meta = _rtDataCache[_currentFileUrl].case_meta || {};
+        if (_rtCaseMeta) {
+            var meta = _rtCaseMeta;
             stormName = (meta.storm_name || '').toUpperCase();
             year = meta.datetime ? meta.datetime.substring(0, 4) : '';
             analysisDt = meta.datetime ? meta.datetime.replace('Z', '').replace(' ', 'T') : '';
@@ -4179,8 +4182,8 @@
 
         var varInfo = null;
         // Get variable info from last rendered data
-        if (_rtDataCache[_currentFileUrl] && _rtDataCache[_currentFileUrl].variable) {
-            varInfo = _rtDataCache[_currentFileUrl].variable;
+        if (_rtLastPlotlyData && _rtLastPlotlyData.json && _rtLastPlotlyData.json.variable) {
+            varInfo = _rtLastPlotlyData.json.variable;
         }
         var cmap = varInfo ? varInfo.colorscale : 'RdBu';
         var vmin = varInfo ? varInfo.vmin : null;
