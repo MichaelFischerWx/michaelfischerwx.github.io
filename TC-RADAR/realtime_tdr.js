@@ -4141,11 +4141,14 @@
         var variable = document.getElementById('rt-var').value || 'TANGENTIAL_WIND';
         var overlay = document.getElementById('rt-overlay').value || '';
 
+        var covSlider = document.getElementById('coverage-slider');
+        var covVal = covSlider ? (parseInt(covSlider.value) / 100) : 0.5;
+
         var url = API_BASE + RT_PREFIX + '/quadrant_mean?' +
             'file_url=' + encodeURIComponent(_currentFileUrl) +
             '&variable=' + encodeURIComponent(variable) +
             '&sddc=' + sddc +
-            '&max_radius_km=200&dr_km=2&coverage_min=0.5' +
+            '&max_radius_km=200&dr_km=2&coverage_min=' + covVal +
             (overlay ? '&overlay=' + encodeURIComponent(overlay) : '');
 
         fetch(url)
@@ -4209,6 +4212,21 @@
             div.style.height = '100%';
             gridEl.appendChild(div);
 
+            // Check if quadrant has any non-null data
+            var hasData = false;
+            for (var ri = 0; ri < qData.length && !hasData; ri++) {
+                for (var ci = 0; ci < qData[ri].length && !hasData; ci++) {
+                    if (qData[ri][ci] !== null && !isNaN(qData[ri][ci])) hasData = true;
+                }
+            }
+
+            if (!hasData) {
+                div.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;">' +
+                    '<p style="color:#e5e7eb;font-size:11px;font-weight:600;margin:0 0 4px 0;">' + quadLabels[qname] + '</p>' +
+                    '<p style="color:#6b7280;font-size:10px;margin:0;">No data in this quadrant</p></div>';
+                return;
+            }
+
             var trace = {
                 z: qData,
                 x: data.radius_km,
@@ -4217,7 +4235,8 @@
                 colorscale: cmap,
                 zmin: vmin,
                 zmax: vmax_val,
-                colorbar: idx === 1 ? {
+                zauto: false,
+                colorbar: idx === 1 || (idx === 3) ? {
                     title: { text: variable, font: { color: '#ccc', size: 8 } },
                     tickfont: { color: '#ccc', size: 7 },
                     thickness: 8, len: 0.8, x: 1.02
@@ -4250,7 +4269,9 @@
                 });
             } catch (plotErr) {
                 console.warn('Plotly quadrant error for ' + qname + ':', plotErr);
-                div.innerHTML = '<p style="color:#f87171;padding:10px;font-size:11px;">Plot error for ' + qname + '</p>';
+                div.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;">' +
+                    '<p style="color:#e5e7eb;font-size:11px;font-weight:600;margin:0 0 4px 0;">' + quadLabels[qname] + '</p>' +
+                    '<p style="color:#6b7280;font-size:10px;margin:0;">Insufficient data</p></div>';
             }
         });
     }
