@@ -994,16 +994,13 @@
             var imgEl = _rtIRMapOverlay.getElement ? _rtIRMapOverlay.getElement() : _rtIRMapOverlay._image;
             if (imgEl) { imgEl.src = url; }
             else { _rtIRMapOverlay.setUrl(url); }
-            if (!_rtIRMapBoundsSet) {
-                _rtIRMapOverlay.setBounds(bounds);
-                _rtIRMapBoundsSet = true;
-            }
+            // Always update bounds — they change when switching analysis files
+            _rtIRMapOverlay.setBounds(bounds);
         } else {
             _rtIRMapOverlay = L.imageOverlay(url, bounds, {
                 opacity: 0.75, interactive: false, zIndex: 200
             });
             if (_rtIRMapVisible) _rtIRMapOverlay.addTo(_rtMap);
-            _rtIRMapBoundsSet = true;
         }
     }
 
@@ -4100,6 +4097,8 @@
             '<table style="width:100%;font-size:10px;color:#d1d5db;border-collapse:collapse;">',
         ];
 
+        var shgcEst = data.vp_components && data.vp_components.shgc_est_kt
+            ? data.vp_components.shgc_est_kt : null;
         var fields = [
             ['Vmax', sd.vmax_kt != null ? sd.vmax_kt + ' kt' : '\u2014'],
             ['Shear', sd.shear_kt != null ? sd.shear_kt + ' kt / ' + (sd.sddc != null ? sd.sddc + '\u00b0' : '?') : '\u2014'],
