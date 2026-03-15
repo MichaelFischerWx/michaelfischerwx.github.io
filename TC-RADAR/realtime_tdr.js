@@ -3904,7 +3904,8 @@
     };
 
     // Auto-fetch SHIPS silently (called after first plot render)
-    // Uses storm name + lat/lon from TDR metadata for auto-detection — no basin/storm# needed
+    // Strategy: try auto-detect (no basin/storm#) first; if that fails (e.g. old backend),
+    // fall back to explicit basin=AL, storm_number=1.
     function _rtAutoFetchSHIPS() {
         if (!_currentFileUrl || _rtShipsData || _rtShipsLoading) return;
 
@@ -3925,45 +3926,126 @@
         var statusEl = document.getElementById('rt-ships-status');
         if (statusEl) { statusEl.style.display = ''; statusEl.innerHTML = '<span style="color:#fdba74;">\u27F3 Auto-detecting SHIPS data for ' + stormName + '...</span>'; }
 
-        // Auto-detect mode: omit basin & storm_number, send lat/lon instead
-        var url = API_BASE + RT_PREFIX + '/ships?' +
+        // Common success handler
+        function _onShipsSuccess(data, isAutoDetect) {
+            if (data.status === 'not_found') throw new Error('not found');
+            _rtShipsData = data;
+            _rtShipsLoading = false;
+            _rtRenderSHIPSPanel(data);
+            _rtEnableSHIPSDiagnostics();
+            if (statusEl) statusEl.style.display = 'none';
+            var manualEl = document.getElementById('rt-ships-manual');
+            if (manualEl) manualEl.style.display = 'none';
+            if (data.auto_detected && data.basin && data.storm_number) {
+                var basinSel = document.getElementById('rt-ships-basin');
+                var stNumInput = document.getElementById('rt-ships-stnum');
+                if (basinSel) basinSel.value = data.basin;
+                if (stNumInput) stNumInput.value = data.storm_number;
+            }
+            var autoTag = data.auto_detected ? ' (auto ' + (data.atcf_id || '') + ')' : '';
+            rtToast('SHIPS loaded: Vmax=' + (data.ships_data.vmax_kt || '?') + ' kt' + autoTag, 'success');
+        }
+
+        // Guess basin from longitude
+        var guessBasin = 'AL';
+        if (lon !== 0) {
+            var normLon = lon > 180 ? lon - 360 : lon;
+            if (normLon < -100) guessBasin = 'EP';
+        }
+
+        // Try 1: Auto-detect mode (new backend — omit basin & storm_number)
+        var autoUrl = API_BASE + RT_PREFIX + '/ships?' +
             'storm_name=' + encodeURIComponent(stormName) +
             '&year=' + year +
             '&analysis_dt=' + encodeURIComponent(analysisDt) +
             '&lat=' + lat + '&lon=' + lon;
 
-        fetch(url)
+        fetch(autoUrl)
             .then(function (r) {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 return r.json();
             })
-            .then(function (data) {
-                if (data.status === 'not_found') throw new Error('not found');
-                _rtShipsData = data;
-                _rtShipsLoading = false;
-                _rtRenderSHIPSPanel(data);
-                _rtEnableSHIPSDiagnostics();
-                // Hide status, hide manual override
-                if (statusEl) statusEl.style.display = 'none';
-                var manualEl = document.getElementById('rt-ships-manual');
-                if (manualEl) manualEl.style.display = 'none';
-                // If auto-detected, update the basin/storm# controls to reflect discovered values
-                if (data.auto_detected && data.basin && data.storm_number) {
+            .then(function (data) { _onShipsSuccess(data, true); })
+            .catch(function () {
+                // Try 2: Fallback — send explicit basin + storm_number=1 (old backend compat)
+                // Scan storm numbers 1-30 for the matching storm name
+                if (statusEl) { statusEl.innerHTML = '<span style="color:#fdba74;">\u27F3 Scanning SHIPS for ' + stormName + ' (' + guessBasin + ')...</span>'; }
+                _rtDiscoverATCFAndFetchSHIPS(stormName, year, analysisDt, guessBasin, statusEl);
+            });
+    }
+
+    // Fallback: discover the ATCF ID by trying storm numbers in batches,
+    // then call backend /ships with the discovered basin + storm_number.
+    // Uses batched parallel requests (5 at a time) to avoid overwhelming the server.
+    function _rtDiscoverATCFAndFetchSHIPS(stormName, year, analysisDt, guessBasin, statusEl) {
+        var maxStNum = 25;
+        var batchSize = 5;
+
+        function _tryBatch(startNum) {
+            if (startNum > maxStNum) {
+                // Exhausted this basin
+                if (guessBasin === 'AL') {
+                    if (statusEl) { statusEl.innerHTML = '<span style="color:#fdba74;">\u27F3 Trying EP basin...</span>'; }
+                    _rtDiscoverATCFAndFetchSHIPS(stormName, year, analysisDt, 'EP', statusEl);
+                } else {
+                    _rtShipsLoading = false;
+                    if (statusEl) { statusEl.style.display = ''; statusEl.innerHTML = '<span style="color:#f87171;">SHIPS not found for ' + stormName + '. Use manual override below.</span>'; }
+                    var manualEl = document.getElementById('rt-ships-manual');
+                    if (manualEl) manualEl.style.display = '';
+                }
+                return;
+            }
+
+            var promises = [];
+            var endNum = Math.min(startNum + batchSize - 1, maxStNum);
+            for (var sn = startNum; sn <= endNum; sn++) {
+                var url = API_BASE + RT_PREFIX + '/ships?' +
+                    'storm_name=' + encodeURIComponent(stormName) +
+                    '&year=' + year +
+                    '&basin=' + guessBasin +
+                    '&storm_number=' + sn +
+                    '&analysis_dt=' + encodeURIComponent(analysisDt);
+                promises.push(
+                    fetch(url).then(function (r) {
+                        if (!r.ok) return null;
+                        return r.json();
+                    }).then(function (data) {
+                        if (!data || data.status === 'not_found') return null;
+                        return data;
+                    }).catch(function () { return null; })
+                );
+            }
+
+            Promise.all(promises).then(function (results) {
+                var found = null;
+                for (var i = 0; i < results.length; i++) {
+                    if (results[i] && results[i].status === 'success') {
+                        found = results[i];
+                        break;
+                    }
+                }
+
+                if (found) {
+                    _rtShipsData = found;
+                    _rtShipsLoading = false;
+                    _rtRenderSHIPSPanel(found);
+                    _rtEnableSHIPSDiagnostics();
+                    if (statusEl) statusEl.style.display = 'none';
+                    var manualEl = document.getElementById('rt-ships-manual');
+                    if (manualEl) manualEl.style.display = 'none';
                     var basinSel = document.getElementById('rt-ships-basin');
                     var stNumInput = document.getElementById('rt-ships-stnum');
-                    if (basinSel) basinSel.value = data.basin;
-                    if (stNumInput) stNumInput.value = data.storm_number;
+                    if (basinSel && found.basin) basinSel.value = found.basin;
+                    if (stNumInput && found.storm_number) stNumInput.value = found.storm_number;
+                    rtToast('SHIPS loaded: ' + (found.atcf_id || '') + ' Vmax=' + ((found.ships_data || {}).vmax_kt || '?') + ' kt', 'success');
+                } else {
+                    // Try next batch
+                    _tryBatch(endNum + 1);
                 }
-                var autoTag = data.auto_detected ? ' (auto ' + (data.atcf_id || '') + ')' : '';
-                rtToast('SHIPS loaded: Vmax=' + (data.ships_data.vmax_kt || '?') + ' kt' + autoTag, 'success');
-            })
-            .catch(function () {
-                _rtShipsLoading = false;
-                // Show failure status and reveal manual override
-                if (statusEl) { statusEl.style.display = ''; statusEl.innerHTML = '<span style="color:#f87171;">SHIPS auto-detect failed. Use manual override below.</span>'; }
-                var manualEl = document.getElementById('rt-ships-manual');
-                if (manualEl) manualEl.style.display = '';
             });
+        }
+
+        _tryBatch(1);
     }
 
     // Enable all SHIPS-dependent diagnostic buttons
