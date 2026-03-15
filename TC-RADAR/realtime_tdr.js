@@ -4466,16 +4466,33 @@
         var currentVmax = _rtShipsData.ships_data ? _rtShipsData.ships_data.vmax_kt : null;
         var stormName = _rtShipsData.storm_name || '';
 
-        // Fetch archive VP scatter data
-        var url = API_BASE + '/scatter/vp_favorability?data_type=merge&color_by=' + colorBy;
+        // Fetch archive VP scatter data AND real-time vortex metrics in parallel
+        var scatterUrl = API_BASE + '/scatter/vp_favorability?data_type=merge&color_by=' + colorBy;
 
-        fetch(url, { cache: 'no-store' })
-            .then(function (r) {
-                if (!r.ok) throw new Error('HTTP ' + r.status);
-                return r.json();
-            })
-            .then(function (json) {
-                _rtRenderVPScatter(json, colorBy, currentVP, currentVmax, stormName);
+        var vortexPromise = Promise.resolve(null);
+        if (_currentFileUrl && currentVmax != null) {
+            var vortexUrl = API_BASE + RT_PREFIX + '/vortex_raw?' +
+                'file_url=' + encodeURIComponent(_currentFileUrl) +
+                '&vmax_kt=' + currentVmax;
+            vortexPromise = fetch(vortexUrl)
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .catch(function () { return null; });
+        }
+
+        Promise.all([
+            fetch(scatterUrl, { cache: 'no-store' })
+                .then(function (r) {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.json();
+                }),
+            vortexPromise
+        ])
+            .then(function (results) {
+                var json = results[0];
+                var vortex = results[1];
+                var currentVF = (vortex && vortex.vortex_favorability != null)
+                    ? vortex.vortex_favorability : null;
+                _rtRenderVPScatter(json, colorBy, currentVP, currentVmax, stormName, currentVF);
             })
             .catch(function (err) {
                 rtToast('VP Scatter: ' + err.message, 'error');
@@ -4486,7 +4503,7 @@
             });
     };
 
-    function _rtRenderVPScatter(json, colorBy, currentVP, currentVmax, stormName) {
+    function _rtRenderVPScatter(json, colorBy, currentVP, currentVmax, stormName, currentVF) {
         var container = document.getElementById('rt-vp-result');
         if (!container) return;
 
@@ -4591,21 +4608,38 @@
             });
         }
 
-        // Current real-time case: vertical line at VP value
+        // Current real-time case: vertical line + star marker
         var shapes = [];
         var annotations = [];
         if (currentVP != null) {
+            var starY = currentVF != null ? currentVF : 0;
+            var vfLabel = currentVF != null ? ', VF=' + currentVF.toFixed(2) : '';
+            var hoverVF = currentVF != null
+                ? 'Favorability: ' + currentVF.toFixed(2)
+                : 'Favorability: computing...';
+
             shapes.push({
                 type: 'line', xref: 'x', yref: 'paper',
                 x0: currentVP, x1: currentVP, y0: 0, y1: 1,
-                line: { color: '#22d3ee', width: 2.5, dash: 'solid' }
+                line: { color: '#22d3ee', width: 2, dash: 'dash' }
             });
             annotations.push({
                 x: currentVP, y: 1.05, xref: 'x', yref: 'paper',
-                text: stormName + ' (VP=' + currentVP.toFixed(2) + ')',
+                text: stormName + ' (VP=' + currentVP.toFixed(2) + vfLabel + ')',
                 showarrow: false,
                 font: { color: '#22d3ee', size: 11, family: 'JetBrains Mono' },
                 xanchor: 'center'
+            });
+            // Star marker at actual (VP, VF) position
+            traces.push({
+                x: [currentVP], y: [starY], mode: 'markers', type: 'scatter',
+                marker: {
+                    symbol: 'star', size: 18, color: '#22d3ee',
+                    line: { color: '#ffffff', width: 2 }
+                },
+                name: stormName + ' (current)',
+                showlegend: true,
+                hovertemplate: '<b>' + stormName + '</b><br>VP: ' + currentVP.toFixed(2) + '<br>' + hoverVF + '<extra></extra>'
             });
         }
 
