@@ -4099,9 +4099,20 @@
 
         var shgcEst = data.vp_components && data.vp_components.shgc_est_kt
             ? data.vp_components.shgc_est_kt : null;
+        var shgcRatio = data.vp_components && data.vp_components.shgc_shdc_ratio
+            ? data.vp_components.shgc_shdc_ratio : null;
+        var shearVal = '\u2014';
+        if (sd.shear_kt != null) {
+            shearVal = sd.shear_kt + ' kt / ' + (sd.sddc != null ? sd.sddc + '\u00b0' : '?');
+        }
+        var shgcVal = '\u2014';
+        if (shgcEst != null) {
+            shgcVal = shgcEst.toFixed(1) + ' kt' + (shgcRatio != null ? ' (\u00d7' + shgcRatio.toFixed(2) + ')' : '');
+        }
         var fields = [
             ['Vmax', sd.vmax_kt != null ? sd.vmax_kt + ' kt' : '\u2014'],
-            ['Shear', sd.shear_kt != null ? sd.shear_kt + ' kt / ' + (sd.sddc != null ? sd.sddc + '\u00b0' : '?') : '\u2014'],
+            ['Shear (SHDC)', shearVal],
+            ['SHGC Est', shgcVal],
             ['SST', sd.sst_c != null ? sd.sst_c + ' \u00b0C' : '\u2014'],
             ['MPI', sd.pot_int_kt != null ? sd.pot_int_kt + ' kt' : '\u2014'],
             ['RH (700-500)', sd.rhmd != null ? sd.rhmd + '%' : '\u2014'],
