@@ -4236,8 +4236,10 @@
 
         var gridEl = document.getElementById('rt-quad-grid');
 
-        panelOrder.forEach(function (p, idx) {
-            var qData = data.quadrant_means[p.key].data;
+        // ── Pass 1: create ALL divs and append them so the CSS grid
+        //    can compute cell sizes before Plotly tries to render.
+        var panelDivs = [];
+        panelOrder.forEach(function (p) {
             var divId = 'rt-quad-' + p.key.toLowerCase();
             var div = document.createElement('div');
             div.id = divId;
@@ -4246,6 +4248,18 @@
             div.style.overflow = 'hidden';
             div.style.minHeight = '0';
             gridEl.appendChild(div);
+            panelDivs.push({ div: div, divId: divId, p: p });
+        });
+
+        // Force a synchronous layout reflow so every cell has dimensions
+        void gridEl.offsetHeight;
+
+        // ── Pass 2: render Plotly into each div now that they are laid out
+        panelDivs.forEach(function (item) {
+            var p = item.p;
+            var div = item.div;
+            var divId = item.divId;
+            var qData = data.quadrant_means[p.key].data;
 
             // Check if quadrant has any non-null data
             var hasData = false;
