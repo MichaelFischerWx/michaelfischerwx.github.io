@@ -4186,7 +4186,7 @@
         container.innerHTML =
             '<div class="storm-timeline-panel" style="margin-top:10px;">' +
             '<div class="fl-ts-header">' +
-            '<span class="fl-ts-title">⊙ Shear-Relative Quadrant Means (SDDC: ' + data.sddc + '°)</span>' +
+            '<span class="fl-ts-title">\u2299 Shear-Relative Quadrant Means (SDDC: ' + data.sddc + '\u00b0)</span>' +
             _rtSaveBtnHTML('rt-quad-grid', 'QuadrantMeans', 'margin-left:auto;') +
             '<button onclick="document.getElementById(\'rt-quad-result\').innerHTML=\'\'" class="fl-ts-close" title="Close">&times;</button>' +
             '</div>' +
@@ -4202,20 +4202,24 @@
         var vmin = varInfo ? varInfo.vmin : 0;
         var vmax_val = varInfo ? varInfo.vmax : 80;
 
-        var quadNames = ['DSL', 'DSR', 'USL', 'USR'];
-        var quadLabels = {
-            'DSL': 'Downshear Left',
-            'DSR': 'Downshear Right',
-            'USL': 'Upshear Left',
-            'USR': 'Upshear Right'
-        };
+        // Panel layout matching archive: shear points RIGHT
+        //   USL (top-left)  |  DSL (top-right)      ← left of shear (top)
+        //   USR (bot-left)  |  DSR (bot-right)      ← right of shear (bottom)
+        //   ← upshear         downshear →
+        var panelOrder = [
+            { key: 'USL', label: 'Upshear Left',     row: 0, col: 0 },
+            { key: 'DSL', label: 'Downshear Left',   row: 0, col: 1 },
+            { key: 'USR', label: 'Upshear Right',    row: 1, col: 0 },
+            { key: 'DSR', label: 'Downshear Right',  row: 1, col: 1 }
+        ];
+
+        var quadColors = { DSL: '#f59e0b', DSR: '#f59e0b', USL: '#60a5fa', USR: '#60a5fa' };
 
         var gridEl = document.getElementById('rt-quad-grid');
-        var subplots = [];
 
-        quadNames.forEach(function (qname, idx) {
-            var qData = data.quadrant_means[qname].data;
-            var divId = 'rt-quad-' + qname.toLowerCase();
+        panelOrder.forEach(function (p, idx) {
+            var qData = data.quadrant_means[p.key].data;
+            var divId = 'rt-quad-' + p.key.toLowerCase();
             var div = document.createElement('div');
             div.id = divId;
             div.style.width = '100%';
@@ -4232,11 +4236,12 @@
 
             if (!hasData) {
                 div.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;">' +
-                    '<p style="color:#e5e7eb;font-size:11px;font-weight:600;margin:0 0 4px 0;">' + quadLabels[qname] + '</p>' +
+                    '<p style="color:' + (quadColors[p.key] || '#e5e7eb') + ';font-size:11px;font-weight:600;margin:0 0 4px 0;">' + p.label + '</p>' +
                     '<p style="color:#6b7280;font-size:10px;margin:0;">No data in this quadrant</p></div>';
                 return;
             }
 
+            var showCbar = (p.row === 0 && p.col === 1); // top-right panel
             var trace = {
                 z: qData,
                 x: data.radius_km,
@@ -4246,30 +4251,30 @@
                 zmin: vmin,
                 zmax: vmax_val,
                 zauto: false,
-                colorbar: idx === 1 || (idx === 3) ? {
+                colorbar: showCbar ? {
                     title: { text: variable, font: { color: '#ccc', size: 8 } },
                     tickfont: { color: '#ccc', size: 7 },
                     thickness: 8, len: 0.8, x: 1.02
                 } : { thickness: 0, len: 0 },
-                hovertemplate: '<b>' + qname + '</b><br>R: %{x} km<br>z: %{y} km<br>Value: %{z:.2f}<extra></extra>'
+                hovertemplate: '<b>' + p.label + '</b><br>R: %{x} km<br>z: %{y} km<br>Value: %{z:.2f}<extra></extra>'
             };
 
             var layout = {
                 paper_bgcolor: '#0a1628', plot_bgcolor: '#0a1628',
-                title: { text: quadLabels[qname], font: { color: '#e5e7eb', size: 11 }, x: 0.5, y: 0.97 },
+                title: { text: p.label, font: { color: quadColors[p.key] || '#e5e7eb', size: 11 }, x: 0.5, y: 0.97 },
                 xaxis: {
-                    title: idx >= 2 ? { text: 'Radius (km)', font: { size: 9, color: '#8b9ec2' } } : null,
+                    title: p.row >= 1 ? { text: 'Radius (km)', font: { size: 9, color: '#8b9ec2' } } : null,
                     tickfont: { size: 8, color: '#8b9ec2' },
                     gridcolor: 'rgba(255,255,255,0.04)',
                     range: [0, 200]
                 },
                 yaxis: {
-                    title: idx % 2 === 0 ? { text: 'Height (km)', font: { size: 9, color: '#8b9ec2' } } : null,
+                    title: p.col === 0 ? { text: 'Height (km)', font: { size: 9, color: '#8b9ec2' } } : null,
                     tickfont: { size: 8, color: '#8b9ec2' },
                     gridcolor: 'rgba(255,255,255,0.04)',
                     range: [0, 15]
                 },
-                margin: { l: idx % 2 === 0 ? 40 : 20, r: idx % 2 === 1 ? 40 : 5, t: 25, b: idx >= 2 ? 35 : 10 },
+                margin: { l: p.col === 0 ? 40 : 20, r: p.col === 1 ? 40 : 5, t: 25, b: p.row >= 1 ? 35 : 10 },
                 hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 10 } }
             };
 
@@ -4278,9 +4283,9 @@
                     responsive: true, displayModeBar: false, displaylogo: false
                 });
             } catch (plotErr) {
-                console.warn('Plotly quadrant error for ' + qname + ':', plotErr);
+                console.warn('Plotly quadrant error for ' + p.key + ':', plotErr);
                 div.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;">' +
-                    '<p style="color:#e5e7eb;font-size:11px;font-weight:600;margin:0 0 4px 0;">' + quadLabels[qname] + '</p>' +
+                    '<p style="color:' + (quadColors[p.key] || '#e5e7eb') + ';font-size:11px;font-weight:600;margin:0 0 4px 0;">' + p.label + '</p>' +
                     '<p style="color:#6b7280;font-size:10px;margin:0;">Insufficient data</p></div>';
             }
         });
