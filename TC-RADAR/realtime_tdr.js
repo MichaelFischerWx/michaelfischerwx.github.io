@@ -4311,10 +4311,14 @@
             return;
         }
 
+        var covSlider = document.getElementById('coverage-slider');
+        var covVal = covSlider ? (parseInt(covSlider.value) / 100) : 0.5;
+
         var url = API_BASE + RT_PREFIX + '/anomaly_azimuthal_mean?' +
             'file_url=' + encodeURIComponent(_currentFileUrl) +
             '&variable=' + encodeURIComponent(variable) +
-            '&vmax_kt=' + vmax;
+            '&vmax_kt=' + vmax +
+            '&coverage_min=' + covVal;
 
         fetch(url)
             .then(function (r) {
@@ -4502,7 +4506,11 @@
                 var vortex = results[1];
                 var currentVF = (vortex && vortex.vortex_favorability != null)
                     ? vortex.vortex_favorability : null;
-                _rtRenderVPScatter(json, colorBy, currentVP, currentVmax, stormName, currentVF);
+                var currentVH = (vortex && vortex.vortex_height != null)
+                    ? vortex.vortex_height : null;
+                var currentVW = (vortex && vortex.vortex_width != null)
+                    ? vortex.vortex_width : null;
+                _rtRenderVPScatter(json, colorBy, currentVP, currentVmax, stormName, currentVF, currentVH, currentVW);
             })
             .catch(function (err) {
                 rtToast('VP Scatter: ' + err.message, 'error');
@@ -4513,7 +4521,7 @@
             });
     };
 
-    function _rtRenderVPScatter(json, colorBy, currentVP, currentVmax, stormName, currentVF) {
+    function _rtRenderVPScatter(json, colorBy, currentVP, currentVmax, stormName, currentVF, currentVH, currentVW) {
         var container = document.getElementById('rt-vp-result');
         if (!container) return;
 
@@ -4560,11 +4568,22 @@
         var labels = withVF.map(function (p) { return p.storm_name + ' ' + p.datetime; });
         var vmaxs = withVF.map(function (p) { return p.vmax_kt != null ? p.vmax_kt : ''; });
 
+        // Also extract height/width for the right panel
+        var withHW = withVF.filter(function (p) {
+            return p.vortex_height != null && p.vortex_width != null;
+        });
+        var vhs = withHW.map(function (p) { return p.vortex_height; });
+        var vws = withHW.map(function (p) { return p.vortex_width; });
+        var hwDvs = withHW.map(function (p) { return p[colorBy] || 0; });
+        var hwLabels = withHW.map(function (p) { return p.storm_name + ' ' + p.datetime; });
+        var hwVmaxs = withHW.map(function (p) { return p.vmax_kt != null ? p.vmax_kt : ''; });
+
         var traces = [];
 
-        // Background scatter: archive cases
+        // ── Left panel: VP vs Vortex Favorability ──
         traces.push({
             x: vps, y: vfs, mode: 'markers', type: 'scatter',
+            xaxis: 'x', yaxis: 'y',
             marker: {
                 size: 6, color: dvs, colorscale: dvmaxColorscale, cmin: -30, cmax: 30,
                 opacity: 0.7,
@@ -4579,17 +4598,39 @@
             name: 'Archive (' + withVF.length + ')', showlegend: true
         });
 
+        // ── Right panel: Anomalous Height vs Width ──
+        if (withHW.length > 0) {
+            traces.push({
+                x: vws, y: vhs, mode: 'markers', type: 'scatter',
+                xaxis: 'x2', yaxis: 'y2',
+                marker: {
+                    size: 6, color: hwDvs, colorscale: dvmaxColorscale, cmin: -30, cmax: 30,
+                    opacity: 0.7,
+                    line: { color: 'rgba(255,255,255,0.3)', width: 0.5 },
+                    showscale: false
+                },
+                text: hwLabels, customdata: hwVmaxs,
+                hovertemplate: '<b>%{text}</b><br>Vmax: %{customdata} kt<br>Width: %{x:.2f}<br>Height: %{y:.2f}<br>\u0394Vmax: %{marker.color:.0f} kt<extra></extra>',
+                name: 'Archive (H\u00d7W)', showlegend: false
+            });
+        }
+
         // 2-sigma ellipses for RI/SI/NI groups
         var grpColors = { RI: 'rgba(239,68,68,0.6)', SI: 'rgba(251,191,36,0.6)', NI: 'rgba(96,165,250,0.6)' };
-        var groups = { RI: { vp: [], vf: [] }, SI: { vp: [], vf: [] }, NI: { vp: [], vf: [] } };
+        var vpGroups = { RI: { vp: [], vf: [] }, SI: { vp: [], vf: [] }, NI: { vp: [], vf: [] } };
+        var hwGroups = { RI: { h: [], w: [] }, SI: { h: [], w: [] }, NI: { h: [], w: [] } };
 
         for (var i = 0; i < withVF.length; i++) {
             var p = withVF[i];
             if (p.vmax_kt != null && p.vmax_kt > 100) continue;
             var dv = p[colorBy] || 0;
             var gk = dv >= 20 ? 'RI' : (dv > 0 ? 'SI' : 'NI');
-            groups[gk].vp.push(p.vp);
-            groups[gk].vf.push(p.vortex_favorability);
+            vpGroups[gk].vp.push(p.vp);
+            vpGroups[gk].vf.push(p.vortex_favorability);
+            if (p.vortex_height != null && p.vortex_width != null) {
+                hwGroups[gk].h.push(p.vortex_height);
+                hwGroups[gk].w.push(p.vortex_width);
+            }
         }
 
         function _ms(arr) {
@@ -4602,24 +4643,45 @@
         var grpNames = ['RI', 'SI', 'NI'];
         for (var gi = 0; gi < grpNames.length; gi++) {
             var grp = grpNames[gi];
-            var g = groups[grp];
-            if (g.vp.length < 3) continue;
-            var vpS = _ms(g.vp), vfS = _ms(g.vf);
-            var ellX = [], ellY = [];
-            for (var a = 0; a <= 360; a += 5) {
-                var rad = a * Math.PI / 180;
-                ellX.push(vpS.m + 2 * vpS.s * Math.cos(rad));
-                ellY.push(vfS.m + 2 * vfS.s * Math.sin(rad));
+
+            // Left panel ellipse (VP vs Favorability)
+            var g = vpGroups[grp];
+            if (g.vp.length >= 3) {
+                var vpS = _ms(g.vp), vfS = _ms(g.vf);
+                var ellX = [], ellY = [];
+                for (var a = 0; a <= 360; a += 5) {
+                    var rad = a * Math.PI / 180;
+                    ellX.push(vpS.m + 2 * vpS.s * Math.cos(rad));
+                    ellY.push(vfS.m + 2 * vfS.s * Math.sin(rad));
+                }
+                traces.push({
+                    x: ellX, y: ellY, mode: 'lines', type: 'scatter',
+                    xaxis: 'x', yaxis: 'y',
+                    line: { color: grpColors[grp], width: 2, dash: 'dot' },
+                    name: grp + ' (n=' + g.vp.length + ')', legendgroup: grp, showlegend: true
+                });
             }
-            traces.push({
-                x: ellX, y: ellY, mode: 'lines', type: 'scatter',
-                line: { color: grpColors[grp], width: 2, dash: 'dot' },
-                name: grp + ' (n=' + g.vp.length + ')', showlegend: true
-            });
+
+            // Right panel ellipse (Width vs Height)
+            var hw = hwGroups[grp];
+            if (hw && hw.h.length >= 3) {
+                var hStat = _ms(hw.h), wStat = _ms(hw.w);
+                var eX2 = [], eY2 = [];
+                for (var a2 = 0; a2 <= 360; a2 += 5) {
+                    var r2 = a2 * Math.PI / 180;
+                    eX2.push(wStat.m + 2 * wStat.s * Math.cos(r2));
+                    eY2.push(hStat.m + 2 * hStat.s * Math.sin(r2));
+                }
+                traces.push({
+                    x: eX2, y: eY2, mode: 'lines', type: 'scatter',
+                    xaxis: 'x2', yaxis: 'y2',
+                    line: { color: grpColors[grp], width: 2, dash: 'dot' },
+                    name: grp + ' (2\u03c3)', legendgroup: grp, showlegend: false
+                });
+            }
         }
 
-        // Current real-time case: vertical line + star marker
-        var shapes = [];
+        // Current real-time case: star markers on both panels
         var annotations = [];
         if (currentVP != null) {
             var starY = currentVF != null ? currentVF : 0;
@@ -4628,11 +4690,6 @@
                 ? 'Favorability: ' + currentVF.toFixed(2)
                 : 'Favorability: computing...';
 
-            shapes.push({
-                type: 'line', xref: 'x', yref: 'paper',
-                x0: currentVP, x1: currentVP, y0: 0, y1: 1,
-                line: { color: '#22d3ee', width: 2, dash: 'dash' }
-            });
             annotations.push({
                 x: currentVP, y: 1.05, xref: 'x', yref: 'paper',
                 text: stormName + ' (VP=' + currentVP.toFixed(2) + vfLabel + ')',
@@ -4640,9 +4697,10 @@
                 font: { color: '#22d3ee', size: 11, family: 'JetBrains Mono' },
                 xanchor: 'center'
             });
-            // Star marker at actual (VP, VF) position
+            // Star marker on left panel at (VP, VF)
             traces.push({
                 x: [currentVP], y: [starY], mode: 'markers', type: 'scatter',
+                xaxis: 'x', yaxis: 'y',
                 marker: {
                     symbol: 'star', size: 18, color: '#22d3ee',
                     line: { color: '#ffffff', width: 2 }
@@ -4651,14 +4709,38 @@
                 showlegend: true,
                 hovertemplate: '<b>' + stormName + '</b><br>VP: ' + currentVP.toFixed(2) + '<br>' + hoverVF + '<extra></extra>'
             });
+
+            // Star marker on right panel at (Width, Height)
+            if (currentVH != null && currentVW != null) {
+                annotations.push({
+                    x: currentVW, y: 1.05, xref: 'x2', yref: 'paper',
+                    text: stormName + ' (VH=' + currentVH.toFixed(2) + ', VW=' + currentVW.toFixed(2) + ')',
+                    showarrow: false,
+                    font: { color: '#22d3ee', size: 11, family: 'JetBrains Mono' },
+                    xanchor: 'center'
+                });
+                traces.push({
+                    x: [currentVW], y: [currentVH], mode: 'markers', type: 'scatter',
+                    xaxis: 'x2', yaxis: 'y2',
+                    marker: {
+                        symbol: 'star', size: 18, color: '#22d3ee',
+                        line: { color: '#ffffff', width: 2 }
+                    },
+                    name: stormName + ' (current)',
+                    showlegend: false,
+                    hovertemplate: '<b>' + stormName + '</b><br>Width: ' + currentVW.toFixed(2) + '<br>Height: ' + currentVH.toFixed(2) + '<extra></extra>'
+                });
+            }
         }
 
         var layout = {
             paper_bgcolor: '#0a1628', plot_bgcolor: '#0a1628',
+            // Left panel: VP vs Favorability
             xaxis: {
                 title: { text: 'Ventilation Proxy (VP)', font: { size: 10, color: '#8b9ec2' } },
                 tickfont: { size: 9, color: '#8b9ec2' },
                 gridcolor: 'rgba(255,255,255,0.04)', zeroline: false,
+                domain: [0, 0.45]
             },
             yaxis: {
                 title: { text: 'Vortex Favorability (VH \u2212 VW)', font: { size: 10, color: '#8b9ec2' } },
@@ -4666,13 +4748,26 @@
                 gridcolor: 'rgba(255,255,255,0.04)', zeroline: true,
                 zerolinecolor: 'rgba(255,255,255,0.1)',
             },
-            shapes: shapes,
+            // Right panel: Height vs Width
+            xaxis2: {
+                title: { text: 'Anomalous Vortex Width (W1\u2013W2)', font: { size: 10, color: '#8b9ec2' } },
+                tickfont: { size: 9, color: '#8b9ec2' },
+                gridcolor: 'rgba(255,255,255,0.04)', zeroline: false,
+                domain: [0.55, 1.0], anchor: 'y2'
+            },
+            yaxis2: {
+                title: { text: 'Anomalous Vortex Height (H1)', font: { size: 10, color: '#8b9ec2' } },
+                tickfont: { size: 9, color: '#8b9ec2' },
+                gridcolor: 'rgba(255,255,255,0.04)', zeroline: false,
+                anchor: 'x2'
+            },
             annotations: annotations,
-            margin: { l: 50, r: 20, t: 30, b: 45 },
+            margin: { l: 50, r: 50, t: 30, b: 45 },
             legend: {
-                x: 0.01, y: 0.99, xanchor: 'left', yanchor: 'top',
+                x: 0.45, y: 0.99, xanchor: 'right', yanchor: 'top',
                 font: { color: '#aaa', size: 9 },
-                bgcolor: 'rgba(10,22,40,0.8)', bordercolor: 'rgba(255,255,255,0.1)', borderwidth: 1
+                bgcolor: 'rgba(10,22,40,0.8)', bordercolor: 'rgba(255,255,255,0.1)', borderwidth: 1,
+                orientation: 'h'
             },
             hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 10 } }
         };
