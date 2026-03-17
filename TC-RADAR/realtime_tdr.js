@@ -4236,93 +4236,99 @@
 
         var gridEl = document.getElementById('rt-quad-grid');
 
-        // ── Pass 1: create ALL divs and append them so the CSS grid
-        //    can compute cell sizes before Plotly tries to render.
+        // Compute explicit pixel sizes from the grid container.
+        // The grid is 2x2 with gap:0, so each cell is exactly half width / half height.
+        var cellW = Math.floor(gridEl.clientWidth / 2);
+        var cellH = Math.floor(gridEl.clientHeight / 2);
+        // Fallback if grid hasn't laid out yet (shouldn't happen but be safe)
+        if (cellW < 50) cellW = 300;
+        if (cellH < 50) cellH = 280;
+
+        // ── Pass 1: create ALL divs with explicit pixel sizes
         var panelDivs = [];
         panelOrder.forEach(function (p) {
             var divId = 'rt-quad-' + p.key.toLowerCase();
             var div = document.createElement('div');
             div.id = divId;
-            div.style.width = '100%';
-            div.style.height = '100%';
+            div.style.width = cellW + 'px';
+            div.style.height = cellH + 'px';
             div.style.overflow = 'hidden';
-            div.style.minHeight = '0';
             gridEl.appendChild(div);
             panelDivs.push({ div: div, divId: divId, p: p });
         });
 
-        // Force a synchronous layout reflow so every cell has dimensions
-        void gridEl.offsetHeight;
+        // ── Pass 2: render Plotly in a requestAnimationFrame to guarantee layout
+        requestAnimationFrame(function () {
+            panelDivs.forEach(function (item) {
+                var p = item.p;
+                var div = item.div;
+                var divId = item.divId;
+                var qData = data.quadrant_means[p.key].data;
 
-        // ── Pass 2: render Plotly into each div now that they are laid out
-        panelDivs.forEach(function (item) {
-            var p = item.p;
-            var div = item.div;
-            var divId = item.divId;
-            var qData = data.quadrant_means[p.key].data;
-
-            // Check if quadrant has any non-null data
-            var hasData = false;
-            for (var ri = 0; ri < qData.length && !hasData; ri++) {
-                for (var ci = 0; ci < qData[ri].length && !hasData; ci++) {
-                    if (qData[ri][ci] !== null && !isNaN(qData[ri][ci])) hasData = true;
+                // Check if quadrant has any non-null data
+                var hasData = false;
+                for (var ri = 0; ri < qData.length && !hasData; ri++) {
+                    for (var ci = 0; ci < qData[ri].length && !hasData; ci++) {
+                        if (qData[ri][ci] !== null && !isNaN(qData[ri][ci])) hasData = true;
+                    }
                 }
-            }
 
-            if (!hasData) {
-                div.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;">' +
-                    '<p style="color:' + (quadColors[p.key] || '#e5e7eb') + ';font-size:11px;font-weight:600;margin:0 0 4px 0;">' + p.label + '</p>' +
-                    '<p style="color:#6b7280;font-size:10px;margin:0;">No data in this quadrant</p></div>';
-                return;
-            }
+                if (!hasData) {
+                    div.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;">' +
+                        '<p style="color:' + (quadColors[p.key] || '#e5e7eb') + ';font-size:11px;font-weight:600;margin:0 0 4px 0;">' + p.label + '</p>' +
+                        '<p style="color:#6b7280;font-size:10px;margin:0;">No data in this quadrant</p></div>';
+                    return;
+                }
 
-            var showCbar = (p.row === 0 && p.col === 1); // top-right panel
-            var trace = {
-                z: qData,
-                x: data.radius_km,
-                y: data.height_km,
-                type: 'heatmap',
-                colorscale: cmap,
-                zmin: vmin,
-                zmax: vmax_val,
-                zauto: false,
-                colorbar: showCbar ? {
-                    title: { text: variable, font: { color: '#ccc', size: 8 } },
-                    tickfont: { color: '#ccc', size: 7 },
-                    thickness: 8, len: 0.8, x: 1.02
-                } : { thickness: 0, len: 0 },
-                hovertemplate: '<b>' + p.label + '</b><br>R: %{x} km<br>z: %{y} km<br>Value: %{z:.2f}<extra></extra>'
-            };
+                var showCbar = (p.row === 0 && p.col === 1); // top-right panel
+                var trace = {
+                    z: qData,
+                    x: data.radius_km,
+                    y: data.height_km,
+                    type: 'heatmap',
+                    colorscale: cmap,
+                    zmin: vmin,
+                    zmax: vmax_val,
+                    zauto: false,
+                    colorbar: showCbar ? {
+                        title: { text: variable, font: { color: '#ccc', size: 8 } },
+                        tickfont: { color: '#ccc', size: 7 },
+                        thickness: 8, len: 0.8, x: 1.02
+                    } : { thickness: 0, len: 0 },
+                    hovertemplate: '<b>' + p.label + '</b><br>R: %{x} km<br>z: %{y} km<br>Value: %{z:.2f}<extra></extra>'
+                };
 
-            var layout = {
-                paper_bgcolor: '#0a1628', plot_bgcolor: '#0a1628',
-                title: { text: p.label, font: { color: quadColors[p.key] || '#e5e7eb', size: 11 }, x: 0.5, y: 0.97 },
-                xaxis: {
-                    title: p.row >= 1 ? { text: 'Radius (km)', font: { size: 9, color: '#8b9ec2' } } : null,
-                    tickfont: { size: 8, color: '#8b9ec2' },
-                    gridcolor: 'rgba(255,255,255,0.04)',
-                    range: [0, 200]
-                },
-                yaxis: {
-                    title: p.col === 0 ? { text: 'Height (km)', font: { size: 9, color: '#8b9ec2' } } : null,
-                    tickfont: { size: 8, color: '#8b9ec2' },
-                    gridcolor: 'rgba(255,255,255,0.04)',
-                    range: [0, 15]
-                },
-                margin: { l: p.col === 0 ? 40 : 20, r: p.col === 1 ? 40 : 5, t: 25, b: p.row >= 1 ? 35 : 10 },
-                hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 10 } }
-            };
+                var layout = {
+                    paper_bgcolor: '#0a1628', plot_bgcolor: '#0a1628',
+                    width: cellW, height: cellH,
+                    title: { text: p.label, font: { color: quadColors[p.key] || '#e5e7eb', size: 11 }, x: 0.5, y: 0.97 },
+                    xaxis: {
+                        title: p.row >= 1 ? { text: 'Radius (km)', font: { size: 9, color: '#8b9ec2' } } : null,
+                        tickfont: { size: 8, color: '#8b9ec2' },
+                        gridcolor: 'rgba(255,255,255,0.04)',
+                        range: [0, 200]
+                    },
+                    yaxis: {
+                        title: p.col === 0 ? { text: 'Height (km)', font: { size: 9, color: '#8b9ec2' } } : null,
+                        tickfont: { size: 8, color: '#8b9ec2' },
+                        gridcolor: 'rgba(255,255,255,0.04)',
+                        range: [0, 15]
+                    },
+                    margin: { l: p.col === 0 ? 40 : 20, r: p.col === 1 ? 40 : 5, t: 25, b: p.row >= 1 ? 35 : 10 },
+                    hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 10 } }
+                };
 
-            try {
-                Plotly.newPlot(divId, [trace], layout, {
-                    responsive: true, displayModeBar: false, displaylogo: false
-                });
-            } catch (plotErr) {
-                console.warn('Plotly quadrant error for ' + p.key + ':', plotErr);
-                div.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;">' +
-                    '<p style="color:' + (quadColors[p.key] || '#e5e7eb') + ';font-size:11px;font-weight:600;margin:0 0 4px 0;">' + p.label + '</p>' +
-                    '<p style="color:#6b7280;font-size:10px;margin:0;">Insufficient data</p></div>';
-            }
+                try {
+                    Plotly.newPlot(divId, [trace], layout, {
+                        responsive: false, displayModeBar: false, displaylogo: false
+                    });
+                } catch (plotErr) {
+                    console.warn('Plotly quadrant error for ' + p.key + ':', plotErr);
+                    div.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;">' +
+                        '<p style="color:' + (quadColors[p.key] || '#e5e7eb') + ';font-size:11px;font-weight:600;margin:0 0 4px 0;">' + p.label + '</p>' +
+                        '<p style="color:#6b7280;font-size:10px;margin:0;">Insufficient data</p></div>';
+                }
+            });
         });
     }
 
