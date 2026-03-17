@@ -4201,30 +4201,31 @@
         var container = document.getElementById('rt-quad-result');
         if (!container) return;
 
-        // Build the quadrant panel HTML
+        // ── Single-chart subplot approach (matches archive) ──
+        // One Plotly.newPlot with 4 traces on 4 subplot axes — no CSS Grid.
         container.innerHTML =
             '<div class="storm-timeline-panel" style="margin-top:10px;">' +
             '<div class="fl-ts-header">' +
             '<span class="fl-ts-title">\u2299 Shear-Relative Quadrant Means (SDDC: ' + data.sddc + '\u00b0)</span>' +
-            _rtSaveBtnHTML('rt-quad-grid', 'QuadrantMeans', 'margin-left:auto;') +
+            _rtSaveBtnHTML('rt-quad-chart', 'QuadrantMeans', 'margin-left:auto;') +
             '<button onclick="document.getElementById(\'rt-quad-result\').innerHTML=\'\'" class="fl-ts-close" title="Close">&times;</button>' +
             '</div>' +
-            '<div id="rt-quad-grid" style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:0;width:100%;height:600px;overflow:hidden;"></div>' +
+            '<div id="rt-quad-chart" style="width:100%;height:550px;border-radius:6px;overflow:hidden;"></div>' +
             '</div>';
 
         var varInfo = null;
-        // Get variable info from last rendered data
         if (_rtLastPlotlyData && _rtLastPlotlyData.json && _rtLastPlotlyData.json.variable) {
             varInfo = _rtLastPlotlyData.json.variable;
         }
         var cmap = varInfo ? varInfo.colorscale : 'RdBu';
+        var units = varInfo ? varInfo.units : '';
+        var dispName = varInfo ? varInfo.display_name : variable;
         var vmin = varInfo ? varInfo.vmin : 0;
         var vmax_val = varInfo ? varInfo.vmax : 80;
 
-        // Panel layout matching archive: shear points RIGHT
-        //   USL (top-left)  |  DSL (top-right)      ← left of shear (top)
-        //   USR (bot-left)  |  DSR (bot-right)      ← right of shear (bottom)
-        //   ← upshear         downshear →
+        // Panel layout: shear points RIGHT
+        //   USL (top-left)  |  DSL (top-right)
+        //   USR (bot-left)  |  DSR (bot-right)
         var panelOrder = [
             { key: 'USL', label: 'Upshear Left',     row: 0, col: 0 },
             { key: 'DSL', label: 'Downshear Left',   row: 0, col: 1 },
@@ -4233,102 +4234,137 @@
         ];
 
         var quadColors = { DSL: '#f59e0b', DSR: '#f59e0b', USL: '#60a5fa', USR: '#60a5fa' };
+        var fontSize = { title: 11, axis: 9, tick: 8, cbar: 9, cbarTick: 8, hover: 10, panel: 10 };
 
-        var gridEl = document.getElementById('rt-quad-grid');
+        // Subplot geometry (paper coordinates)
+        var gap = 0.10;
+        var cbarW = 0.04;
+        var leftM = 0.06, rightM = 0.02 + cbarW + 0.02;
+        var topM = 0.10, botM = 0.06;
+        var pw = (1 - leftM - rightM - gap) / 2;
+        var ph = (1 - topM - botM - gap) / 2;
 
-        // Compute explicit pixel sizes from the grid container.
-        // The grid is 2x2 with gap:0, so each cell is exactly half width / half height.
-        var cellW = Math.floor(gridEl.clientWidth / 2);
-        var cellH = Math.floor(gridEl.clientHeight / 2);
-        // Fallback if grid hasn't laid out yet (shouldn't happen but be safe)
-        if (cellW < 50) cellW = 300;
-        if (cellH < 50) cellH = 280;
+        var axConfigs = [
+            { x0: leftM,          x1: leftM + pw,          y0: 1 - topM - ph, y1: 1 - topM },
+            { x0: leftM + pw + gap, x1: leftM + 2*pw + gap, y0: 1 - topM - ph, y1: 1 - topM },
+            { x0: leftM,          x1: leftM + pw,          y0: botM,           y1: botM + ph },
+            { x0: leftM + pw + gap, x1: leftM + 2*pw + gap, y0: botM,           y1: botM + ph }
+        ];
 
-        // ── Pass 1: create ALL divs with explicit pixel sizes
-        var panelDivs = [];
-        panelOrder.forEach(function (p) {
-            var divId = 'rt-quad-' + p.key.toLowerCase();
-            var div = document.createElement('div');
-            div.id = divId;
-            div.style.width = cellW + 'px';
-            div.style.height = cellH + 'px';
-            div.style.overflow = 'hidden';
-            gridEl.appendChild(div);
-            panelDivs.push({ div: div, divId: divId, p: p });
+        var traces = [];
+        var annotations = [];
+        var shapes = [];
+        var plotBg = '#0a1628';
+
+        var layout = {
+            paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+            margin: { l: 45, r: 55, t: 70, b: 42 },
+            showlegend: false,
+            hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: fontSize.hover } }
+        };
+
+        panelOrder.forEach(function (p, i) {
+            var qData = data.quadrant_means[p.key];
+            if (!qData || !qData.data) return;
+
+            var axSuffix = i === 0 ? '' : String(i + 1);
+            var showCbar = (i === 1); // top-right panel
+            var ac = axConfigs[i];
+
+            traces.push({
+                z: qData.data,
+                x: data.radius_km,
+                y: data.height_km,
+                type: 'heatmap',
+                colorscale: cmap,
+                zmin: vmin,
+                zmax: vmax_val,
+                xaxis: 'x' + axSuffix,
+                yaxis: 'y' + axSuffix,
+                showscale: showCbar,
+                colorbar: showCbar ? {
+                    title: { text: units, font: { color: '#ccc', size: fontSize.cbar } },
+                    tickfont: { color: '#ccc', size: fontSize.cbarTick },
+                    thickness: 10, len: 0.85, x: 1.02, y: 0.5
+                } : undefined,
+                hovertemplate: '<b>' + p.label + '</b><br>' + dispName + ': %{z:.2f} ' + units +
+                    '<br>Radius: %{x:.0f} km<br>Height: %{y:.1f} km<extra></extra>',
+                hoverongaps: false
+            });
+
+            // Panel title annotation
+            annotations.push({
+                text: '<b>' + p.label + '</b>',
+                xref: 'paper', yref: 'paper',
+                x: (ac.x0 + ac.x1) / 2, y: ac.y1 + 0.005,
+                xanchor: 'center', yanchor: 'bottom', showarrow: false,
+                font: { color: quadColors[p.key] || '#ccc', size: fontSize.panel, family: 'JetBrains Mono, monospace' },
+                bgcolor: 'rgba(10,22,40,0.7)', borderpad: 2
+            });
+
+            // Axes
+            var showXLabel = (p.row === 1);
+            var showYLabel = (p.col === 0);
+            layout['xaxis' + axSuffix] = {
+                domain: [ac.x0, ac.x1],
+                title: showXLabel ? { text: 'Radius (km)', font: { color: '#aaa', size: fontSize.axis } } : undefined,
+                tickfont: { color: '#aaa', size: fontSize.tick },
+                gridcolor: 'rgba(255,255,255,0.04)', zeroline: false,
+                anchor: 'y' + axSuffix
+            };
+            layout['yaxis' + axSuffix] = {
+                domain: [ac.y0, ac.y1],
+                title: showYLabel ? { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } } : undefined,
+                tickfont: { color: '#aaa', size: fontSize.tick },
+                gridcolor: 'rgba(255,255,255,0.04)', zeroline: false,
+                anchor: 'x' + axSuffix
+            };
         });
 
-        // ── Pass 2: render Plotly in a requestAnimationFrame to guarantee layout
-        requestAnimationFrame(function () {
-            panelDivs.forEach(function (item) {
-                var p = item.p;
-                var div = item.div;
-                var divId = item.divId;
-                var qData = data.quadrant_means[p.key].data;
+        // Shear vector inset between the 4 panels
+        var sddc = data.sddc;
+        if (sddc !== null && sddc !== undefined && sddc !== 9999) {
+            var insetCx = leftM + pw + gap / 2;
+            var insetCy = botM + ph + gap / 2;
+            var insetR = Math.min(gap, 0.06) * 0.55;
+            var theta = (90 - sddc) * Math.PI / 180;
+            var arrowLen = insetR * 0.8;
+            var adx = arrowLen * Math.cos(theta);
+            var ady = arrowLen * Math.sin(theta);
+            shapes.push({ type: 'circle', xref: 'paper', yref: 'paper',
+                x0: insetCx - insetR, y0: insetCy - insetR, x1: insetCx + insetR, y1: insetCy + insetR,
+                fillcolor: 'rgba(10,22,40,0.9)', line: { color: 'rgba(245,158,11,0.4)', width: 1.5 } });
+            shapes.push({ type: 'line', xref: 'paper', yref: 'paper',
+                x0: insetCx - adx * 0.3, y0: insetCy - ady * 0.3, x1: insetCx + adx, y1: insetCy + ady,
+                line: { color: '#f59e0b', width: 2.5 } });
+            var headLen = arrowLen * 0.35, headAng = 25 * Math.PI / 180;
+            var tipX = insetCx + adx, tipY = insetCy + ady;
+            shapes.push({ type: 'line', xref: 'paper', yref: 'paper',
+                x0: tipX, y0: tipY,
+                x1: tipX + headLen * Math.cos(theta + Math.PI - headAng),
+                y1: tipY + headLen * Math.sin(theta + Math.PI - headAng),
+                line: { color: '#f59e0b', width: 2.5 } });
+            shapes.push({ type: 'line', xref: 'paper', yref: 'paper',
+                x0: tipX, y0: tipY,
+                x1: tipX + headLen * Math.cos(theta + Math.PI + headAng),
+                y1: tipY + headLen * Math.sin(theta + Math.PI + headAng),
+                line: { color: '#f59e0b', width: 2.5 } });
+            annotations.push({ text: 'DS', xref: 'paper', yref: 'paper',
+                x: insetCx + adx * 1.6, y: insetCy + ady * 1.6,
+                showarrow: false, font: { color: '#f59e0b', size: 7, family: 'JetBrains Mono,monospace' } });
+        }
 
-                // Check if quadrant has any non-null data
-                var hasData = false;
-                for (var ri = 0; ri < qData.length && !hasData; ri++) {
-                    for (var ci = 0; ci < qData[ri].length && !hasData; ci++) {
-                        if (qData[ri][ci] !== null && !isNaN(qData[ri][ci])) hasData = true;
-                    }
-                }
+        // Main title
+        var shearStr = (sddc !== null && sddc !== undefined && sddc !== 9999) ? ' | Shear: ' + Number(sddc).toFixed(0) + '\u00b0' : '';
+        layout.title = {
+            text: 'Shear-Relative Quadrant Mean: ' + dispName + shearStr,
+            font: { color: '#e5e7eb', size: fontSize.title }, y: 0.99, x: 0.5, xanchor: 'center'
+        };
+        layout.shapes = shapes;
+        layout.annotations = annotations;
 
-                if (!hasData) {
-                    div.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;">' +
-                        '<p style="color:' + (quadColors[p.key] || '#e5e7eb') + ';font-size:11px;font-weight:600;margin:0 0 4px 0;">' + p.label + '</p>' +
-                        '<p style="color:#6b7280;font-size:10px;margin:0;">No data in this quadrant</p></div>';
-                    return;
-                }
-
-                var showCbar = (p.row === 0 && p.col === 1); // top-right panel
-                var trace = {
-                    z: qData,
-                    x: data.radius_km,
-                    y: data.height_km,
-                    type: 'heatmap',
-                    colorscale: cmap,
-                    zmin: vmin,
-                    zmax: vmax_val,
-                    zauto: false,
-                    colorbar: showCbar ? {
-                        title: { text: variable, font: { color: '#ccc', size: 8 } },
-                        tickfont: { color: '#ccc', size: 7 },
-                        thickness: 8, len: 0.8, x: 1.02
-                    } : { thickness: 0, len: 0 },
-                    hovertemplate: '<b>' + p.label + '</b><br>R: %{x} km<br>z: %{y} km<br>Value: %{z:.2f}<extra></extra>'
-                };
-
-                var layout = {
-                    paper_bgcolor: '#0a1628', plot_bgcolor: '#0a1628',
-                    width: cellW, height: cellH,
-                    title: { text: p.label, font: { color: quadColors[p.key] || '#e5e7eb', size: 11 }, x: 0.5, y: 0.97 },
-                    xaxis: {
-                        title: p.row >= 1 ? { text: 'Radius (km)', font: { size: 9, color: '#8b9ec2' } } : null,
-                        tickfont: { size: 8, color: '#8b9ec2' },
-                        gridcolor: 'rgba(255,255,255,0.04)',
-                        range: [0, 200]
-                    },
-                    yaxis: {
-                        title: p.col === 0 ? { text: 'Height (km)', font: { size: 9, color: '#8b9ec2' } } : null,
-                        tickfont: { size: 8, color: '#8b9ec2' },
-                        gridcolor: 'rgba(255,255,255,0.04)',
-                        range: [0, 15]
-                    },
-                    margin: { l: p.col === 0 ? 40 : 20, r: p.col === 1 ? 40 : 5, t: 25, b: p.row >= 1 ? 35 : 10 },
-                    hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 10 } }
-                };
-
-                try {
-                    Plotly.newPlot(divId, [trace], layout, {
-                        responsive: false, displayModeBar: false, displaylogo: false
-                    });
-                } catch (plotErr) {
-                    console.warn('Plotly quadrant error for ' + p.key + ':', plotErr);
-                    div.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;">' +
-                        '<p style="color:' + (quadColors[p.key] || '#e5e7eb') + ';font-size:11px;font-weight:600;margin:0 0 4px 0;">' + p.label + '</p>' +
-                        '<p style="color:#6b7280;font-size:10px;margin:0;">Insufficient data</p></div>';
-                }
-            });
+        Plotly.newPlot('rt-quad-chart', traces, layout, {
+            responsive: true, displayModeBar: false, displaylogo: false
         });
     }
 
