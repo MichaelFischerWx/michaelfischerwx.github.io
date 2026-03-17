@@ -4167,6 +4167,25 @@
                 return r.json();
             })
             .then(function (data) {
+                // Log diagnostics and per-quadrant data summary
+                if (data.diagnostics) {
+                    console.log('[QuadDiag] Backend diagnostics:', JSON.stringify(data.diagnostics, null, 2));
+                }
+                if (data.quadrant_means) {
+                    var qSummary = {};
+                    Object.keys(data.quadrant_means).forEach(function(q) {
+                        var d = data.quadrant_means[q].data;
+                        var total = 0, nonNull = 0;
+                        for (var i = 0; i < d.length; i++) {
+                            for (var j = 0; j < d[i].length; j++) {
+                                total++;
+                                if (d[i][j] !== null) nonNull++;
+                            }
+                        }
+                        qSummary[q] = { total: total, nonNull: nonNull, pct: (100 * nonNull / total).toFixed(1) + '%' };
+                    });
+                    console.log('[QuadDiag] Per-quadrant data fill:', JSON.stringify(qSummary, null, 2));
+                }
                 _rtRenderQuadrants(data, variable);
             })
             .catch(function (err) {
@@ -4190,7 +4209,7 @@
             _rtSaveBtnHTML('rt-quad-grid', 'QuadrantMeans', 'margin-left:auto;') +
             '<button onclick="document.getElementById(\'rt-quad-result\').innerHTML=\'\'" class="fl-ts-close" title="Close">&times;</button>' +
             '</div>' +
-            '<div id="rt-quad-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:0;width:100%;height:600px;"></div>' +
+            '<div id="rt-quad-grid" style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:0;width:100%;height:600px;overflow:hidden;"></div>' +
             '</div>';
 
         var varInfo = null;
@@ -4224,6 +4243,8 @@
             div.id = divId;
             div.style.width = '100%';
             div.style.height = '100%';
+            div.style.overflow = 'hidden';
+            div.style.minHeight = '0';
             gridEl.appendChild(div);
 
             // Check if quadrant has any non-null data
