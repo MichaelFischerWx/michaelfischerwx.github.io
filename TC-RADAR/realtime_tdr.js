@@ -4167,25 +4167,6 @@
                 return r.json();
             })
             .then(function (data) {
-                // Log diagnostics and per-quadrant data summary
-                if (data.diagnostics) {
-                    console.log('[QuadDiag] Backend diagnostics:', JSON.stringify(data.diagnostics, null, 2));
-                }
-                if (data.quadrant_means) {
-                    var qSummary = {};
-                    Object.keys(data.quadrant_means).forEach(function(q) {
-                        var d = data.quadrant_means[q].data;
-                        var total = 0, nonNull = 0;
-                        for (var i = 0; i < d.length; i++) {
-                            for (var j = 0; j < d[i].length; j++) {
-                                total++;
-                                if (d[i][j] !== null) nonNull++;
-                            }
-                        }
-                        qSummary[q] = { total: total, nonNull: nonNull, pct: (100 * nonNull / total).toFixed(1) + '%' };
-                    });
-                    console.log('[QuadDiag] Per-quadrant data fill:', JSON.stringify(qSummary, null, 2));
-                }
                 _rtRenderQuadrants(data, variable);
             })
             .catch(function (err) {
