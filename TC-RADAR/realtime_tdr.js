@@ -576,81 +576,58 @@
         if (!hasShear && !hasMotion) return result;
 
         var cx = isFullsize ? 0.08 : 0.10;
-        var cy = isFullsize ? 0.90 : 0.88;
-        var r = isFullsize ? 0.055 : 0.065;
-        var arrowLen = r * 0.82;
-        var dotR = r * 0.08;
+        var cy = isFullsize ? 0.88 : 0.86;
+        var r = isFullsize ? 0.050 : 0.058;
+        var arrowLen = r * 0.85;
+        var dotR = r * 0.07;
+        var lw = isFullsize ? 2.5 : 2;
+        var fsL = isFullsize ? 10 : 8;
 
         var shapes = [
-            // Background circle
             { type: 'circle', xref: 'paper', yref: 'paper',
               x0: cx - r, y0: cy - r, x1: cx + r, y1: cy + r,
-              fillcolor: 'rgba(10,22,40,0.85)', line: { color: 'rgba(255,255,255,0.25)', width: 1 } },
-            // Center dot
+              fillcolor: 'rgba(10,22,40,0.80)', line: { color: 'rgba(255,255,255,0.15)', width: 1 } },
             { type: 'circle', xref: 'paper', yref: 'paper',
               x0: cx - dotR, y0: cy - dotR, x1: cx + dotR, y1: cy + dotR,
-              fillcolor: 'rgba(255,255,255,0.5)', line: { width: 0 } }
+              fillcolor: 'rgba(255,255,255,0.4)', line: { width: 0 } }
         ];
         var annotations = [];
 
-        // ── Shear vector (orange) ───────────────────────────────
-        if (hasShear) {
-            var theta = (90 - sddc) * Math.PI / 180;
-            var dx = arrowLen * Math.cos(theta);
-            var dy = arrowLen * Math.sin(theta);
+        function _addArrow(theta, color) {
+            var adx = arrowLen * Math.cos(theta), ady = arrowLen * Math.sin(theta);
             shapes.push({ type: 'line', xref: 'paper', yref: 'paper',
-                x0: cx - dx * 0.3, y0: cy - dy * 0.3, x1: cx + dx, y1: cy + dy,
-                line: { color: '#f59e0b', width: isFullsize ? 3 : 2.5 } });
-            var headLen = arrowLen * 0.35;
-            var ha1 = theta + Math.PI - 25 * Math.PI / 180;
-            var ha2 = theta + Math.PI + 25 * Math.PI / 180;
-            var tipX = cx + dx, tipY = cy + dy;
+                x0: cx - adx * 0.25, y0: cy - ady * 0.25, x1: cx + adx, y1: cy + ady,
+                line: { color: color, width: lw } });
+            var hl = arrowLen * 0.32, ha = 25 * Math.PI / 180;
+            var tx = cx + adx, ty = cy + ady;
             shapes.push({ type: 'line', xref: 'paper', yref: 'paper',
-                x0: tipX, y0: tipY, x1: tipX + headLen * Math.cos(ha1), y1: tipY + headLen * Math.sin(ha1),
-                line: { color: '#f59e0b', width: isFullsize ? 3 : 2.5 } });
+                x0: tx, y0: ty, x1: tx + hl * Math.cos(theta + Math.PI - ha), y1: ty + hl * Math.sin(theta + Math.PI - ha),
+                line: { color: color, width: lw } });
             shapes.push({ type: 'line', xref: 'paper', yref: 'paper',
-                x0: tipX, y0: tipY, x1: tipX + headLen * Math.cos(ha2), y1: tipY + headLen * Math.sin(ha2),
-                line: { color: '#f59e0b', width: isFullsize ? 3 : 2.5 } });
-
-            var shearKt = sd.shear_kt;
-            var shrLabel = '<b>SHR</b>';
-            if (shearKt != null) shrLabel += '  ' + Math.round(shearKt) + ' kt';
-            annotations.push({ text: shrLabel, xref: 'paper', yref: 'paper',
-                x: cx, y: cy + r + (isFullsize ? 0.028 : 0.033),
-                showarrow: false, font: { color: '#f59e0b', size: isFullsize ? 11 : 9, family: 'JetBrains Mono, monospace' },
-                bgcolor: 'rgba(10,22,40,0.7)', borderpad: 1 });
-            annotations.push({ text: sddc.toFixed(0) + '\u00b0', xref: 'paper', yref: 'paper',
-                x: cx, y: cy - r - (isFullsize ? 0.022 : 0.027),
-                showarrow: false, font: { color: 'rgba(245,158,11,0.7)', size: isFullsize ? 9 : 8, family: 'JetBrains Mono, monospace' } });
+                x0: tx, y0: ty, x1: tx + hl * Math.cos(theta + Math.PI + ha), y1: ty + hl * Math.sin(theta + Math.PI + ha),
+                line: { color: color, width: lw } });
         }
 
-        // ── TC Motion vector (cyan, solid) ──────────────────────
-        if (hasMotion) {
-            var thetaM = (90 - motDir) * Math.PI / 180;
-            var dxM = arrowLen * Math.cos(thetaM);
-            var dyM = arrowLen * Math.sin(thetaM);
-            shapes.push({ type: 'line', xref: 'paper', yref: 'paper',
-                x0: cx - dxM * 0.3, y0: cy - dyM * 0.3, x1: cx + dxM, y1: cy + dyM,
-                line: { color: '#06b6d4', width: isFullsize ? 3 : 2.5 } });
-            var mHL = arrowLen * 0.35;
-            var mha1 = thetaM + Math.PI - 25 * Math.PI / 180;
-            var mha2 = thetaM + Math.PI + 25 * Math.PI / 180;
-            var mTipX = cx + dxM, mTipY = cy + dyM;
-            shapes.push({ type: 'line', xref: 'paper', yref: 'paper',
-                x0: mTipX, y0: mTipY, x1: mTipX + mHL * Math.cos(mha1), y1: mTipY + mHL * Math.sin(mha1),
-                line: { color: '#06b6d4', width: isFullsize ? 3 : 2.5 } });
-            shapes.push({ type: 'line', xref: 'paper', yref: 'paper',
-                x0: mTipX, y0: mTipY, x1: mTipX + mHL * Math.cos(mha2), y1: mTipY + mHL * Math.sin(mha2),
-                line: { color: '#06b6d4', width: isFullsize ? 3 : 2.5 } });
+        if (hasShear) _addArrow((90 - sddc) * Math.PI / 180, '#f59e0b');
+        if (hasMotion) _addArrow((90 - motDir) * Math.PI / 180, '#22d3ee');
 
-            var motLabel = '<b>MOT</b>  ' + Math.round(motSpd) + ' kt';
-            var motLabelY = hasShear
-                ? cy - r - (isFullsize ? 0.048 : 0.056)
-                : cy + r + (isFullsize ? 0.028 : 0.033);
-            annotations.push({ text: motLabel, xref: 'paper', yref: 'paper',
-                x: cx, y: motLabelY,
-                showarrow: false, font: { color: '#06b6d4', size: isFullsize ? 11 : 9, family: 'JetBrains Mono, monospace' },
-                bgcolor: 'rgba(10,22,40,0.7)', borderpad: 1 });
+        // Compact labels: "SHR 7 kt / 276°" above, "MOT 8 kt / 29°" below
+        if (hasShear) {
+            var shrTxt = '<b>SHR</b>  ';
+            if (sd.shear_kt != null) shrTxt += Math.round(sd.shear_kt) + ' kt / ';
+            shrTxt += sddc.toFixed(0) + '\u00b0';
+            annotations.push({ text: shrTxt, xref: 'paper', yref: 'paper',
+                x: cx, y: cy + r + (isFullsize ? 0.025 : 0.030),
+                showarrow: false, font: { color: '#f59e0b', size: fsL, family: 'JetBrains Mono, monospace' },
+                bgcolor: 'rgba(10,22,40,0.7)', borderpad: 2 });
+        }
+        if (hasMotion) {
+            var motTxt = '<b>MOT</b>  ' + Math.round(motSpd) + ' kt / ' + motDir.toFixed(0) + '\u00b0';
+            var motY = hasShear ? cy - r - (isFullsize ? 0.025 : 0.030) : cy + r + (isFullsize ? 0.025 : 0.030);
+            annotations.push({ text: motTxt, xref: 'paper', yref: 'paper',
+                x: cx, y: motY,
+                showarrow: false, font: { color: '#22d3ee', size: fsL, family: 'JetBrains Mono, monospace' },
+                bgcolor: 'rgba(10,22,40,0.7)', borderpad: 2 });
         }
 
         return { shapes: shapes, annotations: annotations };

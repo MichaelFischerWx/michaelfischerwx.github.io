@@ -4614,93 +4614,74 @@ function buildShearInset(sddc, isFullsize, shdc, motionDir, motionSpd) {
     var hasMotion = (motionDir !== null && motionDir !== undefined && motionDir !== 9999);
     if (!hasShear && !hasMotion) return { shapes: [], annotations: [] };
 
-    // Inset center position (paper coords) - top-left corner
+    // Inset center (paper coords) — top-left corner
     var cx = isFullsize ? 0.08 : 0.10;
-    var cy = isFullsize ? 0.90 : 0.88;
-    var r = isFullsize ? 0.055 : 0.065;
-    var arrowLen = r * 0.82;
-    var dotR = r * 0.08;
+    var cy = isFullsize ? 0.88 : 0.86;
+    var r = isFullsize ? 0.050 : 0.058;
+    var arrowLen = r * 0.85;
+    var dotR = r * 0.07;
+    var lw = isFullsize ? 2.5 : 2;
+    var fsL = isFullsize ? 10 : 8;   // label font size
 
     var shapes = [
-        // Background circle
+        // Background circle (subtle)
         { type:'circle', xref:'paper', yref:'paper',
           x0: cx-r, y0: cy-r, x1: cx+r, y1: cy+r,
-          fillcolor:'rgba(10,22,40,0.85)', line:{ color:'rgba(255,255,255,0.25)', width:1 } },
-        // Small dot at center
+          fillcolor:'rgba(10,22,40,0.80)', line:{ color:'rgba(255,255,255,0.15)', width:1 } },
+        // Center dot
         { type:'circle', xref:'paper', yref:'paper',
           x0: cx-dotR, y0: cy-dotR, x1: cx+dotR, y1: cy+dotR,
-          fillcolor:'rgba(255,255,255,0.5)', line:{ width:0 } }
+          fillcolor:'rgba(255,255,255,0.4)', line:{ width:0 } }
     ];
     var annotations = [];
 
-    // ── Shear vector (orange) ───────────────────────────────────
-    if (hasShear) {
-        var thetaShr = (90 - sddc) * Math.PI / 180;
-        var dxS = arrowLen * Math.cos(thetaShr);
-        var dyS = arrowLen * Math.sin(thetaShr);
-        // Shaft
+    // Helper: draw an arrow + arrowhead in the inset
+    function _addArrow(theta, color) {
+        var adx = arrowLen * Math.cos(theta);
+        var ady = arrowLen * Math.sin(theta);
         shapes.push({ type:'line', xref:'paper', yref:'paper',
-            x0: cx - dxS*0.3, y0: cy - dyS*0.3, x1: cx + dxS, y1: cy + dyS,
-            line:{ color:'#f59e0b', width: isFullsize?3:2.5 } });
-        // Arrowhead
-        var headLen = arrowLen * 0.35;
-        var headAngle = 25 * Math.PI / 180;
-        var ha1 = thetaShr + Math.PI - headAngle;
-        var ha2 = thetaShr + Math.PI + headAngle;
-        var tipX = cx + dxS, tipY = cy + dyS;
+            x0: cx - adx*0.25, y0: cy - ady*0.25, x1: cx + adx, y1: cy + ady,
+            line:{ color: color, width: lw } });
+        var hl = arrowLen * 0.32, ha = 25 * Math.PI / 180;
+        var tx = cx + adx, ty = cy + ady;
         shapes.push({ type:'line', xref:'paper', yref:'paper',
-            x0: tipX, y0: tipY, x1: tipX + headLen*Math.cos(ha1), y1: tipY + headLen*Math.sin(ha1),
-            line:{ color:'#f59e0b', width: isFullsize?3:2.5 } });
+            x0: tx, y0: ty,
+            x1: tx + hl*Math.cos(theta+Math.PI-ha), y1: ty + hl*Math.sin(theta+Math.PI-ha),
+            line:{ color: color, width: lw } });
         shapes.push({ type:'line', xref:'paper', yref:'paper',
-            x0: tipX, y0: tipY, x1: tipX + headLen*Math.cos(ha2), y1: tipY + headLen*Math.sin(ha2),
-            line:{ color:'#f59e0b', width: isFullsize?3:2.5 } });
-        // Shear label + magnitude above
-        var shrLabel = '<b>SHR</b>';
-        if (shdc !== null && shdc !== undefined && shdc !== 9999) {
-            shrLabel += '  ' + shdc.toFixed(0) + ' kt';
-        }
-        annotations.push({ text: shrLabel, xref:'paper', yref:'paper',
-            x: cx, y: cy + r + (isFullsize?0.028:0.033),
-            showarrow:false, font:{ color:'#f59e0b', size: isFullsize?11:9, family:'JetBrains Mono, monospace' },
-            bgcolor:'rgba(10,22,40,0.7)', borderpad:1 });
-        // Direction below
-        annotations.push({ text: sddc.toFixed(0) + '\u00b0', xref:'paper', yref:'paper',
-            x: cx, y: cy - r - (isFullsize?0.022:0.027),
-            showarrow:false, font:{ color:'rgba(245,158,11,0.7)', size: isFullsize?9:8, family:'JetBrains Mono, monospace' } });
+            x0: tx, y0: ty,
+            x1: tx + hl*Math.cos(theta+Math.PI+ha), y1: ty + hl*Math.sin(theta+Math.PI+ha),
+            line:{ color: color, width: lw } });
     }
 
-    // ── TC Motion vector (cyan) ─────────────────────────────────
+    // Draw arrows
+    if (hasShear) _addArrow((90 - sddc) * Math.PI / 180, '#f59e0b');
+    if (hasMotion) _addArrow((90 - motionDir) * Math.PI / 180, '#22d3ee');
+
+    // ── Compact labels: one line per vector ──────────────────────
+    // "SHR  12 kt / 276°" above circle
+    if (hasShear) {
+        var shrTxt = '<b>SHR</b>  ';
+        if (shdc !== null && shdc !== undefined && shdc !== 9999) shrTxt += shdc.toFixed(0) + ' kt / ';
+        shrTxt += sddc.toFixed(0) + '\u00b0';
+        annotations.push({ text: shrTxt, xref:'paper', yref:'paper',
+            x: cx, y: cy + r + (isFullsize ? 0.025 : 0.030),
+            showarrow:false, font:{ color:'#f59e0b', size: fsL, family:'JetBrains Mono, monospace' },
+            bgcolor:'rgba(10,22,40,0.7)', borderpad: 2 });
+    }
+
+    // "MOT  8 kt / 29°" below circle
     if (hasMotion) {
-        var thetaMot = (90 - motionDir) * Math.PI / 180;
-        var dxM = arrowLen * Math.cos(thetaMot);
-        var dyM = arrowLen * Math.sin(thetaMot);
-        // Shaft (solid line for visibility)
-        shapes.push({ type:'line', xref:'paper', yref:'paper',
-            x0: cx - dxM*0.3, y0: cy - dyM*0.3, x1: cx + dxM, y1: cy + dyM,
-            line:{ color:'#06b6d4', width: isFullsize?3:2.5 } });
-        // Arrowhead
-        var mHeadLen = arrowLen * 0.35;
-        var mha1 = thetaMot + Math.PI - 25*Math.PI/180;
-        var mha2 = thetaMot + Math.PI + 25*Math.PI/180;
-        var mTipX = cx + dxM, mTipY = cy + dyM;
-        shapes.push({ type:'line', xref:'paper', yref:'paper',
-            x0: mTipX, y0: mTipY, x1: mTipX + mHeadLen*Math.cos(mha1), y1: mTipY + mHeadLen*Math.sin(mha1),
-            line:{ color:'#06b6d4', width: isFullsize?3:2.5 } });
-        shapes.push({ type:'line', xref:'paper', yref:'paper',
-            x0: mTipX, y0: mTipY, x1: mTipX + mHeadLen*Math.cos(mha2), y1: mTipY + mHeadLen*Math.sin(mha2),
-            line:{ color:'#06b6d4', width: isFullsize?3:2.5 } });
-        // Motion label + speed below shear annotations
-        var motLabel = '<b>MOT</b>';
-        if (motionSpd !== null && motionSpd !== undefined && motionSpd !== 9999) {
-            motLabel += '  ' + motionSpd.toFixed(0) + ' kt';
-        }
-        var motLabelY = hasShear
-            ? cy - r - (isFullsize?0.048:0.056)
-            : cy + r + (isFullsize?0.028:0.033);
-        annotations.push({ text: motLabel, xref:'paper', yref:'paper',
-            x: cx, y: motLabelY,
-            showarrow:false, font:{ color:'#06b6d4', size: isFullsize?11:9, family:'JetBrains Mono, monospace' },
-            bgcolor:'rgba(10,22,40,0.7)', borderpad:1 });
+        var motTxt = '<b>MOT</b>  ';
+        if (motionSpd !== null && motionSpd !== undefined && motionSpd !== 9999) motTxt += motionSpd.toFixed(0) + ' kt / ';
+        motTxt += motionDir.toFixed(0) + '\u00b0';
+        var motY = hasShear
+            ? cy - r - (isFullsize ? 0.025 : 0.030)
+            : cy + r + (isFullsize ? 0.025 : 0.030);
+        annotations.push({ text: motTxt, xref:'paper', yref:'paper',
+            x: cx, y: motY,
+            showarrow:false, font:{ color:'#22d3ee', size: fsL, family:'JetBrains Mono, monospace' },
+            bgcolor:'rgba(10,22,40,0.7)', borderpad: 2 });
     }
 
     return { shapes: shapes, annotations: annotations };
