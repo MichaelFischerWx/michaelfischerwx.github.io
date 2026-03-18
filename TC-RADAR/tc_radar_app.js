@@ -4285,7 +4285,12 @@ function renderAnomalyAzimuthalMeanInto(targetId, json, fullsize) {
             tickvals: [-3, -2, -1, 0, 1, 2, 3],
         },
         hoverongaps: false,
-        hovertemplate: '<b>Z-score</b>: %{z:.2f}\u03c3<br>R\u2095: %{x}<br>Height: %{y:.1f} km<extra></extra>'
+        hovertemplate: '<b>Z-score</b>: %{z:.2f}\u03c3<br>R\u2095: %{customdata}<br>Height: %{y:.1f} km<extra></extra>',
+        customdata: height_km.map(function() {
+            return rHAxis.map(function(v, idx) {
+                return idx < nInner ? (v.toFixed(2) + ' R/RMW') : ('+' + v.toFixed(0) + ' km');
+            });
+        })
     };
 
     var vmaxStr = meta.vmax_kt ? ' | Vmax = ' + meta.vmax_kt + ' kt' : '';
@@ -8433,7 +8438,8 @@ function renderCompositeAnomalyInto(targetId, json, filters) {
             thickness: 14, len: 0.85,
         },
         hoverongaps: false,
-        hovertemplate: '<b>Z-score</b>: %{z:.2f}\u03c3<br>R\u2095: %{x}<br>Height: %{y:.1f} km<extra></extra>'
+        hovertemplate: '<b>Z-score</b>: %{z:.2f}\u03c3<br>R\u2095: %{customdata}<br>Height: %{y:.1f} km<extra></extra>',
+        customdata: height_km.map(function() { return rHAxis.map(function(v, idx) { return idx < nInner ? (v.toFixed(2) + ' R/RMW') : ('+' + v.toFixed(0) + ' km'); }); })
     };
 
     var dtypeLabel = ' (Merge)';
@@ -8521,7 +8527,8 @@ function _renderDiffAnomaly(targetId, diffJson, jsonA, jsonB, filtersA, filtersB
             z: anomData, x: xIdxArr, y: height_km, type: 'heatmap',
             colorscale: colorscale, zmin: zmin, zmax: zmax, zmid: 0,
             colorbar: { title:{text:cbarLabel,font:{color:'#ccc',size:fontSize.cbar}}, tickfont:{color:'#ccc',size:fontSize.cbarTick}, thickness:14, len:0.85 },
-            hovertemplate: '<b>Z-score</b>: %{z:.2f}\u03c3<br>R\u2095: %{x}<br>Height: %{y:.1f} km<extra></extra>',
+            hovertemplate: '<b>Z-score</b>: %{z:.2f}\u03c3<br>R\u2095: %{customdata}<br>Height: %{y:.1f} km<extra></extra>',
+        customdata: height_km.map(function() { return rHAxis.map(function(v, idx) { return idx < nInner ? (v.toFixed(2) + ' R/RMW') : ('+' + v.toFixed(0) + ' km'); }); }),
             hoverongaps: false
         };
         var layout = {

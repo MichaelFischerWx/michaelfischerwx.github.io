@@ -4461,9 +4461,11 @@
                 tickvals: [-3, -2, -1, 0, 1, 2, 3],
             },
             hoverongaps: false,
-            hovertemplate: '<b>Z*</b>: %{z:.2f}\u03c3<br>R\u2095: %{text}<br>Height: %{y:.1f} km<extra></extra>',
-            text: rHAxis.map(function(v, idx) {
-                return idx < nInner ? (v.toFixed(2) + ' R/RMW') : (v.toFixed(0) + ' km');
+            hovertemplate: '<b>Z*</b>: %{z:.2f}\u03c3<br>R\u2095: %{customdata}<br>Height: %{y:.1f} km<extra></extra>',
+            customdata: data.height_km.map(function() {
+                return rHAxis.map(function(v, idx) {
+                    return idx < nInner ? (v.toFixed(2) + ' R/RMW') : ('+' + v.toFixed(0) + ' km');
+                });
             })
         };
 
