@@ -494,8 +494,8 @@
         var plotBg = '#0a1628';
         var baseLayout = {
             paper_bgcolor: plotBg, plot_bgcolor: plotBg,
-            xaxis: { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false, scaleanchor: 'y' },
-            yaxis: { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
+            xaxis: { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false, scaleanchor: 'y', range: [-250, 250] },
+            yaxis: { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false, range: [-250, 250] },
             hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 12 } },
             showlegend: false
         };
