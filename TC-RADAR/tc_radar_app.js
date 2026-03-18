@@ -326,6 +326,7 @@ function openSidePanel(caseData, fromQuickSelect) {
                         '<button class="cs-btn" id="sq-btn" onclick="fetchShearQuadrants()" disabled>\u25D1 Shear Quads</button>' +
                         '<button class="cs-btn" id="vol-btn" onclick="fetch3DVolume()" disabled>\uD83D\uDDA5 3D Volume</button>' +
                         '<button class="cs-btn" id="vp-scatter-btn" onclick="fetchVPScatter()" style="background:rgba(251,191,36,0.12);border-color:rgba(251,191,36,0.35);color:#fde68a;">\u2B24 VP Scatter</button>' +
+                        '<button class="cs-btn" id="anom-btn" onclick="document.getElementById(\'az-coord-mode\').value=\'anomaly\';dispatchAzimuthalMean();" disabled style="background:rgba(52,211,153,0.12);border-color:rgba(52,211,153,0.35);color:#6ee7b7;">Z* Anomaly</button>' +
                     '</div>' +
                 '</div>' +
                 // ── STORM EVOLUTION: temporal context ──
@@ -3873,7 +3874,7 @@ function renderPlotFromJSON(json, resultDiv) {
     var azBtn = document.getElementById('az-btn'); if (azBtn) azBtn.disabled = false;
     var sqBtn = document.getElementById('sq-btn'); if (sqBtn) sqBtn.disabled = false;
     var volBtn = document.getElementById('vol-btn'); if (volBtn) volBtn.disabled = false;
-    // (Rh Hybrid and Z* Anomaly are now in the az-coord-mode dropdown)
+    var anomBtn = document.getElementById('anom-btn'); if (anomBtn) anomBtn.disabled = false;
     document.getElementById('plotly-chart').on('plotly_click', handlePlotClick);
 
     // Auto-scroll the side panel to show the plot (skip during animation)
