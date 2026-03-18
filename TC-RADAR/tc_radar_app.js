@@ -6427,10 +6427,20 @@ function _build3DTiltTraces(tiltData) {
      *   [1] markers at each height  (coloured by height)
      */
     if (!tiltData || !tiltData.x_km || !tiltData.x_km.length) return [];
-    var x = tiltData.x_km, y = tiltData.y_km, z = tiltData.height_km;
-    var tiltMag = tiltData.tilt_magnitude_km || [];
-    var rmw = tiltData.rmw_km || [];
+    var rawX = tiltData.x_km, rawY = tiltData.y_km, rawZ = tiltData.height_km;
+    var rawMag = tiltData.tilt_magnitude_km || [];
+    var rawRmw = tiltData.rmw_km || [];
     var refH = tiltData.ref_height_km || 2.0;
+
+    // Filter out levels where any coordinate is null/undefined
+    var x = [], y = [], z = [], tiltMag = [], rmw = [];
+    for (var k = 0; k < rawZ.length; k++) {
+        if (rawX[k] == null || rawY[k] == null || rawZ[k] == null) continue;
+        x.push(rawX[k]); y.push(rawY[k]); z.push(rawZ[k]);
+        tiltMag.push(rawMag[k] != null ? rawMag[k] : null);
+        rmw.push(rawRmw[k] != null ? rawRmw[k] : null);
+    }
+    if (z.length < 2) return [];
 
     // Build hover text
     var hoverText = [];
@@ -6438,8 +6448,8 @@ function _build3DTiltTraces(tiltData) {
         var txt = '<b>' + z[i].toFixed(1) + ' km</b>' +
             '<br>X: ' + x[i].toFixed(1) + ' km' +
             '<br>Y: ' + y[i].toFixed(1) + ' km';
-        if (tiltMag[i] !== undefined && tiltMag[i] !== null) txt += '<br>Tilt: ' + tiltMag[i].toFixed(1) + ' km';
-        if (rmw[i] !== undefined && rmw[i] !== null) txt += '<br>RMW: ' + rmw[i].toFixed(1) + ' km';
+        if (tiltMag[i] !== null) txt += '<br>Tilt: ' + tiltMag[i].toFixed(1) + ' km';
+        if (rmw[i] !== null) txt += '<br>RMW: ' + rmw[i].toFixed(1) + ' km';
         hoverText.push(txt);
     }
 
@@ -6498,7 +6508,10 @@ function _addTiltTo3D() {
     if (btn) btn.disabled = false;
 
     var traces = _build3DTiltTraces(_last3DJson.tilt_profile);
-    if (!traces.length) return;
+    if (!traces.length) {
+        if (btn) { btn.disabled = true; btn.classList.remove('active'); }
+        return;
+    }
 
     _3dTiltTraceStart = chartDiv.data.length;
     Plotly.addTraces(chartDiv, traces);
