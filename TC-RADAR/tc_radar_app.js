@@ -6168,7 +6168,7 @@ function fetch3DVolume() {
 
     var controller = new AbortController();
     var timeout = setTimeout(function() { controller.abort(); }, 120000);
-    var url = API_BASE + '/volume?case_index=' + currentCaseIndex + '&variable=' + variable + '&data_type=' + _activeDataType + '&stride=2&max_height_km=15&compact=true';
+    var url = API_BASE + '/volume?case_index=' + currentCaseIndex + '&variable=' + variable + '&data_type=' + _activeDataType + '&stride=2&max_height_km=15&compact=true&tilt_profile=true';
     fetch(url, { signal: controller.signal })
         .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
         .then(function(json) {
@@ -6389,6 +6389,10 @@ function render3DIsosurface() {
         displayModeBar: true,
         displaylogo: false,
         modeBarButtonsToRemove: ['toImage', 'resetCameraLastSave3d']
+    }).then(function() {
+        // Reset tilt trace state and add tilt hodograph if available
+        _3dTiltTraceStart = -1;
+        _addTiltTo3D();
     });
 }
 
@@ -6396,6 +6400,112 @@ function toggle3DCaps() {
     var btn = document.getElementById('vol-caps');
     btn.classList.toggle('active');
     render3DIsosurface();
+}
+
+// ── 3D Tilt Hodograph ──────────────────────────────────────────
+var _3dTiltTraceStart = -1;   // index where tilt traces begin in chart data
+
+function _build3DTiltTraces(tiltData) {
+    /**
+     * Build scatter3d traces for the vortex tilt path in the 3D viewer.
+     * Returns an array of Plotly trace objects:
+     *   [0] connecting line  (white dotted)
+     *   [1] markers at each height  (coloured by height)
+     */
+    if (!tiltData || !tiltData.x_km || !tiltData.x_km.length) return [];
+    var x = tiltData.x_km, y = tiltData.y_km, z = tiltData.height_km;
+    var tiltMag = tiltData.tilt_magnitude_km || [];
+    var rmw = tiltData.rmw_km || [];
+    var refH = tiltData.ref_height_km || 2.0;
+
+    // Build hover text
+    var hoverText = [];
+    for (var i = 0; i < z.length; i++) {
+        var txt = '<b>' + z[i].toFixed(1) + ' km</b>' +
+            '<br>X: ' + x[i].toFixed(1) + ' km' +
+            '<br>Y: ' + y[i].toFixed(1) + ' km';
+        if (tiltMag[i] !== undefined && tiltMag[i] !== null) txt += '<br>Tilt: ' + tiltMag[i].toFixed(1) + ' km';
+        if (rmw[i] !== undefined && rmw[i] !== null) txt += '<br>RMW: ' + rmw[i].toFixed(1) + ' km';
+        hoverText.push(txt);
+    }
+
+    // Marker sizes: larger at reference height
+    var sizes = [];
+    for (var j = 0; j < z.length; j++) {
+        sizes.push(Math.abs(z[j] - refH) < 0.3 ? 7 : 4);
+    }
+
+    var lineTrace = {
+        type: 'scatter3d',
+        mode: 'lines',
+        x: x, y: y, z: z,
+        line: { color: 'rgba(52,211,153,0.6)', width: 3, dash: 'dot' },
+        hoverinfo: 'skip',
+        showlegend: false
+    };
+
+    var markerTrace = {
+        type: 'scatter3d',
+        mode: 'markers+text',
+        x: x, y: y, z: z,
+        marker: {
+            size: sizes,
+            color: z,
+            colorscale: 'Viridis',
+            cmin: 0, cmax: 14,
+            line: { color: 'rgba(255,255,255,0.4)', width: 0.5 },
+            colorbar: {
+                title: { text: 'Height (km)', font: { color: '#ccc', size: 10 } },
+                tickfont: { color: '#ccc', size: 9 },
+                thickness: 10, len: 0.35,
+                x: 1.08, y: 0.15,
+                xanchor: 'left'
+            }
+        },
+        text: z.map(function(h) { return h.toFixed(1); }),
+        textposition: 'top right',
+        textfont: { size: 8, color: 'rgba(110,231,183,0.7)' },
+        hovertext: hoverText,
+        hoverinfo: 'text',
+        hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 11 } },
+        showlegend: false
+    };
+
+    return [lineTrace, markerTrace];
+}
+
+function _addTiltTo3D() {
+    var chartDiv = document.getElementById('vol-3d-chart');
+    var btn = document.getElementById('vol-tilt-toggle');
+    if (!_last3DJson || !_last3DJson.tilt_profile) {
+        if (btn) { btn.disabled = true; btn.classList.remove('active'); }
+        return;
+    }
+    if (btn) btn.disabled = false;
+
+    var traces = _build3DTiltTraces(_last3DJson.tilt_profile);
+    if (!traces.length) return;
+
+    _3dTiltTraceStart = chartDiv.data.length;
+    Plotly.addTraces(chartDiv, traces);
+    if (btn) btn.classList.add('active');
+}
+
+function toggle3DTilt() {
+    var chartDiv = document.getElementById('vol-3d-chart');
+    var btn = document.getElementById('vol-tilt-toggle');
+    if (!chartDiv || !chartDiv.data || _3dTiltTraceStart < 0) return;
+
+    var isActive = btn.classList.contains('active');
+    var vis = isActive ? false : true;
+    var indices = [];
+    for (var i = _3dTiltTraceStart; i < chartDiv.data.length; i++) {
+        indices.push(i);
+    }
+    if (indices.length) {
+        Plotly.restyle(chartDiv, { visible: vis }, indices);
+    }
+    btn.classList.toggle('active');
 }
 
 
@@ -8147,10 +8257,10 @@ function generateCompositeAzMean() {
 
     var overlay = (document.getElementById('comp-overlay') || {}).value || '';
     var normRmw = !!(document.getElementById('comp-norm-rmw') || {}).checked;
-    var maxRRmw = normRmw ? (parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 8.0) : 8.0;
-    var drRmw   = normRmw ? Math.max(0.05, parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.25) : 0.25;
+    var maxRRmw = normRmw ? (parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 8.0) : (parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 200);
+    var drRmw   = normRmw ? Math.max(0.05, parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.25) : (parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 2);
     var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage +
-        '&max_r_rmw=' + maxRRmw + '&dr_rmw=' + drRmw;
+        '&normalize_rmw=' + (normRmw ? 'true' : 'false') + '&max_r_rmw=' + maxRRmw + '&dr_rmw=' + drRmw;
     if (overlay) qs += '&overlay=' + encodeURIComponent(overlay);
     _fetchCompositeStream(API_BASE + '/composite/azimuthal_mean?' + qs, 'Computing azimuthal mean')
         .then(function(json) {
@@ -9254,10 +9364,10 @@ function generateCompDiffAzMean() {
     _showCompStatus('loading', 'Computing difference composite (A\u2212B) azimuthal mean\u2026');
 
     var normRmw = !!(document.getElementById('comp-norm-rmw') || {}).checked;
-    var maxRRmw = normRmw ? (parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 8.0) : 8.0;
-    var drRmw   = normRmw ? Math.max(0.05, parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.25) : 0.25;
+    var maxRRmw = normRmw ? (parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 8.0) : (parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 200);
+    var drRmw   = normRmw ? Math.max(0.05, parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.25) : (parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 2);
     var baseQS = '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage +
-        '&max_r_rmw=' + maxRRmw + '&dr_rmw=' + drRmw;
+        '&normalize_rmw=' + (normRmw ? 'true' : 'false') + '&max_r_rmw=' + maxRRmw + '&dr_rmw=' + drRmw;
     if (overlay) baseQS += '&overlay=' + encodeURIComponent(overlay);
     var urlA = API_BASE + '/composite/azimuthal_mean?' + _compositeQueryString(filtersA) + baseQS;
     var urlB = API_BASE + '/composite/azimuthal_mean?' + _compositeQueryString(filtersB) + baseQS;
