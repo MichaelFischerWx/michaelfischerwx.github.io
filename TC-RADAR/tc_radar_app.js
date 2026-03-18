@@ -571,6 +571,9 @@ var _csMode = false;
 var _csPointA = null;
 var _csMouseHandler = null;
 var _currentSddc = null;
+var _currentShdc = null;       // shear magnitude (kt)
+var _currentMotionDir = null;  // TC motion direction (met heading, deg)
+var _currentMotionSpd = null;  // TC motion speed (kt)
 var _lastSqJson = null;
 
 // ── ASCII Hurricane Loading Animation ────────────────────────
@@ -3789,6 +3792,9 @@ function renderPlotFromJSON(json, resultDiv) {
 
     var zData = json.data, x = json.x, y = json.y, varInfo = json.variable, meta = _enrichCaseMeta(json.case_meta);
     _currentSddc = (meta.sddc !== undefined && meta.sddc !== null && meta.sddc !== 9999) ? meta.sddc : null;
+    _currentShdc = (meta.shdc !== undefined && meta.shdc !== null && meta.shdc !== 9999) ? meta.shdc : null;
+    _currentMotionDir = (meta.motion_dir !== undefined && meta.motion_dir !== null && meta.motion_dir !== 9999) ? meta.motion_dir : null;
+    _currentMotionSpd = (meta.motion_spd !== undefined && meta.motion_spd !== null && meta.motion_spd !== 9999) ? meta.motion_spd : null;
     _defaultColorscale = varInfo.colorscale; _defaultVmin = varInfo.vmin; _defaultVmax = varInfo.vmax;
     var vminInput = document.getElementById('ep-vmin'), vmaxInput = document.getElementById('ep-vmax');
     if (vminInput) vminInput.placeholder = varInfo.vmin; if (vmaxInput) vmaxInput.placeholder = varInfo.vmax;
@@ -3809,7 +3815,7 @@ function renderPlotFromJSON(json, resultDiv) {
     var plotBg = '#0a1628';
     var baseLayout = { paper_bgcolor: plotBg, plot_bgcolor: plotBg, xaxis: { title: { text: 'Eastward distance (km)', font: { color: '#aaa' } }, tickfont: { color: '#aaa' }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false, scaleanchor: 'y' }, yaxis: { title: { text: 'Northward distance (km)', font: { color: '#aaa' } }, tickfont: { color: '#aaa' }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, shapes: shapes, hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 12 } }, showlegend: false };
     var config = { responsive: true, displayModeBar: true, modeBarButtonsToRemove: ['lasso2d','select2d','toggleSpikelines'], displaylogo: false };
-    var smallLayout = Object.assign({}, baseLayout, { title: { text: title, font: { color: '#e5e7eb', size: 11 }, y: 0.995, x: 0.5, xanchor: 'center', yanchor: 'top' }, margin: { l: 52, r: 16, t: json.overlay ? 110 : 90, b: 44 }, xaxis: Object.assign({}, baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }), yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }) });
+    var smallLayout = Object.assign({}, baseLayout, { title: { text: title, font: { color: '#e5e7eb', size: 11 }, y: 0.995, x: 0.5, xanchor: 'center', yanchor: 'top' }, margin: { l: 52, r: 16, t: json.overlay ? 120 : 100, b: 44 }, xaxis: Object.assign({}, baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }), yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }) });
 
     var overlayTraces = buildOverlayContours(json, x, y);
 
@@ -3828,8 +3834,8 @@ function renderPlotFromJSON(json, resultDiv) {
         }
     }
 
-    // Shear vector inset (small panel only; fullscreen builds its own in openPlotModal)
-    var shearInset = buildShearInset(_currentSddc, false);
+    // Shear + motion vector inset (small panel only; fullscreen builds its own in openPlotModal)
+    var shearInset = buildShearInset(_currentSddc, false, _currentShdc, _currentMotionDir, _currentMotionSpd);
     if (shearInset.shapes.length) {
         smallLayout.shapes = (smallLayout.shapes || []).concat(shearInset.shapes);
     }
@@ -3967,7 +3973,7 @@ function renderCrossSectionInto(targetId, json, fullsize) {
     }
 
     // Shear vector inset for cross-section
-    var csShearInset = buildShearInsetCS(_currentSddc, fullsize);
+    var csShearInset = buildShearInsetCS(_currentSddc, fullsize, _currentShdc);
     if (csShearInset.annotations.length) layout.annotations = (layout.annotations || []).concat(csShearInset.annotations);
     if (csShearInset.shapes.length) layout.shapes = (layout.shapes || []).concat(csShearInset.shapes);
 
@@ -4111,7 +4117,7 @@ function renderAzimuthalMeanInto(targetId, json, fullsize) {
     }
 
     // Shear vector inset for azimuthal mean
-    var azShearInset = buildShearInsetCS(_currentSddc, fullsize);
+    var azShearInset = buildShearInsetCS(_currentSddc, fullsize, _currentShdc);
     if (azShearInset.annotations.length) layout.annotations = (layout.annotations || []).concat(azShearInset.annotations);
     if (azShearInset.shapes.length) layout.shapes = (layout.shapes || []).concat(azShearInset.shapes);
 
@@ -4596,62 +4602,113 @@ function buildAzOverlayContours(json, radius_km, height_km) {
     } catch(e) { console.warn('Az overlay contour error:',e); return []; }
 }
 
-// ── Shear vector inset ──────────────────────────────────────────
-function buildShearInset(sddc, isFullsize) {
-    if (sddc === null || sddc === undefined || sddc === 9999) return { shapes: [], annotations: [] };
-    // Convert SDDC (met heading: 0=N,90=E) to math angle (CCW from east)
-    var theta = (90 - sddc) * Math.PI / 180;
+// ── Shear & Motion vector inset ─────────────────────────────────
+function buildShearInset(sddc, isFullsize, shdc, motionDir, motionSpd) {
+    var hasShear = (sddc !== null && sddc !== undefined && sddc !== 9999);
+    var hasMotion = (motionDir !== null && motionDir !== undefined && motionDir !== 9999);
+    if (!hasShear && !hasMotion) return { shapes: [], annotations: [] };
+
     // Inset center position (paper coords) - top-left corner
     var cx = isFullsize ? 0.08 : 0.10;
-    var cy = isFullsize ? 0.92 : 0.90;
-    var r = isFullsize ? 0.045 : 0.055;
+    var cy = isFullsize ? 0.90 : 0.88;
+    var r = isFullsize ? 0.050 : 0.058;
     var arrowLen = r * 0.82;
-    var dx = arrowLen * Math.cos(theta);
-    var dy = arrowLen * Math.sin(theta);
-    // Aspect ratio correction: paper coords are not square, estimate from typical plots
-    var aspect = 1.0; // for square axes with scaleanchor this is ~1
+    var dotR = r * 0.08;
+
     var shapes = [
         // Background circle
         { type:'circle', xref:'paper', yref:'paper',
           x0: cx-r, y0: cy-r, x1: cx+r, y1: cy+r,
           fillcolor:'rgba(10,22,40,0.85)', line:{ color:'rgba(255,255,255,0.25)', width:1 } },
-        // Shear arrow shaft
-        { type:'line', xref:'paper', yref:'paper',
-          x0: cx - dx*0.3, y0: cy - dy*0.3, x1: cx + dx, y1: cy + dy,
-          line:{ color:'#f59e0b', width: isFullsize?2.5:2 } }
+        // Small dot at center
+        { type:'circle', xref:'paper', yref:'paper',
+          x0: cx-dotR, y0: cy-dotR, x1: cx+dotR, y1: cy+dotR,
+          fillcolor:'rgba(255,255,255,0.5)', line:{ width:0 } }
     ];
-    // Arrowhead using two short lines
-    var headLen = arrowLen * 0.35;
-    var headAngle = 25 * Math.PI / 180;
-    var ha1 = theta + Math.PI - headAngle;
-    var ha2 = theta + Math.PI + headAngle;
-    var tipX = cx + dx, tipY = cy + dy;
-    shapes.push({ type:'line', xref:'paper', yref:'paper',
-        x0: tipX, y0: tipY, x1: tipX + headLen*Math.cos(ha1), y1: tipY + headLen*Math.sin(ha1),
-        line:{ color:'#f59e0b', width: isFullsize?2.5:2 } });
-    shapes.push({ type:'line', xref:'paper', yref:'paper',
-        x0: tipX, y0: tipY, x1: tipX + headLen*Math.cos(ha2), y1: tipY + headLen*Math.sin(ha2),
-        line:{ color:'#f59e0b', width: isFullsize?2.5:2 } });
-    // Small dot at center
-    var dotR = r * 0.08;
-    shapes.push({ type:'circle', xref:'paper', yref:'paper',
-        x0: cx-dotR, y0: cy-dotR, x1: cx+dotR, y1: cy+dotR,
-        fillcolor:'rgba(255,255,255,0.5)', line:{ width:0 } });
-    var annotations = [
-        { text:'<b>SHR</b>', xref:'paper', yref:'paper', x: cx, y: cy + r + (isFullsize?0.025:0.03),
-          showarrow:false, font:{ color:'#f59e0b', size: isFullsize?10:8, family:'JetBrains Mono, monospace' },
-          bgcolor:'rgba(10,22,40,0.7)', borderpad:1 },
-        { text: sddc.toFixed(0) + '\u00b0', xref:'paper', yref:'paper', x: cx, y: cy - r - (isFullsize?0.02:0.025),
-          showarrow:false, font:{ color:'rgba(245,158,11,0.7)', size: isFullsize?8:7, family:'JetBrains Mono, monospace' } }
-    ];
+    var annotations = [];
+
+    // ── Shear vector (orange) ───────────────────────────────────
+    if (hasShear) {
+        var thetaShr = (90 - sddc) * Math.PI / 180;
+        var dxS = arrowLen * Math.cos(thetaShr);
+        var dyS = arrowLen * Math.sin(thetaShr);
+        // Shaft
+        shapes.push({ type:'line', xref:'paper', yref:'paper',
+            x0: cx - dxS*0.3, y0: cy - dyS*0.3, x1: cx + dxS, y1: cy + dyS,
+            line:{ color:'#f59e0b', width: isFullsize?2.5:2 } });
+        // Arrowhead
+        var headLen = arrowLen * 0.35;
+        var headAngle = 25 * Math.PI / 180;
+        var ha1 = thetaShr + Math.PI - headAngle;
+        var ha2 = thetaShr + Math.PI + headAngle;
+        var tipX = cx + dxS, tipY = cy + dyS;
+        shapes.push({ type:'line', xref:'paper', yref:'paper',
+            x0: tipX, y0: tipY, x1: tipX + headLen*Math.cos(ha1), y1: tipY + headLen*Math.sin(ha1),
+            line:{ color:'#f59e0b', width: isFullsize?2.5:2 } });
+        shapes.push({ type:'line', xref:'paper', yref:'paper',
+            x0: tipX, y0: tipY, x1: tipX + headLen*Math.cos(ha2), y1: tipY + headLen*Math.sin(ha2),
+            line:{ color:'#f59e0b', width: isFullsize?2.5:2 } });
+        // Shear label + magnitude above
+        var shrLabel = '<b>SHR</b>';
+        if (shdc !== null && shdc !== undefined && shdc !== 9999) {
+            shrLabel += '  ' + shdc.toFixed(0) + ' kt';
+        }
+        annotations.push({ text: shrLabel, xref:'paper', yref:'paper',
+            x: cx, y: cy + r + (isFullsize?0.028:0.033),
+            showarrow:false, font:{ color:'#f59e0b', size: isFullsize?9:7, family:'JetBrains Mono, monospace' },
+            bgcolor:'rgba(10,22,40,0.7)', borderpad:1 });
+        // Direction below
+        annotations.push({ text: sddc.toFixed(0) + '\u00b0', xref:'paper', yref:'paper',
+            x: cx, y: cy - r - (isFullsize?0.022:0.027),
+            showarrow:false, font:{ color:'rgba(245,158,11,0.7)', size: isFullsize?8:7, family:'JetBrains Mono, monospace' } });
+    }
+
+    // ── TC Motion vector (cyan) ─────────────────────────────────
+    if (hasMotion) {
+        var thetaMot = (90 - motionDir) * Math.PI / 180;
+        var dxM = arrowLen * Math.cos(thetaMot);
+        var dyM = arrowLen * Math.sin(thetaMot);
+        // Shaft
+        shapes.push({ type:'line', xref:'paper', yref:'paper',
+            x0: cx - dxM*0.3, y0: cy - dyM*0.3, x1: cx + dxM, y1: cy + dyM,
+            line:{ color:'#06b6d4', width: isFullsize?2.5:2, dash:'dot' } });
+        // Arrowhead
+        var mHeadLen = arrowLen * 0.35;
+        var mha1 = thetaMot + Math.PI - 25*Math.PI/180;
+        var mha2 = thetaMot + Math.PI + 25*Math.PI/180;
+        var mTipX = cx + dxM, mTipY = cy + dyM;
+        shapes.push({ type:'line', xref:'paper', yref:'paper',
+            x0: mTipX, y0: mTipY, x1: mTipX + mHeadLen*Math.cos(mha1), y1: mTipY + mHeadLen*Math.sin(mha1),
+            line:{ color:'#06b6d4', width: isFullsize?2.5:2 } });
+        shapes.push({ type:'line', xref:'paper', yref:'paper',
+            x0: mTipX, y0: mTipY, x1: mTipX + mHeadLen*Math.cos(mha2), y1: mTipY + mHeadLen*Math.sin(mha2),
+            line:{ color:'#06b6d4', width: isFullsize?2.5:2 } });
+        // Motion label + speed below shear annotations
+        var motLabel = '<b>MOT</b>';
+        if (motionSpd !== null && motionSpd !== undefined && motionSpd !== 9999) {
+            motLabel += '  ' + motionSpd.toFixed(0) + ' kt';
+        }
+        var motLabelY = hasShear
+            ? cy - r - (isFullsize?0.048:0.056)
+            : cy + r + (isFullsize?0.028:0.033);
+        annotations.push({ text: motLabel, xref:'paper', yref:'paper',
+            x: cx, y: motLabelY,
+            showarrow:false, font:{ color:'#06b6d4', size: isFullsize?9:7, family:'JetBrains Mono, monospace' },
+            bgcolor:'rgba(10,22,40,0.7)', borderpad:1 });
+    }
+
     return { shapes: shapes, annotations: annotations };
 }
 
 // Build shear inset for cross-section (simpler: just show direction label)
-function buildShearInsetCS(sddc, isFullsize) {
+function buildShearInsetCS(sddc, isFullsize, shdc) {
     if (sddc === null || sddc === undefined || sddc === 9999) return { shapes: [], annotations: [] };
+    var shrText = '<b>SHR: ' + sddc.toFixed(0) + '\u00b0</b>';
+    if (shdc !== null && shdc !== undefined && shdc !== 9999) {
+        shrText = '<b>SHR: ' + sddc.toFixed(0) + '\u00b0 (' + shdc.toFixed(0) + ' kt)</b>';
+    }
     var annotations = [
-        { text:'<b>SHR: ' + sddc.toFixed(0) + '\u00b0</b>',
+        { text: shrText,
           xref:'paper', yref:'paper', x: 0.01, y: 1.0,
           xanchor:'left', yanchor:'bottom', showarrow:false,
           font:{ color:'#f59e0b', size: isFullsize?10:8, family:'JetBrains Mono, monospace' },
@@ -6043,15 +6100,15 @@ function openPlotModal(csJson) {
     }
 
     var d = window._lastPlotlyData;
-    var fullLayout = Object.assign({}, d.baseLayout, { title: { text: d.title, font: { color: '#e5e7eb', size: 15 }, y: 0.97, x: 0.5, xanchor: 'center' }, margin: { l:65,r:30,t:d.overlayTraces&&d.overlayTraces.length?110:94,b:55 }, xaxis: Object.assign({}, d.baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }), yaxis: Object.assign({}, d.baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }) });
+    var fullLayout = Object.assign({}, d.baseLayout, { title: { text: d.title, font: { color: '#e5e7eb', size: 15 }, y: 0.97, x: 0.5, xanchor: 'center' }, margin: { l:65,r:30,t:d.overlayTraces&&d.overlayTraces.length?120:104,b:55 }, xaxis: Object.assign({}, d.baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }), yaxis: Object.assign({}, d.baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }) });
     // Scale up annotations for fullscreen
     if (fullLayout.annotations) {
         fullLayout.annotations = fullLayout.annotations.map(function(a) {
             return Object.assign({}, a, { font: Object.assign({}, a.font, { size: 11 }) });
         });
     }
-    // Add fullscreen-scaled shear inset (baseLayout has no shear shapes)
-    var fsShearInset = buildShearInset(_currentSddc, true);
+    // Add fullscreen-scaled shear + motion inset (baseLayout has no shear shapes)
+    var fsShearInset = buildShearInset(_currentSddc, true, _currentShdc, _currentMotionDir, _currentMotionSpd);
     if (fsShearInset.shapes.length) fullLayout.shapes = (fullLayout.shapes || []).concat(fsShearInset.shapes);
     if (fsShearInset.annotations.length) fullLayout.annotations = (fullLayout.annotations || []).concat(fsShearInset.annotations);
     var fullCbar = { title: { text: d.heatmap.colorbar.title.text, font: { color: '#ccc', size: 13 } }, tickfont: { color: '#ccc', size: 11 }, thickness: 16, len: 0.85 };
