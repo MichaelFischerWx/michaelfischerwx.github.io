@@ -4855,6 +4855,24 @@
         btn.disabled = true;
         btn.classList.add('pill-pulse');
 
+        // Show elapsed-time progress indicator
+        var tiltStartTime = Date.now();
+        var tiltStatusEl = document.getElementById('rt-tilt-status');
+        if (!tiltStatusEl) {
+            tiltStatusEl = document.createElement('div');
+            tiltStatusEl.id = 'rt-tilt-status';
+            tiltStatusEl.style.cssText = 'font-size:10px;color:#6ee7b7;padding:4px 8px;font-family:JetBrains Mono,monospace;';
+            // Insert after the layers strip
+            var layerStrip = btn.closest('.overlay-strip');
+            if (layerStrip && layerStrip.parentElement) layerStrip.parentElement.insertBefore(tiltStatusEl, layerStrip.nextSibling);
+        }
+        tiltStatusEl.style.display = 'block';
+        tiltStatusEl.textContent = '\u23F3 Computing WCM centres at 16 heights (0.5\u20138 km)\u2026 0s';
+        var tiltTimer = setInterval(function () {
+            var elapsed = ((Date.now() - tiltStartTime) / 1000).toFixed(0);
+            tiltStatusEl.textContent = '\u23F3 Computing WCM centres at 16 heights (0.5\u20138 km)\u2026 ' + elapsed + 's';
+        }, 1000);
+
         var url = API_BASE + RT_PREFIX + '/tilt_profile?file_url=' + encodeURIComponent(_currentFileUrl);
         var controller = new AbortController();
         var timeout = setTimeout(function () { controller.abort(); }, 120000);
@@ -4868,16 +4886,19 @@
                 _rtTiltEnabled = true;
                 btn.classList.add('active');
                 _rtAddTiltTraces(json);
-                if (json.compute_time_s !== undefined) {
-                    rtToast('Tilt profile computed in ' + json.compute_time_s.toFixed(1) + 's (' + json.height_km.length + ' levels)', 'success');
-                }
+                var nLevels = json.height_km ? json.height_km.length : '?';
+                var elapsed = json.compute_time_s !== undefined ? json.compute_time_s.toFixed(1) : ((Date.now() - tiltStartTime) / 1000).toFixed(1);
+                tiltStatusEl.textContent = '\u2713 Tilt profile: ' + nLevels + ' levels in ' + elapsed + 's';
+                setTimeout(function () { tiltStatusEl.style.display = 'none'; }, 6000);
             })
             .catch(function (err) {
-                var msg = err.name === 'AbortError' ? 'Tilt request timed out.' : err.message;
+                var msg = err.name === 'AbortError' ? 'Tilt request timed out (120s).' : err.message;
                 rtToast('Tilt: ' + msg, 'error');
                 btn.classList.remove('active');
+                tiltStatusEl.textContent = '\u2717 ' + msg;
+                setTimeout(function () { tiltStatusEl.style.display = 'none'; }, 8000);
             })
-            .finally(function () { clearTimeout(timeout); btn.disabled = false; btn.classList.remove('pill-pulse'); });
+            .finally(function () { clearInterval(tiltTimer); clearTimeout(timeout); btn.disabled = false; btn.classList.remove('pill-pulse'); });
     };
 
     function _rtAddTiltTraces(tiltData) {
