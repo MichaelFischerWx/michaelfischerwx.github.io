@@ -3065,6 +3065,26 @@
         setTimeout(function () { window._rtAddTiltTo3D(tilt); }, 600);
     };
 
+    // ── Listen for 3D re-renders (iso slider, caps toggle, etc.) ──
+    // When render3DIsosurface() does Plotly.newPlot, all addTraces overlays
+    // are destroyed. Re-add active overlays when the event fires.
+    document.addEventListener('vol3d-rerendered', function () {
+        // Only act if we're on the realtime tab
+        var rtTab = document.querySelector('.tab-btn.active[data-tab="realtime"]');
+        if (!rtTab) return;
+
+        _rt3DSondeTraceStart = -1;
+        _rtTilt3DTraceStart = -1;
+
+        if (_rtSondeVisible && _rtSondeData && _rtSondeData.dropsondes.length > 0) {
+            setTimeout(function () { _rtAddSondesTo3D(); }, 100);
+        }
+        var tilt = (_rtLast3DJson && _rtLast3DJson.tilt_profile) ? _rtLast3DJson.tilt_profile : _rtTiltData;
+        if (tilt) {
+            setTimeout(function () { window._rtAddTiltTo3D(tilt); }, 200);
+        }
+    });
+
     // ═══════════════════════════════════════════════════════════
     // Flight-Level (In Situ) Observations — IWG1/MELISSA
     // ═══════════════════════════════════════════════════════════

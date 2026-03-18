@@ -6384,15 +6384,29 @@ function render3DIsosurface() {
         hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 12 } }
     };
 
+    // Preserve camera position across re-renders (caps/iso changes)
+    var chartDiv = document.getElementById('vol-3d-chart');
+    var savedCamera = null;
+    if (chartDiv && chartDiv.layout && chartDiv.layout.scene && chartDiv.layout.scene.camera) {
+        savedCamera = JSON.parse(JSON.stringify(chartDiv.layout.scene.camera));
+    }
+    if (savedCamera) layout.scene.camera = savedCamera;
+
     Plotly.newPlot('vol-3d-chart', [trace], layout, {
         responsive: true,
         displayModeBar: true,
         displaylogo: false,
         modeBarButtonsToRemove: ['toImage', 'resetCameraLastSave3d']
     }).then(function() {
-        // Reset tilt trace state and add tilt hodograph if available
+        // Reset TDR toggle to active (trace 0 is always visible after newPlot)
+        var tdrBtn = document.getElementById('vol-tdr-toggle');
+        if (tdrBtn && !tdrBtn.classList.contains('active')) tdrBtn.classList.add('active');
+
+        // Reset overlay trace state and re-add any active overlays
         _3dTiltTraceStart = -1;
         _addTiltTo3D();
+        // Fire a custom event so realtime_tdr.js can re-add its overlays (sondes, tilt)
+        document.dispatchEvent(new CustomEvent('vol3d-rerendered'));
     });
 }
 
