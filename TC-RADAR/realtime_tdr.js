@@ -276,7 +276,7 @@
         var quadBtn = document.getElementById('rt-quad-btn'); if (quadBtn) quadBtn.disabled = true;
         var anomalyBtn = document.getElementById('rt-anomaly-btn'); if (anomalyBtn) anomalyBtn.disabled = true;
         var vpBtn = document.getElementById('rt-vp-btn'); if (vpBtn) vpBtn.disabled = true;
-        var tiltBtn = document.getElementById('rt-tilt-btn'); if (tiltBtn) { tiltBtn.disabled = true; tiltBtn.textContent = '⟡ Tilt Off'; }
+        var tiltBtn = document.getElementById('rt-tilt-btn'); if (tiltBtn) { tiltBtn.disabled = true; tiltBtn.classList.remove('active'); }
         _rtTiltData = null; _rtTiltTraceStart = -1; _rtTiltEnabled = false;
 
         // Generate initial plot
@@ -344,7 +344,7 @@
             resultDiv.innerHTML = _rtLoadingHTML('Fetching data from API…');
         }
 
-        var cacheKey = _currentFileUrl + '_' + variable + '_' + level_km + '_' + overlay;
+        var cacheKey = _currentFileUrl + '_' + variable + '_' + level_km + '_' + overlay + (_rtBarbsEnabled ? '_barbs' : '');
         if (_rtDataCache[cacheKey]) {
             rtRenderPlot(_rtDataCache[cacheKey], resultDiv);
             btn.disabled = false; btn.textContent = 'Generate Plot';
@@ -355,6 +355,7 @@
         var timeout = setTimeout(function () { controller.abort(); }, 120000);
         var url = API_BASE + RT_PREFIX + '/data?file_url=' + encodeURIComponent(_currentFileUrl) + '&variable=' + variable + '&level_km=' + level_km;
         if (overlay) url += '&overlay=' + overlay;
+        if (_rtBarbsEnabled) url += '&wind_barbs=true';
 
         fetch(url, { signal: controller.signal })
             .then(function (r) { if (!r.ok) return r.json().then(function (e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
@@ -533,6 +534,14 @@
             baseLayout.annotations = (baseLayout.annotations || []).concat(shearInset.annotations);
         }
 
+        // Wind barb shapes (uses archive _buildPlanViewWindBarbs if available)
+        if (json.wind_barbs && typeof _buildPlanViewWindBarbs === 'function') {
+            var axR = { xMin: x[0], xMax: x[x.length - 1], yMin: y[0], yMax: y[y.length - 1] };
+            var barbShapes = _buildPlanViewWindBarbs(json.wind_barbs, axR);
+            layout.shapes = (layout.shapes || []).concat(barbShapes);
+            baseLayout.shapes = (baseLayout.shapes || []).concat(barbShapes);
+        }
+
         Plotly.newPlot('rt-plotly-chart', [heatmap].concat(overlayTraces).concat(maxTraces), layout, config);
         _rtLastPlotlyData = { heatmap: heatmap, overlayTraces: overlayTraces, maxTraces: maxTraces, baseLayout: baseLayout, title: title, config: config, json: json };
 
@@ -541,6 +550,7 @@
         var volBtn = document.getElementById('rt-vol-btn'); if (volBtn) volBtn.disabled = false;
         var azBtn = document.getElementById('rt-az-btn'); if (azBtn) azBtn.disabled = false;
         var tiltBtn = document.getElementById('rt-tilt-btn'); if (tiltBtn) tiltBtn.disabled = false;
+        var barbBtn = document.getElementById('rt-barb-btn'); if (barbBtn) barbBtn.disabled = false;
         // Anomaly + Quadrant buttons stay disabled until SHIPS is loaded
         // (they need Vmax / SDDC from SHIPS)
 
@@ -1560,7 +1570,7 @@
         var btn = document.getElementById('rt-ir-underlay-btn');
         if (btn) {
             btn.classList.toggle('active', _rtIRPlotlyVisible);
-            btn.textContent = _rtIRPlotlyVisible ? '🛰 IR On' : '🛰 IR Off';
+            btn.textContent = '\uD83D\uDEF0 IR';
         }
         if (_rtIRPlotlyVisible) {
             _rtApplyIRUnderlay();
@@ -1702,12 +1712,12 @@
         btn.classList.remove('active', 'sonde-only');
         if (_rtSondeMode === 'on') {
             btn.classList.add('active');
-            btn.textContent = '\uD83E\uDE82 Sondes On' + nStr;
+            btn.textContent = '\uD83E\uDE82 Sondes' + nStr;
         } else if (_rtSondeMode === 'only') {
             btn.classList.add('active', 'sonde-only');
-            btn.textContent = '\uD83E\uDE82 Sondes Only' + nStr;
+            btn.textContent = '\uD83E\uDE82 Only' + nStr;
         } else {
-            btn.textContent = '\uD83E\uDE82 Sondes Off';
+            btn.textContent = '\uD83E\uDE82 Sondes';
         }
     }
 
@@ -3173,7 +3183,7 @@
         _rtRemoveFLFromMap();
         _rtRemoveFLFromPlot();
         var btn = document.getElementById('rt-fl-btn');
-        if (btn) { btn.textContent = '\u2708 FL Off'; btn.classList.remove('active'); }
+        if (btn) { btn.textContent = '\u2708 FL'; btn.classList.remove('active'); }
     }
 
     // ── Leaflet Map: Render flight track ──────────────────────
@@ -3416,7 +3426,7 @@
 
                     _rtFLVisible = true;
                     _rtFLMode = 'on';
-                    if (btn) { btn.textContent = '\u2708 FL On'; btn.classList.add('active'); }
+                    if (btn) { btn.textContent = '\u2708 FL'; btn.classList.add('active'); }
                     var _nTot = _rtFLData10s.n_obs_total;
                     var _maxW = _rtFLData10s.summary && _rtFLData10s.summary.max_fl_wspd_ms;
                     var _toastMsg = _nTot + ' obs \u2192 1s/' + _rtFLData1s.n_obs +
@@ -3431,7 +3441,7 @@
                 })
                 .catch(function (err) {
                     _rtFLFetching = false;
-                    if (btn) btn.textContent = '\u2708 FL Off';
+                    if (btn) btn.textContent = '\u2708 FL';
                     rtToast('Flight-level fetch failed: ' + err.message, 'error');
                 });
             return;
@@ -4799,6 +4809,18 @@
         });
     }
 
+    // ── Real-Time Wind Barbs ────────────────────────────────────
+
+    var _rtBarbsEnabled = false;
+
+    window.rtToggleBarbs = function () {
+        var btn = document.getElementById('rt-barb-btn');
+        _rtBarbsEnabled = !_rtBarbsEnabled;
+        if (btn) btn.classList.toggle('active', _rtBarbsEnabled);
+        // Re-generate the plot (barbs are added as Plotly shapes during render)
+        rtGeneratePlot();
+    };
+
     // ── Real-Time Tilt Hodograph ──────────────────────────────────
 
     var _rtTiltData = null;          // tilt profile from API
@@ -4813,7 +4835,7 @@
         if (_rtTiltEnabled) {
             // Turn off: hide traces
             _rtTiltEnabled = false;
-            btn.textContent = '\u27E1 Tilt Off';
+            btn.classList.remove('active');
             _rtRemoveTiltTraces();
             return;
         }
@@ -4821,7 +4843,7 @@
         // Turn on: fetch if needed, then draw
         if (_rtTiltData) {
             _rtTiltEnabled = true;
-            btn.textContent = '\u27E1 Tilt On';
+            btn.classList.add('active');
             _rtAddTiltTraces(_rtTiltData);
             return;
         }
@@ -4829,7 +4851,7 @@
         // Fetch tilt profile from API
         if (!_currentFileUrl) return;
         btn.disabled = true;
-        btn.textContent = '\u27E1 Computing\u2026';
+        btn.classList.add('pill-pulse');
 
         var url = API_BASE + RT_PREFIX + '/tilt_profile?file_url=' + encodeURIComponent(_currentFileUrl);
         var controller = new AbortController();
@@ -4842,7 +4864,7 @@
             .then(function (json) {
                 _rtTiltData = json;
                 _rtTiltEnabled = true;
-                btn.textContent = '\u27E1 Tilt On';
+                btn.classList.add('active');
                 _rtAddTiltTraces(json);
                 if (json.compute_time_s !== undefined) {
                     rtToast('Tilt profile computed in ' + json.compute_time_s.toFixed(1) + 's (' + json.height_km.length + ' levels)', 'success');
@@ -4851,9 +4873,9 @@
             .catch(function (err) {
                 var msg = err.name === 'AbortError' ? 'Tilt request timed out.' : err.message;
                 rtToast('Tilt: ' + msg, 'error');
-                btn.textContent = '\u27E1 Tilt Off';
+                btn.classList.remove('active');
             })
-            .finally(function () { clearTimeout(timeout); btn.disabled = false; });
+            .finally(function () { clearTimeout(timeout); btn.disabled = false; btn.classList.remove('pill-pulse'); });
     };
 
     function _rtAddTiltTraces(tiltData) {

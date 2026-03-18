@@ -174,20 +174,28 @@
                         <!-- LEFT: Plot display + action buttons -->
                         <div class="explorer-display">
                             <div id="rt-display-area"></div>
-                            <div class="display-actions" style="margin-top:8px;">
+                            <div class="overlay-strip" style="margin-top:8px;">
+                                <span class="overlay-strip-label">Layers</span>
+                                <button class="overlay-pill" id="rt-ir-underlay-btn" onclick="rtToggleIRUnderlay()" disabled data-color="cyan" title="IR Satellite Underlay">🛰 IR</button>
+                                <button class="overlay-pill" id="rt-fl-btn" onclick="rtToggleFlightLevel()" disabled data-color="blue" title="Flight-Level Data">✈ FL</button>
+                                <button class="overlay-pill" id="rt-sonde-btn" onclick="rtToggleDropsondes()" disabled data-color="green" title="Dropsonde Data">🪂 Sondes</button>
+                                <button class="overlay-pill" id="rt-barb-btn" onclick="rtToggleBarbs()" disabled data-color="slate" title="Wind Barbs">🌬 Barbs</button>
+                                <button class="overlay-pill" id="rt-tilt-btn" onclick="rtToggleTilt()" disabled data-color="pink" title="Vortex Tilt Profile">🎯 Tilt</button>
+                            </div>
+                            <div class="action-section">
+                                <span class="action-section-label">Analysis</span>
+                                <div class="display-actions">
                                 <button class="cs-btn" id="rt-cs-btn" onclick="rtToggleCrossSection()" disabled>✂ Cross Section</button>
-                                <button class="cs-btn" id="rt-az-btn" onclick="rtFetchAzimuthalMean()" disabled>↻ Azimuthal Mean</button>
-                                <button class="cs-btn" id="rt-vol-btn" onclick="rtFetch3DVolume()" disabled>🖥 3D Volume</button>
-                                <button class="cs-btn" id="rt-ir-underlay-btn" onclick="rtToggleIRUnderlay()" disabled style="background:rgba(96,165,250,0.12);border-color:rgba(96,165,250,0.35);color:#93c5fd;">🛰 IR Off</button>
-                                <button class="cs-btn" id="rt-fl-btn" onclick="rtToggleFlightLevel()" disabled style="background:rgba(96,165,250,0.12);border-color:rgba(96,165,250,0.35);color:#93c5fd;">✈ FL Off</button>
-                                <button class="cs-btn" id="rt-sonde-btn" onclick="rtToggleDropsondes()" disabled style="background:rgba(168,85,247,0.12);border-color:rgba(168,85,247,0.35);color:#c4b5fd;">🪂 Sondes Off</button>
+                                <button class="cs-btn" id="rt-az-btn" onclick="rtFetchAzimuthalMean()" disabled>↻ Azim. Mean</button>
                                 <button class="cs-btn" id="rt-quad-btn" onclick="rtFetchQuadrants()" disabled style="background:rgba(251,146,60,0.12);border-color:rgba(251,146,60,0.35);color:#fdba74;">⊙ Shear Quads</button>
+                                <button class="cs-btn" id="rt-vol-btn" onclick="rtFetch3DVolume()" disabled>🖥 3D Volume</button>
                                 <button class="cs-btn" id="rt-anomaly-btn" onclick="rtFetchAnomaly()" disabled style="background:rgba(52,211,153,0.12);border-color:rgba(52,211,153,0.35);color:#6ee7b7;">Z* Anomaly</button>
                                 <button class="cs-btn" id="rt-vp-btn" onclick="rtFetchVPScatter()" disabled style="background:rgba(251,191,36,0.12);border-color:rgba(251,191,36,0.35);color:#fde68a;">⬤ VP Scatter</button>
-                                <select id="rt-sonde-select" onchange="rtSelectSonde(this.value)" disabled style="display:none; background:#1a1a2e; color:#c4b5fd; border:1px solid rgba(168,85,247,0.35); border-radius:6px; padding:4px 8px; font-size:11px; cursor:pointer; max-width:220px;">
-                                    <option value="">🪂 Select Sonde…</option>
-                                </select>
+                                </div>
                             </div>
+                            <select id="rt-sonde-select" onchange="rtSelectSonde(this.value)" disabled style="display:none; background:#1a1a2e; color:#c4b5fd; border:1px solid rgba(168,85,247,0.35); border-radius:6px; padding:4px 8px; font-size:11px; cursor:pointer; max-width:220px; margin-top:4px;">
+                                <option value="">🪂 Select Sonde…</option>
+                            </select>
                             <div id="rt-cs-result"></div>
                             <div id="rt-cs-status" class="cs-status"></div>
                             <div id="rt-az-result"></div>
@@ -475,7 +483,7 @@
                 <span style="margin-left:auto;"></span>
                 <button id="vol-tdr-toggle" class="vol3d-toggle-btn active" onclick="rtToggle3DTDR()" title="Toggle TDR isosurfaces">TDR</button>
                 <button id="vol-sonde-toggle" class="vol3d-toggle-btn" onclick="rtToggle3DSondes()" title="Toggle dropsonde traces" style="border-color:rgba(168,85,247,0.5);color:#c4b5fd;" disabled>Sondes</button>
-                <button id="vol-tilt-toggle" class="vol3d-toggle-btn" onclick="toggle3DTilt()" title="Toggle vortex tilt hodograph" style="border-color:rgba(52,211,153,0.5);color:#6ee7b7;" disabled>Tilt</button>
+                <button id="vol-tilt-toggle" class="vol3d-toggle-btn" onclick="typeof rtToggle3DTilt==='function'&&document.querySelector('.tab-btn.active[data-tab=realtime]')?rtToggle3DTilt():toggle3DTilt()" title="Toggle vortex tilt hodograph" style="border-color:rgba(52,211,153,0.5);color:#6ee7b7;" disabled>Tilt</button>
             </div>
             <div id="vol-3d-chart"></div>
         </div>
