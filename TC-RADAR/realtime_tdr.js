@@ -276,6 +276,8 @@
         var quadBtn = document.getElementById('rt-quad-btn'); if (quadBtn) quadBtn.disabled = true;
         var anomalyBtn = document.getElementById('rt-anomaly-btn'); if (anomalyBtn) anomalyBtn.disabled = true;
         var vpBtn = document.getElementById('rt-vp-btn'); if (vpBtn) vpBtn.disabled = true;
+        var tiltBtn = document.getElementById('rt-tilt-btn'); if (tiltBtn) { tiltBtn.disabled = true; tiltBtn.textContent = '⟡ Tilt Off'; }
+        _rtTiltData = null; _rtTiltTraceStart = -1; _rtTiltEnabled = false;
 
         // Generate initial plot
         rtGeneratePlot();
@@ -538,6 +540,7 @@
         var csBtn = document.getElementById('rt-cs-btn'); if (csBtn) csBtn.disabled = false;
         var volBtn = document.getElementById('rt-vol-btn'); if (volBtn) volBtn.disabled = false;
         var azBtn = document.getElementById('rt-az-btn'); if (azBtn) azBtn.disabled = false;
+        var tiltBtn = document.getElementById('rt-tilt-btn'); if (tiltBtn) tiltBtn.disabled = false;
         // Anomaly + Quadrant buttons stay disabled until SHIPS is loaded
         // (they need Vmax / SDDC from SHIPS)
 
@@ -841,7 +844,7 @@
 
         var controller = new AbortController();
         var timeout = setTimeout(function () { controller.abort(); }, 120000);
-        var url = API_BASE + RT_PREFIX + '/volume?file_url=' + encodeURIComponent(_currentFileUrl) + '&variable=' + variable + '&stride=2&max_height_km=15';
+        var url = API_BASE + RT_PREFIX + '/volume?file_url=' + encodeURIComponent(_currentFileUrl) + '&variable=' + variable + '&stride=2&max_height_km=15&tilt_profile=true';
 
         fetch(url, { signal: controller.signal })
             .then(function (r) { if (!r.ok) return r.json().then(function (e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
@@ -3043,11 +3046,12 @@
     }
     var _rtSondeLevelTimer = null;
 
-    // ── Hook: patch rtOpen3DModal to add sonde traces to 3D ──────
+    // ── Hook: patch rtOpen3DModal to add sonde + tilt traces to 3D ──
     var _origRtOpen3DModal = rtOpen3DModal;
     rtOpen3DModal = function () {
         _origRtOpen3DModal();
         _rt3DSondeTraceStart = -1; // reset for fresh 3D scene
+        _rtTilt3DTraceStart = -1;  // reset tilt traces too
         var sondeBtn3D = document.getElementById('vol-sonde-toggle');
         if (_rtSondeVisible && _rtSondeData && _rtSondeData.dropsondes.length > 0) {
             // Delay to ensure 3D scene is rendered
@@ -3056,6 +3060,9 @@
             // No sondes — disable the toggle
             if (sondeBtn3D) { sondeBtn3D.disabled = true; sondeBtn3D.classList.remove('active'); }
         }
+        // Add tilt hodograph to 3D if data available (from /volume?tilt_profile=true or plan-view fetch)
+        var tilt = (_rtLast3DJson && _rtLast3DJson.tilt_profile) ? _rtLast3DJson.tilt_profile : _rtTiltData;
+        setTimeout(function () { window._rtAddTiltTo3D(tilt); }, 600);
     };
 
     // ═══════════════════════════════════════════════════════════
@@ -4771,5 +4778,205 @@
             modeBarButtonsToRemove: ['lasso2d', 'select2d', 'toggleSpikelines']
         });
     }
+
+    // ── Real-Time Tilt Hodograph ──────────────────────────────────
+
+    var _rtTiltData = null;          // tilt profile from API
+    var _rtTiltTraceStart = -1;      // index where tilt traces start in plan-view
+    var _rtTiltEnabled = false;      // toggle state
+    var _rtTilt3DTraceStart = -1;    // index where tilt traces start in 3D viewer
+
+    window.rtToggleTilt = function () {
+        var btn = document.getElementById('rt-tilt-btn');
+        if (!btn) return;
+
+        if (_rtTiltEnabled) {
+            // Turn off: hide traces
+            _rtTiltEnabled = false;
+            btn.textContent = '\u27E1 Tilt Off';
+            _rtRemoveTiltTraces();
+            return;
+        }
+
+        // Turn on: fetch if needed, then draw
+        if (_rtTiltData) {
+            _rtTiltEnabled = true;
+            btn.textContent = '\u27E1 Tilt On';
+            _rtAddTiltTraces(_rtTiltData);
+            return;
+        }
+
+        // Fetch tilt profile from API
+        if (!_currentFileUrl) return;
+        btn.disabled = true;
+        btn.textContent = '\u27E1 Computing\u2026';
+
+        var url = API_BASE + RT_PREFIX + '/tilt_profile?file_url=' + encodeURIComponent(_currentFileUrl);
+        var controller = new AbortController();
+        var timeout = setTimeout(function () { controller.abort(); }, 120000);
+        fetch(url, { signal: controller.signal })
+            .then(function (r) {
+                if (!r.ok) return r.json().then(function (e) { throw new Error(e.detail || 'HTTP ' + r.status); });
+                return r.json();
+            })
+            .then(function (json) {
+                _rtTiltData = json;
+                _rtTiltEnabled = true;
+                btn.textContent = '\u27E1 Tilt On';
+                _rtAddTiltTraces(json);
+                if (json.compute_time_s !== undefined) {
+                    rtToast('Tilt profile computed in ' + json.compute_time_s.toFixed(1) + 's (' + json.height_km.length + ' levels)', 'success');
+                }
+            })
+            .catch(function (err) {
+                var msg = err.name === 'AbortError' ? 'Tilt request timed out.' : err.message;
+                rtToast('Tilt: ' + msg, 'error');
+                btn.textContent = '\u27E1 Tilt Off';
+            })
+            .finally(function () { clearTimeout(timeout); btn.disabled = false; });
+    };
+
+    function _rtAddTiltTraces(tiltData) {
+        var chartDiv = document.getElementById('rt-plotly-chart');
+        if (!chartDiv || !chartDiv.data || !tiltData || !tiltData.x_km || !tiltData.x_km.length) return;
+
+        var x = tiltData.x_km, y = tiltData.y_km, z = tiltData.height_km;
+        var tiltMag = tiltData.tilt_magnitude_km || [];
+        var rmw = tiltData.rmw_km || [];
+        var refH = tiltData.ref_height_km || 2.0;
+
+        // Offset by ref-centre to position on the plan-view grid
+        var offX = tiltData.ref_center_x_km || 0;
+        var offY = tiltData.ref_center_y_km || 0;
+
+        var xAbs = x.map(function (v) { return v + offX; });
+        var yAbs = y.map(function (v) { return v + offY; });
+
+        // Hover text
+        var hoverText = [];
+        for (var i = 0; i < z.length; i++) {
+            var txt = '<b>' + z[i].toFixed(1) + ' km</b>' +
+                '<br>\u0394X: ' + x[i].toFixed(1) + ' km' +
+                '<br>\u0394Y: ' + y[i].toFixed(1) + ' km';
+            if (tiltMag[i] !== undefined && tiltMag[i] !== null) txt += '<br>Tilt: ' + tiltMag[i].toFixed(1) + ' km';
+            if (rmw[i] !== undefined && rmw[i] !== null) txt += '<br>RMW: ' + rmw[i].toFixed(1) + ' km';
+            hoverText.push(txt);
+        }
+
+        var sizes = z.map(function (h) { return Math.abs(h - refH) < 0.3 ? 12 : 8; });
+
+        var lineTrace = {
+            x: xAbs, y: yAbs,
+            mode: 'lines', type: 'scatter',
+            line: { color: 'rgba(52,211,153,0.5)', width: 1.5, dash: 'dot' },
+            hoverinfo: 'skip', showlegend: false
+        };
+
+        var markerTrace = {
+            x: xAbs, y: yAbs,
+            mode: 'markers', type: 'scatter',
+            marker: {
+                size: sizes, color: z,
+                colorscale: 'Viridis', cmin: 0, cmax: 14,
+                line: { color: 'rgba(255,255,255,0.5)', width: 0.5 },
+                colorbar: {
+                    title: { text: 'Tilt Height (km)', font: { color: '#ccc', size: 9 } },
+                    tickfont: { color: '#ccc', size: 8 },
+                    thickness: 10, len: 0.35,
+                    x: 1.02, y: 0.15, xanchor: 'left'
+                }
+            },
+            text: hoverText, hoverinfo: 'text',
+            hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 11 } },
+            showlegend: false
+        };
+
+        _rtTiltTraceStart = chartDiv.data.length;
+        Plotly.addTraces(chartDiv, [lineTrace, markerTrace]);
+    }
+
+    function _rtRemoveTiltTraces() {
+        var chartDiv = document.getElementById('rt-plotly-chart');
+        if (!chartDiv || !chartDiv.data || _rtTiltTraceStart < 0) return;
+        var indices = [];
+        for (var i = _rtTiltTraceStart; i < chartDiv.data.length; i++) indices.push(i);
+        if (indices.length) Plotly.deleteTraces(chartDiv, indices);
+        _rtTiltTraceStart = -1;
+    }
+
+    // ── Real-Time 3D Tilt Hodograph ─────────────────────────────
+
+    window.rtToggle3DTilt = function () {
+        var chartDiv = document.getElementById('vol-3d-chart');
+        var btn = document.getElementById('vol-tilt-toggle');
+        if (!chartDiv || !chartDiv.data || _rtTilt3DTraceStart < 0) return;
+        var isActive = btn.classList.contains('active');
+        var vis = !isActive;
+        var indices = [];
+        for (var i = _rtTilt3DTraceStart; i < chartDiv.data.length; i++) indices.push(i);
+        if (indices.length) Plotly.restyle(chartDiv, { visible: vis }, indices);
+        btn.classList.toggle('active');
+    };
+
+    window._rtAddTiltTo3D = function (tiltData) {
+        var chartDiv = document.getElementById('vol-3d-chart');
+        var btn = document.getElementById('vol-tilt-toggle');
+        if (!tiltData || !tiltData.x_km || !tiltData.x_km.length) {
+            if (btn) { btn.disabled = true; btn.classList.remove('active'); }
+            return;
+        }
+        if (btn) btn.disabled = false;
+
+        var x = tiltData.x_km, y = tiltData.y_km, z = tiltData.height_km;
+        var tiltMag = tiltData.tilt_magnitude_km || [];
+        var rmw = tiltData.rmw_km || [];
+        var refH = tiltData.ref_height_km || 2.0;
+        var offX = tiltData.ref_center_x_km || 0;
+        var offY = tiltData.ref_center_y_km || 0;
+        var xAbs = x.map(function (v) { return v + offX; });
+        var yAbs = y.map(function (v) { return v + offY; });
+
+        var hoverText = [];
+        for (var i = 0; i < z.length; i++) {
+            var txt = '<b>' + z[i].toFixed(1) + ' km</b>' +
+                '<br>\u0394X: ' + x[i].toFixed(1) + ', \u0394Y: ' + y[i].toFixed(1) + ' km';
+            if (tiltMag[i] != null) txt += '<br>Tilt: ' + tiltMag[i].toFixed(1) + ' km';
+            if (rmw[i] != null) txt += '<br>RMW: ' + rmw[i].toFixed(1) + ' km';
+            hoverText.push(txt);
+        }
+        var sizes = z.map(function (h) { return Math.abs(h - refH) < 0.3 ? 7 : 4; });
+
+        var lineTrace = {
+            type: 'scatter3d', mode: 'lines',
+            x: xAbs, y: yAbs, z: z,
+            line: { color: 'rgba(52,211,153,0.6)', width: 3, dash: 'dot' },
+            hoverinfo: 'skip', showlegend: false
+        };
+        var markerTrace = {
+            type: 'scatter3d', mode: 'markers+text',
+            x: xAbs, y: yAbs, z: z,
+            marker: {
+                size: sizes, color: z,
+                colorscale: 'Viridis', cmin: 0, cmax: 14,
+                line: { color: 'rgba(255,255,255,0.4)', width: 0.5 },
+                colorbar: {
+                    title: { text: 'Height (km)', font: { color: '#ccc', size: 10 } },
+                    tickfont: { color: '#ccc', size: 9 },
+                    thickness: 10, len: 0.35,
+                    x: 1.08, y: 0.15, xanchor: 'left'
+                }
+            },
+            text: z.map(function (h) { return h.toFixed(1); }),
+            textposition: 'top right',
+            textfont: { size: 8, color: 'rgba(110,231,183,0.7)' },
+            hovertext: hoverText, hoverinfo: 'text',
+            hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 11 } },
+            showlegend: false
+        };
+
+        _rtTilt3DTraceStart = chartDiv.data.length;
+        Plotly.addTraces(chartDiv, [lineTrace, markerTrace]);
+        if (btn) btn.classList.add('active');
+    };
 
 })();
