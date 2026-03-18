@@ -523,7 +523,7 @@
             }
         }
 
-        // Shear vector inset (from SHIPS data, if available)
+        // Shear + motion vector inset (motion from TDR metadata, shear from SHIPS if loaded)
         var shearInset = _rtBuildShearInset(false);
         if (shearInset.shapes.length) {
             layout.shapes = (layout.shapes || []).concat(shearInset.shapes);
@@ -566,13 +566,28 @@
     // ── Shear vector inset (uses SHIPS SDDC) ─────────────────────
     function _rtBuildShearInset(isFullsize) {
         var result = { shapes: [], annotations: [] };
-        if (!_rtShipsData || !_rtShipsData.ships_data) return result;
-        var sd = _rtShipsData.ships_data;
+        // Shear from SHIPS
+        var sd = (_rtShipsData && _rtShipsData.ships_data) ? _rtShipsData.ships_data : {};
         var sddc = sd.sddc;
         var hasShear = (sddc != null && sddc !== 9999);
+
+        // Motion: try SHIPS first, then TDR file metadata (U/V components)
         var motDir = sd.stm_heading_deg;
         var motSpd = sd.stm_speed_kt;
         var hasMotion = (motDir != null && motSpd != null && motSpd > 0);
+        if (!hasMotion && _rtCaseMeta) {
+            var su = _rtCaseMeta.storm_motion_east_ms;
+            var sv = _rtCaseMeta.storm_motion_north_ms;
+            if (su != null && sv != null && su !== -999 && sv !== -999) {
+                var spdMs = Math.sqrt(su * su + sv * sv);
+                if (spdMs > 0.1) {
+                    motSpd = Math.round(spdMs * 1.94384 * 10) / 10; // m/s → kt
+                    var mathAng = Math.atan2(sv, su) * 180 / Math.PI;
+                    motDir = ((90 - mathAng) % 360 + 360) % 360;
+                    hasMotion = true;
+                }
+            }
+        }
         if (!hasShear && !hasMotion) return result;
 
         var cx = isFullsize ? 0.08 : 0.10;
@@ -631,22 +646,25 @@
                 bgcolor: 'rgba(10,22,40,0.7)', borderpad: 2 });
         }
 
+        // Tag all inset shapes/annotations so we can replace them later
+        shapes.forEach(function (s) { s._rtInset = true; });
+        annotations.forEach(function (a) { a._rtInset = true; });
         return { shapes: shapes, annotations: annotations };
     }
 
-    // Apply shear+motion inset to an already-rendered plan-view plot
-    // (called when SHIPS data arrives after the plot was drawn)
+    // Apply shear+motion inset to an already-rendered plan-view plot.
+    // Replaces any previously drawn inset (tagged with _rtInset) to
+    // avoid duplicates when SHIPS loads after the initial render.
     function _rtApplyShearInsetToPlot() {
         var chartDiv = document.getElementById('rt-plotly-chart');
         if (!chartDiv || !chartDiv.layout) return;
         var inset = _rtBuildShearInset(false);
-        if (!inset.shapes.length && !inset.annotations.length) return;
-        // Merge with existing shapes/annotations (preserve non-inset ones)
-        var existingShapes = (chartDiv.layout.shapes || []).slice();
-        var existingAnnot = (chartDiv.layout.annotations || []).slice();
+        // Remove old inset shapes/annotations, keep everything else
+        var keepShapes = (chartDiv.layout.shapes || []).filter(function (s) { return !s._rtInset; });
+        var keepAnnot = (chartDiv.layout.annotations || []).filter(function (a) { return !a._rtInset; });
         Plotly.relayout(chartDiv, {
-            shapes: existingShapes.concat(inset.shapes),
-            annotations: existingAnnot.concat(inset.annotations)
+            shapes: keepShapes.concat(inset.shapes),
+            annotations: keepAnnot.concat(inset.annotations)
         });
     }
 
