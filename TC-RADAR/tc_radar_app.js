@@ -3816,7 +3816,7 @@ function renderPlotFromJSON(json, resultDiv) {
     var plotBg = '#0a1628';
     var baseLayout = { paper_bgcolor: plotBg, plot_bgcolor: plotBg, xaxis: { title: { text: 'Eastward distance (km)', font: { color: '#aaa' } }, tickfont: { color: '#aaa' }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false, scaleanchor: 'y' }, yaxis: { title: { text: 'Northward distance (km)', font: { color: '#aaa' } }, tickfont: { color: '#aaa' }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false }, shapes: shapes, hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 12 } }, showlegend: false };
     var config = { responsive: true, displayModeBar: true, modeBarButtonsToRemove: ['lasso2d','select2d','toggleSpikelines'], displaylogo: false };
-    var smallLayout = Object.assign({}, baseLayout, { title: { text: title, font: { color: '#e5e7eb', size: 11 }, y: 0.995, x: 0.5, xanchor: 'center', yanchor: 'top' }, margin: { l: 52, r: 16, t: json.overlay ? 120 : 100, b: 44 }, xaxis: Object.assign({}, baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }), yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }) });
+    var smallLayout = Object.assign({}, baseLayout, { title: { text: title, font: { color: '#e5e7eb', size: 11 }, y: 0.98, x: 0.5, xanchor: 'center' }, margin: { l: 52, r: 16, t: json.overlay ? 90 : 74, b: 44 }, xaxis: Object.assign({}, baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }), yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }) });
 
     var overlayTraces = buildOverlayContours(json, x, y);
 
@@ -4617,7 +4617,7 @@ function buildShearInset(sddc, isFullsize, shdc, motionDir, motionSpd) {
     // Inset center position (paper coords) - top-left corner
     var cx = isFullsize ? 0.08 : 0.10;
     var cy = isFullsize ? 0.90 : 0.88;
-    var r = isFullsize ? 0.050 : 0.058;
+    var r = isFullsize ? 0.055 : 0.065;
     var arrowLen = r * 0.82;
     var dotR = r * 0.08;
 
@@ -4641,7 +4641,7 @@ function buildShearInset(sddc, isFullsize, shdc, motionDir, motionSpd) {
         // Shaft
         shapes.push({ type:'line', xref:'paper', yref:'paper',
             x0: cx - dxS*0.3, y0: cy - dyS*0.3, x1: cx + dxS, y1: cy + dyS,
-            line:{ color:'#f59e0b', width: isFullsize?2.5:2 } });
+            line:{ color:'#f59e0b', width: isFullsize?3:2.5 } });
         // Arrowhead
         var headLen = arrowLen * 0.35;
         var headAngle = 25 * Math.PI / 180;
@@ -4650,10 +4650,10 @@ function buildShearInset(sddc, isFullsize, shdc, motionDir, motionSpd) {
         var tipX = cx + dxS, tipY = cy + dyS;
         shapes.push({ type:'line', xref:'paper', yref:'paper',
             x0: tipX, y0: tipY, x1: tipX + headLen*Math.cos(ha1), y1: tipY + headLen*Math.sin(ha1),
-            line:{ color:'#f59e0b', width: isFullsize?2.5:2 } });
+            line:{ color:'#f59e0b', width: isFullsize?3:2.5 } });
         shapes.push({ type:'line', xref:'paper', yref:'paper',
             x0: tipX, y0: tipY, x1: tipX + headLen*Math.cos(ha2), y1: tipY + headLen*Math.sin(ha2),
-            line:{ color:'#f59e0b', width: isFullsize?2.5:2 } });
+            line:{ color:'#f59e0b', width: isFullsize?3:2.5 } });
         // Shear label + magnitude above
         var shrLabel = '<b>SHR</b>';
         if (shdc !== null && shdc !== undefined && shdc !== 9999) {
@@ -4661,12 +4661,12 @@ function buildShearInset(sddc, isFullsize, shdc, motionDir, motionSpd) {
         }
         annotations.push({ text: shrLabel, xref:'paper', yref:'paper',
             x: cx, y: cy + r + (isFullsize?0.028:0.033),
-            showarrow:false, font:{ color:'#f59e0b', size: isFullsize?9:7, family:'JetBrains Mono, monospace' },
+            showarrow:false, font:{ color:'#f59e0b', size: isFullsize?11:9, family:'JetBrains Mono, monospace' },
             bgcolor:'rgba(10,22,40,0.7)', borderpad:1 });
         // Direction below
         annotations.push({ text: sddc.toFixed(0) + '\u00b0', xref:'paper', yref:'paper',
             x: cx, y: cy - r - (isFullsize?0.022:0.027),
-            showarrow:false, font:{ color:'rgba(245,158,11,0.7)', size: isFullsize?8:7, family:'JetBrains Mono, monospace' } });
+            showarrow:false, font:{ color:'rgba(245,158,11,0.7)', size: isFullsize?9:8, family:'JetBrains Mono, monospace' } });
     }
 
     // ── TC Motion vector (cyan) ─────────────────────────────────
@@ -4674,10 +4674,10 @@ function buildShearInset(sddc, isFullsize, shdc, motionDir, motionSpd) {
         var thetaMot = (90 - motionDir) * Math.PI / 180;
         var dxM = arrowLen * Math.cos(thetaMot);
         var dyM = arrowLen * Math.sin(thetaMot);
-        // Shaft
+        // Shaft (solid line for visibility)
         shapes.push({ type:'line', xref:'paper', yref:'paper',
             x0: cx - dxM*0.3, y0: cy - dyM*0.3, x1: cx + dxM, y1: cy + dyM,
-            line:{ color:'#06b6d4', width: isFullsize?2.5:2, dash:'dot' } });
+            line:{ color:'#06b6d4', width: isFullsize?3:2.5 } });
         // Arrowhead
         var mHeadLen = arrowLen * 0.35;
         var mha1 = thetaMot + Math.PI - 25*Math.PI/180;
@@ -4685,10 +4685,10 @@ function buildShearInset(sddc, isFullsize, shdc, motionDir, motionSpd) {
         var mTipX = cx + dxM, mTipY = cy + dyM;
         shapes.push({ type:'line', xref:'paper', yref:'paper',
             x0: mTipX, y0: mTipY, x1: mTipX + mHeadLen*Math.cos(mha1), y1: mTipY + mHeadLen*Math.sin(mha1),
-            line:{ color:'#06b6d4', width: isFullsize?2.5:2 } });
+            line:{ color:'#06b6d4', width: isFullsize?3:2.5 } });
         shapes.push({ type:'line', xref:'paper', yref:'paper',
             x0: mTipX, y0: mTipY, x1: mTipX + mHeadLen*Math.cos(mha2), y1: mTipY + mHeadLen*Math.sin(mha2),
-            line:{ color:'#06b6d4', width: isFullsize?2.5:2 } });
+            line:{ color:'#06b6d4', width: isFullsize?3:2.5 } });
         // Motion label + speed below shear annotations
         var motLabel = '<b>MOT</b>';
         if (motionSpd !== null && motionSpd !== undefined && motionSpd !== 9999) {
@@ -4699,7 +4699,7 @@ function buildShearInset(sddc, isFullsize, shdc, motionDir, motionSpd) {
             : cy + r + (isFullsize?0.028:0.033);
         annotations.push({ text: motLabel, xref:'paper', yref:'paper',
             x: cx, y: motLabelY,
-            showarrow:false, font:{ color:'#06b6d4', size: isFullsize?9:7, family:'JetBrains Mono, monospace' },
+            showarrow:false, font:{ color:'#06b6d4', size: isFullsize?11:9, family:'JetBrains Mono, monospace' },
             bgcolor:'rgba(10,22,40,0.7)', borderpad:1 });
     }
 
