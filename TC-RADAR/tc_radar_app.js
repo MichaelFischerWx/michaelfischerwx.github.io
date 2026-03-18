@@ -4614,14 +4614,15 @@ function buildShearInset(sddc, isFullsize, shdc, motionDir, motionSpd) {
     var hasMotion = (motionDir !== null && motionDir !== undefined && motionDir !== 9999);
     if (!hasShear && !hasMotion) return { shapes: [], annotations: [] };
 
-    // Inset center (paper coords) — top-left corner
+    // Inset center (paper coords) — top-left, lowered to avoid label-arrow overlap
     var cx = isFullsize ? 0.08 : 0.10;
-    var cy = isFullsize ? 0.88 : 0.86;
-    var r = isFullsize ? 0.050 : 0.058;
-    var arrowLen = r * 0.85;
+    var cy = isFullsize ? 0.82 : 0.80;
+    var r = isFullsize ? 0.048 : 0.052;
+    var arrowLen = r * 0.80;
     var dotR = r * 0.07;
     var lw = isFullsize ? 2.5 : 2;
-    var fsL = isFullsize ? 10 : 8;   // label font size
+    var fsL = isFullsize ? 10 : 8;
+    var labelGap = isFullsize ? 0.032 : 0.036;
 
     var shapes = [
         // Background circle (subtle)
@@ -4665,7 +4666,7 @@ function buildShearInset(sddc, isFullsize, shdc, motionDir, motionSpd) {
         if (shdc !== null && shdc !== undefined && shdc !== 9999) shrTxt += shdc.toFixed(0) + ' kt / ';
         shrTxt += sddc.toFixed(0) + '\u00b0';
         annotations.push({ text: shrTxt, xref:'paper', yref:'paper',
-            x: cx, y: cy + r + (isFullsize ? 0.025 : 0.030),
+            x: cx, y: cy + r + labelGap,
             showarrow:false, font:{ color:'#f59e0b', size: fsL, family:'JetBrains Mono, monospace' },
             bgcolor:'rgba(10,22,40,0.7)', borderpad: 2 });
     }
@@ -4676,8 +4677,8 @@ function buildShearInset(sddc, isFullsize, shdc, motionDir, motionSpd) {
         if (motionSpd !== null && motionSpd !== undefined && motionSpd !== 9999) motTxt += motionSpd.toFixed(0) + ' kt / ';
         motTxt += motionDir.toFixed(0) + '\u00b0';
         var motY = hasShear
-            ? cy - r - (isFullsize ? 0.025 : 0.030)
-            : cy + r + (isFullsize ? 0.025 : 0.030);
+            ? cy - r - labelGap
+            : cy + r + labelGap;
         annotations.push({ text: motTxt, xref:'paper', yref:'paper',
             x: cx, y: motY,
             showarrow:false, font:{ color:'#22d3ee', size: fsL, family:'JetBrains Mono, monospace' },

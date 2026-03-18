@@ -576,12 +576,13 @@
         if (!hasShear && !hasMotion) return result;
 
         var cx = isFullsize ? 0.08 : 0.10;
-        var cy = isFullsize ? 0.88 : 0.86;
-        var r = isFullsize ? 0.050 : 0.058;
-        var arrowLen = r * 0.85;
+        var cy = isFullsize ? 0.82 : 0.80;
+        var r = isFullsize ? 0.048 : 0.052;
+        var arrowLen = r * 0.80;
         var dotR = r * 0.07;
         var lw = isFullsize ? 2.5 : 2;
         var fsL = isFullsize ? 10 : 8;
+        var labelGap = isFullsize ? 0.032 : 0.036;
 
         var shapes = [
             { type: 'circle', xref: 'paper', yref: 'paper',
@@ -617,13 +618,13 @@
             if (sd.shear_kt != null) shrTxt += Math.round(sd.shear_kt) + ' kt / ';
             shrTxt += sddc.toFixed(0) + '\u00b0';
             annotations.push({ text: shrTxt, xref: 'paper', yref: 'paper',
-                x: cx, y: cy + r + (isFullsize ? 0.025 : 0.030),
+                x: cx, y: cy + r + labelGap,
                 showarrow: false, font: { color: '#f59e0b', size: fsL, family: 'JetBrains Mono, monospace' },
                 bgcolor: 'rgba(10,22,40,0.7)', borderpad: 2 });
         }
         if (hasMotion) {
             var motTxt = '<b>MOT</b>  ' + Math.round(motSpd) + ' kt / ' + motDir.toFixed(0) + '\u00b0';
-            var motY = hasShear ? cy - r - (isFullsize ? 0.025 : 0.030) : cy + r + (isFullsize ? 0.025 : 0.030);
+            var motY = hasShear ? cy - r - labelGap : cy + r + labelGap;
             annotations.push({ text: motTxt, xref: 'paper', yref: 'paper',
                 x: cx, y: motY,
                 showarrow: false, font: { color: '#22d3ee', size: fsL, family: 'JetBrains Mono, monospace' },
@@ -631,6 +632,22 @@
         }
 
         return { shapes: shapes, annotations: annotations };
+    }
+
+    // Apply shear+motion inset to an already-rendered plan-view plot
+    // (called when SHIPS data arrives after the plot was drawn)
+    function _rtApplyShearInsetToPlot() {
+        var chartDiv = document.getElementById('rt-plotly-chart');
+        if (!chartDiv || !chartDiv.layout) return;
+        var inset = _rtBuildShearInset(false);
+        if (!inset.shapes.length && !inset.annotations.length) return;
+        // Merge with existing shapes/annotations (preserve non-inset ones)
+        var existingShapes = (chartDiv.layout.shapes || []).slice();
+        var existingAnnot = (chartDiv.layout.annotations || []).slice();
+        Plotly.relayout(chartDiv, {
+            shapes: existingShapes.concat(inset.shapes),
+            annotations: existingAnnot.concat(inset.annotations)
+        });
     }
 
     // ── Overlay contours ─────────────────────────────────────────
@@ -3982,6 +3999,8 @@
             _rtShipsLoading = false;
             _rtRenderSHIPSPanel(data);
             _rtEnableSHIPSDiagnostics();
+            // Add shear+motion inset to existing plot now that SHIPS is available
+            _rtApplyShearInsetToPlot();
             if (statusEl) statusEl.style.display = 'none';
             var manualEl = document.getElementById('rt-ships-manual');
             if (manualEl) manualEl.style.display = 'none';
