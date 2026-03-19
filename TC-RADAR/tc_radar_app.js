@@ -218,7 +218,11 @@ document.getElementById('storm-select').addEventListener('change', function() {
 
     caseSelect.disabled = false;
     caseSelect.innerHTML = '<option value="">Choose a case\u2026</option>';
-    var cases = _getActiveData().cases.filter(function(c) { return c.storm_name === storm; });
+    var cases = _getActiveData().cases.filter(function(c) {
+        if (c.storm_name !== storm) return false;
+        if (_selectedYear && c.year !== _selectedYear) return false;
+        return true;
+    });
     cases.sort(function(a, b) { return a.datetime.localeCompare(b.datetime); });
     cases.forEach(function(c) {
         var opt = document.createElement('option');
@@ -5055,7 +5059,19 @@ function resetFilters() {
     filters.minTilt=0; filters.maxTilt=200; document.getElementById('min-tilt').value=0; document.getElementById('max-tilt').value=200; updateTiltSlider();
     filters.minWspd05=0; filters.maxWspd05=100; document.getElementById('min-wspd05').value=0; document.getElementById('max-wspd05').value=100; updateWspd05Slider();
     filters.minWspd20=0; filters.maxWspd20=100; document.getElementById('min-wspd20').value=0; document.getElementById('max-wspd20').value=100; updateWspd20Slider();
-    filters.minYear=1997; filters.maxYear=2024; document.getElementById('min-year').value=1997; document.getElementById('max-year').value=2024;
+    // Reset year filter to full range
+    var _resetData = _getActiveData();
+    if (_resetData) {
+        var _yrs = _resetData.cases.map(function(c) { return c.year; });
+        filters.minYear = Math.min.apply(null, _yrs); filters.maxYear = Math.max.apply(null, _yrs);
+    } else {
+        filters.minYear = 1997; filters.maxYear = 2024;
+    }
+    document.getElementById('min-year').value = filters.minYear; document.getElementById('max-year').value = filters.maxYear;
+    // Reset year dropdown and rebuild storm list with years
+    _selectedYear = '';
+    document.getElementById('year-select').value = '';
+    _populateStormDropdown('');
     filters.stormName='all'; document.getElementById('storm-select').value=''; updateMarkers();
     // Also reset case dropdown
     document.getElementById('case-select').innerHTML = '<option value="">\u2190 Select a storm first</option>';
@@ -5130,8 +5146,9 @@ fetch('tc_radar_metadata.json')
         var years = data.cases.map(function(c) { return c.year; });
         document.getElementById('year-range').textContent = Math.min.apply(null, years) + '\u2013' + Math.max.apply(null, years);
 
-        var stormSelect = document.getElementById('storm-select');
-        Array.from(storms).sort().forEach(function(s) { var o = document.createElement('option'); o.value = s; o.textContent = s; stormSelect.appendChild(o); });
+        // Populate year and storm dropdowns using shared helpers
+        _populateYearDropdown();
+        _populateStormDropdown('');
 
         markers = L.markerClusterGroup({
             maxClusterRadius: 30, disableClusteringAtZoom: 10, spiderfyOnMaxZoom: true, showCoverageOnHover: false, zoomToBoundsOnClick: true,
@@ -5182,11 +5199,12 @@ function _injectDataTypeToggle() {
     var grp = document.createElement('div');
     grp.className = 'toolbar-group';
     grp.innerHTML =
-        '<span class="toolbar-label">Data</span>' +
+        '<span class="toolbar-label">Analysis</span>' +
         '<select id="map-data-type" class="toolbar-select" style="min-width:100px;" onchange="switchDataType(this.value)">' +
-            '<option value="swath">Swath</option>' +
-            '<option value="merge">Merge</option>' +
+            '<option value="swath" title="Individual radar pass analysis">Swath</option>' +
+            '<option value="merge" title="Combined multi-pass analysis">Merge</option>' +
         '</select>';
+    grp.querySelector('select').title = 'Choose between individual radar pass (Swath) or combined multi-pass (Merge) analyses';
     toolbar.insertBefore(grp, toolbar.firstChild);
     // add a separator after
     var sep = document.createElement('div');
@@ -5194,6 +5212,142 @@ function _injectDataTypeToggle() {
     grp.parentNode.insertBefore(sep, grp.nextSibling);
 }
 _injectDataTypeToggle();
+
+// ── Year dropdown logic ──────────────────────────────────────
+var _selectedYear = '';  // '' means All Years
+
+// Build a mapping of storm_name → array of years it appears in
+function _getStormYears(data) {
+    var map = {};
+    if (!data || !data.cases) return map;
+    data.cases.forEach(function(c) {
+        if (!map[c.storm_name]) map[c.storm_name] = new Set();
+        map[c.storm_name].add(c.year);
+    });
+    return map;
+}
+
+// Populate year dropdown from active dataset
+function _populateYearDropdown() {
+    var data = _getActiveData();
+    var yearSelect = document.getElementById('year-select');
+    if (!yearSelect || !data) return;
+    var years = new Set(data.cases.map(function(c) { return c.year; }));
+    var sorted = Array.from(years).sort(function(a, b) { return b - a; }); // newest first
+    yearSelect.innerHTML = '<option value="">All Years</option>';
+    sorted.forEach(function(y) {
+        var count = data.cases.filter(function(c) { return c.year === y; }).length;
+        var o = document.createElement('option');
+        o.value = y;
+        o.textContent = y + ' (' + count + ')';
+        yearSelect.appendChild(o);
+    });
+}
+
+// Populate storm dropdown, optionally filtered by year; show year(s) in label
+function _populateStormDropdown(yearFilter) {
+    var data = _getActiveData();
+    var stormSelect = document.getElementById('storm-select');
+    if (!stormSelect || !data) return;
+    var stormYears = _getStormYears(data);
+    var storms;
+    if (yearFilter) {
+        storms = new Set(data.cases.filter(function(c) { return c.year === yearFilter; }).map(function(c) { return c.storm_name; }));
+    } else {
+        storms = new Set(data.cases.map(function(c) { return c.storm_name; }));
+    }
+    stormSelect.innerHTML = '<option value="">All Storms</option>';
+    Array.from(storms).sort().forEach(function(s) {
+        var o = document.createElement('option');
+        o.value = s;
+        var yrs = Array.from(stormYears[s] || []).sort();
+        if (yearFilter) {
+            o.textContent = s;
+        } else {
+            o.textContent = s + ' (' + yrs.join(', ') + ')';
+        }
+        stormSelect.appendChild(o);
+    });
+}
+
+// Year dropdown change handler
+document.getElementById('year-select').addEventListener('change', function() {
+    _selectedYear = this.value ? parseInt(this.value) : '';
+    // Re-populate storm dropdown filtered by year
+    _populateStormDropdown(_selectedYear);
+    // Reset storm / case selection
+    document.getElementById('storm-select').value = '';
+    filters.stormName = 'all';
+    document.getElementById('case-select').innerHTML = '<option value="">\u2190 Select a storm first</option>';
+    document.getElementById('case-select').disabled = true;
+    document.getElementById('explore-btn').disabled = true;
+    // Update map markers (year filter applied via passesFilters min/maxYear)
+    if (_selectedYear) {
+        filters.minYear = _selectedYear;
+        filters.maxYear = _selectedYear;
+        document.getElementById('min-year').value = _selectedYear;
+        document.getElementById('max-year').value = _selectedYear;
+    } else {
+        var data = _getActiveData();
+        if (data) {
+            var years = data.cases.map(function(c) { return c.year; });
+            filters.minYear = Math.min.apply(null, years);
+            filters.maxYear = Math.max.apply(null, years);
+            document.getElementById('min-year').value = filters.minYear;
+            document.getElementById('max-year').value = filters.maxYear;
+        }
+    }
+    updateMarkers();
+    _updateFilterBadge();
+});
+
+// ── Filter badge: show count of active (non-default) filters ──
+function _injectFilterBadge() {
+    var btn = document.getElementById('filter-toggle');
+    if (!btn || btn.querySelector('.filter-badge')) return;
+    var badge = document.createElement('span');
+    badge.className = 'filter-badge';
+    badge.id = 'filter-badge';
+    badge.textContent = '0';
+    btn.appendChild(badge);
+}
+_injectFilterBadge();
+
+function _updateFilterBadge() {
+    var badge = document.getElementById('filter-badge');
+    if (!badge) return;
+    var count = 0;
+    if (filters.minIntensity !== 0 || filters.maxIntensity !== 200) count++;
+    if (filters.minVmaxChange !== -100 || filters.maxVmaxChange !== 85) count++;
+    if (filters.minTilt !== 0 || filters.maxTilt !== 200) count++;
+    if (filters.minWspd05 !== 0 || filters.maxWspd05 !== 100) count++;
+    if (filters.minWspd20 !== 0 || filters.maxWspd20 !== 100) count++;
+    // Check if year filter is narrower than full range
+    var data = _getActiveData();
+    if (data) {
+        var years = data.cases.map(function(c) { return c.year; });
+        var minY = Math.min.apply(null, years), maxY = Math.max.apply(null, years);
+        if (filters.minYear !== minY || filters.maxYear !== maxY) count++;
+    }
+    badge.textContent = count;
+    if (count > 0) { badge.classList.add('visible'); } else { badge.classList.remove('visible'); }
+}
+
+// ── Case count flash on change ────────────────────────────────
+var _lastFilteredCount = -1;
+var _origUpdateMarkersV2 = null; // will be set after track view overrides updateMarkers
+
+function _flashCaseCount() {
+    var el = document.querySelector('.toolbar-count');
+    if (!el) return;
+    var currentCount = parseInt(document.getElementById('filtered-count').textContent.replace(/,/g, ''));
+    if (_lastFilteredCount !== -1 && currentCount !== _lastFilteredCount) {
+        el.classList.remove('flash');
+        void el.offsetWidth; // reflow to restart animation
+        el.classList.add('flash');
+    }
+    _lastFilteredCount = currentCount;
+}
 
 // ══════════════════════════════════════════════════════════════
 // ── Track View (Clusters / Tracks toggle) ─────────────────────
@@ -5984,6 +6138,9 @@ updateMarkers = function() {
     if (_mapViewMode === 'tracks' && _tracksLoaded) {
         _renderArchiveTracks();
     }
+    // Update filter badge and flash case count
+    _updateFilterBadge();
+    _flashCaseCount();
 };
 
 function switchDataType(dt) {
@@ -6005,10 +6162,17 @@ function switchDataType(dt) {
     var years = src.cases.map(function(c) { return c.year; });
     document.getElementById('year-range').textContent = Math.min.apply(null, years) + '\u2013' + Math.max.apply(null, years);
 
-    // Rebuild storm dropdown
-    var stormSelect = document.getElementById('storm-select');
-    stormSelect.innerHTML = '<option value="">All Storms</option>';
-    Array.from(storms).sort().forEach(function(s) { var o = document.createElement('option'); o.value = s; o.textContent = s; stormSelect.appendChild(o); });
+    // Rebuild year and storm dropdowns
+    _selectedYear = '';
+    document.getElementById('year-select').value = '';
+    _populateYearDropdown();
+    _populateStormDropdown('');
+
+    // Reset year filter to full range of new dataset
+    filters.minYear = Math.min.apply(null, years);
+    filters.maxYear = Math.max.apply(null, years);
+    document.getElementById('min-year').value = filters.minYear;
+    document.getElementById('max-year').value = filters.maxYear;
 
     // Reset case dropdown
     document.getElementById('case-select').innerHTML = '<option value="">\u2190 Select a storm first</option>';
