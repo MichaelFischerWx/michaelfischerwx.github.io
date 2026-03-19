@@ -3789,7 +3789,26 @@ function renderPlotFromJSON(json, resultDiv) {
     var thumbWrap = document.getElementById('thumbnail-wrap');
     if (thumbWrap) thumbWrap.style.display = 'none';
 
-    resultDiv.innerHTML = '<div style="position:relative;"><div id="plotly-chart" style="width:100%;height:400px;border-radius:6px;overflow:hidden;"></div>' + _archSaveBtnHTML('plotly-chart', 'TDR_PlanView') + '<button onclick="openPlotModal()" title="Expand to fullscreen" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">\u26F6</button></div><div style="font-size:11px;color:var(--slate);text-align:center;margin-top:4px;">Hover for values \u00b7 scroll to zoom \u00b7 drag to pan \u00b7 \u26F6 expand</div>';
+    // Build dual-panel HTML: plan view (left) + azimuthal mean placeholder (right)
+    resultDiv.innerHTML =
+        '<div class="dual-panel-wrap" id="dual-panel-wrap">' +
+            '<div class="dual-pane" id="dual-pane-left">' +
+                '<div class="dual-pane-label">Plan View</div>' +
+                '<div class="dual-pane-inner" style="position:relative;">' +
+                    '<div id="plotly-chart" style="width:100%;height:100%;min-height:360px;"></div>' +
+                    _archSaveBtnHTML('plotly-chart', 'TDR_PlanView') +
+                    '<button onclick="openPlotModal()" title="Expand to fullscreen" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">\u26F6</button>' +
+                '</div>' +
+            '</div>' +
+            '<div class="dual-pane-divider" title="Toggle azimuthal mean panel" onclick="_toggleDualPane()"></div>' +
+            '<div class="dual-pane" id="dual-pane-right">' +
+                '<div class="dual-pane-label">Azimuthal Mean</div>' +
+                '<div class="dual-pane-inner" id="dual-az-container">' +
+                    '<div class="az-pane-placeholder" id="dual-az-placeholder">Generating azimuthal mean\u2026</div>' +
+                '</div>' +
+            '</div>' +
+        '</div>' +
+        '<div style="font-size:11px;color:var(--slate);text-align:center;margin-top:4px;">Hover for values \u00b7 scroll to zoom \u00b7 drag to pan \u00b7 \u26F6 expand</div>';
 
     // Scroll panel to top so plot is visible
     var panelInner = document.getElementById('side-panel-inner');
@@ -3839,19 +3858,14 @@ function renderPlotFromJSON(json, resultDiv) {
         }
     }
 
-    // Metadata badge (bottom-right corner)
+    // Metadata strip (moved above plot as text, not as Plotly annotation)
+    var _metaStripHTML = '';
     if (meta.vmax_kt || meta.rmw_km) {
         var badgeParts = [];
         if (meta.vmax_kt) badgeParts.push('<span style="color:' + getIntensityColor(meta.vmax_kt) + ';">' + getIntensityCategory(meta.vmax_kt) + '</span> ' + meta.vmax_kt + ' kt');
         if (meta.rmw_km) badgeParts.push('RMW ' + meta.rmw_km + ' km');
         if (meta.tilt_magnitude_km != null) badgeParts.push('Tilt ' + meta.tilt_magnitude_km + ' km');
-        smallLayout.annotations = (smallLayout.annotations || []).concat([{
-            text: badgeParts.join('  ·  '),
-            xref: 'paper', yref: 'paper', x: 0.99, y: 0.01,
-            xanchor: 'right', yanchor: 'bottom', showarrow: false,
-            font: { color: 'rgba(200,210,225,0.7)', size: 9, family: 'JetBrains Mono, monospace' },
-            bgcolor: 'rgba(10,22,40,0.6)', borderpad: 3
-        }]);
+        _metaStripHTML = '<div class="dual-panel-strip">' + badgeParts.join('  &middot;  ') + '</div>';
     }
 
     // Shear + motion vector inset (small panel only; fullscreen builds its own in openPlotModal)
@@ -3887,8 +3901,18 @@ function renderPlotFromJSON(json, resultDiv) {
         }
     }
 
+    // Insert metadata strip above the dual panel wrap
+    var dualWrap = document.getElementById('dual-panel-wrap');
+    if (dualWrap && _metaStripHTML) {
+        dualWrap.insertAdjacentHTML('beforebegin', _metaStripHTML);
+    }
+
     Plotly.newPlot('plotly-chart', [heatmap].concat(overlayTraces).concat(maxTraces).concat(tiltTraces), smallLayout, config);
     window._lastPlotlyData = { heatmap: heatmap, overlayTraces: overlayTraces, maxTraces: maxTraces, tiltTraces: tiltTraces, baseLayout: baseLayout, title: title, config: config, barbShapes: barbShapes };
+
+    // Auto-generate azimuthal mean in the right pane (non-blocking)
+    _autoFetchDualAzimuthalMean();
+
     var csBtn = document.getElementById('cs-btn'); if (csBtn) csBtn.disabled = false;
     var azBtn = document.getElementById('az-btn'); if (azBtn) azBtn.disabled = false;
     var sqBtn = document.getElementById('sq-btn'); if (sqBtn) sqBtn.disabled = false;
@@ -3998,6 +4022,106 @@ function renderCrossSectionInto(targetId, json, fullsize) {
     if (csShearInset.shapes.length) layout.shapes = (layout.shapes || []).concat(csShearInset.shapes);
 
     Plotly.newPlot(targetId, [heatmap].concat(csOverlayTraces).concat(csMaxTraces), layout, { responsive: true, displayModeBar: fullsize, displaylogo: false, modeBarButtonsToRemove: ['lasso2d','select2d','toggleSpikelines'] });
+}
+
+// ── Dual-pane toggle ─────────────────────────────────────────
+function _toggleDualPane() {
+    var wrap = document.getElementById('dual-panel-wrap');
+    if (!wrap) return;
+    wrap.classList.toggle('collapsed');
+    // Re-layout Plotly charts after CSS transition
+    setTimeout(function() {
+        var chart = document.getElementById('plotly-chart');
+        if (chart && chart.data) Plotly.Plots.resize(chart);
+        var azChart = document.getElementById('dual-az-chart');
+        if (azChart && azChart.data) Plotly.Plots.resize(azChart);
+    }, 50);
+}
+
+// ── Auto-fetch azimuthal mean into the right dual pane ────────
+function _autoFetchDualAzimuthalMean() {
+    if (currentCaseIndex === null) return;
+    var variable = document.getElementById('ep-var').value;
+    var overlay = (document.getElementById('ep-overlay') || {}).value || '';
+    var covSlider = document.getElementById('az-coverage');
+    var coverage = covSlider ? (parseInt(covSlider.value) / 100) : 0.5;
+    var placeholder = document.getElementById('dual-az-placeholder');
+    if (placeholder) placeholder.textContent = 'Generating azimuthal mean\u2026';
+
+    var url = API_BASE + '/azimuthal_mean?case_index=' + currentCaseIndex + '&variable=' + variable + '&data_type=' + _activeDataType + '&coverage_min=' + coverage;
+    if (overlay && overlay !== 'none') url += '&overlay=' + overlay;
+
+    var controller = new AbortController();
+    var timeout = setTimeout(function() { controller.abort(); }, 90000);
+    fetch(url, { signal: controller.signal })
+        .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
+        .then(function(json) {
+            _lastAzJson = json; _lastHybridAzJson = null; _lastAnomalyAzJson = null; _lastVPScatterJson = null;
+            _renderDualAzimuthalMean(json);
+            // Also enable the az button
+            var azBtn = document.getElementById('az-btn'); if (azBtn) azBtn.disabled = false;
+        })
+        .catch(function(err) {
+            var container = document.getElementById('dual-az-container');
+            if (container) container.innerHTML = '<div class="az-pane-placeholder" style="color:#f87171;font-style:normal;font-size:0.7rem;">' + (err.name === 'AbortError' ? 'Timed out' : err.message) + '</div>';
+        })
+        .finally(function() { clearTimeout(timeout); });
+}
+
+// Render azimuthal mean into the dual-pane right panel
+function _renderDualAzimuthalMean(json) {
+    var container = document.getElementById('dual-az-container');
+    if (!container) return;
+
+    var azData = json.azimuthal_mean, radius_km = json.radius_km, height_km = json.height_km, varInfo = json.variable, meta = _enrichCaseMeta(json.case_meta);
+    var fontSize = { title:9, axis:8, tick:7, cbar:8, cbarTick:7, hover:10 };
+    var csColorscale = varInfo.colorscale;
+    var cmapSel = document.getElementById('ep-cmap');
+    if (cmapSel && cmapSel.value) { try { csColorscale = JSON.parse(cmapSel.value); } catch(e) { csColorscale = cmapSel.value; } }
+    var av = _getActiveVmin(), avx = _getActiveVmax();
+
+    var heatmap = { z: azData, x: radius_km, y: height_km, type: 'heatmap', colorscale: csColorscale,
+        zmin: av !== null ? av : varInfo.vmin, zmax: avx !== null ? avx : varInfo.vmax,
+        colorbar: { title: { text: varInfo.units, font: { color: '#ccc', size: fontSize.cbar } }, tickfont: { color: '#ccc', size: fontSize.cbarTick }, thickness: 10, len: 0.85 },
+        hovertemplate: '<b>' + varInfo.display_name + '</b>: %{z:.2f} ' + varInfo.units + '<br>Radius: %{x:.0f} km<br>Height: %{y:.1f} km<extra></extra>', hoverongaps: false };
+
+    var azOverlayTraces = buildAzOverlayContours(json, radius_km, height_km);
+    var covPct = Math.round((json.coverage_min || 0.5) * 100);
+    var title = 'Azimuthal Mean: ' + varInfo.display_name + ' (\u2265' + covPct + '%)';
+    var shapes = [];
+    if (meta.rmw_km && !isNaN(meta.rmw_km)) shapes.push({ type:'line',xref:'x',yref:'paper',x0:meta.rmw_km,x1:meta.rmw_km,y0:0,y1:1,line:{color:'white',width:1.5,dash:'dash'} });
+
+    var plotBg = '#0a1628';
+    var layout = {
+        title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' },
+        paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+        xaxis: { title: { text: 'Radius (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
+        yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
+        margin: { l: 40, r: 10, t: json.overlay ? 64 : 50, b: 34 },
+        shapes: shapes,
+        hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: fontSize.hover } },
+        showlegend: false
+    };
+
+    // Max value marker
+    var azMaxInfo = findDataMax(azData, radius_km, height_km);
+    var azMaxTraces = [];
+    if (azMaxInfo) {
+        var azMaxAnnot = buildMaxAnnotation(azMaxInfo, varInfo.units, 'R', 'Z', 7);
+        if (azMaxAnnot) layout.annotations = (layout.annotations || []).concat([azMaxAnnot]);
+        if (isWindVariable((document.getElementById('ep-var') || {}).value || '')) {
+            var azMaxMarker = buildMaxMarkerTrace(azMaxInfo, varInfo.units);
+            if (azMaxMarker) azMaxTraces.push(azMaxMarker);
+        }
+    }
+
+    // Shear inset
+    var azShearInset = buildShearInsetCS(_currentSddc, false, _currentShdc);
+    if (azShearInset.annotations.length) layout.annotations = (layout.annotations || []).concat(azShearInset.annotations);
+    if (azShearInset.shapes.length) layout.shapes = (layout.shapes || []).concat(azShearInset.shapes);
+
+    container.innerHTML = '<div id="dual-az-chart" style="width:100%;height:100%;min-height:320px;"></div>';
+    Plotly.newPlot('dual-az-chart', [heatmap].concat(azOverlayTraces).concat(azMaxTraces), layout, { responsive: true, displayModeBar: false, displaylogo: false });
 }
 
 // ── Azimuthal Mean (dispatcher for coordinate mode selector) ──
@@ -4681,7 +4805,7 @@ function buildShearInset(sddc, isFullsize, shdc, motionDir, motionSpd) {
     // ── Compact labels: one line per vector ──────────────────────
     // "SHR  12 kt / 276°" above circle
     if (hasShear) {
-        var shrTxt = '<b>SHR</b>  ';
+        var shrTxt = '<b>Shear</b>  ';
         if (shdc !== null && shdc !== undefined && shdc !== 9999) shrTxt += shdc.toFixed(0) + ' kt / ';
         shrTxt += sddc.toFixed(0) + '\u00b0';
         annotations.push({ text: shrTxt, xref:'paper', yref:'paper',
@@ -4692,7 +4816,7 @@ function buildShearInset(sddc, isFullsize, shdc, motionDir, motionSpd) {
 
     // "MOT  8 kt / 29°" below circle
     if (hasMotion) {
-        var motTxt = '<b>MOT</b>  ';
+        var motTxt = '<b>Motion</b>  ';
         if (motionSpd !== null && motionSpd !== undefined && motionSpd !== 9999) motTxt += motionSpd.toFixed(0) + ' kt / ';
         motTxt += motionDir.toFixed(0) + '\u00b0';
         var motY = hasShear
@@ -4710,9 +4834,9 @@ function buildShearInset(sddc, isFullsize, shdc, motionDir, motionSpd) {
 // Build shear inset for cross-section (simpler: just show direction label)
 function buildShearInsetCS(sddc, isFullsize, shdc) {
     if (sddc === null || sddc === undefined || sddc === 9999) return { shapes: [], annotations: [] };
-    var shrText = '<b>SHR: ' + sddc.toFixed(0) + '\u00b0</b>';
+    var shrText = '<b>Shear: ' + sddc.toFixed(0) + '\u00b0</b>';
     if (shdc !== null && shdc !== undefined && shdc !== 9999) {
-        shrText = '<b>SHR: ' + sddc.toFixed(0) + '\u00b0 (' + shdc.toFixed(0) + ' kt)</b>';
+        shrText = '<b>Shear: ' + sddc.toFixed(0) + '\u00b0 (' + shdc.toFixed(0) + ' kt)</b>';
     }
     var annotations = [
         { text: shrText,
