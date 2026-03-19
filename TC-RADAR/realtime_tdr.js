@@ -775,8 +775,8 @@
 
         var d = _rtLastPlotlyData;
         var fullLayout = Object.assign({}, d.baseLayout, {
-            title: { text: d.title, font: { color: '#e5e7eb', size: 14 }, y: 0.97, x: 0.5, xanchor: 'center' },
-            margin: { l: 60, r: 28, t: 80, b: 52 }
+            title: { text: d.title, font: { color: '#e5e7eb', size: 14 }, y: 0.98, x: 0.5, xanchor: 'center' },
+            margin: { l: 60, r: 28, t: 90, b: 52 }
         });
 
         // Hide cross-section panes from main app
@@ -785,7 +785,40 @@
         var csDiv = document.getElementById('cs-full-divider'); if (csDiv) csDiv.style.display = 'none';
         var azDiv = document.getElementById('az-full-divider'); if (azDiv) azDiv.style.display = 'none';
 
-        Plotly.newPlot('plotly-fullscreen', [d.heatmap].concat(d.overlayTraces).concat(d.maxTraces || []), fullLayout, d.config);
+        // Capture dynamic overlays (tilt, FL traces, IR images) from the live plot
+        var livePlot = document.getElementById('rt-plotly-chart');
+        var liveTraces = d.overlayTraces || [];
+        var liveImages = [];
+        if (livePlot && livePlot.data) {
+            var baseCount = 1 + (d.overlayTraces || []).length + (d.maxTraces || []).length;
+            if (livePlot.data.length > baseCount) {
+                var extraTraces = livePlot.data.slice(baseCount).map(function(t) {
+                    return Object.assign({}, t);
+                });
+                liveTraces = liveTraces.concat(extraTraces);
+            }
+            if (livePlot.layout && livePlot.layout.images && livePlot.layout.images.length > 0) {
+                liveImages = livePlot.layout.images.map(function(img) {
+                    return Object.assign({}, img);
+                });
+            }
+        }
+        if (liveImages.length > 0) {
+            fullLayout.images = liveImages;
+        }
+
+        // Adjust main colorbar if tilt traces are present
+        var hasTilt = liveTraces.some(function(t) { return t.marker && t.marker.colorbar && t.marker.colorbar.title && t.marker.colorbar.title.text === 'Tilt Height (km)'; });
+        if (hasTilt) {
+            var fullHeatmap = Object.assign({}, d.heatmap, {
+                colorbar: Object.assign({}, d.heatmap.colorbar, {
+                    len: 0.42, y: 0.98, yanchor: 'top', x: 1.01, xpad: 2
+                })
+            });
+            Plotly.newPlot('plotly-fullscreen', [fullHeatmap].concat(liveTraces).concat(d.maxTraces || []), fullLayout, d.config);
+        } else {
+            Plotly.newPlot('plotly-fullscreen', [d.heatmap].concat(liveTraces).concat(d.maxTraces || []), fullLayout, d.config);
+        }
         document.getElementById('plotly-fullscreen').on('plotly_click', rtHandlePlotClick);
     };
 
