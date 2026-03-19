@@ -3835,6 +3835,21 @@ function renderPlotFromJSON(json, resultDiv) {
         }
     }
 
+    // Metadata badge (bottom-right corner)
+    if (meta.vmax_kt || meta.rmw_km) {
+        var badgeParts = [];
+        if (meta.vmax_kt) badgeParts.push('<span style="color:' + getIntensityColor(meta.vmax_kt) + ';">' + getIntensityCategory(meta.vmax_kt) + '</span> ' + meta.vmax_kt + ' kt');
+        if (meta.rmw_km) badgeParts.push('RMW ' + meta.rmw_km + ' km');
+        if (meta.tilt_magnitude_km != null) badgeParts.push('Tilt ' + meta.tilt_magnitude_km + ' km');
+        smallLayout.annotations = (smallLayout.annotations || []).concat([{
+            text: badgeParts.join('  ·  '),
+            xref: 'paper', yref: 'paper', x: 0.99, y: 0.01,
+            xanchor: 'right', yanchor: 'bottom', showarrow: false,
+            font: { color: 'rgba(200,210,225,0.7)', size: 9, family: 'JetBrains Mono, monospace' },
+            bgcolor: 'rgba(10,22,40,0.6)', borderpad: 3
+        }]);
+    }
+
     // Shear + motion vector inset (small panel only; fullscreen builds its own in openPlotModal)
     var shearInset = buildShearInset(_currentSddc, false, _currentShdc, _currentMotionDir, _currentMotionSpd);
     if (shearInset.shapes.length) {

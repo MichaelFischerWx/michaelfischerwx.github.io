@@ -523,6 +523,24 @@
             }
         }
 
+        // Metadata badge (bottom-right corner)
+        var meta = json.case_meta || {};
+        var _sd = (_rtShipsData && _rtShipsData.ships_data) ? _rtShipsData.ships_data : {};
+        var _vmax = _sd.vmax_kt || meta.vmax_kt;
+        var badgeParts = [];
+        if (_vmax) badgeParts.push('<span style="color:' + (typeof getIntensityColor === 'function' ? getIntensityColor(_vmax) : '#ccc') + ';">' + (typeof getIntensityCategory === 'function' ? getIntensityCategory(_vmax) : '') + '</span> ' + _vmax + ' kt');
+        if (json.wcm_rmw_km != null) badgeParts.push('RMW ' + json.wcm_rmw_km + ' km');
+        if (json.tilt_2_6_km != null) badgeParts.push('Tilt ' + json.tilt_2_6_km + ' km');
+        if (badgeParts.length) {
+            layout.annotations = (layout.annotations || []).concat([{
+                text: badgeParts.join('  \u00b7  '),
+                xref: 'paper', yref: 'paper', x: 0.99, y: 0.01,
+                xanchor: 'right', yanchor: 'bottom', showarrow: false,
+                font: { color: 'rgba(200,210,225,0.7)', size: 9, family: 'JetBrains Mono, monospace' },
+                bgcolor: 'rgba(10,22,40,0.6)', borderpad: 3
+            }]);
+        }
+
         // Shear + motion vector inset (motion from TDR metadata, shear from SHIPS if loaded)
         var shearInset = _rtBuildShearInset(false);
         if (shearInset.shapes.length) {
