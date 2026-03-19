@@ -550,8 +550,17 @@
         var _rtCompassHTML = '';
         if (typeof buildShearCompassHTML === 'function') {
             var _shSd = _sd.sddc || null, _shKt = _sd.shear_kt || null;
-            var _moDir = (meta.motion_dir != null && meta.motion_dir !== 9999) ? meta.motion_dir : null;
-            var _moSpd = (meta.motion_spd != null && meta.motion_spd !== 9999) ? meta.motion_spd : null;
+            var _moDir = null, _moSpd = null;
+            // case_meta provides U/V storm motion (m/s); convert to met direction + kt
+            var _su = meta.storm_motion_east_ms, _sv = meta.storm_motion_north_ms;
+            if (_su != null && _sv != null && _su !== -999 && _sv !== -999) {
+                var _spdMs = Math.sqrt(_su * _su + _sv * _sv);
+                if (_spdMs > 0.1) {
+                    _moSpd = Math.round(_spdMs * 1.94384 * 10) / 10;
+                    var _mathAng = Math.atan2(_sv, _su) * 180 / Math.PI;
+                    _moDir = ((90 - _mathAng) % 360 + 360) % 360;
+                }
+            }
             _rtCompassHTML = buildShearCompassHTML(_shSd, _shKt, _moDir, _moSpd);
         }
         var metaText = badgeParts.length ? '<span class="meta-text">' + badgeParts.join('  &middot;  ') + '</span>' : '';
@@ -703,6 +712,57 @@
             shapes: keepShapes.concat(inset.shapes),
             annotations: keepAnnot.concat(inset.annotations)
         });
+    }
+
+    // ── Rebuild the HTML compass strip above the dual panel ───────
+    // Called after SHIPS loads so shear vector is incorporated.
+    function _rtUpdateCompassStrip() {
+        if (typeof buildShearCompassHTML !== 'function') return;
+        var sd = (_rtShipsData && _rtShipsData.ships_data) ? _rtShipsData.ships_data : {};
+        var sddc = sd.sddc || null, shkt = sd.shear_kt || null;
+
+        // Motion: prefer SHIPS heading/speed, fall back to TDR U/V
+        var moDir = null, moSpd = null;
+        if (sd.stm_heading_deg != null && sd.stm_speed_kt != null && sd.stm_speed_kt > 0) {
+            moDir = sd.stm_heading_deg;
+            moSpd = sd.stm_speed_kt;
+        } else if (_rtCaseMeta) {
+            var su = _rtCaseMeta.storm_motion_east_ms, sv = _rtCaseMeta.storm_motion_north_ms;
+            if (su != null && sv != null && su !== -999 && sv !== -999) {
+                var spdMs = Math.sqrt(su * su + sv * sv);
+                if (spdMs > 0.1) {
+                    moSpd = Math.round(spdMs * 1.94384 * 10) / 10;
+                    var mathAng = Math.atan2(sv, su) * 180 / Math.PI;
+                    moDir = ((90 - mathAng) % 360 + 360) % 360;
+                }
+            }
+        }
+
+        var compassHTML = buildShearCompassHTML(sddc, shkt, moDir, moSpd);
+
+        // Badge text (Vmax / RMW / Tilt)
+        var meta = _rtCaseMeta || {};
+        var _vmax = sd.vmax_kt || meta.vmax_kt;
+        var badgeParts = [];
+        if (_vmax) badgeParts.push('<span style="color:' + (typeof getIntensityColor === 'function' ? getIntensityColor(_vmax) : '#ccc') + ';">' + (typeof getIntensityCategory === 'function' ? getIntensityCategory(_vmax) : '') + '</span> ' + _vmax + ' kt');
+        if (_rtLastPlotlyData && _rtLastPlotlyData.json) {
+            var j = _rtLastPlotlyData.json;
+            if (j.wcm_rmw_km != null) badgeParts.push('RMW ' + j.wcm_rmw_km + ' km');
+            if (j.tilt_2_6_km != null) badgeParts.push('Tilt ' + j.tilt_2_6_km + ' km');
+        }
+        var metaText = badgeParts.length ? '<span class="meta-text">' + badgeParts.join('  &middot;  ') + '</span>' : '';
+
+        if (!compassHTML && !metaText) return;
+        var newStrip = '<div class="dual-panel-strip">' + compassHTML + metaText + '</div>';
+
+        // Replace existing strip (if any), else insert before the dual panel wrap
+        var old = document.querySelector('.dual-panel-strip');
+        var rtDualWrap = document.getElementById('rt-dual-panel-wrap');
+        if (old) {
+            old.outerHTML = newStrip;
+        } else if (rtDualWrap) {
+            rtDualWrap.insertAdjacentHTML('beforebegin', newStrip);
+        }
     }
 
     // ── Overlay contours ─────────────────────────────────────────
@@ -4151,6 +4211,8 @@
                 _rtShipsLoading = false;
                 _rtRenderSHIPSPanel(data);
                 _rtEnableSHIPSDiagnostics();
+                _rtUpdateCompassStrip();
+                _rtApplyShearInsetToPlot();
                 btn.textContent = '\u2713 SHIPS Loaded';
                 btn.style.borderColor = 'rgba(52,211,153,0.5)';
                 btn.disabled = false;
@@ -4205,7 +4267,8 @@
             _rtShipsLoading = false;
             _rtRenderSHIPSPanel(data);
             _rtEnableSHIPSDiagnostics();
-            // Add shear+motion inset to existing plot now that SHIPS is available
+            // Update HTML compass strip and Plotly inset now that SHIPS is available
+            _rtUpdateCompassStrip();
             _rtApplyShearInsetToPlot();
             if (statusEl) statusEl.style.display = 'none';
             var manualEl = document.getElementById('rt-ships-manual');
