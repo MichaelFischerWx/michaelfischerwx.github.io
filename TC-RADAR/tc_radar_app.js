@@ -3796,8 +3796,7 @@ function renderPlotFromJSON(json, resultDiv) {
                 '<div class="dual-pane-label">Plan View</div>' +
                 '<div class="dual-pane-inner" style="position:relative;">' +
                     '<div id="plotly-chart" style="width:100%;height:100%;min-height:360px;"></div>' +
-                    _archSaveBtnHTML('plotly-chart', 'TDR_PlanView') +
-                    '<button onclick="openPlotModal()" title="Expand to fullscreen" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">\u26F6</button>' +
+                    '<button onclick="openPlotModal()" title="Expand to fullscreen" style="position:absolute;top:6px;left:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:28px;height:28px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">\u26F6</button>' +
                 '</div>' +
             '</div>' +
             '<div class="dual-pane-divider" title="Toggle azimuthal mean panel" onclick="_toggleDualPane()"></div>' +
@@ -4074,7 +4073,8 @@ function _renderDualAzimuthalMean(json) {
     if (!container) return;
 
     var azData = json.azimuthal_mean, radius_km = json.radius_km, height_km = json.height_km, varInfo = json.variable, meta = _enrichCaseMeta(json.case_meta);
-    var fontSize = { title:9, axis:8, tick:7, cbar:8, cbarTick:7, hover:10 };
+    // Match font sizes to plan view (axis: 10, tick: 9, title: 11)
+    var fontSize = { title:11, axis:10, tick:9, cbar:10, cbarTick:9, hover:11 };
     var csColorscale = varInfo.colorscale;
     var cmapSel = document.getElementById('ep-cmap');
     if (cmapSel && cmapSel.value) { try { csColorscale = JSON.parse(cmapSel.value); } catch(e) { csColorscale = cmapSel.value; } }
@@ -4082,22 +4082,23 @@ function _renderDualAzimuthalMean(json) {
 
     var heatmap = { z: azData, x: radius_km, y: height_km, type: 'heatmap', colorscale: csColorscale,
         zmin: av !== null ? av : varInfo.vmin, zmax: avx !== null ? avx : varInfo.vmax,
-        colorbar: { title: { text: varInfo.units, font: { color: '#ccc', size: fontSize.cbar } }, tickfont: { color: '#ccc', size: fontSize.cbarTick }, thickness: 10, len: 0.85 },
+        colorbar: { title: { text: varInfo.units, font: { color: '#ccc', size: fontSize.cbar } }, tickfont: { color: '#ccc', size: fontSize.cbarTick }, thickness: 12, len: 0.85 },
         hovertemplate: '<b>' + varInfo.display_name + '</b>: %{z:.2f} ' + varInfo.units + '<br>Radius: %{x:.0f} km<br>Height: %{y:.1f} km<extra></extra>', hoverongaps: false };
 
     var azOverlayTraces = buildAzOverlayContours(json, radius_km, height_km);
     var covPct = Math.round((json.coverage_min || 0.5) * 100);
-    var title = 'Azimuthal Mean: ' + varInfo.display_name + ' (\u2265' + covPct + '%)';
+    var vmaxStr = meta.vmax_kt ? ' | Vmax = ' + meta.vmax_kt + ' kt' : '';
+    var title = meta.storm_name + ' | ' + meta.datetime + vmaxStr + '<br>Azimuthal Mean: ' + varInfo.display_name + ' (\u2265' + covPct + '%)';
     var shapes = [];
     if (meta.rmw_km && !isNaN(meta.rmw_km)) shapes.push({ type:'line',xref:'x',yref:'paper',x0:meta.rmw_km,x1:meta.rmw_km,y0:0,y1:1,line:{color:'white',width:1.5,dash:'dash'} });
 
     var plotBg = '#0a1628';
     var layout = {
-        title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.97, x: 0.5, xanchor: 'center' },
+        title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.98, x: 0.5, xanchor: 'center' },
         paper_bgcolor: plotBg, plot_bgcolor: plotBg,
         xaxis: { title: { text: 'Radius (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
         yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
-        margin: { l: 40, r: 10, t: json.overlay ? 64 : 50, b: 34 },
+        margin: { l: 48, r: 14, t: json.overlay ? 90 : 74, b: 44 },
         shapes: shapes,
         hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: fontSize.hover } },
         showlegend: false
@@ -4107,7 +4108,7 @@ function _renderDualAzimuthalMean(json) {
     var azMaxInfo = findDataMax(azData, radius_km, height_km);
     var azMaxTraces = [];
     if (azMaxInfo) {
-        var azMaxAnnot = buildMaxAnnotation(azMaxInfo, varInfo.units, 'R', 'Z', 7);
+        var azMaxAnnot = buildMaxAnnotation(azMaxInfo, varInfo.units, 'R', 'Z', 9);
         if (azMaxAnnot) layout.annotations = (layout.annotations || []).concat([azMaxAnnot]);
         if (isWindVariable((document.getElementById('ep-var') || {}).value || '')) {
             var azMaxMarker = buildMaxMarkerTrace(azMaxInfo, varInfo.units);
@@ -4115,13 +4116,10 @@ function _renderDualAzimuthalMean(json) {
         }
     }
 
-    // Shear inset
-    var azShearInset = buildShearInsetCS(_currentSddc, false, _currentShdc);
-    if (azShearInset.annotations.length) layout.annotations = (layout.annotations || []).concat(azShearInset.annotations);
-    if (azShearInset.shapes.length) layout.shapes = (layout.shapes || []).concat(azShearInset.shapes);
+    // No shear inset on azimuthal mean — it's already on the plan view
 
     container.innerHTML = '<div id="dual-az-chart" style="width:100%;height:100%;min-height:320px;"></div>';
-    Plotly.newPlot('dual-az-chart', [heatmap].concat(azOverlayTraces).concat(azMaxTraces), layout, { responsive: true, displayModeBar: false, displaylogo: false });
+    Plotly.newPlot('dual-az-chart', [heatmap].concat(azOverlayTraces).concat(azMaxTraces), layout, { responsive: true, displayModeBar: true, modeBarButtonsToRemove: ['lasso2d','select2d','toggleSpikelines'], displaylogo: false });
 }
 
 // ── Azimuthal Mean (dispatcher for coordinate mode selector) ──
@@ -4757,15 +4755,15 @@ function buildShearInset(sddc, isFullsize, shdc, motionDir, motionSpd) {
     var hasMotion = (motionDir !== null && motionDir !== undefined && motionDir !== 9999);
     if (!hasShear && !hasMotion) return { shapes: [], annotations: [] };
 
-    // Inset center (paper coords) — top-left, lowered to avoid label-arrow overlap
+    // Inset center (paper coords) — top-left, pushed up to leverage blank space
     var cx = isFullsize ? 0.08 : 0.10;
-    var cy = isFullsize ? 0.82 : 0.80;
-    var r = isFullsize ? 0.048 : 0.052;
-    var arrowLen = r * 0.80;
+    var cy = isFullsize ? 0.88 : 0.88;
+    var r = isFullsize ? 0.055 : 0.065;
+    var arrowLen = r * 0.82;
     var dotR = r * 0.07;
     var lw = isFullsize ? 2.5 : 2;
-    var fsL = isFullsize ? 10 : 8;
-    var labelGap = isFullsize ? 0.032 : 0.036;
+    var fsL = isFullsize ? 11 : 9;
+    var labelGap = isFullsize ? 0.032 : 0.034;
 
     var shapes = [
         // Background circle (subtle)

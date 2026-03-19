@@ -157,6 +157,9 @@ input[type="range"]::-moz-range-track { height: 4px; background: transparent; bo
 .dual-panel-wrap { display: flex; gap: 6px; min-height: 320px; }
 .dual-panel-wrap > .dual-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .dual-panel-wrap > .dual-pane .dual-pane-inner { flex: 1; border-radius: 6px; overflow: hidden; position: relative; }
+/* Push Plotly mode bar below the title area to prevent overlap */
+.dual-pane-inner .modebar-container { top: 0 !important; }
+.dual-pane-inner .modebar-group { background: rgba(10,22,40,0.7) !important; border-radius: 4px; }
 .dual-panel-wrap > .dual-pane-divider { width: 1px; background: var(--border-light); flex-shrink: 0; cursor: col-resize; position: relative; }
 .dual-panel-wrap > .dual-pane-divider::after { content: '‹›'; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 9px; color: var(--slate); background: var(--surface-raised); padding: 6px 2px; border-radius: 3px; border: 1px solid var(--border-light); line-height: 1; }
 .dual-pane-label { font-size: 0.58rem; color: var(--slate); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; text-align: center; padding: 3px 0 2px; }
