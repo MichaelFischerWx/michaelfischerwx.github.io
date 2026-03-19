@@ -3772,7 +3772,7 @@ function buildMaxAnnotation(maxInfo, units, xLabel, yLabel, fontSize) {
     var fs = fontSize || 9;
     return {
         text: '<b>Max:</b> ' + maxInfo.value.toFixed(2) + ' ' + units +
-              '  @  ' + xLabel + '=' + maxInfo.x.toFixed(0) + ', ' + yLabel + '=' + maxInfo.y.toFixed(0),
+              '  @  ' + xLabel + '=' + maxInfo.x.toFixed(0) + ', ' + yLabel + '=' + (Math.abs(maxInfo.y) < 100 ? maxInfo.y.toFixed(1) : maxInfo.y.toFixed(0)),
         xref: 'paper', yref: 'paper', x: 0.01, y: -0.01,
         xanchor: 'left', yanchor: 'top',
         showarrow: false,
@@ -3838,7 +3838,7 @@ function renderPlotFromJSON(json, resultDiv) {
     var plotBg = '#0a1628';
     var baseLayout = { paper_bgcolor: plotBg, plot_bgcolor: plotBg, xaxis: { title: { text: 'Eastward distance (km)', font: { color: '#aaa' } }, tickfont: { color: '#aaa' }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false, scaleanchor: 'y', range: [-250, 250] }, yaxis: { title: { text: 'Northward distance (km)', font: { color: '#aaa' } }, tickfont: { color: '#aaa' }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false, range: [-250, 250] }, shapes: shapes, hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 12 } }, showlegend: false };
     var config = { responsive: true, displayModeBar: true, modeBarButtonsToRemove: ['lasso2d','select2d','toggleSpikelines'], displaylogo: false };
-    var smallLayout = Object.assign({}, baseLayout, { title: { text: title, font: { color: '#e5e7eb', size: 11 }, y: 0.98, x: 0.5, xanchor: 'center' }, margin: { l: 52, r: 16, t: json.overlay ? 90 : 74, b: 44 }, xaxis: Object.assign({}, baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }), yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }) });
+    var smallLayout = Object.assign({}, baseLayout, { title: { text: title, font: { color: '#e5e7eb', size: 11 }, y: 0.99, x: 0.5, xanchor: 'center' }, margin: { l: 52, r: 16, t: json.overlay ? 96 : 80, b: 44 }, xaxis: Object.assign({}, baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }), yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }) });
 
     var overlayTraces = buildOverlayContours(json, x, y);
 
@@ -4755,15 +4755,15 @@ function buildShearInset(sddc, isFullsize, shdc, motionDir, motionSpd) {
     var hasMotion = (motionDir !== null && motionDir !== undefined && motionDir !== 9999);
     if (!hasShear && !hasMotion) return { shapes: [], annotations: [] };
 
-    // Inset center (paper coords) — top-left, pushed up to leverage blank space
-    var cx = isFullsize ? 0.08 : 0.10;
-    var cy = isFullsize ? 0.88 : 0.88;
-    var r = isFullsize ? 0.055 : 0.065;
-    var arrowLen = r * 0.82;
+    // Inset center (paper coords) — top-left corner, leveraging blank space above data
+    var cx = isFullsize ? 0.09 : 0.12;
+    var cy = isFullsize ? 0.92 : 0.92;
+    var r = isFullsize ? 0.060 : 0.075;
+    var arrowLen = r * 0.85;
     var dotR = r * 0.07;
-    var lw = isFullsize ? 2.5 : 2;
-    var fsL = isFullsize ? 11 : 9;
-    var labelGap = isFullsize ? 0.032 : 0.034;
+    var lw = isFullsize ? 2.5 : 2.5;
+    var fsL = isFullsize ? 12 : 10;
+    var labelGap = isFullsize ? 0.038 : 0.032;
 
     var shapes = [
         // Background circle (subtle)
@@ -6389,7 +6389,7 @@ function openPlotModal(csJson) {
     }
 
     var d = window._lastPlotlyData;
-    var fullLayout = Object.assign({}, d.baseLayout, { title: { text: d.title, font: { color: '#e5e7eb', size: 15 }, y: 0.97, x: 0.5, xanchor: 'center' }, margin: { l:65,r:30,t:d.overlayTraces&&d.overlayTraces.length?120:104,b:55 }, xaxis: Object.assign({}, d.baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }), yaxis: Object.assign({}, d.baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }) });
+    var fullLayout = Object.assign({}, d.baseLayout, { title: { text: d.title, font: { color: '#e5e7eb', size: 15 }, y: 0.98, x: 0.5, xanchor: 'center' }, margin: { l:65,r:30,t:d.overlayTraces&&d.overlayTraces.length?120:104,b:55 }, xaxis: Object.assign({}, d.baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }), yaxis: Object.assign({}, d.baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }) });
     // Scale up annotations for fullscreen
     if (fullLayout.annotations) {
         fullLayout.annotations = fullLayout.annotations.map(function(a) {
@@ -6407,7 +6407,33 @@ function openPlotModal(csJson) {
         fullCbar.yanchor = 'top';
     }
     var fullHeatmap = Object.assign({}, d.heatmap, { colorbar: Object.assign({}, d.heatmap.colorbar, fullCbar) });
-    Plotly.newPlot('plotly-fullscreen', [fullHeatmap].concat(d.overlayTraces||[]).concat(d.maxTraces||[]).concat(d.tiltTraces||[]), fullLayout, d.config);
+
+    // Capture dynamic overlays (FL traces, IR images) from the live plot
+    var livePlot = document.getElementById('plotly-chart');
+    var liveTraces = d.overlayTraces || [];
+    var liveImages = [];
+    if (livePlot && livePlot.data) {
+        // Collect any extra traces beyond the base ones (heatmap + overlay + max + tilt)
+        var baseCount = 1 + (d.overlayTraces||[]).length + (d.maxTraces||[]).length + (d.tiltTraces||[]).length;
+        if (livePlot.data.length > baseCount) {
+            var extraTraces = livePlot.data.slice(baseCount).map(function(t) {
+                return Object.assign({}, t);
+            });
+            // These are flight-level, dropsonde, or other dynamic traces
+            liveTraces = liveTraces.concat(extraTraces);
+        }
+        // Capture IR images from the live layout
+        if (livePlot.layout && livePlot.layout.images && livePlot.layout.images.length > 0) {
+            liveImages = livePlot.layout.images.map(function(img) {
+                return Object.assign({}, img);
+            });
+        }
+    }
+    if (liveImages.length > 0) {
+        fullLayout.images = liveImages;
+    }
+
+    Plotly.newPlot('plotly-fullscreen', [fullHeatmap].concat(liveTraces).concat(d.maxTraces||[]).concat(d.tiltTraces||[]), fullLayout, d.config);
     if (hasCrossSection) renderCrossSectionInto('cs-fullscreen', csJson, true);
     if (hasAzMean) {
         if (_lastVPScatterJson) renderVPScatterInto('az-fullscreen', _lastVPScatterJson, true);
