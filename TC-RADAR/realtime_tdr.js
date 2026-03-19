@@ -549,7 +549,9 @@
         // Build compass from available shear/motion data
         var _rtCompassHTML = '';
         if (typeof buildShearCompassHTML === 'function') {
-            var _shSd = _sd.sddc || null, _shKt = _sd.shear_kt || null;
+            // Real-time SHIPS SDDC is "where shear comes FROM"; flip 180° to match archive convention (downshear direction)
+            var _shSd = (_sd.sddc != null && _sd.sddc !== 9999) ? ((_sd.sddc + 180) % 360) : null;
+            var _shKt = _sd.shear_kt || null;
             var _moDir = null, _moSpd = null;
             // case_meta provides U/V storm motion (m/s); convert to met direction + kt
             var _su = meta.storm_motion_east_ms, _sv = meta.storm_motion_north_ms;
@@ -561,7 +563,7 @@
                     _moDir = ((90 - _mathAng) % 360 + 360) % 360;
                 }
             }
-            _rtCompassHTML = buildShearCompassHTML(_shSd, _shKt, _moDir, _moSpd);
+            _rtCompassHTML = buildShearCompassHTML(_shSd, _shKt, _moDir, _moSpd, _sd.sddc);
         }
         var metaText = badgeParts.length ? '<span class="meta-text">' + badgeParts.join('  &middot;  ') + '</span>' : '';
         var _rtMetaStripHTML = '';
@@ -710,7 +712,9 @@
     function _rtUpdateCompassStrip() {
         if (typeof buildShearCompassHTML !== 'function') return;
         var sd = (_rtShipsData && _rtShipsData.ships_data) ? _rtShipsData.ships_data : {};
-        var sddc = sd.sddc || null, shkt = sd.shear_kt || null;
+        // Real-time SHIPS SDDC is "where shear comes FROM"; flip 180° to match archive convention (downshear direction)
+        var sddc = (sd.sddc != null && sd.sddc !== 9999) ? ((sd.sddc + 180) % 360) : null;
+        var shkt = sd.shear_kt || null;
 
         // Motion: prefer SHIPS heading/speed, fall back to TDR U/V
         var moDir = null, moSpd = null;
@@ -729,7 +733,7 @@
             }
         }
 
-        var compassHTML = buildShearCompassHTML(sddc, shkt, moDir, moSpd);
+        var compassHTML = buildShearCompassHTML(sddc, shkt, moDir, moSpd, sd.sddc);
 
         // Badge text (Vmax / RMW / Tilt)
         var meta = _rtCaseMeta || {};
