@@ -514,6 +514,13 @@
             hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 12 } },
             showlegend: false
         };
+        // RMW dashed circle on plan view
+        var shapes = [];
+        if (json.wcm_rmw_km && !isNaN(json.wcm_rmw_km)) {
+            shapes.push({ type: 'circle', xref: 'x', yref: 'y', x0: -json.wcm_rmw_km, y0: -json.wcm_rmw_km, x1: json.wcm_rmw_km, y1: json.wcm_rmw_km, line: { color: 'white', width: 1.5, dash: 'dash' } });
+        }
+        baseLayout.shapes = shapes;
+
         var layout = Object.assign({}, baseLayout, {
             title: { text: title, font: { color: '#e5e7eb', size: 11 }, y: 0.96, x: 0.5, xanchor: 'center', yanchor: 'top' },
             margin: { l: 52, r: 16, t: json.overlay ? 58 : 46, b: 44 }
@@ -1357,6 +1364,16 @@
         var covSlider = document.getElementById('rt-az-coverage');
         var coverage = covSlider ? (parseInt(covSlider.value) / 100) : 0.5;
         var placeholder = document.getElementById('rt-dual-az-placeholder');
+
+        // Check cache first
+        var azCacheKey = 'az_' + _currentFileUrl + '_' + variable + '_' + coverage + '_' + overlay;
+        if (_rtDataCache[azCacheKey]) {
+            _rtLastAzJson = _rtDataCache[azCacheKey];
+            _rtRenderDualAzimuthalMean(_rtDataCache[azCacheKey]);
+            var azBtn = document.getElementById('rt-az-btn'); if (azBtn) azBtn.disabled = false;
+            return;
+        }
+
         if (placeholder) placeholder.textContent = 'Generating azimuthal mean\u2026';
 
         var url = API_BASE + RT_PREFIX + '/azimuthal_mean?file_url=' + encodeURIComponent(_currentFileUrl) +
@@ -1368,6 +1385,7 @@
         fetch(url, { signal: controller.signal })
             .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
             .then(function(json) {
+                _rtDataCache[azCacheKey] = json;
                 _rtLastAzJson = json;
                 _rtRenderDualAzimuthalMean(json);
                 var azBtn = document.getElementById('rt-az-btn'); if (azBtn) azBtn.disabled = false;
@@ -1471,6 +1489,15 @@
         var coverage = covSlider ? (parseInt(covSlider.value) / 100) : 0.5;
         var resultDiv = document.getElementById('rt-az-result');
         var btn = document.getElementById('rt-az-btn');
+
+        // Check cache first
+        var azCacheKey = 'az_' + _currentFileUrl + '_' + variable + '_' + coverage + '_' + overlay;
+        if (_rtDataCache[azCacheKey]) {
+            _rtLastAzJson = _rtDataCache[azCacheKey];
+            rtRenderAzimuthalMean(_rtDataCache[azCacheKey]);
+            return;
+        }
+
         resultDiv.innerHTML = _rtLoadingHTML('Computing azimuthal mean…');
         btn.disabled = true; btn.textContent = '↻ Computing…';
 
@@ -1482,7 +1509,7 @@
         var timeout = setTimeout(function () { controller.abort(); }, 120000);
         fetch(url, { signal: controller.signal })
             .then(function (r) { if (!r.ok) return r.json().then(function (e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
-            .then(function (json) { _rtLastAzJson = json; rtRenderAzimuthalMean(json); })
+            .then(function (json) { _rtDataCache[azCacheKey] = json; _rtLastAzJson = json; rtRenderAzimuthalMean(json); })
             .catch(function (err) {
                 resultDiv.innerHTML = '<div class="explorer-status error">⚠️ ' + (err.name === 'AbortError' ? 'Request timed out (120s).' : err.message) + '</div>';
             })

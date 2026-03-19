@@ -4042,6 +4042,16 @@ function _autoFetchDualAzimuthalMean() {
     var covSlider = document.getElementById('az-coverage');
     var coverage = covSlider ? (parseInt(covSlider.value) / 100) : 0.5;
     var placeholder = document.getElementById('dual-az-placeholder');
+
+    // Check cache first
+    var azCacheKey = 'az_' + _activeDataType + '_' + currentCaseIndex + '_' + variable + '_' + coverage + '_' + overlay;
+    if (_dataCache[azCacheKey]) {
+        _lastAzJson = _dataCache[azCacheKey];
+        _renderDualAzimuthalMean(_dataCache[azCacheKey]);
+        var azBtn = document.getElementById('az-btn'); if (azBtn) azBtn.disabled = false;
+        return;
+    }
+
     if (placeholder) placeholder.textContent = 'Generating azimuthal mean\u2026';
 
     var url = API_BASE + '/azimuthal_mean?case_index=' + currentCaseIndex + '&variable=' + variable + '&data_type=' + _activeDataType + '&coverage_min=' + coverage;
@@ -4052,6 +4062,7 @@ function _autoFetchDualAzimuthalMean() {
     fetch(url, { signal: controller.signal })
         .then(function(r) { if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); }); return r.json(); })
         .then(function(json) {
+            _dataCache[azCacheKey] = json;
             _lastAzJson = json; _lastHybridAzJson = null; _lastAnomalyAzJson = null; _lastVPScatterJson = null;
             _renderDualAzimuthalMean(json);
             // Also enable the az button
@@ -4747,7 +4758,11 @@ function buildAzOverlayContours(json, radius_km, height_km) {
 }
 
 // ── Shear & Motion HTML compass widget (for metadata strip) ─────
-function buildShearCompassHTML(sddc, shdc, motionDir, motionSpd) {
+// sddc: direction for the arrow (downshear direction)
+// shdc: shear magnitude in kt
+// motionDir/motionSpd: motion vector direction and speed
+// sddcDisplay: optional — the direction value to show in the text label (if different from arrow direction)
+function buildShearCompassHTML(sddc, shdc, motionDir, motionSpd, sddcDisplay) {
     var hasShear = (sddc !== null && sddc !== undefined && sddc !== 9999);
     var hasMotion = (motionDir !== null && motionDir !== undefined && motionDir !== 9999);
     if (!hasShear && !hasMotion) return '';
@@ -4790,7 +4805,8 @@ function buildShearCompassHTML(sddc, shdc, motionDir, motionSpd) {
     if (hasShear) {
         var shrStr = 'Shear';
         if (shdc !== null && shdc !== undefined && shdc !== 9999) shrStr += ' ' + shdc.toFixed(0) + ' kt';
-        shrStr += ' / ' + sddc.toFixed(0) + '\u00b0';
+        var displayDir = (sddcDisplay !== null && sddcDisplay !== undefined) ? sddcDisplay : sddc;
+        shrStr += ' / ' + (typeof displayDir === 'number' ? displayDir.toFixed(0) : displayDir) + '\u00b0';
         labels += '<span class="shear-lbl">' + shrStr + '</span>';
     }
     if (hasMotion) {
