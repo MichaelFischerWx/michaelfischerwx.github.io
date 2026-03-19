@@ -1268,8 +1268,8 @@ function _buildTiltProfileTrace(tiltData) {
             colorbar: {
                 title: { text: 'Tilt Height (km)', font: { color: '#ccc', size: 9 } },
                 tickfont: { color: '#ccc', size: 8 },
-                thickness: 10, len: 0.35,
-                x: 1.02, xpad: 2, y: 0.15,
+                thickness: 10, len: 0.30,
+                x: 1.01, xpad: 2, y: 0.02,
                 yanchor: 'bottom',
                 outlinewidth: 0
             },
@@ -3857,24 +3857,21 @@ function renderPlotFromJSON(json, resultDiv) {
         }
     }
 
-    // Metadata strip (moved above plot as text, not as Plotly annotation)
+    // Metadata strip with compass widget (above dual panel)
     var _metaStripHTML = '';
-    if (meta.vmax_kt || meta.rmw_km) {
+    {
+        var compassHTML = buildShearCompassHTML(_currentSddc, _currentShdc, _currentMotionDir, _currentMotionSpd);
         var badgeParts = [];
         if (meta.vmax_kt) badgeParts.push('<span style="color:' + getIntensityColor(meta.vmax_kt) + ';">' + getIntensityCategory(meta.vmax_kt) + '</span> ' + meta.vmax_kt + ' kt');
         if (meta.rmw_km) badgeParts.push('RMW ' + meta.rmw_km + ' km');
         if (meta.tilt_magnitude_km != null) badgeParts.push('Tilt ' + meta.tilt_magnitude_km + ' km');
-        _metaStripHTML = '<div class="dual-panel-strip">' + badgeParts.join('  &middot;  ') + '</div>';
+        var metaText = badgeParts.length ? '<span class="meta-text">' + badgeParts.join('  &middot;  ') + '</span>' : '';
+        if (compassHTML || metaText) {
+            _metaStripHTML = '<div class="dual-panel-strip">' + compassHTML + metaText + '</div>';
+        }
     }
 
-    // Shear + motion vector inset (small panel only; fullscreen builds its own in openPlotModal)
-    var shearInset = buildShearInset(_currentSddc, false, _currentShdc, _currentMotionDir, _currentMotionSpd);
-    if (shearInset.shapes.length) {
-        smallLayout.shapes = (smallLayout.shapes || []).concat(shearInset.shapes);
-    }
-    if (shearInset.annotations.length) {
-        smallLayout.annotations = (smallLayout.annotations || []).concat(shearInset.annotations);
-    }
+    // Shear + motion vectors now rendered as HTML compass in the metadata strip (not in Plotly)
 
     // Wind barbs overlay
     var barbShapes = [];
@@ -3895,7 +3892,7 @@ function renderPlotFromJSON(json, resultDiv) {
             tiltTraces.push(tiltResult.scatter);
             // Stack colorbars vertically: shrink wind colorbar to upper portion
             heatmap.colorbar = Object.assign({}, heatmap.colorbar, {
-                len: 0.45, y: 0.98, yanchor: 'top'
+                len: 0.42, y: 0.98, yanchor: 'top', x: 1.01, xpad: 2
             });
         }
     }
@@ -4749,7 +4746,65 @@ function buildAzOverlayContours(json, radius_km, height_km) {
     } catch(e) { console.warn('Az overlay contour error:',e); return []; }
 }
 
-// ── Shear & Motion vector inset ─────────────────────────────────
+// ── Shear & Motion HTML compass widget (for metadata strip) ─────
+function buildShearCompassHTML(sddc, shdc, motionDir, motionSpd) {
+    var hasShear = (sddc !== null && sddc !== undefined && sddc !== 9999);
+    var hasMotion = (motionDir !== null && motionDir !== undefined && motionDir !== 9999);
+    if (!hasShear && !hasMotion) return '';
+
+    var size = 50, cx = size / 2, cy = size / 2, r = 18, arrowR = 15;
+    // SVG: circle + arrows
+    var svg = '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '" style="vertical-align:middle;">';
+    // Background circle
+    svg += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="rgba(10,22,40,0.8)" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>';
+    // Center dot
+    svg += '<circle cx="' + cx + '" cy="' + cy + '" r="2" fill="rgba(255,255,255,0.5)"/>';
+
+    // Arrow helper: meteorological direction (where FROM) → SVG angle
+    // Met convention: 0°=N, 90°=E, clockwise. SVG: 0°=right, counter-clockwise.
+    // Arrow points in the direction the vector is headed (downshear, not upshear)
+    function drawArrow(dirDeg, color) {
+        var rad = (90 - dirDeg) * Math.PI / 180;
+        var tipX = cx + arrowR * Math.cos(rad);
+        var tipY = cy - arrowR * Math.sin(rad);
+        var baseX = cx - arrowR * 0.2 * Math.cos(rad);
+        var baseY = cy + arrowR * 0.2 * Math.sin(rad);
+        // Arrowhead
+        var hl = 5, ha = 28 * Math.PI / 180;
+        var aRad = Math.atan2(-(tipY - baseY), tipX - baseX);
+        var h1x = tipX - hl * Math.cos(aRad - ha);
+        var h1y = tipY + hl * Math.sin(aRad - ha);
+        var h2x = tipX - hl * Math.cos(aRad + ha);
+        var h2y = tipY + hl * Math.sin(aRad + ha);
+        svg += '<line x1="' + baseX.toFixed(1) + '" y1="' + baseY.toFixed(1) + '" x2="' + tipX.toFixed(1) + '" y2="' + tipY.toFixed(1) + '" stroke="' + color + '" stroke-width="2" stroke-linecap="round"/>';
+        svg += '<line x1="' + tipX.toFixed(1) + '" y1="' + tipY.toFixed(1) + '" x2="' + h1x.toFixed(1) + '" y2="' + h1y.toFixed(1) + '" stroke="' + color + '" stroke-width="2" stroke-linecap="round"/>';
+        svg += '<line x1="' + tipX.toFixed(1) + '" y1="' + tipY.toFixed(1) + '" x2="' + h2x.toFixed(1) + '" y2="' + h2y.toFixed(1) + '" stroke="' + color + '" stroke-width="2" stroke-linecap="round"/>';
+    }
+
+    if (hasShear) drawArrow(sddc, '#f59e0b');
+    if (hasMotion) drawArrow(motionDir, '#22d3ee');
+    svg += '</svg>';
+
+    // Text labels
+    var labels = '<span class="compass-labels">';
+    if (hasShear) {
+        var shrStr = 'Shear';
+        if (shdc !== null && shdc !== undefined && shdc !== 9999) shrStr += ' ' + shdc.toFixed(0) + ' kt';
+        shrStr += ' / ' + sddc.toFixed(0) + '\u00b0';
+        labels += '<span class="shear-lbl">' + shrStr + '</span>';
+    }
+    if (hasMotion) {
+        var motStr = 'Motion';
+        if (motionSpd !== null && motionSpd !== undefined && motionSpd !== 9999) motStr += ' ' + motionSpd.toFixed(0) + ' kt';
+        motStr += ' / ' + motionDir.toFixed(0) + '\u00b0';
+        labels += '<span class="motion-lbl">' + motStr + '</span>';
+    }
+    labels += '</span>';
+
+    return '<span class="shear-compass">' + svg + labels + '</span>';
+}
+
+// ── Shear & Motion vector inset (kept for cross-section/azimuthal mean Plotly plots) ──
 function buildShearInset(sddc, isFullsize, shdc, motionDir, motionSpd) {
     var hasShear = (sddc !== null && sddc !== undefined && sddc !== 9999);
     var hasMotion = (motionDir !== null && motionDir !== undefined && motionDir !== 9999);
@@ -6396,15 +6451,14 @@ function openPlotModal(csJson) {
             return Object.assign({}, a, { font: Object.assign({}, a.font, { size: 11 }) });
         });
     }
-    // Add fullscreen-scaled shear + motion inset (baseLayout has no shear shapes)
-    var fsShearInset = buildShearInset(_currentSddc, true, _currentShdc, _currentMotionDir, _currentMotionSpd);
-    if (fsShearInset.shapes.length) fullLayout.shapes = (fullLayout.shapes || []).concat(fsShearInset.shapes);
-    if (fsShearInset.annotations.length) fullLayout.annotations = (fullLayout.annotations || []).concat(fsShearInset.annotations);
+    // Shear + motion vectors now rendered as HTML compass (not in Plotly)
     var fullCbar = { title: { text: d.heatmap.colorbar.title.text, font: { color: '#ccc', size: 13 } }, tickfont: { color: '#ccc', size: 11 }, thickness: 16, len: 0.85 };
     if (d.tiltTraces && d.tiltTraces.length > 0) {
-        fullCbar.len = 0.45;
+        fullCbar.len = 0.42;
         fullCbar.y = 0.98;
         fullCbar.yanchor = 'top';
+        fullCbar.x = 1.01;
+        fullCbar.xpad = 2;
     }
     var fullHeatmap = Object.assign({}, d.heatmap, { colorbar: Object.assign({}, d.heatmap.colorbar, fullCbar) });
 

@@ -538,7 +538,7 @@
             }
         }
 
-        // Metadata strip (above the dual panel, not inside the Plotly plot)
+        // Metadata strip with compass widget (above the dual panel)
         var meta = json.case_meta || {};
         var _sd = (_rtShipsData && _rtShipsData.ships_data) ? _rtShipsData.ships_data : {};
         var _vmax = _sd.vmax_kt || meta.vmax_kt;
@@ -546,21 +546,21 @@
         if (_vmax) badgeParts.push('<span style="color:' + (typeof getIntensityColor === 'function' ? getIntensityColor(_vmax) : '#ccc') + ';">' + (typeof getIntensityCategory === 'function' ? getIntensityCategory(_vmax) : '') + '</span> ' + _vmax + ' kt');
         if (json.wcm_rmw_km != null) badgeParts.push('RMW ' + json.wcm_rmw_km + ' km');
         if (json.tilt_2_6_km != null) badgeParts.push('Tilt ' + json.tilt_2_6_km + ' km');
+        // Build compass from available shear/motion data
+        var _rtCompassHTML = '';
+        if (typeof buildShearCompassHTML === 'function') {
+            var _shSd = _sd.sddc || null, _shKt = _sd.shear_kt || null;
+            var _moDir = (meta.motion_dir != null && meta.motion_dir !== 9999) ? meta.motion_dir : null;
+            var _moSpd = (meta.motion_spd != null && meta.motion_spd !== 9999) ? meta.motion_spd : null;
+            _rtCompassHTML = buildShearCompassHTML(_shSd, _shKt, _moDir, _moSpd);
+        }
+        var metaText = badgeParts.length ? '<span class="meta-text">' + badgeParts.join('  &middot;  ') + '</span>' : '';
         var _rtMetaStripHTML = '';
-        if (badgeParts.length) {
-            _rtMetaStripHTML = '<div class="dual-panel-strip">' + badgeParts.join('  &middot;  ') + '</div>';
+        if (_rtCompassHTML || metaText) {
+            _rtMetaStripHTML = '<div class="dual-panel-strip">' + _rtCompassHTML + metaText + '</div>';
         }
 
-        // Shear + motion vector inset (motion from TDR metadata, shear from SHIPS if loaded)
-        var shearInset = _rtBuildShearInset(false);
-        if (shearInset.shapes.length) {
-            layout.shapes = (layout.shapes || []).concat(shearInset.shapes);
-            baseLayout.shapes = (baseLayout.shapes || []).concat(shearInset.shapes);
-        }
-        if (shearInset.annotations.length) {
-            layout.annotations = (layout.annotations || []).concat(shearInset.annotations);
-            baseLayout.annotations = (baseLayout.annotations || []).concat(shearInset.annotations);
-        }
+        // Shear + motion vectors now rendered as HTML compass in the metadata strip (not in Plotly)
 
         // Wind barb shapes (uses archive _buildPlanViewWindBarbs if available)
         if (json.wind_barbs && typeof _buildPlanViewWindBarbs === 'function') {
@@ -5156,8 +5156,9 @@
                 colorbar: {
                     title: { text: 'Tilt Height (km)', font: { color: '#ccc', size: 9 } },
                     tickfont: { color: '#ccc', size: 8 },
-                    thickness: 10, len: 0.35,
-                    x: 1.02, y: 0.15, xanchor: 'left'
+                    thickness: 10, len: 0.30,
+                    x: 1.01, xpad: 2, y: 0.02,
+                    yanchor: 'bottom', outlinewidth: 0
                 }
             },
             text: hoverText, hoverinfo: 'text',
@@ -5167,6 +5168,17 @@
 
         _rtTiltTraceStart = chartDiv.data.length;
         Plotly.addTraces(chartDiv, [lineTrace, markerTrace]);
+
+        // Shrink main heatmap colorbar to make room for tilt colorbar
+        if (chartDiv.data && chartDiv.data.length > 0) {
+            Plotly.restyle(chartDiv, {
+                'colorbar.len': [0.42],
+                'colorbar.y': [0.98],
+                'colorbar.yanchor': ['top'],
+                'colorbar.x': [1.01],
+                'colorbar.xpad': [2]
+            }, [0]);
+        }
     }
 
     function _rtRemoveTiltTraces() {
@@ -5176,6 +5188,17 @@
         for (var i = _rtTiltTraceStart; i < chartDiv.data.length; i++) indices.push(i);
         if (indices.length) Plotly.deleteTraces(chartDiv, indices);
         _rtTiltTraceStart = -1;
+
+        // Restore main heatmap colorbar to full length
+        if (chartDiv.data && chartDiv.data.length > 0) {
+            Plotly.restyle(chartDiv, {
+                'colorbar.len': [0.85],
+                'colorbar.y': [0.5],
+                'colorbar.yanchor': ['middle'],
+                'colorbar.x': [null],
+                'colorbar.xpad': [null]
+            }, [0]);
+        }
     }
 
     // ── Real-Time 3D Tilt Hodograph ─────────────────────────────
