@@ -514,10 +514,15 @@
             hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 12 } },
             showlegend: false
         };
-        // RMW dashed circle on plan view
+        // RMW dashed circle on plan view, centered at WCM center (not grid origin)
         var shapes = [];
         if (json.wcm_rmw_km && !isNaN(json.wcm_rmw_km)) {
-            shapes.push({ type: 'circle', xref: 'x', yref: 'y', x0: -json.wcm_rmw_km, y0: -json.wcm_rmw_km, x1: json.wcm_rmw_km, y1: json.wcm_rmw_km, line: { color: 'white', width: 1.5, dash: 'dash' } });
+            var wcmCx = json.wcm_center_x_km || 0;
+            var wcmCy = json.wcm_center_y_km || 0;
+            shapes.push({ type: 'circle', xref: 'x', yref: 'y',
+                x0: wcmCx - json.wcm_rmw_km, y0: wcmCy - json.wcm_rmw_km,
+                x1: wcmCx + json.wcm_rmw_km, y1: wcmCy + json.wcm_rmw_km,
+                line: { color: 'white', width: 1.5, dash: 'dash' } });
         }
         baseLayout.shapes = shapes;
 
