@@ -3838,7 +3838,7 @@ function renderPlotFromJSON(json, resultDiv) {
     var plotBg = '#0a1628';
     var baseLayout = { paper_bgcolor: plotBg, plot_bgcolor: plotBg, xaxis: { title: { text: 'Eastward distance (km)', font: { color: '#aaa' } }, tickfont: { color: '#aaa' }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false, scaleanchor: 'y', range: [-250, 250] }, yaxis: { title: { text: 'Northward distance (km)', font: { color: '#aaa' } }, tickfont: { color: '#aaa' }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false, range: [-250, 250] }, shapes: shapes, hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 12 } }, showlegend: false };
     var config = { responsive: true, displayModeBar: true, modeBarButtonsToRemove: ['lasso2d','select2d','toggleSpikelines'], displaylogo: false };
-    var smallLayout = Object.assign({}, baseLayout, { title: { text: title, font: { color: '#e5e7eb', size: 11 }, y: 0.99, x: 0.5, xanchor: 'center' }, margin: { l: 52, r: 16, t: json.overlay ? 96 : 80, b: 44 }, xaxis: Object.assign({}, baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }), yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }) });
+    var smallLayout = Object.assign({}, baseLayout, { title: { text: title, font: { color: '#e5e7eb', size: 11 }, y: 0.96, x: 0.5, xanchor: 'center', yanchor: 'top' }, margin: { l: 52, r: 16, t: json.overlay ? 58 : 46, b: 44 }, xaxis: Object.assign({}, baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }), yaxis: Object.assign({}, baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } }, tickfont: { color: '#aaa', size: 9 } }) });
 
     var overlayTraces = buildOverlayContours(json, x, y);
 
@@ -4091,11 +4091,11 @@ function _renderDualAzimuthalMean(json) {
 
     var plotBg = '#0a1628';
     var layout = {
-        title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.98, x: 0.5, xanchor: 'center' },
+        title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.96, x: 0.5, xanchor: 'center', yanchor: 'top' },
         paper_bgcolor: plotBg, plot_bgcolor: plotBg,
         xaxis: { title: { text: 'Radius (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
         yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
-        margin: { l: 48, r: 14, t: json.overlay ? 90 : 74, b: 44 },
+        margin: { l: 48, r: 14, t: json.overlay ? 58 : 46, b: 44 },
         shapes: shapes,
         hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: fontSize.hover } },
         showlegend: false
@@ -6444,7 +6444,7 @@ function openPlotModal(csJson) {
     }
 
     var d = window._lastPlotlyData;
-    var fullLayout = Object.assign({}, d.baseLayout, { title: { text: d.title, font: { color: '#e5e7eb', size: 15 }, y: 0.98, x: 0.5, xanchor: 'center' }, margin: { l:65,r:30,t:d.overlayTraces&&d.overlayTraces.length?120:104,b:55 }, xaxis: Object.assign({}, d.baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }), yaxis: Object.assign({}, d.baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }) });
+    var fullLayout = Object.assign({}, d.baseLayout, { title: { text: d.title, font: { color: '#e5e7eb', size: 15 }, y: 0.97, x: 0.5, xanchor: 'center', yanchor: 'top' }, margin: { l:65,r:30,t:d.overlayTraces&&d.overlayTraces.length?80:64,b:55 }, xaxis: Object.assign({}, d.baseLayout.xaxis, { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }), yaxis: Object.assign({}, d.baseLayout.yaxis, { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 13 } }, tickfont: { color: '#aaa', size: 11 } }) });
     // Scale up annotations for fullscreen
     if (fullLayout.annotations) {
         fullLayout.annotations = fullLayout.annotations.map(function(a) {

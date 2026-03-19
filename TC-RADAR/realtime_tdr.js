@@ -515,8 +515,8 @@
             showlegend: false
         };
         var layout = Object.assign({}, baseLayout, {
-            title: { text: title, font: { color: '#e5e7eb', size: 11 }, y: 0.99, x: 0.5, xanchor: 'center' },
-            margin: { l: 52, r: 16, t: json.overlay ? 96 : 80, b: 44 }
+            title: { text: title, font: { color: '#e5e7eb', size: 11 }, y: 0.96, x: 0.5, xanchor: 'center', yanchor: 'top' },
+            margin: { l: 52, r: 16, t: json.overlay ? 58 : 46, b: 44 }
         });
 
         var overlayTraces = rtBuildOverlayContours(json, x, y, false);
@@ -699,19 +699,10 @@
     }
 
     // Apply shear+motion inset to an already-rendered plan-view plot.
-    // Replaces any previously drawn inset (tagged with _rtInset) to
-    // avoid duplicates when SHIPS loads after the initial render.
+    // Shear/motion vectors now rendered as HTML compass in metadata strip only.
+    // This function is kept as a no-op to avoid breaking callers.
     function _rtApplyShearInsetToPlot() {
-        var chartDiv = document.getElementById('rt-plotly-chart');
-        if (!chartDiv || !chartDiv.layout) return;
-        var inset = _rtBuildShearInset(false);
-        // Remove old inset shapes/annotations, keep everything else
-        var keepShapes = (chartDiv.layout.shapes || []).filter(function (s) { return !s._rtInset; });
-        var keepAnnot = (chartDiv.layout.annotations || []).filter(function (a) { return !a._rtInset; });
-        Plotly.relayout(chartDiv, {
-            shapes: keepShapes.concat(inset.shapes),
-            annotations: keepAnnot.concat(inset.annotations)
-        });
+        // No longer adds shear inset to Plotly; compass strip handles display
     }
 
     // ── Rebuild the HTML compass strip above the dual panel ───────
@@ -835,8 +826,8 @@
 
         var d = _rtLastPlotlyData;
         var fullLayout = Object.assign({}, d.baseLayout, {
-            title: { text: d.title, font: { color: '#e5e7eb', size: 14 }, y: 0.98, x: 0.5, xanchor: 'center' },
-            margin: { l: 60, r: 28, t: 90, b: 52 }
+            title: { text: d.title, font: { color: '#e5e7eb', size: 14 }, y: 0.97, x: 0.5, xanchor: 'center', yanchor: 'top' },
+            margin: { l: 60, r: 28, t: 64, b: 52 }
         });
 
         // Hide cross-section panes from main app
@@ -1414,11 +1405,11 @@
 
         var plotBg = '#0a1628';
         var layout = {
-            title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.98, x: 0.5, xanchor: 'center' },
+            title: { text: title, font: { color: '#e5e7eb', size: fontSize.title }, y: 0.96, x: 0.5, xanchor: 'center', yanchor: 'top' },
             paper_bgcolor: plotBg, plot_bgcolor: plotBg,
             xaxis: { title: { text: 'Radius (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
             yaxis: { title: { text: 'Height (km)', font: { color: '#aaa', size: fontSize.axis } }, tickfont: { color: '#aaa', size: fontSize.tick }, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false },
-            margin: { l: 48, r: 14, t: json.overlay ? 90 : 74, b: 44 },
+            margin: { l: 48, r: 14, t: json.overlay ? 58 : 46, b: 44 },
             shapes: shapes,
             hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: fontSize.hover } },
             showlegend: false
@@ -4329,26 +4320,10 @@
         _rtAddShearToPlot();
     }
 
-    // Add shear vector overlay to existing plan-view plot via Plotly.relayout
+    // Shear vector overlay now handled by HTML compass strip.
+    // This function is kept as a no-op to avoid breaking callers.
     function _rtAddShearToPlot() {
-        var plotDiv = document.getElementById('rt-plotly-chart');
-        if (!plotDiv || !plotDiv.layout) return;
-        var shearInset = _rtBuildShearInset(false);
-        if (shearInset.shapes.length === 0) return;
-
-        var existingShapes = (plotDiv.layout.shapes || []).slice();
-        var existingAnnot = (plotDiv.layout.annotations || []).slice();
-
-        Plotly.relayout('rt-plotly-chart', {
-            shapes: existingShapes.concat(shearInset.shapes),
-            annotations: existingAnnot.concat(shearInset.annotations)
-        });
-
-        // Also update stored layout data for fullscreen toggle
-        if (_rtLastPlotlyData && _rtLastPlotlyData.baseLayout) {
-            _rtLastPlotlyData.baseLayout.shapes = (_rtLastPlotlyData.baseLayout.shapes || []).concat(shearInset.shapes);
-            _rtLastPlotlyData.baseLayout.annotations = (_rtLastPlotlyData.baseLayout.annotations || []).concat(shearInset.annotations);
-        }
+        // No longer adds shear inset to Plotly; compass strip handles display
     }
 
     function _rtRenderSHIPSPanel(data) {
