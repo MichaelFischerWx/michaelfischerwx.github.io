@@ -1095,7 +1095,7 @@ function _buildPlanViewWindBarbs(barbData, axRanges) {
     var flagWFrac = 0.38;   // flag width (50-kt pennant)
     var flagHFrac = 0.18;   // flag height along staff
 
-    var lineColor = 'rgba(220,220,240,0.85)';
+    var lineColor = 'rgba(0,0,0,0.8)';
     var lineWidth = 1.4;
 
     function mkLine(x0, y0, x1, y1) {
