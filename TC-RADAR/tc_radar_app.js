@@ -8560,6 +8560,55 @@ function renderCompositeAzMeanInto(targetId, json, filters) {
     _registerShadingTargets('shd-az', ['comp-az-chart'], varInfo.colorscale, varInfo.vmin, varInfo.vmax);
     el.innerHTML = '<div id="comp-az-chart" style="width:100%;height:560px;border-radius:8px;overflow:hidden;"></div>' + _buildShadingControlsRow('shd-az', {defaultVmin: varInfo.vmin, defaultVmax: varInfo.vmax}) + _buildCompToolbar();
     Plotly.newPlot('comp-az-chart', [heatmap].concat(compAzOverlay), layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
+    // Apply user-specified range from Step 3 controls if set
+    var _userVmin = _getCompVmin(null), _userVmax = _getCompVmax(null);
+    if (_userVmin !== null && _userVmax !== null) {
+        Plotly.restyle('comp-az-chart', { zmin: [_userVmin], zmax: [_userVmax] }, [0]);
+    }
+}
+
+// ── TC-centric quad layout ──────────────────────────────────
+// When enabled, upshear (left) panels have their x-axis reversed so
+// R=0 meets in the centre of the four panels, giving the visual
+// impression of a continuous cross-section through the vortex.
+var _compQuadTCCentric = true;
+
+function _toggleQuadTCCentric() {
+    _compQuadTCCentric = !_compQuadTCCentric;
+    // Update all visible toggle buttons
+    document.querySelectorAll('.sq-tc-toggle-btn').forEach(function(btn) {
+        btn.textContent = _compQuadTCCentric ? '\u229A TC-Centric' : '\u229B Standard';
+        btn.title = _compQuadTCCentric
+            ? 'Upshear axes reversed so R=0 meets at centre (click for standard layout)'
+            : 'Standard layout with all axes 0\u2192max (click for TC-centric)';
+    });
+    // Relayout every quad chart that currently exists
+    _applyQuadTCCentricLayout('comp-sq-chart');
+    ['comp-diff-sq-a', 'comp-diff-sq-b', 'comp-diff-sq-d'].forEach(function(id) {
+        _applyQuadTCCentricLayout(id);
+    });
+}
+
+function _applyQuadTCCentricLayout(chartId) {
+    var plotDiv = document.getElementById(chartId);
+    if (!plotDiv || !plotDiv.data) return;
+    // Upshear panels: xaxis (i=0, suffix='') and xaxis3 (i=2, suffix='3')
+    // Downshear panels: xaxis2 (i=1) and xaxis4 (i=3)
+    var update = {};
+    update['xaxis.autorange']  = _compQuadTCCentric ? 'reversed' : true;
+    update['xaxis3.autorange'] = _compQuadTCCentric ? 'reversed' : true;
+    update['xaxis2.autorange'] = true;
+    update['xaxis4.autorange'] = true;
+    Plotly.relayout(plotDiv, update);
+}
+
+function _buildQuadLayoutToggle() {
+    var label = _compQuadTCCentric ? '\u229A TC-Centric' : '\u229B Standard';
+    var tip = _compQuadTCCentric
+        ? 'Upshear axes reversed so R=0 meets at centre (click for standard layout)'
+        : 'Standard layout with all axes 0\u2192max (click for TC-centric)';
+    return '<button class="comp-tool-btn sq-tc-toggle-btn" onclick="_toggleQuadTCCentric()" title="' + tip + '" ' +
+           'style="font-weight:600;border:1px solid rgba(96,165,250,0.3);color:#60a5fa;">' + label + '</button>';
 }
 
 function renderCompositeQuadMeanInto(targetId, json, filters) {
@@ -8570,6 +8619,7 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
     var rLabel = isNorm ? 'R / RMW' : 'Radius (km)';
     var fontSize = { title:14, axis:11, tick:10, cbar:11, cbarTick:10, hover:12, panel:12 };
     var zmin = varInfo.vmin, zmax = varInfo.vmax;
+    var tcCentric = _compQuadTCCentric;
 
     var panelOrder = [
         { key:'USL', label:'Upshear Left', row:0, col:0 },
@@ -8579,7 +8629,7 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
     ];
 
     var traces = [], annotations = [], shapes = [];
-    var gap=0.08, cbarW=0.04, leftM=0.06, rightM=0.02+cbarW+0.02, topM=0.20, botM=0.06;
+    var gap=0.04, cbarW=0.04, leftM=0.06, rightM=0.02+cbarW+0.02, topM=0.20, botM=0.06;
     var pw = (1-leftM-rightM-gap)/2, ph = (1-topM-botM-gap)/2;
     var quadColors = { DSL:'#f59e0b', DSR:'#f59e0b', USL:'#60a5fa', USR:'#60a5fa' };
 
@@ -8637,8 +8687,11 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
         var yBottom = 1 - topM - (p.row+1) * ph - p.row * gap;
         var yTop = 1 - topM - p.row * ph - p.row * gap;
         var axSuffix = i === 0 ? '' : String(i+1);
+        var isUpshear = (p.col === 0);
         var showYLabel = (p.col === 0), showXLabel = (p.row === 1);
-        layoutAxes['xaxis' + axSuffix] = { domain:[x0,x1], title:showXLabel?{text:rLabel,font:{color:'#aaa',size:fontSize.axis}}:undefined, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false, anchor:'y'+axSuffix };
+        var xAxisDef = { domain:[x0,x1], title:showXLabel?{text:rLabel,font:{color:'#aaa',size:fontSize.axis}}:undefined, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false, anchor:'y'+axSuffix };
+        if (tcCentric && isUpshear) xAxisDef.autorange = 'reversed';
+        layoutAxes['xaxis' + axSuffix] = xAxisDef;
         layoutAxes['yaxis' + axSuffix] = { domain:[yBottom,yTop], title:showYLabel?{text:'Height (km)',font:{color:'#aaa',size:fontSize.axis}}:undefined, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false, anchor:'x'+axSuffix };
     });
 
@@ -8656,8 +8709,23 @@ function renderCompositeQuadMeanInto(targetId, json, filters) {
     el.style.display = 'block';
     _lastCompJson = json; _lastCompType = 'sq';
     _registerShadingTargets('shd-sq', ['comp-sq-chart'], varInfo.colorscale, varInfo.vmin, varInfo.vmax);
-    el.innerHTML = '<div id="comp-sq-chart" style="width:100%;height:740px;border-radius:8px;overflow:hidden;"></div>' + _buildShadingControlsRow('shd-sq', {defaultVmin: varInfo.vmin, defaultVmax: varInfo.vmax}) + _buildCompToolbar();
+    el.innerHTML = '<div id="comp-sq-chart" style="width:100%;height:740px;border-radius:8px;overflow:hidden;"></div>' + _buildShadingControlsRow('shd-sq', {defaultVmin: varInfo.vmin, defaultVmax: varInfo.vmax}) + _buildCompToolbar() + _buildQuadLayoutToggle();
     Plotly.newPlot('comp-sq-chart', traces.concat(compQuadOverlay), layout, { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
+    // Apply user-specified range from Step 3 controls if set
+    var _userVmin = _getCompVmin(null), _userVmax = _getCompVmax(null);
+    if (_userVmin !== null && _userVmax !== null) {
+        var _sqPlot = document.getElementById('comp-sq-chart');
+        if (_sqPlot && _sqPlot.data) {
+            var _heatmapIdx = [];
+            _sqPlot.data.forEach(function(t, i) { if (t.type === 'heatmap') _heatmapIdx.push(i); });
+            if (_heatmapIdx.length) {
+                Plotly.restyle(_sqPlot, {
+                    zmin: _heatmapIdx.map(function() { return _userVmin; }),
+                    zmax: _heatmapIdx.map(function() { return _userVmax; })
+                }, _heatmapIdx);
+            }
+        }
+    }
 }
 
 function generateCompositeAzMean() {
@@ -9439,9 +9507,9 @@ function generateCompositeQuadMean() {
     _showCompStatus('loading', 'Computing composite shear quadrants \u2014 this may take 30\u201390 seconds for many cases\u2026');
 
     var overlay = (document.getElementById('comp-overlay') || {}).value || '';
-    var normRmw = !!(document.getElementById('comp-norm-rmw') || {}).checked;
-    var maxRRmw = normRmw ? (parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 8.0) : 8.0;
-    var drRmw   = normRmw ? Math.max(0.05, parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.25) : 0.25;
+    // Quad endpoint always RMW-normalises, so always read user-specified radial settings
+    var maxRRmw = parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 5.0;
+    var drRmw   = Math.max(0.05, parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.25);
     var qs = _compositeQueryString(filters) + '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage +
         '&max_r_rmw=' + maxRRmw + '&dr_rmw=' + drRmw;
     if (overlay) qs += '&overlay=' + encodeURIComponent(overlay);
@@ -9654,6 +9722,11 @@ function renderCompositePlanViewInto(targetId, json, filters, pvParams) {
     Plotly.newPlot('comp-pv-chart', [heatmap].concat(pvOverlay).concat(extraTraces), layout,
         { responsive:true, displayModeBar:true, displaylogo:false,
           modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] });
+    // Apply user-specified range from Step 3 controls if set
+    var _userVmin = _getCompVmin(null), _userVmax = _getCompVmax(null);
+    if (_userVmin !== null && _userVmax !== null) {
+        Plotly.restyle('comp-pv-chart', { zmin: [_userVmin], zmax: [_userVmax] }, [0]);
+    }
 }
 
 // ── Composite Difference Mode ───────────────────────
@@ -9869,9 +9942,9 @@ function generateCompDiffQuadMean() {
     document.getElementById('comp-result-pv').style.display = 'none';
     _showCompStatus('loading', 'Computing difference composite (A\u2212B) shear quadrants\u2026');
 
-    var normRmw = !!(document.getElementById('comp-norm-rmw') || {}).checked;
-    var maxRRmw = normRmw ? (parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 8.0) : 8.0;
-    var drRmw   = normRmw ? Math.max(0.05, parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.25) : 0.25;
+    // Quad endpoint always RMW-normalises, so always read user-specified radial settings
+    var maxRRmw = parseFloat((document.getElementById('comp-max-r-rmw') || {}).value) || 5.0;
+    var drRmw   = Math.max(0.05, parseFloat((document.getElementById('comp-dr-rmw') || {}).value) || 0.25);
     var baseQS = '&variable=' + encodeURIComponent(variable) + '&data_type=' + dataType + '&coverage_min=' + coverage +
         '&max_r_rmw=' + maxRRmw + '&dr_rmw=' + drRmw;
     if (overlay) baseQS += '&overlay=' + encodeURIComponent(overlay);
@@ -10057,7 +10130,7 @@ function _renderDiffQuadMean(targetId, diffJson, jsonA, jsonB, filtersA, filters
         '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#ef4444;">\u0394 Difference (A \u2212 B)</div>' +
         '<div id="comp-diff-sq-d" style="width:100%;height:640px;border-radius:8px;overflow:hidden;"></div>' +
         _buildShadingControlsRow('shd-dsq-d', {label: 'Difference', defaultVmin: diffVarInfo.vmin, defaultVmax: diffVarInfo.vmax}) +
-        _buildCompToolbar();
+        _buildCompToolbar() + _buildQuadLayoutToggle();
 
     _registerShadingTargets('shd-dsq-ab', ['comp-diff-sq-a', 'comp-diff-sq-b'], varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax);
 
@@ -10080,7 +10153,8 @@ function _renderDiffQuadMean(targetId, diffJson, jsonA, jsonB, filtersA, filters
 
     function buildQuadPlot(chartId, quads, titleText, colorscale, zmin, zmax, units, overlayJson) {
         var traces = [], annotations = [], shapes = [];
-        var gap=0.08, cbarW=0.04, leftM=0.06, rightM=0.02+cbarW+0.02, topM=0.18, botM=0.06;
+        var tcCentric = _compQuadTCCentric;
+        var gap=0.04, cbarW=0.04, leftM=0.06, rightM=0.02+cbarW+0.02, topM=0.18, botM=0.06;
         var pw = (1-leftM-rightM-gap)/2, ph = (1-topM-botM-gap)/2;
 
         panelOrder.forEach(function(p, i) {
@@ -10123,8 +10197,11 @@ function _renderDiffQuadMean(targetId, diffJson, jsonA, jsonB, filtersA, filters
             var yBottom = 1 - topM - (p.row+1) * ph - p.row * gap;
             var yTop = 1 - topM - p.row * ph - p.row * gap;
             var axSuffix = i === 0 ? '' : String(i+1);
+            var isUpshear = (p.col === 0);
             var showYLabel = (p.col === 0), showXLabel = (p.row === 1);
-            layoutAxes['xaxis' + axSuffix] = { domain:[x0,x1], title:showXLabel?{text:rLabel,font:{color:'#aaa',size:fontSize.axis}}:undefined, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false, anchor:'y'+axSuffix };
+            var xAxisDef = { domain:[x0,x1], title:showXLabel?{text:rLabel,font:{color:'#aaa',size:fontSize.axis}}:undefined, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false, anchor:'y'+axSuffix };
+            if (tcCentric && isUpshear) xAxisDef.autorange = 'reversed';
+            layoutAxes['xaxis' + axSuffix] = xAxisDef;
             layoutAxes['yaxis' + axSuffix] = { domain:[yBottom,yTop], title:showYLabel?{text:'Height (km)',font:{color:'#aaa',size:fontSize.axis}}:undefined, tickfont:{color:'#aaa',size:fontSize.tick}, gridcolor:'rgba(255,255,255,0.04)', zeroline:false, anchor:'x'+axSuffix };
         });
 
