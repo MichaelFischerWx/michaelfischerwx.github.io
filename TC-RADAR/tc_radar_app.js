@@ -3665,8 +3665,14 @@ function _applyShadingFor(prefix) {
     reg.chartIds.forEach(function(id) {
         var plotDiv = document.getElementById(id);
         if (!plotDiv || !plotDiv.data || !plotDiv.data.length) return;
-        // Only restyle trace 0 (heatmap) — leave contour overlays untouched
-        Plotly.restyle(plotDiv, { colorscale: [cs], zmin: [zmin], zmax: [zmax] }, [0]);
+        // Restyle all heatmap traces (quad view has 4) — leave contour overlays untouched
+        var heatmapIndices = [];
+        plotDiv.data.forEach(function(t, i) { if (t.type === 'heatmap') heatmapIndices.push(i); });
+        if (!heatmapIndices.length) return;
+        var csArr = heatmapIndices.map(function() { return cs; });
+        var zminArr = heatmapIndices.map(function() { return zmin; });
+        var zmaxArr = heatmapIndices.map(function() { return zmax; });
+        Plotly.restyle(plotDiv, { colorscale: csArr, zmin: zminArr, zmax: zmaxArr }, heatmapIndices);
     });
 }
 
