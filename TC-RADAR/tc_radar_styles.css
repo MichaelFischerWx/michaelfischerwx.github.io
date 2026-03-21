@@ -862,6 +862,8 @@ footer a:hover { text-decoration: underline; }
     padding-bottom: 6px; border-bottom: 1px solid rgba(34,211,238,0.15);
 }
 .wizard-section-title.env { color: #6ee7b7; border-bottom-color: rgba(16,185,129,0.2); }
+.wizard-section-title.sat { color: #c084fc; border-bottom-color: rgba(192,132,252,0.2); }
+.wizard-output-item.sat-item.checked { border-color: #a855f7; background: rgba(168,85,247,0.08); }
 .wizard-output-grid {
     display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
 }

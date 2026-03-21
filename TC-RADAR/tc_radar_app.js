@@ -7424,6 +7424,18 @@ function initCompositePanel() {
                         '</div>' +
                     '</div>' +
 
+                    '<div class="wizard-section-title sat">\uD83D\uDEF0\uFE0F Satellite Outputs</div>' +
+                    '<div class="wizard-output-grid">' +
+                        '<div class="wizard-output-item sat-item" id="wiz-out-ir-pv" onclick="_wizardToggleOutput(this, event)">' +
+                            '<input type="checkbox" id="wiz-chk-ir-pv">' +
+                            '<label for="wiz-chk-ir-pv">\uD83C\uDF21 IR Plan View<small>RMW-relative brightness temp</small></label>' +
+                        '</div>' +
+                        '<div class="wizard-output-item sat-item" id="wiz-out-ir-az" onclick="_wizardToggleOutput(this, event)">' +
+                            '<input type="checkbox" id="wiz-chk-ir-az">' +
+                            '<label for="wiz-chk-ir-az">\u27F3 IR Azimuthal Mean<small>Radial Tb profile</small></label>' +
+                        '</div>' +
+                    '</div>' +
+
                     '<div class="wizard-section-title env">Environment Outputs</div>' +
                     '<div class="wizard-output-grid">' +
                         '<div class="wizard-output-item env-item" id="wiz-out-env-pv" onclick="_wizardToggleOutput(this, event)">' +
@@ -7709,6 +7721,8 @@ function initCompositePanel() {
                         '<div id="comp-result-az" style="display:none;"></div>' +
                         '<div id="comp-result-sq" style="display:none;"></div>' +
                         '<div id="comp-result-pv" style="display:none;"></div>' +
+                        '<div id="comp-result-ir-pv" style="display:none;"></div>' +
+                        '<div id="comp-result-ir-az" style="display:none;"></div>' +
                         '<div id="comp-result-cfad" style="display:none;"></div>' +
                         '<div id="comp-result-anom" style="display:none;"></div>' +
                         '<div id="comp-result-vpsc" style="display:none;"></div>' +
@@ -8074,6 +8088,14 @@ function _wizardGenerateSelected() {
     }
     if (document.getElementById('wiz-chk-vpsc') && document.getElementById('wiz-chk-vpsc').checked) {
         generateCompositeVPScatter();
+    }
+
+    // Satellite outputs
+    if (document.getElementById('wiz-chk-ir-pv') && document.getElementById('wiz-chk-ir-pv').checked) {
+        generateCompositeIRPlanView();
+    }
+    if (document.getElementById('wiz-chk-ir-az') && document.getElementById('wiz-chk-ir-az').checked) {
+        generateCompositeIRAzMean();
     }
 
     // Environment outputs
@@ -10086,6 +10108,205 @@ function _symmetricRange(data2d) {
     var mag = Math.pow(10, Math.floor(Math.log10(maxAbs)));
     return Math.ceil(maxAbs / mag) * mag;
 }
+
+// ---------------------------------------------------------------------------
+// IR Satellite Composite generation & rendering
+// ---------------------------------------------------------------------------
+
+function generateCompositeIRPlanView() {
+    var filters = _getCompositeFilters();
+    var pvParams = _getCompositePlanViewParams();
+    var dataType = document.getElementById('comp-dtype').value;
+    var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
+
+    var _crp = document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
+    _showCompStatus('loading', 'Computing IR plan-view composite \u2014 this may take 30\u201390 seconds\u2026');
+
+    var qs = _compositeQueryString(filters) +
+        '&ir_variable=ir_brightness_temp' +
+        '&data_type=' + dataType +
+        '&coverage_min=' + coverage +
+        '&normalize_rmw=' + (pvParams.normalize_rmw ? 'true' : 'false') +
+        '&max_r_rmw=' + pvParams.max_r_rmw +
+        '&dr_rmw=' + pvParams.dr_rmw +
+        '&shear_relative=' + (pvParams.shear_relative ? 'true' : 'false');
+
+    _fetchCompositeStream(API_BASE + '/composite/ir_plan_view?' + qs, 'Computing IR plan-view composite')
+        .then(function(json) {
+            _showCompStatus('success', '\u2713 IR plan-view composite computed: ' + json.n_cases + ' / ' + json.n_matched + ' cases');
+            _renderIRPlanView('comp-result-ir-pv', json, filters, pvParams);
+        })
+        .catch(function(err) { _showCompStatus('error', '\u2717 IR Plan View: ' + (err.message || String(err))); });
+}
+
+function _renderIRPlanView(targetId, json, filters, pvParams) {
+    var el = document.getElementById(targetId); if (!el) return;
+    el.style.display = 'block';
+    var planData = json.plan_view;
+    var xAxis = json.x_axis, yAxis = json.y_axis;
+    var varInfo = json.variable;
+    var xLabel = json.x_label, yLabel = json.y_label;
+
+    var heatmap = {
+        z: planData, x: xAxis, y: yAxis, type: 'heatmap',
+        colorscale: varInfo.colorscale, zmin: varInfo.vmin, zmax: varInfo.vmax,
+        colorbar: { title: { text: varInfo.units, font: { color:'#ccc', size:12 } },
+                    tickfont: { color:'#ccc', size:10 }, thickness:14, len:0.85 },
+        hovertemplate: '<b>IR Tb</b>: %{z:.1f} K<br>' + xLabel + ': %{x:.1f}<br>' + yLabel + ': %{y:.1f}<extra></extra>',
+        hoverongaps: false,
+        reversescale: true
+    };
+
+    var normLabel = json.normalize_rmw ? ' (RMW-norm)' : '';
+    var shearLabel = json.shear_relative ? ' [Shear \u2192 Right]' : '';
+    var title = _compositeFilterSummary(filters, json.n_cases) +
+                '<br>\uD83D\uDEF0\uFE0F IR Brightness Temperature' + normLabel + shearLabel;
+
+    var shapes = [];
+    var annotations = [];
+    if (json.normalize_rmw) {
+        var nPts = 100; var circleX = [], circleY = [];
+        for (var i = 0; i <= nPts; i++) {
+            var angle = 2 * Math.PI * i / nPts;
+            circleX.push(Math.cos(angle)); circleY.push(Math.sin(angle));
+        }
+    }
+    if (json.shear_relative) {
+        var maxX = xAxis[xAxis.length - 1];
+        shapes.push({
+            type: 'line', x0: 0, y0: 0, x1: maxX * 0.92, y1: 0,
+            line: { color: 'rgba(255,255,255,0.6)', width: 2, dash: 'dot' }
+        });
+        annotations.push({
+            x: maxX * 0.95, y: 0, text: 'Shear \u2192', showarrow: false,
+            font: { color: 'rgba(255,255,255,0.7)', size: 10 }
+        });
+    }
+
+    var traces = [heatmap];
+    if (json.normalize_rmw) {
+        traces.push({
+            x: circleX, y: circleY, type: 'scatter', mode: 'lines',
+            line: { color: 'rgba(255,255,255,0.5)', width: 1.5, dash: 'dash' },
+            showlegend: false, hoverinfo: 'skip'
+        });
+    }
+
+    var layout = {
+        title: { text: title, font: { color:'#e2e8f0', size:13 }, y:0.98 },
+        xaxis: { title: { text: xLabel, font: { color:'#9ca3af', size:11 } },
+                 tickfont: { color:'#6b7280', size:10 }, gridcolor:'rgba(255,255,255,0.05)',
+                 zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)',
+                 scaleanchor: 'y', scaleratio: 1 },
+        yaxis: { title: { text: yLabel, font: { color:'#9ca3af', size:11 } },
+                 tickfont: { color:'#6b7280', size:10 }, gridcolor:'rgba(255,255,255,0.05)',
+                 zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)' },
+        paper_bgcolor: '#0a1628', plot_bgcolor: '#0a1628',
+        margin: { l:60, r:20, t:70, b:55 }, shapes: shapes, annotations: annotations
+    };
+
+    Plotly.react(el, traces, layout, { responsive: true, displayModeBar: true,
+        modeBarButtonsToRemove: ['select2d','lasso2d','autoScale2d'] });
+
+    // Append case list if available
+    _appendCaseList(el, json.case_list, json.n_cases);
+}
+
+function generateCompositeIRAzMean() {
+    var filters = _getCompositeFilters();
+    var dataType = document.getElementById('comp-dtype').value;
+    var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
+    var pvParams = _getCompositePlanViewParams();
+
+    var _crp = document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
+    _showCompStatus('loading', 'Computing IR azimuthal-mean composite\u2026');
+
+    var qs = _compositeQueryString(filters) +
+        '&ir_variable=ir_brightness_temp' +
+        '&data_type=' + dataType +
+        '&coverage_min=' + coverage +
+        '&normalize_rmw=' + (pvParams.normalize_rmw ? 'true' : 'false') +
+        '&max_r_rmw=' + pvParams.max_r_rmw +
+        '&dr_rmw=' + pvParams.dr_rmw;
+
+    _fetchCompositeStream(API_BASE + '/composite/ir_azimuthal_mean?' + qs, 'Computing IR azimuthal-mean composite')
+        .then(function(json) {
+            _showCompStatus('success', '\u2713 IR azimuthal-mean composite: ' + json.n_cases + ' / ' + json.n_matched + ' cases');
+            _renderIRAzMean('comp-result-ir-az', json, filters);
+        })
+        .catch(function(err) { _showCompStatus('error', '\u2717 IR Az Mean: ' + (err.message || String(err))); });
+}
+
+function _renderIRAzMean(targetId, json, filters) {
+    var el = document.getElementById(targetId); if (!el) return;
+    el.style.display = 'block';
+    var profile = json.radial_profile;
+    var rCenters = json.r_centers;
+    var varInfo = json.variable;
+    var rLabel = json.r_label;
+
+    // Build line trace
+    var trace = {
+        x: rCenters, y: profile, type: 'scatter', mode: 'lines',
+        line: { color: '#22d3ee', width: 2.5 },
+        hovertemplate: '<b>Tb</b>: %{y:.1f} K<br>' + rLabel + ': %{x:.2f}<extra></extra>',
+        name: 'IR Tb'
+    };
+
+    var normLabel = json.normalize_rmw ? ' (RMW-norm)' : '';
+    var title = _compositeFilterSummary(filters, json.n_cases) +
+                '<br>\uD83D\uDEF0\uFE0F Azimuthal Mean IR Brightness Temperature' + normLabel;
+
+    var shapes = [];
+    if (json.normalize_rmw) {
+        shapes.push({
+            type: 'line', x0: 1, x1: 1, y0: 0, y1: 1, yref: 'paper',
+            line: { color: 'rgba(255,255,255,0.4)', width: 1.5, dash: 'dash' }
+        });
+    }
+
+    var layout = {
+        title: { text: title, font: { color:'#e2e8f0', size:13 }, y:0.98 },
+        xaxis: { title: { text: rLabel, font: { color:'#9ca3af', size:11 } },
+                 tickfont: { color:'#6b7280', size:10 }, gridcolor:'rgba(255,255,255,0.05)',
+                 zeroline: false, range: [0, rCenters[rCenters.length - 1]] },
+        yaxis: { title: { text: 'Brightness Temperature (K)', font: { color:'#9ca3af', size:11 } },
+                 tickfont: { color:'#6b7280', size:10 }, gridcolor:'rgba(255,255,255,0.05)',
+                 zeroline: false, autorange: 'reversed' },
+        paper_bgcolor: '#0a1628', plot_bgcolor: '#0a1628',
+        margin: { l:65, r:20, t:70, b:55 }, shapes: shapes,
+        showlegend: false
+    };
+
+    Plotly.react(el, [trace], layout, { responsive: true, displayModeBar: true,
+        modeBarButtonsToRemove: ['select2d','lasso2d','autoScale2d'] });
+
+    _appendCaseList(el, json.case_list, json.n_cases);
+}
+
+function _appendCaseList(el, caseList, nCases) {
+    // Remove any existing case list in this container
+    var existing = el.querySelector('.comp-case-list-wrap');
+    if (existing) existing.remove();
+    if (!caseList || !caseList.length) return;
+
+    var wrap = document.createElement('div');
+    wrap.className = 'comp-case-list-wrap';
+    wrap.innerHTML =
+        '<div class="comp-cl-header">' +
+            '<span class="comp-cl-title">' + nCases + ' Cases Used</span>' +
+        '</div>' +
+        '<div class="comp-cl-scroll">' +
+            '<table class="comp-cl-table"><thead><tr>' +
+                '<th>#</th><th>Storm</th><th>Date</th><th>V<sub>max</sub></th><th>RMW</th>' +
+            '</tr></thead><tbody>' +
+            caseList.map(function(c, i) {
+                return '<tr><td>' + (i+1) + '</td><td>' + (c.storm_name || '?') + '</td><td>' + (c.date || '?') + '</td><td>' + (c.vmax != null ? c.vmax + ' kt' : '?') + '</td><td>' + (c.rmw_km != null ? c.rmw_km + ' km' : '?') + '</td></tr>';
+            }).join('') +
+            '</tbody></table></div>';
+    el.appendChild(wrap);
+}
+
 
 var _DIFF_COLORSCALE = [[0,'rgb(5,48,97)'],[0.1,'rgb(33,102,172)'],[0.2,'rgb(67,147,195)'],[0.3,'rgb(146,197,222)'],[0.4,'rgb(209,229,240)'],[0.5,'rgb(247,247,247)'],[0.6,'rgb(253,219,199)'],[0.7,'rgb(239,163,128)'],[0.8,'rgb(214,96,77)'],[0.9,'rgb(178,24,43)'],[1,'rgb(103,0,31)']];
 
