@@ -330,8 +330,17 @@ function openSidePanel(caseData, fromQuickSelect) {
                         '<select id="mw-product-select" onchange="loadMicrowaveOverpass()" style="font-size:10px;padding:4px 6px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
                             '<option value="89pct">89 GHz PCT</option>' +
                             '<option value="37h">37 GHz H-pol</option>' +
+                            '<option value="37color">37 GHz Color</option>' +
                         '</select>' +
                         '<span id="mw-status" style="font-size:9px;color:#64748b;"></span>' +
+                    '</div>' +
+                    '<div style="display:flex;align-items:center;gap:6px;margin-top:5px;flex-wrap:wrap;">' +
+                        '<button id="mw-planview-btn" class="overlay-pill active" onclick="toggleMWPlanView()" style="font-size:9px;padding:2px 8px;background:rgba(251,146,60,0.2);border:1px solid rgba(251,146,60,0.4);border-radius:4px;color:#fdba74;cursor:pointer;" title="Toggle MW on Plan View">Plan View</button>' +
+                        '<label style="font-size:9px;color:#9ca3af;">Range</label>' +
+                        '<input id="mw-vmin" type="number" value="105" step="5" style="width:44px;font-size:9px;padding:2px 4px;border:1px solid rgba(255,255,255,0.1);border-radius:3px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;text-align:center;" onchange="updateMWColorBounds()">' +
+                        '<span style="font-size:9px;color:#64748b;">–</span>' +
+                        '<input id="mw-vmax" type="number" value="305" step="5" style="width:44px;font-size:9px;padding:2px 4px;border:1px solid rgba(255,255,255,0.1);border-radius:3px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;text-align:center;" onchange="updateMWColorBounds()">' +
+                        '<span style="font-size:9px;color:#64748b;">K</span>' +
                     '</div>' +
                 '</div>' +
                 '<div class="fl-archive-status" id="fl-archive-status" style="display:none;font-size:10px;color:#fbbf24;padding:2px 8px;"></div>' +
@@ -2993,11 +3002,14 @@ function showIRMapOverlay(frameIdx) {
         _irBoundsSet = true;
     }
     _updateIRLoadingLabel();
+    // Show IR colorbar on the Leaflet map
+    _showIRMapColorbar();
 }
 
 function removeIRMapOverlay() {
     irAnimStop();
     _removeIRLoadingIndicator();
+    _hideIRMapColorbar();
     if (_irMapOverlay) { map.removeLayer(_irMapOverlay); _irMapOverlay = null; }
     _irData = null; _irFrameURLs = []; _irAnimFrame = 0; _irMapVisible = true; _irAllFramesLoaded = false; _irLoadedCount = 0; _irBoundsSet = false; _irDecodedImages = [];
     var ctrl = document.getElementById('ir-map-controls');
@@ -3070,6 +3082,7 @@ function _updateIRSlider() {
 function toggleIRMapVisibility() {
     _irMapVisible = !_irMapVisible;
     if (_irMapOverlay) _irMapOverlay.setOpacity(_irMapVisible ? 0.75 : 0);
+    if (_irMapVisible) { _showIRMapColorbar(); } else { _hideIRMapColorbar(); }
     var btn = document.getElementById('ir-toggle-btn');
     if (btn) btn.textContent = _irMapVisible ? '\uD83C\uDF0D IR On' : '\uD83C\uDF11 IR Off';
 }
@@ -5556,13 +5569,47 @@ fetch('tc_radar_metadata.json')
             map.addLayer(markers);
         }
 
+        // ── Compact intensity legend (collapsed by default) ──
         var legend = L.control({ position:'bottomright' });
         legend.onAdd = function() {
-            var div = L.DomUtil.create('div','intensity-legend');
-            div.innerHTML = '<h4>Intensity (kt)</h4><div class="legend-item"><div class="legend-color" style="background:#60a5fa"></div><span>TD (&lt;34)</span></div><div class="legend-item"><div class="legend-color" style="background:#34d399"></div><span>TS (34\u201363)</span></div><div class="legend-item"><div class="legend-color" style="background:#fbbf24"></div><span>Cat 1 (64\u201382)</span></div><div class="legend-item"><div class="legend-color" style="background:#fb923c"></div><span>Cat 2 (83\u201395)</span></div><div class="legend-item"><div class="legend-color" style="background:#f87171"></div><span>Cat 3 (96\u2013112)</span></div><div class="legend-item"><div class="legend-color" style="background:#ef4444"></div><span>Cat 4 (113\u2013136)</span></div><div class="legend-item"><div class="legend-color" style="background:#dc2626"></div><span>Cat 5 (137+)</span></div>';
+            var div = L.DomUtil.create('div','intensity-legend intensity-legend-compact');
+            div.innerHTML =
+                '<div class="legend-header" onclick="this.parentNode.classList.toggle(\'expanded\')" style="cursor:pointer;display:flex;align-items:center;gap:4px;">' +
+                    '<span style="font-size:9px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;">Intensity</span>' +
+                    '<span class="legend-toggle" style="font-size:8px;color:#64748b;">&#9660;</span>' +
+                '</div>' +
+                '<div class="legend-body" style="display:none;">' +
+                    '<div class="legend-item"><div class="legend-color" style="background:#60a5fa"></div><span>TD</span></div>' +
+                    '<div class="legend-item"><div class="legend-color" style="background:#34d399"></div><span>TS</span></div>' +
+                    '<div class="legend-item"><div class="legend-color" style="background:#fbbf24"></div><span>C1</span></div>' +
+                    '<div class="legend-item"><div class="legend-color" style="background:#fb923c"></div><span>C2</span></div>' +
+                    '<div class="legend-item"><div class="legend-color" style="background:#f87171"></div><span>C3</span></div>' +
+                    '<div class="legend-item"><div class="legend-color" style="background:#ef4444"></div><span>C4</span></div>' +
+                    '<div class="legend-item"><div class="legend-color" style="background:#dc2626"></div><span>C5</span></div>' +
+                '</div>';
+            L.DomEvent.disableClickPropagation(div);
             return div;
         };
         legend.addTo(map);
+
+        // ── MW / IR Colorbar controls on the Leaflet map ──
+        _mwMapColorbar = L.control({ position:'bottomleft' });
+        _mwMapColorbar.onAdd = function() {
+            var div = L.DomUtil.create('div','map-colorbar mw-map-colorbar');
+            div.id = 'mw-map-colorbar';
+            div.style.display = 'none';
+            return div;
+        };
+        _mwMapColorbar.addTo(map);
+
+        _irMapColorbar = L.control({ position:'bottomleft' });
+        _irMapColorbar.onAdd = function() {
+            var div = L.DomUtil.create('div','map-colorbar ir-map-colorbar');
+            div.id = 'ir-map-colorbar';
+            div.style.display = 'none';
+            return div;
+        };
+        _irMapColorbar.addTo(map);
         initializeFilters();
 
         // Fetch enriched metadata from API to populate max wind speed fields
@@ -13390,6 +13437,16 @@ var _mwMapOverlay = null;       // L.imageOverlay on the Leaflet map
 var _mwOverpassData = [];       // array of overpass objects from the API
 var _mwVisible = false;         // whether the MW layer is shown
 var _mwLastCaseIndex = null;    // last case we fetched overpasses for
+var _mwStormGrid = null;        // storm-relative grid data for Plotly overlay
+var _mwPlanViewTraceIdx = null; // index of MW trace in Plotly chart (for removal)
+var _mwPlanViewVisible = true;  // whether the MW contour is shown on plan view
+var _mwColorscale = null;       // NRL colorscale from API
+var _mwVmin = 105;              // current MW color bounds
+var _mwVmax = 305;
+var _mwIsRGB = false;           // true when showing 37color product
+var _mwStormGridRGBb64 = null;  // base64 RGB image for 37color plan view
+var _mwMapColorbar = null;      // L.control for MW colorbar on Leaflet map
+var _irMapColorbar = null;      // L.control for IR colorbar on Leaflet map
 
 /**
  * Toggle the microwave satellite overlay on/off.
@@ -13407,6 +13464,7 @@ function toggleMicrowaveOverlay() {
         btn.classList.remove('active');
         panel.style.display = 'none';
         if (_mwMapOverlay) _mwMapOverlay.setOpacity(0);
+        _hideMWMapColorbar();
         return;
     }
 
@@ -13421,6 +13479,9 @@ function toggleMicrowaveOverlay() {
         fetchMicrowaveOverpasses(currentCaseIndex);
     } else if (_mwMapOverlay) {
         _mwMapOverlay.setOpacity(0.8);
+        var prodSel = document.getElementById('mw-product-select');
+        var p = (prodSel && prodSel.value) || '89pct';
+        _showMWMapColorbar(p, _mwVmin, _mwVmax);
     }
 }
 
@@ -13484,7 +13545,7 @@ function loadMicrowaveOverpass() {
     var product = (prodSel && prodSel.value) || '89pct';
 
     // Check if the sensor supports this product
-    if (product === '37h' && !op.has_37) {
+    if ((product === '37h' || product === '37color') && !op.has_37) {
         if (status) status.textContent = op.sensor + ' does not have 37 GHz';
         return;
     }
@@ -13516,21 +13577,248 @@ function loadMicrowaveOverpass() {
                 'img length:', json.image_b64.length, '_mwVisible:', _mwVisible,
                 'map exists:', !!map);
 
+            // ── Leaflet image overlay ──
             if (_mwMapOverlay) {
                 map.removeLayer(_mwMapOverlay);
             }
             _mwMapOverlay = L.imageOverlay(imgUrl, bounds, {
                 opacity: 0.85, interactive: false, zIndex: 650
             });
-            // Always add to map (remove the _mwVisible gate — if we got
-            // here the user explicitly requested it)
             _mwMapOverlay.addTo(map);
+
+            // Store colorscale and bounds from API
+            _mwIsRGB = !!json.is_rgb;
+            if (json.colorscale) _mwColorscale = json.colorscale;
+            if (json.vmin != null) _mwVmin = json.vmin;
+            if (json.vmax != null) _mwVmax = json.vmax;
+            _mwStormGridRGBb64 = json.storm_grid_rgb_b64 || null;
+
+            // Update color bounds controls visibility (hide for 37color)
+            var vminEl = document.getElementById('mw-vmin');
+            var vmaxEl = document.getElementById('mw-vmax');
+            if (vminEl) vminEl.style.display = _mwIsRGB ? 'none' : '';
+            if (vmaxEl) vmaxEl.style.display = _mwIsRGB ? 'none' : '';
+            // Update vmin/vmax inputs to reflect current values
+            if (!_mwIsRGB) {
+                if (vminEl) vminEl.value = _mwVmin;
+                if (vmaxEl) vmaxEl.value = _mwVmax;
+            }
+
+            // ── Plotly plan-view overlay ──
+            if (_mwIsRGB && _mwStormGridRGBb64) {
+                // 37color: use the RGB image as a Plotly layout image
+                _mwStormGrid = json.storm_grid;  // still need extent info
+                _applyMWPlanViewOverlay();
+            } else if (json.storm_grid && json.storm_grid.z) {
+                _mwStormGrid = json.storm_grid;
+                _applyMWPlanViewOverlay();
+            }
+
+            // Show MW colorbar on the Leaflet map
+            _showMWMapColorbar(product, _mwVmin, _mwVmax);
 
             if (status) status.textContent = json.sensor + ' ' + json.datetime;
         })
         .catch(function(e) {
             if (status) status.textContent = 'Error: ' + e.message;
         });
+}
+
+// ── MW Plan-View Overlay (Plotly contour on the TDR plan view) ──
+
+function _applyMWPlanViewOverlay() {
+    if (!_mwPlanViewVisible) return;
+    var chartEl = document.getElementById('plotly-chart');
+    if (!chartEl || !chartEl.data) return;
+
+    // Remove any existing MW trace/image first
+    removeMWPlanViewOverlay();
+
+    // ── 37 GHz Color Composite: overlay as a Plotly layout image ──
+    if (_mwIsRGB && _mwStormGridRGBb64) {
+        var ext = (_mwStormGrid && _mwStormGrid.extent_km) || 250;
+        var imgSrc = 'data:image/png;base64,' + _mwStormGridRGBb64;
+        var layoutUpdate = {
+            images: (chartEl.layout.images || []).concat([{
+                source: imgSrc,
+                xref: 'x', yref: 'y',
+                x: -ext, y: ext,
+                sizex: 2 * ext, sizey: 2 * ext,
+                xanchor: 'left', yanchor: 'top',
+                sizing: 'stretch',
+                opacity: 0.6,
+                layer: 'below',
+                _isMW: true
+            }])
+        };
+        Plotly.relayout(chartEl, layoutUpdate);
+        _mwPlanViewTraceIdx = -1; // sentinel: means image, not trace
+        console.log('[MW] Plan-view 37color RGB image overlay added');
+        return;
+    }
+
+    // ── Single-channel products: heatmap trace ──
+    if (!_mwStormGrid) return;
+
+    // NRL-style Plotly colorscale
+    var cs = _mwColorscale || [
+        [0.000, '#303030'], [0.100, '#606060'], [0.225, '#800000'],
+        [0.375, '#FF0000'], [0.500, '#FF8C00'], [0.535, '#FFD700'],
+        [0.615, '#ADFF2F'], [0.700, '#00CC44'], [0.745, '#00DDCC'],
+        [0.825, '#0066FF'], [0.875, '#0000CC'], [1.000, '#8888FF']
+    ];
+
+    var prodSel = document.getElementById('mw-product-select');
+    var product = (prodSel && prodSel.value) || '89pct';
+    var cbarTitle = product === '89pct' ? 'PCT (K)' : '37H (K)';
+
+    var mwTrace = {
+        z: _mwStormGrid.z,
+        x: _mwStormGrid.x_axis,
+        y: _mwStormGrid.y_axis,
+        type: 'heatmap',
+        colorscale: cs,
+        zmin: _mwVmin,
+        zmax: _mwVmax,
+        opacity: 0.55,
+        showscale: true,
+        colorbar: {
+            title: { text: cbarTitle, font: { color: '#94a3b8', size: 10 } },
+            tickfont: { color: '#94a3b8', size: 9 },
+            len: 0.42, y: 0.02, yanchor: 'bottom',
+            x: 1.01, xpad: 2,
+            thickness: 12,
+            outlinewidth: 0,
+            bgcolor: 'rgba(0,0,0,0)'
+        },
+        hovertemplate: '<b>MW %{z:.0f} K</b><br>X: %{x:.0f} km  Y: %{y:.0f} km<extra>MW</extra>',
+        hoverongaps: false,
+        name: 'MW ' + cbarTitle.replace(' (K)', ''),
+        _isMW: true  // tag for identification
+    };
+
+    // Insert MW trace as the FIRST trace (below the TDR heatmap)
+    Plotly.addTraces(chartEl, [mwTrace], [0]);
+    _mwPlanViewTraceIdx = 0;
+    console.log('[MW] Plan-view overlay added');
+}
+
+function removeMWPlanViewOverlay() {
+    var chartEl = document.getElementById('plotly-chart');
+    if (!chartEl || !chartEl.data) return;
+
+    // Remove any MW heatmap traces
+    for (var i = chartEl.data.length - 1; i >= 0; i--) {
+        if (chartEl.data[i]._isMW) {
+            Plotly.deleteTraces(chartEl, [i]);
+        }
+    }
+
+    // Remove any MW layout images (37color RGB overlay)
+    if (chartEl.layout && chartEl.layout.images && chartEl.layout.images.length > 0) {
+        var filtered = chartEl.layout.images.filter(function(img) { return !img._isMW; });
+        if (filtered.length !== chartEl.layout.images.length) {
+            Plotly.relayout(chartEl, { images: filtered });
+        }
+    }
+
+    _mwPlanViewTraceIdx = null;
+}
+
+function toggleMWPlanView() {
+    _mwPlanViewVisible = !_mwPlanViewVisible;
+    var btn = document.getElementById('mw-planview-btn');
+    if (_mwPlanViewVisible) {
+        if (btn) btn.classList.add('active');
+        _applyMWPlanViewOverlay();
+    } else {
+        if (btn) btn.classList.remove('active');
+        removeMWPlanViewOverlay();
+    }
+}
+
+function updateMWColorBounds() {
+    var vminEl = document.getElementById('mw-vmin');
+    var vmaxEl = document.getElementById('mw-vmax');
+    if (vminEl) _mwVmin = parseFloat(vminEl.value) || 105;
+    if (vmaxEl) _mwVmax = parseFloat(vmaxEl.value) || 305;
+    // Re-apply with new bounds
+    if (_mwPlanViewVisible && _mwStormGrid) {
+        removeMWPlanViewOverlay();
+        _applyMWPlanViewOverlay();
+    }
+}
+
+// ── Map Colorbars (MW + IR on Leaflet map) ──
+
+/**
+ * Show/update the MW colorbar on the Leaflet map.
+ * Called when an MW overpass is loaded.
+ */
+function _showMWMapColorbar(product, vmin, vmax) {
+    var el = document.getElementById('mw-map-colorbar');
+    if (!el) return;
+
+    if (product === '37color') {
+        // 37color: show a compact legend with color patches
+        el.innerHTML =
+            '<div style="font-size:9px;font-weight:600;color:#fdba74;margin-bottom:3px;">37 GHz Color</div>' +
+            '<div style="display:flex;gap:2px;align-items:center;">' +
+                '<span style="display:inline-block;width:12px;height:10px;background:#008800;border-radius:2px;" title="Ocean"></span>' +
+                '<span style="font-size:8px;color:#94a3b8;">Ocn</span>' +
+                '<span style="display:inline-block;width:12px;height:10px;background:#00cccc;border-radius:2px;margin-left:3px;" title="Rain/Cloud"></span>' +
+                '<span style="font-size:8px;color:#94a3b8;">Rain</span>' +
+                '<span style="display:inline-block;width:12px;height:10px;background:#cc44cc;border-radius:2px;margin-left:3px;" title="Deep Convection"></span>' +
+                '<span style="font-size:8px;color:#94a3b8;">Conv</span>' +
+            '</div>';
+    } else {
+        // Single-channel: show a gradient colorbar
+        var label = product === '89pct' ? '89 GHz PCT' : '37 GHz H';
+        // NRL colormap gradient
+        var gradientStops = 'linear-gradient(to right, #303030, #606060, #800000, #FF0000, #FF8C00, #FFD700, #ADFF2F, #00CC44, #00DDCC, #0066FF, #0000CC, #8888FF)';
+        el.innerHTML =
+            '<div style="font-size:9px;font-weight:600;color:#fdba74;margin-bottom:2px;">' + label + '</div>' +
+            '<div style="width:140px;height:10px;border-radius:3px;background:' + gradientStops + ';border:1px solid rgba(255,255,255,0.15);"></div>' +
+            '<div style="display:flex;justify-content:space-between;font-size:8px;color:#94a3b8;margin-top:1px;">' +
+                '<span>' + vmin + ' K</span><span>' + vmax + ' K</span>' +
+            '</div>';
+    }
+    el.style.display = 'block';
+}
+
+/**
+ * Hide the MW colorbar.
+ */
+function _hideMWMapColorbar() {
+    var el = document.getElementById('mw-map-colorbar');
+    if (el) el.style.display = 'none';
+}
+
+/**
+ * Show/update the IR colorbar on the Leaflet map.
+ * Called when IR imagery is loaded and visible.
+ */
+function _showIRMapColorbar() {
+    var el = document.getElementById('ir-map-colorbar');
+    if (!el) return;
+
+    // Standard IR brightness temperature colorbar (approx CIRA RAMMB style)
+    var gradientStops = 'linear-gradient(to right, #FFFFFF, #C8C8C8, #969696, #646464, #323232, #003264, #0064C8, #0096FF, #00C8FF, #00FF96, #00C800, #96FF00, #FFFF00, #FFC800, #FF9600, #FF0000, #C80000, #960000, #640000, #320000)';
+    el.innerHTML =
+        '<div style="font-size:9px;font-weight:600;color:#60a5fa;margin-bottom:2px;">IR Brightness Temp</div>' +
+        '<div style="width:140px;height:10px;border-radius:3px;background:' + gradientStops + ';border:1px solid rgba(255,255,255,0.15);"></div>' +
+        '<div style="display:flex;justify-content:space-between;font-size:8px;color:#94a3b8;margin-top:1px;">' +
+            '<span>190 K</span><span>310 K</span>' +
+        '</div>';
+    el.style.display = 'block';
+}
+
+/**
+ * Hide the IR colorbar.
+ */
+function _hideIRMapColorbar() {
+    var el = document.getElementById('ir-map-colorbar');
+    if (el) el.style.display = 'none';
 }
 
 // ── MW Timeline (Storm Evolution section) ──
@@ -13743,6 +14031,11 @@ function renderMWTimeline(overpasses) {
  */
 function removeMicrowaveOverlay() {
     if (_mwMapOverlay) { map.removeLayer(_mwMapOverlay); _mwMapOverlay = null; }
+    removeMWPlanViewOverlay();
+    _hideMWMapColorbar();
+    _mwStormGrid = null;
+    _mwStormGridRGBb64 = null;
+    _mwIsRGB = false;
     _mwOverpassData = [];
     _mwVisible = false;
     _mwLastCaseIndex = null;

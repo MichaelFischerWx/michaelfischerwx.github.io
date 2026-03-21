@@ -648,6 +648,19 @@ input[type="range"]::-moz-range-track { height: 4px; background: transparent; bo
 .legend-color { width: 14px; height: 14px; border-radius: 50%; margin-right: 8px; border: 2px solid rgba(255,255,255,0.15); }
 .custom-marker { border-radius: 50%; border: 2px solid rgba(255,255,255,0.3); cursor: pointer; }
 
+/* ── Compact intensity legend ──────────────────── */
+.intensity-legend.intensity-legend-compact { padding: 6px 10px; font-size: 10px; line-height: 1.4; }
+.intensity-legend-compact .legend-body { display: none; }
+.intensity-legend-compact.expanded .legend-body { display: block; margin-top: 4px; }
+.intensity-legend-compact.expanded .legend-toggle { transform: rotate(180deg); }
+.intensity-legend-compact .legend-item { margin: 2px 0; }
+.intensity-legend-compact .legend-color { width: 10px; height: 10px; margin-right: 5px; }
+.intensity-legend-compact .legend-item span { font-size: 9px; }
+
+/* ── Map colorbars (IR / MW on Leaflet) ───────── */
+.map-colorbar { background: rgba(15,23,42,0.88); padding: 6px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 2px 8px rgba(0,0,0,0.3); backdrop-filter: blur(6px); }
+.map-colorbar + .map-colorbar { margin-top: 6px; }
+
 /* ── Loading ─────────────────────────────────────── */
 #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); background: var(--surface-raised); padding: 30px 40px; border-radius: var(--radius-lg); box-shadow: 0 4px 20px rgba(0,0,0,0.4); z-index: 1000; text-align: center; color: var(--text); border: 1px solid var(--border); }
 .spinner { border: 3px solid var(--navy); border-top: 3px solid var(--cyan); border-radius: 50%; width: 36px; height: 36px; animation: spin 1s linear infinite; margin: 0 auto 12px; }
