@@ -13512,13 +13512,19 @@ function loadMicrowaveOverpass() {
                 L.latLng(json.bounds[1][0], json.bounds[1][1])
             );
 
+            console.log('[MW] Overlay bounds:', JSON.stringify(json.bounds),
+                'img length:', json.image_b64.length, '_mwVisible:', _mwVisible,
+                'map exists:', !!map);
+
             if (_mwMapOverlay) {
                 map.removeLayer(_mwMapOverlay);
             }
             _mwMapOverlay = L.imageOverlay(imgUrl, bounds, {
-                opacity: 0.8, interactive: false, zIndex: 190
+                opacity: 0.85, interactive: false, zIndex: 650
             });
-            if (_mwVisible) _mwMapOverlay.addTo(map);
+            // Always add to map (remove the _mwVisible gate — if we got
+            // here the user explicitly requested it)
+            _mwMapOverlay.addTo(map);
 
             if (status) status.textContent = json.sensor + ' ' + json.datetime;
         })
