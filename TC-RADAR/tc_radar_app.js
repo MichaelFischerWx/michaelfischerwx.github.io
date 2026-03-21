@@ -6720,21 +6720,43 @@ function openPlotModal(csJson) {
     }
     var fullHeatmap = Object.assign({}, d.heatmap, { colorbar: Object.assign({}, d.heatmap.colorbar, fullCbar) });
 
-    // Capture dynamic overlays (FL traces, IR images) from the live plot
+    // Capture dynamic overlays (FL traces, IR/MW images) from the live plot
     var livePlot = document.getElementById('plotly-chart');
     var liveTraces = d.overlayTraces || [];
     var liveImages = [];
+    var mwTraces = [];  // MW traces to prepend (below TDR)
     if (livePlot && livePlot.data) {
-        // Collect any extra traces beyond the base ones (heatmap + overlay + max + tilt)
+        // Separate MW traces from other dynamic traces
+        // MW traces are tagged with _isMW and inserted at index 0
         var baseCount = 1 + (d.overlayTraces||[]).length + (d.maxTraces||[]).length + (d.tiltTraces||[]).length;
-        if (livePlot.data.length > baseCount) {
-            var extraTraces = livePlot.data.slice(baseCount).map(function(t) {
-                return Object.assign({}, t);
-            });
-            // These are flight-level, dropsonde, or other dynamic traces
+        // Account for MW traces shifting indices
+        var mwCount = 0;
+        for (var i = 0; i < livePlot.data.length; i++) {
+            if (livePlot.data[i]._isMW) {
+                mwTraces.push(Object.assign({}, livePlot.data[i]));
+                mwCount++;
+            }
+        }
+        var adjustedBase = baseCount + mwCount;
+        if (livePlot.data.length > adjustedBase) {
+            var extraTraces = [];
+            for (var i = 0; i < livePlot.data.length; i++) {
+                if (livePlot.data[i]._isMW) continue;  // already captured
+                // Skip the base TDR traces (heatmap, overlay, max, tilt)
+                // They're recreated from _lastPlotlyData
+            }
+            // Collect non-MW, non-base traces (FL, sondes, etc.)
+            var seen = 0;
+            for (var i = 0; i < livePlot.data.length; i++) {
+                if (livePlot.data[i]._isMW) continue;
+                seen++;
+                if (seen > baseCount) {
+                    extraTraces.push(Object.assign({}, livePlot.data[i]));
+                }
+            }
             liveTraces = liveTraces.concat(extraTraces);
         }
-        // Capture IR images from the live layout
+        // Capture IR/MW images from the live layout
         if (livePlot.layout && livePlot.layout.images && livePlot.layout.images.length > 0) {
             liveImages = livePlot.layout.images.map(function(img) {
                 return Object.assign({}, img);
@@ -6745,7 +6767,9 @@ function openPlotModal(csJson) {
         fullLayout.images = liveImages;
     }
 
-    Plotly.newPlot('plotly-fullscreen', [fullHeatmap].concat(liveTraces).concat(d.maxTraces||[]).concat(d.tiltTraces||[]), fullLayout, d.config);
+    // Build fullscreen traces: MW (below) + TDR heatmap + overlays + max + tilt + dynamic
+    var allTraces = mwTraces.concat([fullHeatmap]).concat(liveTraces).concat(d.maxTraces||[]).concat(d.tiltTraces||[]);
+    Plotly.newPlot('plotly-fullscreen', allTraces, fullLayout, d.config);
     if (hasCrossSection) renderCrossSectionInto('cs-fullscreen', csJson, true);
     if (hasAzMean) {
         if (_lastCFADJson) renderSingleCFADInto('az-fullscreen', _lastCFADJson, true);
@@ -13688,16 +13712,7 @@ function _applyMWPlanViewOverlay() {
         zmin: _mwVmin,
         zmax: _mwVmax,
         opacity: 0.55,
-        showscale: true,
-        colorbar: {
-            title: { text: cbarTitle, font: { color: '#94a3b8', size: 10 } },
-            tickfont: { color: '#94a3b8', size: 9 },
-            len: 0.42, y: 0.02, yanchor: 'bottom',
-            x: 1.01, xpad: 2,
-            thickness: 12,
-            outlinewidth: 0,
-            bgcolor: 'rgba(0,0,0,0)'
-        },
+        showscale: false,
         hovertemplate: '<b>MW %{z:.0f} K</b><br>X: %{x:.0f} km  Y: %{y:.0f} km<extra>MW</extra>',
         hoverongaps: false,
         name: 'MW ' + cbarTitle.replace(' (K)', ''),
