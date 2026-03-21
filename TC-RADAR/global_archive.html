@@ -102,6 +102,35 @@
                         <div class="ga-spinner"></div>
                         <span>Loading storms...</span>
                     </div>
+                    <!-- Floating storm info card on map -->
+                    <div id="map-storm-card" class="map-storm-card" style="display:none;">
+                        <button class="map-storm-card-close" onclick="dismissMapStormCard()" title="Dismiss">&times;</button>
+                        <div class="map-storm-card-header">
+                            <span id="map-card-name" class="map-storm-card-name"></span>
+                            <span id="map-card-badge" class="intensity-badge"></span>
+                        </div>
+                        <div class="map-storm-card-stats">
+                            <div class="map-card-stat">
+                                <span class="map-card-stat-label">Wind</span>
+                                <span id="map-card-wind" class="map-card-stat-value"></span>
+                            </div>
+                            <div class="map-card-stat">
+                                <span class="map-card-stat-label">Pres</span>
+                                <span id="map-card-pres" class="map-card-stat-value"></span>
+                            </div>
+                            <div class="map-card-stat">
+                                <span class="map-card-stat-label">Year</span>
+                                <span id="map-card-year" class="map-card-stat-value"></span>
+                            </div>
+                            <div class="map-card-stat">
+                                <span class="map-card-stat-label">Basin</span>
+                                <span id="map-card-basin" class="map-card-stat-value"></span>
+                            </div>
+                        </div>
+                        <button class="map-storm-card-btn" onclick="viewStormDetail()">
+                            View Storm Detail <span style="margin-left:4px;">&#8594;</span>
+                        </button>
+                    </div>
                 </div>
                 <aside class="browser-sidebar">
                     <div class="sidebar-section">
@@ -215,7 +244,7 @@
                             <h3 id="card-name" class="storm-card-name"></h3>
                             <span id="card-cat-badge" class="intensity-badge"></span>
                         </div>
-                        <button class="ga-btn ga-btn-primary" onclick="viewStormDetail()" style="margin-bottom:10px;">View Storm Detail</button>
+                        <button class="ga-btn ga-btn-primary storm-detail-pulse" onclick="viewStormDetail()" style="margin-bottom:10px;font-size:0.88rem;padding:10px 14px;font-weight:700;letter-spacing:0.3px;">View Storm Detail <span style="margin-left:4px;">&#8594;</span></button>
                         <div class="storm-card-meta">
                             <div class="card-row"><span class="card-label">Year</span><span id="card-year" class="card-value"></span></div>
                             <div class="card-row"><span class="card-label">Basin</span><span id="card-basin" class="card-value"></span></div>

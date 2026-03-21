@@ -557,9 +557,36 @@ function selectStorm(storm) {
         hursatEl.innerHTML = '<span style="color:#6b7280;">Not available</span>';
     }
 
+    // Update the floating map card
+    _showMapStormCard(storm, color, cat);
+
+    // Scroll sidebar to show the storm card
+    setTimeout(function () {
+        card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 50);
+
     // Show track on map if available
     showTrackOnBrowserMap(storm.sid);
 }
+
+function _showMapStormCard(storm, color, cat) {
+    var mc = document.getElementById('map-storm-card');
+    if (!mc) return;
+    document.getElementById('map-card-name').textContent = storm.name || 'UNNAMED';
+    var badge = document.getElementById('map-card-badge');
+    badge.textContent = cat;
+    badge.style.background = color;
+    document.getElementById('map-card-wind').textContent = storm.peak_wind_kt ? storm.peak_wind_kt + ' kt' : 'N/A';
+    document.getElementById('map-card-pres').textContent = storm.min_pres_hpa ? storm.min_pres_hpa + ' hPa' : 'N/A';
+    document.getElementById('map-card-year').textContent = storm.year;
+    document.getElementById('map-card-basin').textContent = BASIN_NAMES[storm.basin] || storm.basin;
+    mc.style.display = '';
+}
+
+window.dismissMapStormCard = function () {
+    var mc = document.getElementById('map-storm-card');
+    if (mc) mc.style.display = 'none';
+};
 
 window.selectStormFromPopup = function (sid) {
     var storm = allStorms.find(function (s) { return s.sid === sid; });
@@ -710,6 +737,8 @@ function applyFilters() {
         selectedStorm = null;
         var card = document.getElementById('storm-card');
         if (card) card.style.display = 'none';
+        var mc = document.getElementById('map-storm-card');
+        if (mc) mc.style.display = 'none';
     }
 
     if (mapViewMode === 'tracks') {
