@@ -10197,8 +10197,8 @@ function _getIRCompositeParams() {
     var normRmw = !!(document.getElementById('ir-norm-rmw') || {}).checked;
     return {
         normalize_rmw: normRmw,
-        max_r_rmw: normRmw ? (parseFloat((document.getElementById('ir-max-r-rmw') || {}).value) || 5.0) : 500,
-        dr_rmw: normRmw ? Math.max(0.05, parseFloat((document.getElementById('ir-dr-rmw') || {}).value) || 0.1) : 4,
+        max_r_rmw: normRmw ? (parseFloat((document.getElementById('ir-max-r-rmw') || {}).value) || 5.0) : 5.0,
+        dr_rmw: normRmw ? Math.max(0.05, parseFloat((document.getElementById('ir-dr-rmw') || {}).value) || 0.1) : 0.1,
         shear_relative: !!(document.getElementById('ir-shear-rel') || {}).checked,
         tilt_overlay: !!(document.getElementById('ir-tilt-overlay') || {}).checked,
         coverage: parseInt((document.getElementById('ir-coverage') || {}).value || '25') / 100,
