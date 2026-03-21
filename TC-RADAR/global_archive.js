@@ -976,26 +976,37 @@ function _applyIntensityMarker(dtStr) {
     if (!chartEl || !chartEl.layout) return;
 
     var baseShapes = window._timelineBaseShapes || [];
+    var extraShapes = [];
 
-    if (!dtStr || !irOverlayVisible) {
-        // Remove marker — restore base shapes only
-        Plotly.relayout(chartEl, { shapes: baseShapes });
-        return;
+    // IR vertical line (yellow/gold)
+    if (dtStr && irOverlayVisible) {
+        extraShapes.push({
+            type: 'line',
+            xref: 'x',
+            yref: 'paper',
+            x0: dtStr,
+            x1: dtStr,
+            y0: 0,
+            y1: 1,
+            line: { color: 'rgba(255,200,50,0.7)', width: 2, dash: 'solid' }
+        });
     }
 
-    // Add a vertical line at the IR frame time
-    var markerLine = {
-        type: 'line',
-        xref: 'x',
-        yref: 'paper',
-        x0: dtStr,
-        x1: dtStr,
-        y0: 0,
-        y1: 1,
-        line: { color: 'rgba(255,200,50,0.7)', width: 2, dash: 'solid' }
-    };
+    // MW vertical line (cyan)
+    if (_gaMwMarkerDt && _gaMwVisible) {
+        extraShapes.push({
+            type: 'line',
+            xref: 'x',
+            yref: 'paper',
+            x0: _gaMwMarkerDt,
+            x1: _gaMwMarkerDt,
+            y0: 0,
+            y1: 1,
+            line: { color: 'rgba(0,220,255,0.7)', width: 2, dash: 'dot' }
+        });
+    }
 
-    Plotly.relayout(chartEl, { shapes: baseShapes.concat([markerLine]) });
+    Plotly.relayout(chartEl, { shapes: baseShapes.concat(extraShapes) });
 }
 
 
@@ -4212,6 +4223,7 @@ var _gaMwVisible = false;        // MW overlay is shown on the detail map
 var _gaMwMapOverlay = null;      // L.imageOverlay for the current MW frame
 var _gaMwMarkers = null;         // L.layerGroup of overpass time-markers on track
 var _gaMwLastAtcf = null;        // last ATCF ID we fetched for
+var _gaMwMarkerDt = null;        // current MW overpass datetime for intensity line
 
 /**
  * Fetch all microwave overpasses for the selected storm's lifecycle.
@@ -4275,6 +4287,8 @@ window.toggleGlobalMWOverlay = function () {
         if (controls) controls.style.display = 'none';
         if (_gaMwMapOverlay && detailMap) { detailMap.removeLayer(_gaMwMapOverlay); }
         if (_gaMwMarkers && detailMap) { detailMap.removeLayer(_gaMwMarkers); }
+        // Remove MW line from intensity chart
+        _applyIntensityMarker(_lastMarkerDt);
         return;
     }
 
@@ -4392,6 +4406,14 @@ window.loadGlobalMWOverpass = function () {
             }
 
             if (status) status.textContent = json.sensor + ' ' + json.datetime;
+
+            // Update MW marker on intensity chart
+            // MW datetime is "YYYY-MM-DD HH:MM UTC" → convert to ISO for Plotly
+            if (json.datetime) {
+                var mwDt = json.datetime.replace(' UTC', '').replace(' ', 'T') + ':00';
+                _gaMwMarkerDt = mwDt;
+            }
+            _applyIntensityMarker(_lastMarkerDt);
         })
         .catch(function (e) {
             if (status) status.textContent = 'Error: ' + e.message;
@@ -4407,6 +4429,7 @@ function removeGlobalMWOverlay() {
     _gaMwOverpassData = [];
     _gaMwVisible = false;
     _gaMwLastAtcf = null;
+    _gaMwMarkerDt = null;
     var btn = document.getElementById('ga-mw-toggle-btn');
     if (btn) btn.textContent = '\uD83D\uDCE1 MW';
     var controls = document.getElementById('ga-mw-controls');
