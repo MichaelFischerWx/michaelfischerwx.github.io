@@ -13538,20 +13538,33 @@ function fetchMicrowaveOverpasses(caseIdx) {
                 return;
             }
 
-            for (var i = 0; i < _mwOverpassData.length; i++) {
-                var op = _mwOverpassData[i];
+            // Build index array sorted chronologically (by offset_minutes)
+            // while _mwOverpassData stays sorted by |offset| (closest first)
+            var chronOrder = [];
+            for (var i = 0; i < _mwOverpassData.length; i++) chronOrder.push(i);
+            chronOrder.sort(function(a, b) {
+                return _mwOverpassData[a].offset_minutes - _mwOverpassData[b].offset_minutes;
+            });
+
+            // The closest overpass is always index 0 in _mwOverpassData
+            var closestIdx = 0;
+
+            for (var ci = 0; ci < chronOrder.length; ci++) {
+                var origIdx = chronOrder[ci];
+                var op = _mwOverpassData[origIdx];
                 var sign = op.offset_minutes >= 0 ? '+' : '';
                 var label = op.sensor + ' / ' + op.platform +
                     ' (' + sign + Math.round(op.offset_minutes) + ' min)';
                 var opt = document.createElement('option');
-                opt.value = i;
+                opt.value = origIdx;
                 opt.textContent = label;
+                if (origIdx === closestIdx) opt.selected = true;
                 sel.appendChild(opt);
             }
 
             if (status) status.textContent = _mwOverpassData.length + ' overpass(es)';
 
-            // Auto-load the first (closest) overpass
+            // Auto-load the closest overpass (already selected)
             loadMicrowaveOverpass();
         })
         .catch(function(e) {

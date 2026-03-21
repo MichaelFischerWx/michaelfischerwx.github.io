@@ -318,14 +318,15 @@
                                 <div class="ga-spinner"></div>
                                 <div id="ir-loading-text" class="ir-loading-text">Loading IR frame...</div>
                             </div>
-                            <!-- MW overpass controls (floats above map, below IR) -->
-                            <div id="ga-mw-controls" style="display:none;position:absolute;bottom:8px;left:8px;right:8px;z-index:450;background:rgba(15,23,42,0.92);backdrop-filter:blur(8px);border:1px solid rgba(251,146,60,0.3);border-radius:8px;padding:8px 12px;">
+                            <!-- MW overpass controls (floats above IR controls) -->
+                            <div id="ga-mw-controls" style="display:none;position:absolute;bottom:8px;left:8px;right:8px;z-index:850;background:rgba(15,23,42,0.92);backdrop-filter:blur(8px);border:1px solid rgba(251,146,60,0.3);border-radius:8px;padding:8px 12px;transition:bottom 0.2s ease;">
                                 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                                    <label style="font-size:10px;font-weight:600;color:#fdba74;text-transform:uppercase;letter-spacing:0.5px;">Overpass</label>
+                                    <label style="font-size:10px;font-weight:600;color:#fdba74;text-transform:uppercase;letter-spacing:0.5px;">MW Overpass</label>
                                     <select id="ga-mw-overpass-select" onchange="loadGlobalMWOverpass()" style="flex:1;min-width:200px;font-size:10px;padding:4px 6px;border:1px solid rgba(255,255,255,0.12);border-radius:4px;background:#0f172a;color:#e2e8f0;font-family:'JetBrains Mono',monospace;"></select>
                                     <select id="ga-mw-product-select" onchange="loadGlobalMWOverpass()" style="font-size:10px;padding:4px 6px;border:1px solid rgba(255,255,255,0.12);border-radius:4px;background:#0f172a;color:#e2e8f0;font-family:'JetBrains Mono',monospace;">
                                         <option value="89pct">89 GHz PCT</option>
                                         <option value="37h">37 GHz H-pol</option>
+                                        <option value="37color">37 GHz Color</option>
                                     </select>
                                     <span id="ga-mw-frame-status" style="font-size:9px;color:#64748b;"></span>
                                 </div>

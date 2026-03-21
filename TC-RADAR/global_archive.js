@@ -2216,6 +2216,8 @@ window.toggleIROverlay = function () {
         toggleBtn.textContent = 'Hide IR';
         toggleBtn.classList.add('active');
         controls.style.display = '';
+        // Reposition MW controls above IR if MW is visible
+        setTimeout(_repositionMWControls, 50);
         // Hide track annotation markers so they don't obscure IR
         trackAnnotationMarkers.forEach(function (m) { if (detailMap) detailMap.removeLayer(m); });
         if (irOverlayLayer && detailMap) {
@@ -2234,6 +2236,8 @@ window.toggleIROverlay = function () {
         toggleBtn.textContent = 'Show IR';
         toggleBtn.classList.remove('active');
         controls.style.display = 'none';
+        // Reposition MW controls back to bottom
+        _repositionMWControls();
         stopIRPlayback();
         if (irOverlayLayer && detailMap) {
             detailMap.removeLayer(irOverlayLayer);
@@ -4278,6 +4282,7 @@ window.toggleGlobalMWOverlay = function () {
     _gaMwVisible = true;
     if (btn) btn.textContent = 'Hide MW';
     if (controls) controls.style.display = '';
+    _repositionMWControls();
 
     // If overpasses loaded, show markers on track and auto-load first
     if (_gaMwOverpassData.length > 0) {
@@ -4285,6 +4290,22 @@ window.toggleGlobalMWOverlay = function () {
         loadGlobalMWOverpass();
     }
 };
+
+/**
+ * Reposition the MW controls panel above the IR controls if IR is visible.
+ */
+function _repositionMWControls() {
+    var mwCtrl = document.getElementById('ga-mw-controls');
+    if (!mwCtrl) return;
+    var irCtrl = document.getElementById('ir-map-controls');
+    if (irCtrl && irCtrl.style.display !== 'none') {
+        // IR controls are visible — push MW above them
+        var irHeight = irCtrl.offsetHeight || 80;
+        mwCtrl.style.bottom = (irHeight + 4) + 'px';
+    } else {
+        mwCtrl.style.bottom = '8px';
+    }
+}
 
 /**
  * Add small markers along the storm track showing overpass times.
@@ -4323,7 +4344,7 @@ window.loadGlobalMWOverpass = function () {
 
     var product = (prodSel && prodSel.value) || '89pct';
 
-    if (product === '37h' && !op.has_37) {
+    if ((product === '37h' || product === '37color') && !op.has_37) {
         if (status) status.textContent = op.sensor + ' has no 37 GHz';
         return;
     }
@@ -4358,7 +4379,7 @@ window.loadGlobalMWOverpass = function () {
                 detailMap.removeLayer(_gaMwMapOverlay);
             }
             _gaMwMapOverlay = L.imageOverlay(imgUrl, bounds, {
-                opacity: 0.8, interactive: false, zIndex: 180
+                opacity: 0.8, interactive: false, zIndex: 650
             });
             if (_gaMwVisible && detailMap) _gaMwMapOverlay.addTo(detailMap);
 
