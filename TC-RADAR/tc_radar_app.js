@@ -4786,7 +4786,7 @@ function fetchSingleCFAD() {
     var pop = document.getElementById('cfad-config-popover');
     if (pop) pop.style.display = 'none';
 
-    var variable = (document.getElementById('var-select') || {}).value || 'REFLECTIVITY';
+    var variable = (document.getElementById('ep-var') || {}).value || 'REFLECTIVITY';
     var dataType = (_currentDataType || 'swath');
     var era = (_currentEra || '');
 
