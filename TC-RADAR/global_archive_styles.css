@@ -542,17 +542,12 @@ input[type="range"].ga-range::-moz-range-thumb {
 
 /* Playback controls floating over the map */
 .ir-map-controls {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: linear-gradient(transparent, rgba(10, 22, 40, 0.92) 30%);
-    padding: 24px 14px 10px;
-    z-index: 800;
-    pointer-events: none;
-}
-.ir-map-controls > * {
-    pointer-events: auto;
+    position: relative;
+    background: rgba(10, 22, 40, 0.92);
+    padding: 8px 12px;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 6px;
+    margin-top: 4px;
 }
 .ir-map-info {
     display: flex;

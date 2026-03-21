@@ -7681,6 +7681,12 @@ function initCompositePanel() {
                                         '<label for="ir-shear-rel" style="font-size:11px;color:#9ca3af;">Shear-Relative Rotation</label>' +
                                     '</div>' +
                                 '</div>' +
+                                '<div class="wizard-config-row">' +
+                                    '<div class="wizard-config-inline">' +
+                                        '<input type="checkbox" id="ir-tilt-overlay" checked>' +
+                                        '<label for="ir-tilt-overlay" style="font-size:11px;color:#9ca3af;">Overlay Mean Vortex Tilt</label>' +
+                                    '</div>' +
+                                '</div>' +
                                 '<div class="wizard-config-row"><label>Max Domain Radius</label>' +
                                     '<div class="wizard-slider-row">' +
                                         '<input type="range" id="ir-max-radius" min="200" max="1000" step="50" value="500" oninput="document.getElementById(\'ir-max-radius-val\').textContent=this.value+\' km\'">' +
@@ -8123,24 +8129,33 @@ function _wizardGenerateSelected() {
         // (each diff request does 2 composite fetches: Group A then B)
         var diffQueue = [];
         if (document.getElementById('wiz-chk-az').checked) {
-            diffQueue.push(generateCompDiffAzMean);
+            diffQueue.push({ fn: generateCompDiffAzMean, name: 'AzMean' });
         }
         if (document.getElementById('wiz-chk-sq').checked) {
-            diffQueue.push(generateCompDiffQuadMean);
+            diffQueue.push({ fn: generateCompDiffQuadMean, name: 'QuadMean' });
         }
         if (document.getElementById('wiz-chk-pv').checked) {
-            diffQueue.push(generateCompDiffPlanView);
+            diffQueue.push({ fn: generateCompDiffPlanView, name: 'PlanView' });
         }
         if (document.getElementById('wiz-chk-cfad') && document.getElementById('wiz-chk-cfad').checked) {
-            diffQueue.push(generateCompDiffCFAD);
+            diffQueue.push({ fn: generateCompDiffCFAD, name: 'CFAD' });
         }
         if (document.getElementById('wiz-chk-anom') && document.getElementById('wiz-chk-anom').checked) {
-            diffQueue.push(generateCompDiffAnomaly);
+            diffQueue.push({ fn: generateCompDiffAnomaly, name: 'Anomaly' });
         }
-        // Run diff functions sequentially via promise chain
+        // Run diff functions sequentially via promise chain.
+        // Each step catches its own error so the chain always continues.
         var chain = Promise.resolve();
-        diffQueue.forEach(function(fn) {
-            chain = chain.then(function() { return fn(); }).catch(function() { /* continue */ });
+        diffQueue.forEach(function(item) {
+            chain = chain.then(function() {
+                console.log('[Diff] Starting ' + item.name + '…');
+                return item.fn();
+            }).then(function() {
+                console.log('[Diff] ' + item.name + ' complete.');
+            }).catch(function(err) {
+                console.warn('[Diff] ' + item.name + ' failed:', err);
+                // Resolve so the chain continues to the next output
+            });
         });
         // After all diffs, run non-diff outputs
         chain.then(function() {
@@ -9088,8 +9103,6 @@ function generateCompositeAzMean() {
     if (btnAz) if (btnAz) btnAz.disabled = true; if (btnSq) if (btnSq) btnSq.disabled = true; if (btnPv) if (btnPv) btnPv.disabled = true;
     if (btnAz) btnAz.textContent = '\u23F3 Computing\u2026';
     var _crp = document.getElementById('comp-result-placeholder') || document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
-    document.getElementById('comp-result-sq').style.display = 'none';
-    document.getElementById('comp-result-pv').style.display = 'none';
     _showCompStatus('loading', 'Computing composite azimuthal mean \u2014 this may take 30\u201390 seconds for many cases\u2026');
 
     var overlay = (document.getElementById('comp-overlay') || {}).value || '';
@@ -9853,8 +9866,6 @@ function generateCompositeQuadMean() {
     if (btnAz) if (btnAz) btnAz.disabled = true; if (btnSq) if (btnSq) btnSq.disabled = true; if (btnPv) if (btnPv) btnPv.disabled = true;
     if (btnSq) btnSq.textContent = '\u23F3 Computing\u2026';
     var _crp = document.getElementById('comp-result-placeholder') || document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
-    document.getElementById('comp-result-az').style.display = 'none';
-    document.getElementById('comp-result-pv').style.display = 'none';
     _showCompStatus('loading', 'Computing composite shear quadrants \u2014 this may take 30\u201390 seconds for many cases\u2026');
 
     var overlay = (document.getElementById('comp-overlay') || {}).value || '';
@@ -9904,8 +9915,6 @@ function generateCompositePlanView() {
     if (btnPv) btnPv.disabled = true; if (btnAz) btnAz.disabled = true; if (btnSq) btnSq.disabled = true;
     if (btnPv) btnPv.textContent = '\u23F3 Computing\u2026';
     var _crp = document.getElementById('comp-result-placeholder') || document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
-    document.getElementById('comp-result-az').style.display = 'none';
-    document.getElementById('comp-result-sq').style.display = 'none';
     _showCompStatus('loading', 'Computing plan-view composite at ' + pvParams.level_km + ' km \u2014 this may take 30\u201390 seconds for many cases\u2026');
 
     var overlay = (document.getElementById('comp-overlay') || {}).value || '';
@@ -10188,6 +10197,7 @@ function _getIRCompositeParams() {
         max_r_rmw: normRmw ? (parseFloat((document.getElementById('ir-max-r-rmw') || {}).value) || 5.0) : 500,
         dr_rmw: normRmw ? Math.max(0.05, parseFloat((document.getElementById('ir-dr-rmw') || {}).value) || 0.1) : 4,
         shear_relative: !!(document.getElementById('ir-shear-rel') || {}).checked,
+        tilt_overlay: !!(document.getElementById('ir-tilt-overlay') || {}).checked,
         coverage: parseInt((document.getElementById('ir-coverage') || {}).value || '25') / 100,
         max_radius_km: parseInt((document.getElementById('ir-max-radius') || {}).value || '500'),
     };
@@ -10209,7 +10219,8 @@ function generateCompositeIRPlanView() {
         '&max_r_rmw=' + irParams.max_r_rmw +
         '&dr_rmw=' + irParams.dr_rmw +
         '&shear_relative=' + (irParams.shear_relative ? 'true' : 'false') +
-        '&max_radius_km=' + irParams.max_radius_km;
+        '&max_radius_km=' + irParams.max_radius_km +
+        '&include_tilt=' + (irParams.tilt_overlay ? 'true' : 'false');
 
     _fetchCompositeStream(API_BASE + '/composite/ir_plan_view?' + qs, 'Computing IR plan-view composite')
         .then(function(json) {
@@ -10222,6 +10233,7 @@ function generateCompositeIRPlanView() {
 function _renderIRPlanView(targetId, json, filters, pvParams) {
     var el = document.getElementById(targetId); if (!el) return;
     el.style.display = 'block';
+    _lastCompJson = json; _lastCompType = 'ir-pv';
     var planData = json.plan_view;
     var xAxis = json.x_axis, yAxis = json.y_axis;
     var varInfo = json.variable;
@@ -10335,9 +10347,6 @@ function _renderIRPlanView(targetId, json, filters, pvParams) {
 
     Plotly.react(el, traces, layout, { responsive: true, displayModeBar: true,
         modeBarButtonsToRemove: ['select2d','lasso2d','autoScale2d'] });
-
-    // Append case list if available
-    _appendCaseList(el, json.case_list, json.n_cases);
 }
 
 function generateCompositeIRAzMean() {
@@ -10368,6 +10377,7 @@ function generateCompositeIRAzMean() {
 function _renderIRAzMean(targetId, json, filters) {
     var el = document.getElementById(targetId); if (!el) return;
     el.style.display = 'block';
+    _lastCompJson = json; _lastCompType = 'ir-az';
     var profile = json.radial_profile;
     var rCenters = json.r_centers;
     var varInfo = json.variable;
@@ -10408,8 +10418,6 @@ function _renderIRAzMean(targetId, json, filters) {
 
     Plotly.react(el, [trace], layout, { responsive: true, displayModeBar: true,
         modeBarButtonsToRemove: ['select2d','lasso2d','autoScale2d'] });
-
-    _appendCaseList(el, json.case_list, json.n_cases);
 }
 
 function _appendCaseList(el, caseList, nCases) {
@@ -10426,10 +10434,12 @@ function _appendCaseList(el, caseList, nCases) {
         '</div>' +
         '<div class="comp-cl-scroll">' +
             '<table class="comp-cl-table"><thead><tr>' +
-                '<th>#</th><th>Storm</th><th>Date</th><th>V<sub>max</sub></th><th>RMW</th>' +
+                '<th>#</th><th>Storm</th><th>Date/Time</th><th>V<sub>max</sub> (kt)</th>' +
             '</tr></thead><tbody>' +
             caseList.map(function(c, i) {
-                return '<tr><td>' + (i+1) + '</td><td>' + (c.storm_name || '?') + '</td><td>' + (c.date || '?') + '</td><td>' + (c.vmax != null ? c.vmax + ' kt' : '?') + '</td><td>' + (c.rmw_km != null ? c.rmw_km + ' km' : '?') + '</td></tr>';
+                var cat = getIntensityCategory(c.vmax_kt);
+                var color = getIntensityColor(c.vmax_kt);
+                return '<tr><td>' + (i+1) + '</td><td>' + (c.storm_name || '?') + '</td><td>' + (c.datetime || '?') + '</td><td><span class="intensity-badge" style="background:' + color + ';font-size:9px;padding:1px 4px;">' + cat + '</span> ' + (c.vmax_kt != null ? c.vmax_kt : 'N/A') + '</td></tr>';
             }).join('') +
             '</tbody></table></div>';
     el.appendChild(wrap);

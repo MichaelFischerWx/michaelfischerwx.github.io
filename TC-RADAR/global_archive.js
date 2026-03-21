@@ -4306,20 +4306,9 @@ window.toggleGlobalMWOverlay = function () {
 };
 
 /**
- * Reposition the MW controls panel above the IR controls if IR is visible.
+ * Reposition the MW controls panel (no-op: controls now in normal flow below map).
  */
-function _repositionMWControls() {
-    var mwCtrl = document.getElementById('ga-mw-controls');
-    if (!mwCtrl) return;
-    var irCtrl = document.getElementById('ir-map-controls');
-    if (irCtrl && irCtrl.style.display !== 'none') {
-        // IR controls are visible — push MW above them
-        var irHeight = irCtrl.offsetHeight || 80;
-        mwCtrl.style.bottom = (irHeight + 4) + 'px';
-    } else {
-        mwCtrl.style.bottom = '8px';
-    }
-}
+function _repositionMWControls() {}
 
 /**
  * Add small markers along the storm track showing overpass times.
