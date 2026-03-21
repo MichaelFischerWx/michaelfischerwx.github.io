@@ -4383,6 +4383,14 @@ window.loadGlobalMWOverpass = function () {
             });
             if (_gaMwVisible && detailMap) _gaMwMapOverlay.addTo(detailMap);
 
+            // Re-center map on the MW image so the overpass is visible
+            if (detailMap && bounds.isValid()) {
+                var mwCenter = bounds.getCenter();
+                detailMap.flyTo(mwCenter, detailMap.getZoom(), {
+                    animate: true, duration: 0.5
+                });
+            }
+
             if (status) status.textContent = json.sensor + ' ' + json.datetime;
         })
         .catch(function (e) {
