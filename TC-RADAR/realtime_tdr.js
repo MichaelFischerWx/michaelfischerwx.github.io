@@ -5405,7 +5405,7 @@
     };
 
     window.rtFetchCFAD = function () {
-        if (!_rtCurrentFileUrl) return;
+        if (!_currentFileUrl) return;
         var btn = document.getElementById('rt-cfad-btn');
         if (btn) { btn.disabled = true; btn.textContent = 'Loading...'; }
 
@@ -5413,7 +5413,7 @@
         var pop = document.getElementById('rt-cfad-config-popover');
         if (pop) pop.style.display = 'none';
 
-        var variable = (document.getElementById('rt-var-select') || {}).value || 'REFLECTIVITY';
+        var variable = (document.getElementById('rt-var') || {}).value || 'REFLECTIVITY';
 
         // Read config from popover inputs
         var binWidth = parseFloat((document.getElementById('rt-cfad-bin-width') || {}).value) || 0;
@@ -5425,7 +5425,7 @@
         var maxRadius = parseFloat((document.getElementById('rt-cfad-max-radius') || {}).value) || 200;
         var logScale = !!(document.getElementById('rt-cfad-log-scale') || {}).checked;
 
-        var url = RT_API_BASE + '/cfad?file_url=' + encodeURIComponent(_rtCurrentFileUrl) +
+        var url = API_BASE + RT_PREFIX + '/cfad?file_url=' + encodeURIComponent(_currentFileUrl) +
             '&variable=' + variable +
             '&min_radius=' + minRadius + '&max_radius=' + maxRadius +
             '&normalise=' + encodeURIComponent(normalise) +
