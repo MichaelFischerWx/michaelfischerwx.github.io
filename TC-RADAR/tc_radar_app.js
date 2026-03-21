@@ -4778,19 +4778,18 @@ function toggleSingleCFADConfig() {
 }
 
 function fetchSingleCFAD() {
-    if (!_selectedCaseIndex && _selectedCaseIndex !== 0) return;
+    if (!currentCaseIndex && currentCaseIndex !== 0) return;
     var btn = document.getElementById('cfad-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Loading...'; }
 
-    // Hide the config popover
+    // Hide the config panel
     var pop = document.getElementById('cfad-config-popover');
     if (pop) pop.style.display = 'none';
 
     var variable = (document.getElementById('ep-var') || {}).value || 'REFLECTIVITY';
-    var dataType = (_currentDataType || 'swath');
-    var era = (_currentEra || '');
+    var dataType = _activeDataType || 'swath';
 
-    // Read config from popover inputs
+    // Read config from panel inputs
     var binWidth = parseFloat((document.getElementById('sc-cfad-bin-width') || {}).value) || 0;
     var nBins = parseInt((document.getElementById('sc-cfad-n-bins') || {}).value, 10) || 40;
     var binMinVal = (document.getElementById('sc-cfad-bin-min') || {}).value;
@@ -4800,9 +4799,8 @@ function fetchSingleCFAD() {
     var maxRadius = parseFloat((document.getElementById('sc-cfad-max-radius') || {}).value) || 200;
     var logScale = !!(document.getElementById('sc-cfad-log-scale') || {}).checked;
 
-    var url = API_BASE + '/cfad/single?case_index=' + _selectedCaseIndex +
+    var url = API_BASE + '/cfad/single?case_index=' + currentCaseIndex +
         '&variable=' + variable + '&data_type=' + dataType +
-        '&era=' + encodeURIComponent(era) +
         '&min_radius=' + minRadius + '&max_radius=' + maxRadius +
         '&normalise=' + encodeURIComponent(normalise) +
         '&n_bins=' + nBins;
