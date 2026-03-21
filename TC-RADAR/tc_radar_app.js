@@ -7648,6 +7648,48 @@ function initCompositePanel() {
                             '</div>' +
                         '</div>' +
 
+                        // Satellite config section (shown when IR outputs checked)
+                        '<div class="wizard-config-section" id="wiz-cfg-sat" style="display:none;">' +
+                            '<div class="wizard-config-section-title" onclick="_wizardToggleSection(this.parentElement)">' +
+                                '<span class="wcs-icon">\uD83D\uDEF0\uFE0F</span> Satellite Settings' +
+                                '<span class="wcs-toggle">\u25BC</span>' +
+                            '</div>' +
+                            '<div class="wizard-config-body">' +
+                                '<div class="wizard-config-row"><label>Coverage Threshold</label>' +
+                                    '<div class="wizard-slider-row">' +
+                                        '<input type="range" id="ir-coverage" min="0" max="100" step="5" value="25" oninput="document.getElementById(\'ir-cov-val\').textContent=this.value+\'%\'">' +
+                                        '<span class="wizard-slider-val" id="ir-cov-val">25%</span>' +
+                                    '</div>' +
+                                '</div>' +
+                                '<div class="wizard-config-row">' +
+                                    '<div class="wizard-config-inline">' +
+                                        '<input type="checkbox" id="ir-norm-rmw" checked onchange="var opts=document.getElementById(\'ir-rmw-opts\');if(opts)opts.style.display=this.checked?\'block\':\'none\';">' +
+                                        '<label for="ir-norm-rmw" style="font-size:11px;color:#9ca3af;">Normalize by RMW (2-km)</label>' +
+                                    '</div>' +
+                                '</div>' +
+                                '<div id="ir-rmw-opts">' +
+                                    '<div class="wizard-config-row"><label>Max Extent (R/RMW)</label>' +
+                                        '<input type="number" id="ir-max-r-rmw" value="5.0" min="1" max="20" step="0.5" style="width:80px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                                    '</div>' +
+                                    '<div class="wizard-config-row"><label>Bin Width (R/RMW)</label>' +
+                                        '<input type="number" id="ir-dr-rmw" value="0.1" min="0.05" max="1" step="0.05" style="width:80px;padding:3px 6px;font-size:11px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                                    '</div>' +
+                                '</div>' +
+                                '<div class="wizard-config-row">' +
+                                    '<div class="wizard-config-inline">' +
+                                        '<input type="checkbox" id="ir-shear-rel">' +
+                                        '<label for="ir-shear-rel" style="font-size:11px;color:#9ca3af;">Shear-Relative Rotation</label>' +
+                                    '</div>' +
+                                '</div>' +
+                                '<div class="wizard-config-row"><label>Max Domain Radius</label>' +
+                                    '<div class="wizard-slider-row">' +
+                                        '<input type="range" id="ir-max-radius" min="200" max="1000" step="50" value="500" oninput="document.getElementById(\'ir-max-radius-val\').textContent=this.value+\' km\'">' +
+                                        '<span class="wizard-slider-val" id="ir-max-radius-val">500 km</span>' +
+                                    '</div>' +
+                                '</div>' +
+                            '</div>' +
+                        '</div>' +
+
                         // Environment config section
                         '<div class="wizard-config-section" id="wiz-cfg-env">' +
                             '<div class="wizard-config-section-title" onclick="_wizardToggleSection(this.parentElement)">' +
@@ -7897,13 +7939,19 @@ function _wizardUpdateConfigVisibility() {
     var envSC  = document.getElementById('wiz-chk-env-sc').checked;
     var envTH  = document.getElementById('wiz-chk-env-th').checked;
     var anyEnv = envPV || envSC || envTH;
+    var chkIrPv = document.getElementById('wiz-chk-ir-pv') && document.getElementById('wiz-chk-ir-pv').checked;
+    var chkIrAz = document.getElementById('wiz-chk-ir-az') && document.getElementById('wiz-chk-ir-az').checked;
+    var anySat = chkIrPv || chkIrAz;
     var tdrCfg = document.getElementById('wiz-cfg-tdr');
+    var satCfg = document.getElementById('wiz-cfg-sat');
     var envCfg = document.getElementById('wiz-cfg-env');
     if (tdrCfg) tdrCfg.style.display = anyTDR ? '' : 'none';
+    if (satCfg) satCfg.style.display = anySat ? '' : 'none';
     if (envCfg) envCfg.style.display = anyEnv ? '' : 'none';
-    // If neither selected, show a message
-    if (!anyTDR && !anyEnv) {
+    // If nothing selected, show all sections
+    if (!anyTDR && !anySat && !anyEnv) {
         if (tdrCfg) tdrCfg.style.display = '';
+        if (satCfg) satCfg.style.display = '';
         if (envCfg) envCfg.style.display = '';
     }
 
@@ -8070,40 +8118,60 @@ function _wizardGenerateSelected() {
 
     var isDiff = _wizardMode === 'diff';
 
-    // TDR outputs
-    if (document.getElementById('wiz-chk-az').checked) {
-        if (isDiff) generateCompDiffAzMean(); else generateCompositeAzMean();
-    }
-    if (document.getElementById('wiz-chk-sq').checked) {
-        if (isDiff) generateCompDiffQuadMean(); else generateCompositeQuadMean();
-    }
-    if (document.getElementById('wiz-chk-pv').checked) {
-        if (isDiff) generateCompDiffPlanView(); else generateCompositePlanView();
-    }
-    if (document.getElementById('wiz-chk-cfad') && document.getElementById('wiz-chk-cfad').checked) {
-        if (isDiff) generateCompDiffCFAD(); else generateCompositeCFAD();
-    }
-    if (document.getElementById('wiz-chk-anom') && document.getElementById('wiz-chk-anom').checked) {
-        if (isDiff) generateCompDiffAnomaly(); else generateCompositeAnomaly();
-    }
-    if (document.getElementById('wiz-chk-vpsc') && document.getElementById('wiz-chk-vpsc').checked) {
-        generateCompositeVPScatter();
-    }
-
-    // Satellite outputs
-    if (document.getElementById('wiz-chk-ir-pv') && document.getElementById('wiz-chk-ir-pv').checked) {
-        generateCompositeIRPlanView();
-    }
-    if (document.getElementById('wiz-chk-ir-az') && document.getElementById('wiz-chk-ir-az').checked) {
-        generateCompositeIRAzMean();
-    }
-
-    // Environment outputs
-    var anyEnv = document.getElementById('wiz-chk-env-pv').checked ||
-                 document.getElementById('wiz-chk-env-sc').checked ||
-                 document.getElementById('wiz-chk-env-th').checked;
-    if (anyEnv) {
-        if (isDiff) generateEnvCompDiff(); else generateEnvComposite();
+    if (isDiff) {
+        // In diff mode, serialize requests to avoid server overload
+        // (each diff request does 2 composite fetches: Group A then B)
+        var diffQueue = [];
+        if (document.getElementById('wiz-chk-az').checked) {
+            diffQueue.push(generateCompDiffAzMean);
+        }
+        if (document.getElementById('wiz-chk-sq').checked) {
+            diffQueue.push(generateCompDiffQuadMean);
+        }
+        if (document.getElementById('wiz-chk-pv').checked) {
+            diffQueue.push(generateCompDiffPlanView);
+        }
+        if (document.getElementById('wiz-chk-cfad') && document.getElementById('wiz-chk-cfad').checked) {
+            diffQueue.push(generateCompDiffCFAD);
+        }
+        if (document.getElementById('wiz-chk-anom') && document.getElementById('wiz-chk-anom').checked) {
+            diffQueue.push(generateCompDiffAnomaly);
+        }
+        // Run diff functions sequentially via promise chain
+        var chain = Promise.resolve();
+        diffQueue.forEach(function(fn) {
+            chain = chain.then(function() { return fn(); }).catch(function() { /* continue */ });
+        });
+        // After all diffs, run non-diff outputs
+        chain.then(function() {
+            if (document.getElementById('wiz-chk-vpsc') && document.getElementById('wiz-chk-vpsc').checked) {
+                generateCompositeVPScatter();
+            }
+            if (document.getElementById('wiz-chk-ir-pv') && document.getElementById('wiz-chk-ir-pv').checked) {
+                generateCompositeIRPlanView();
+            }
+            if (document.getElementById('wiz-chk-ir-az') && document.getElementById('wiz-chk-ir-az').checked) {
+                generateCompositeIRAzMean();
+            }
+            var anyEnv = document.getElementById('wiz-chk-env-pv').checked ||
+                         document.getElementById('wiz-chk-env-sc').checked ||
+                         document.getElementById('wiz-chk-env-th').checked;
+            if (anyEnv) generateEnvCompDiff();
+        });
+    } else {
+        // Non-diff mode: fire all concurrently (each makes 1 API call)
+        if (document.getElementById('wiz-chk-az').checked) generateCompositeAzMean();
+        if (document.getElementById('wiz-chk-sq').checked) generateCompositeQuadMean();
+        if (document.getElementById('wiz-chk-pv').checked) generateCompositePlanView();
+        if (document.getElementById('wiz-chk-cfad') && document.getElementById('wiz-chk-cfad').checked) generateCompositeCFAD();
+        if (document.getElementById('wiz-chk-anom') && document.getElementById('wiz-chk-anom').checked) generateCompositeAnomaly();
+        if (document.getElementById('wiz-chk-vpsc') && document.getElementById('wiz-chk-vpsc').checked) generateCompositeVPScatter();
+        if (document.getElementById('wiz-chk-ir-pv') && document.getElementById('wiz-chk-ir-pv').checked) generateCompositeIRPlanView();
+        if (document.getElementById('wiz-chk-ir-az') && document.getElementById('wiz-chk-ir-az').checked) generateCompositeIRAzMean();
+        var anyEnv = document.getElementById('wiz-chk-env-pv').checked ||
+                     document.getElementById('wiz-chk-env-sc').checked ||
+                     document.getElementById('wiz-chk-env-th').checked;
+        if (anyEnv) generateEnvComposite();
     }
 }
 
@@ -9083,7 +9151,7 @@ function generateCompDiffAnomaly() {
     if (dataType !== 'merge') {
         resultEl.style.display = 'block';
         resultEl.innerHTML = '<div class="explorer-status" style="color:#fbbf24;padding:12px;font-size:12px;">\u26A0\uFE0F Anomaly composites are only available for merged analyses. Switch data type to "Merge".</div>';
-        return;
+        return Promise.resolve();
     }
 
     var filtersA = _getCompositeFilters();
@@ -9098,7 +9166,7 @@ function generateCompDiffAnomaly() {
     var urlB = API_BASE + '/composite/anomaly_azimuthal_mean?' + _compositeQueryString(filtersB) + baseQS;
 
     var jsonA;
-    _fetchCompositeStream(urlA, 'Group A anomaly').then(function(result) {
+    return _fetchCompositeStream(urlA, 'Group A anomaly').then(function(result) {
         jsonA = result;
         _showCompStatus('loading', 'Group A done (' + jsonA.n_cases + ' cases). Computing Group B\u2026');
         return _fetchCompositeStream(urlB, 'Group B anomaly');
@@ -10113,11 +10181,22 @@ function _symmetricRange(data2d) {
 // IR Satellite Composite generation & rendering
 // ---------------------------------------------------------------------------
 
+function _getIRCompositeParams() {
+    var normRmw = !!(document.getElementById('ir-norm-rmw') || {}).checked;
+    return {
+        normalize_rmw: normRmw,
+        max_r_rmw: normRmw ? (parseFloat((document.getElementById('ir-max-r-rmw') || {}).value) || 5.0) : 500,
+        dr_rmw: normRmw ? Math.max(0.05, parseFloat((document.getElementById('ir-dr-rmw') || {}).value) || 0.1) : 4,
+        shear_relative: !!(document.getElementById('ir-shear-rel') || {}).checked,
+        coverage: parseInt((document.getElementById('ir-coverage') || {}).value || '25') / 100,
+        max_radius_km: parseInt((document.getElementById('ir-max-radius') || {}).value || '500'),
+    };
+}
+
 function generateCompositeIRPlanView() {
     var filters = _getCompositeFilters();
-    var pvParams = _getCompositePlanViewParams();
+    var irParams = _getIRCompositeParams();
     var dataType = document.getElementById('comp-dtype').value;
-    var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
 
     var _crp = document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
     _showCompStatus('loading', 'Computing IR plan-view composite \u2014 this may take 30\u201390 seconds\u2026');
@@ -10125,16 +10204,17 @@ function generateCompositeIRPlanView() {
     var qs = _compositeQueryString(filters) +
         '&ir_variable=ir_brightness_temp' +
         '&data_type=' + dataType +
-        '&coverage_min=' + coverage +
-        '&normalize_rmw=' + (pvParams.normalize_rmw ? 'true' : 'false') +
-        '&max_r_rmw=' + pvParams.max_r_rmw +
-        '&dr_rmw=' + pvParams.dr_rmw +
-        '&shear_relative=' + (pvParams.shear_relative ? 'true' : 'false');
+        '&coverage_min=' + irParams.coverage +
+        '&normalize_rmw=' + (irParams.normalize_rmw ? 'true' : 'false') +
+        '&max_r_rmw=' + irParams.max_r_rmw +
+        '&dr_rmw=' + irParams.dr_rmw +
+        '&shear_relative=' + (irParams.shear_relative ? 'true' : 'false') +
+        '&max_radius_km=' + irParams.max_radius_km;
 
     _fetchCompositeStream(API_BASE + '/composite/ir_plan_view?' + qs, 'Computing IR plan-view composite')
         .then(function(json) {
             _showCompStatus('success', '\u2713 IR plan-view composite computed: ' + json.n_cases + ' / ' + json.n_matched + ' cases');
-            _renderIRPlanView('comp-result-ir-pv', json, filters, pvParams);
+            _renderIRPlanView('comp-result-ir-pv', json, filters, irParams);
         })
         .catch(function(err) { _showCompStatus('error', '\u2717 IR Plan View: ' + (err.message || String(err))); });
 }
@@ -10192,6 +10272,54 @@ function _renderIRPlanView(targetId, json, filters, pvParams) {
         });
     }
 
+    // Tilt overlay — composite mean vortex tilt profile coloured by height
+    if (json.tilt_overlay) {
+        var tilt = json.tilt_overlay;
+        var tiltX = [], tiltY = [], tiltColors = [], tiltText = [];
+        for (var ti = 0; ti < tilt.height_km.length; ti++) {
+            if (tilt.x[ti] !== null && tilt.y[ti] !== null) {
+                tiltX.push(tilt.x[ti]);
+                tiltY.push(tilt.y[ti]);
+                tiltColors.push(tilt.height_km[ti]);
+                tiltText.push(tilt.height_km[ti] + ' km');
+            }
+        }
+        if (tiltX.length > 1) {
+            // Line connecting tilt positions (white, thin)
+            traces.push({
+                x: tiltX, y: tiltY, type: 'scatter', mode: 'lines',
+                line: { color: 'rgba(255,255,255,0.5)', width: 1.5 },
+                showlegend: false, hoverinfo: 'skip'
+            });
+            // Markers coloured by height
+            traces.push({
+                x: tiltX, y: tiltY, type: 'scatter', mode: 'markers+text',
+                marker: {
+                    size: 8, color: tiltColors,
+                    colorscale: [[0,'#22d3ee'],[0.5,'#a855f7'],[1,'#ef4444']],
+                    cmin: 0, cmax: 15,
+                    colorbar: {
+                        title: { text: 'Height (km)', font: { color:'#ccc', size:10 } },
+                        tickfont: { color:'#ccc', size:9 }, thickness: 10, len: 0.4,
+                        x: 1.12, xpad: 2, y: 0.15, yanchor: 'bottom'
+                    },
+                    line: { width: 1, color: 'rgba(255,255,255,0.6)' }
+                },
+                text: tiltText, textposition: 'top right',
+                textfont: { size: 8, color: 'rgba(255,255,255,0.6)' },
+                hovertemplate: '<b>Tilt</b> at %{text}<br>X: %{x:.2f}<br>Y: %{y:.2f}<extra></extra>',
+                name: 'Vortex Tilt', showlegend: false
+            });
+            // Start marker (2 km reference)
+            traces.push({
+                x: [tiltX[0]], y: [tiltY[0]], type: 'scatter', mode: 'markers',
+                marker: { size: 12, symbol: 'circle-open', color: '#22d3ee', line: { width: 2 } },
+                showlegend: false, hoverinfo: 'skip'
+            });
+            title += '<br><span style="font-size:0.8em;color:#c084fc;">Tilt overlay: N=' + tilt.n_cases + ' cases</span>';
+        }
+    }
+
     var layout = {
         title: { text: title, font: { color:'#e2e8f0', size:13 }, y:0.98 },
         xaxis: { title: { text: xLabel, font: { color:'#9ca3af', size:11 } },
@@ -10202,7 +10330,7 @@ function _renderIRPlanView(targetId, json, filters, pvParams) {
                  tickfont: { color:'#6b7280', size:10 }, gridcolor:'rgba(255,255,255,0.05)',
                  zeroline: true, zerolinecolor: 'rgba(255,255,255,0.15)' },
         paper_bgcolor: '#0a1628', plot_bgcolor: '#0a1628',
-        margin: { l:60, r:20, t:70, b:55 }, shapes: shapes, annotations: annotations
+        margin: { l:60, r:20, t:80, b:55 }, shapes: shapes, annotations: annotations
     };
 
     Plotly.react(el, traces, layout, { responsive: true, displayModeBar: true,
@@ -10215,8 +10343,7 @@ function _renderIRPlanView(targetId, json, filters, pvParams) {
 function generateCompositeIRAzMean() {
     var filters = _getCompositeFilters();
     var dataType = document.getElementById('comp-dtype').value;
-    var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
-    var pvParams = _getCompositePlanViewParams();
+    var irParams = _getIRCompositeParams();
 
     var _crp = document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
     _showCompStatus('loading', 'Computing IR azimuthal-mean composite\u2026');
@@ -10224,10 +10351,11 @@ function generateCompositeIRAzMean() {
     var qs = _compositeQueryString(filters) +
         '&ir_variable=ir_brightness_temp' +
         '&data_type=' + dataType +
-        '&coverage_min=' + coverage +
-        '&normalize_rmw=' + (pvParams.normalize_rmw ? 'true' : 'false') +
-        '&max_r_rmw=' + pvParams.max_r_rmw +
-        '&dr_rmw=' + pvParams.dr_rmw;
+        '&coverage_min=' + irParams.coverage +
+        '&normalize_rmw=' + (irParams.normalize_rmw ? 'true' : 'false') +
+        '&max_r_rmw=' + irParams.max_r_rmw +
+        '&dr_rmw=' + irParams.dr_rmw +
+        '&max_radius_km=' + irParams.max_radius_km;
 
     _fetchCompositeStream(API_BASE + '/composite/ir_azimuthal_mean?' + qs, 'Computing IR azimuthal-mean composite')
         .then(function(json) {
@@ -10328,14 +10456,7 @@ function generateCompDiffAzMean() {
     var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
     var overlay = (document.getElementById('comp-overlay') || {}).value || '';
 
-    // Disable buttons
-    var btns = ['comp-btn-az','comp-btn-sq','comp-btn-pv','comp-btn-diff-az','comp-btn-diff-sq','comp-btn-diff-pv'];
-    btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = true; });
-    var btnDiffAz = document.getElementById('comp-btn-diff-az');
-    if (btnDiffAz) btnDiffAz.textContent = '\u23F3 Computing\u2026';
     var _crp = document.getElementById('comp-result-placeholder') || document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
-    document.getElementById('comp-result-sq').style.display = 'none';
-    document.getElementById('comp-result-pv').style.display = 'none';
     _showCompStatus('loading', 'Computing difference composite (A\u2212B) azimuthal mean\u2026');
 
     var normRmw = !!(document.getElementById('comp-norm-rmw') || {}).checked;
@@ -10350,7 +10471,7 @@ function generateCompDiffAzMean() {
     // Sequential streaming: fetch Group A first, then Group B, to avoid
     // doubling memory/thread pressure on the server.
     var jsonA;
-    _fetchCompositeStream(urlA, 'Group A azimuthal mean').then(function(result) {
+    return _fetchCompositeStream(urlA, 'Group A azimuthal mean').then(function(result) {
         jsonA = result;
         _showCompStatus('loading', 'Group A done (' + jsonA.n_cases + ' cases). Computing Group B\u2026');
         return _fetchCompositeStream(urlB, 'Group B azimuthal mean');
@@ -10400,10 +10521,7 @@ function generateCompDiffAzMean() {
         _renderDiffAzMean('comp-result-az', diffJson, jsonA, jsonB, filtersA, filtersB);
         _showCompShadingToolbar();
     }).catch(function(err) {
-        _showCompStatus('error', '\u2717 ' + (err.message || String(err)));
-    }).finally(function() {
-        btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = false; });
-        if (btnDiffAz) btnDiffAz.textContent = '\u0394 Az Mean (A\u2212B)';
+        _showCompStatus('error', '\u2717 Az Mean: ' + (err.message || String(err)));
     });
 }
 
@@ -10415,13 +10533,7 @@ function generateCompDiffQuadMean() {
     var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
     var overlay = (document.getElementById('comp-overlay') || {}).value || '';
 
-    var btns = ['comp-btn-az','comp-btn-sq','comp-btn-pv','comp-btn-diff-az','comp-btn-diff-sq','comp-btn-diff-pv'];
-    btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = true; });
-    var btnDiffSq = document.getElementById('comp-btn-diff-sq');
-    if (btnDiffSq) btnDiffSq.textContent = '\u23F3 Computing\u2026';
     var _crp = document.getElementById('comp-result-placeholder') || document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
-    document.getElementById('comp-result-az').style.display = 'none';
-    document.getElementById('comp-result-pv').style.display = 'none';
     _showCompStatus('loading', 'Computing difference composite (A\u2212B) shear quadrants\u2026');
 
     // Quad endpoint always RMW-normalises, so always read user-specified radial settings
@@ -10436,7 +10548,7 @@ function generateCompDiffQuadMean() {
     // Sequential streaming: fetch Group A first, then Group B, to avoid
     // doubling memory/thread pressure on the server.
     var jsonA;
-    _fetchCompositeStream(urlA, 'Group A shear quadrants').then(function(result) {
+    return _fetchCompositeStream(urlA, 'Group A shear quadrants').then(function(result) {
         jsonA = result;
         _showCompStatus('loading', 'Group A done (' + jsonA.n_cases + ' cases). Computing Group B\u2026');
         return _fetchCompositeStream(urlB, 'Group B shear quadrants');
@@ -10504,10 +10616,7 @@ function generateCompDiffQuadMean() {
         _renderDiffQuadMean('comp-result-sq', diffJson, jsonA, jsonB, filtersA, filtersB);
         _showCompShadingToolbar();
     }).catch(function(err) {
-        _showCompStatus('error', '\u2717 ' + (err.message || String(err)));
-    }).finally(function() {
-        btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = false; });
-        if (btnDiffSq) btnDiffSq.textContent = '\u0394 Quad Mean (A\u2212B)';
+        _showCompStatus('error', '\u2717 Quad Mean: ' + (err.message || String(err)));
     });
 }
 
@@ -10744,14 +10853,7 @@ function generateCompDiffPlanView() {
     var coverage = parseInt(document.getElementById('comp-coverage').value) / 100;
     var overlay = (document.getElementById('comp-overlay') || {}).value || '';
 
-    // Disable all buttons
-    var btns = ['comp-btn-az','comp-btn-sq','comp-btn-pv','comp-btn-diff-az','comp-btn-diff-sq','comp-btn-diff-pv'];
-    btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = true; });
-    var btnDiffPv = document.getElementById('comp-btn-diff-pv');
-    if (btnDiffPv) btnDiffPv.textContent = '\u23F3 Computing\u2026';
     var _crp = document.getElementById('comp-result-placeholder') || document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
-    document.getElementById('comp-result-az').style.display = 'none';
-    document.getElementById('comp-result-sq').style.display = 'none';
     _showCompStatus('loading', 'Computing difference plan-view composite (A\u2212B) at ' + pvParams.level_km + ' km\u2026');
 
     var baseQS = '&variable=' + encodeURIComponent(variable) +
@@ -10768,7 +10870,7 @@ function generateCompDiffPlanView() {
     // Sequential streaming: fetch Group A first, then Group B, to avoid
     // doubling memory/thread pressure on the server.
     var jsonA;
-    _fetchCompositeStream(urlA, 'Group A plan view').then(function(result) {
+    return _fetchCompositeStream(urlA, 'Group A plan view').then(function(result) {
         jsonA = result;
         _showCompStatus('loading', 'Group A done (' + jsonA.n_cases + ' cases). Computing Group B\u2026');
         return _fetchCompositeStream(urlB, 'Group B plan view');
@@ -10820,10 +10922,7 @@ function generateCompDiffPlanView() {
         _renderDiffPlanView('comp-result-pv', diffJson, jsonA, jsonB, filtersA, filtersB, pvParams);
         _showCompShadingToolbar();
     }).catch(function(err) {
-        _showCompStatus('error', '\u2717 ' + (err.message || String(err)));
-    }).finally(function() {
-        btns.forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = false; });
-        if (btnDiffPv) btnDiffPv.textContent = '\u0394 Plan View (A\u2212B)';
+        _showCompStatus('error', '\u2717 Plan View: ' + (err.message || String(err)));
     });
 }
 
@@ -10975,7 +11074,7 @@ function generateCompDiffCFAD() {
     var urlB = API_BASE + '/composite/cfad?' + _compositeQueryString(filtersB) + cfadQS;
 
     var jsonA;
-    _fetchCompositeStream(urlA, 'Group A CFAD').then(function(result) {
+    return _fetchCompositeStream(urlA, 'Group A CFAD').then(function(result) {
         jsonA = result;
         _showCompStatus('loading', 'Group A done (' + jsonA.n_cases + ' cases). Computing Group B\u2026');
         return _fetchCompositeStream(urlB, 'Group B CFAD');
