@@ -837,6 +837,19 @@ function renderStormDetail(storm) {
         stopIRPlayback();
         removeIROverlay();
     }
+
+    // MW satellite overlay — show toggle if storm has an ATCF ID (TC-PRIMED coverage)
+    var mwToggleWrap = document.getElementById('ga-mw-toggle-wrap');
+    if (mwToggleWrap) {
+        if (storm.atcf_id && storm.year >= 1987) {
+            mwToggleWrap.style.display = '';
+            document.getElementById('ga-mw-status').textContent = '';
+            loadGlobalMWOverpasses(storm);
+        } else {
+            mwToggleWrap.style.display = 'none';
+            removeGlobalMWOverlay();
+        }
+    }
 }
 
 function renderIntensityTimeline(track, storm) {
@@ -4185,5 +4198,191 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 });
+
+// ═══════════════════════════════════════════════════════════════
+// ── MICROWAVE SATELLITE OVERLAY (TC-PRIMED) — GLOBAL ARCHIVE ──
+// ═══════════════════════════════════════════════════════════════
+
+var _gaMwOverpassData = [];      // all overpasses for current storm
+var _gaMwVisible = false;        // MW overlay is shown on the detail map
+var _gaMwMapOverlay = null;      // L.imageOverlay for the current MW frame
+var _gaMwMarkers = null;         // L.layerGroup of overpass time-markers on track
+var _gaMwLastAtcf = null;        // last ATCF ID we fetched for
+
+/**
+ * Fetch all microwave overpasses for the selected storm's lifecycle.
+ * Called from renderStormDetail() when a storm with an ATCF ID is viewed.
+ */
+function loadGlobalMWOverpasses(storm) {
+    var status = document.getElementById('ga-mw-status');
+    var sel = document.getElementById('ga-mw-overpass-select');
+    if (!sel) return;
+
+    var atcfId = storm.atcf_id;
+    if (!atcfId) return;
+
+    // Skip if already loaded for this storm
+    if (atcfId === _gaMwLastAtcf && _gaMwOverpassData.length > 0) return;
+    _gaMwLastAtcf = atcfId;
+
+    sel.innerHTML = '<option value="">Loading...</option>';
+    if (status) status.textContent = 'Searching TC-PRIMED...';
+
+    fetch(API_BASE + '/microwave/storm_overpasses?atcf_id=' + encodeURIComponent(atcfId))
+        .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(function (json) {
+            _gaMwOverpassData = json.overpasses || [];
+            sel.innerHTML = '';
+
+            if (_gaMwOverpassData.length === 0) {
+                sel.innerHTML = '<option value="">No overpasses found</option>';
+                if (status) status.textContent = 'No TC-PRIMED data';
+                return;
+            }
+
+            for (var i = 0; i < _gaMwOverpassData.length; i++) {
+                var op = _gaMwOverpassData[i];
+                var label = op.sensor + ' / ' + op.platform + ' — ' + op.datetime;
+                var opt = document.createElement('option');
+                opt.value = i;
+                opt.textContent = label;
+                sel.appendChild(opt);
+            }
+
+            if (status) status.textContent = _gaMwOverpassData.length + ' overpass(es)';
+        })
+        .catch(function (e) {
+            sel.innerHTML = '<option value="">Error</option>';
+            if (status) status.textContent = 'Error: ' + e.message;
+        });
+}
+
+/**
+ * Toggle the MW overlay layer on the global archive detail map.
+ */
+window.toggleGlobalMWOverlay = function () {
+    var btn = document.getElementById('ga-mw-toggle-btn');
+    var controls = document.getElementById('ga-mw-controls');
+
+    if (_gaMwVisible) {
+        // Hide
+        _gaMwVisible = false;
+        if (btn) btn.textContent = '\uD83D\uDCE1 MW';
+        if (controls) controls.style.display = 'none';
+        if (_gaMwMapOverlay && detailMap) { detailMap.removeLayer(_gaMwMapOverlay); }
+        if (_gaMwMarkers && detailMap) { detailMap.removeLayer(_gaMwMarkers); }
+        return;
+    }
+
+    // Show
+    _gaMwVisible = true;
+    if (btn) btn.textContent = 'Hide MW';
+    if (controls) controls.style.display = '';
+
+    // If overpasses loaded, show markers on track and auto-load first
+    if (_gaMwOverpassData.length > 0) {
+        addMWTrackMarkers();
+        loadGlobalMWOverpass();
+    }
+};
+
+/**
+ * Add small markers along the storm track showing overpass times.
+ */
+function addMWTrackMarkers() {
+    if (_gaMwMarkers && detailMap) detailMap.removeLayer(_gaMwMarkers);
+    _gaMwMarkers = L.layerGroup();
+
+    // Sensor colour map
+    var colors = {
+        'GMI': '#00bcd4', 'SSMIS': '#ff7043', 'AMSR2': '#66bb6a',
+        'SSMI': '#ab47bc', 'TMI': '#ffa726', 'ATMS': '#42a5f5', 'MHS': '#78909c'
+    };
+
+    // We don't have lat/lon for each overpass from the API directly,
+    // but we can still render them as a visual indicator if the storm track
+    // is available. For now, just skip track markers — the dropdown is the
+    // primary navigation interface.
+    // Future enhancement: interpolate overpass time to track lat/lon.
+
+    if (detailMap) _gaMwMarkers.addTo(detailMap);
+}
+
+/**
+ * Load the selected MW overpass image onto the detail map.
+ */
+window.loadGlobalMWOverpass = function () {
+    var sel = document.getElementById('ga-mw-overpass-select');
+    var prodSel = document.getElementById('ga-mw-product-select');
+    var status = document.getElementById('ga-mw-frame-status');
+    if (!sel || sel.value === '') return;
+
+    var idx = parseInt(sel.value, 10);
+    var op = _gaMwOverpassData[idx];
+    if (!op) return;
+
+    var product = (prodSel && prodSel.value) || '89pct';
+
+    if (product === '37h' && !op.has_37) {
+        if (status) status.textContent = op.sensor + ' has no 37 GHz';
+        return;
+    }
+
+    if (status) status.textContent = 'Loading ' + product + '...';
+
+    var url = API_BASE + '/microwave/data?s3_key=' + encodeURIComponent(op.s3_key) +
+        '&product=' + product;
+
+    // Pass storm center if available from the selected storm
+    if (selectedStorm) {
+        var lat = selectedStorm.lmi_lat || selectedStorm.genesis_lat || 0;
+        var lon = selectedStorm.lmi_lon || selectedStorm.genesis_lon || 0;
+        url += '&center_lat=' + lat + '&center_lon=' + lon;
+    }
+
+    fetch(url)
+        .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(function (json) {
+            if (!json.image_b64 || !json.bounds) {
+                if (status) status.textContent = 'No data returned';
+                return;
+            }
+
+            var imgUrl = 'data:image/png;base64,' + json.image_b64;
+            var bounds = L.latLngBounds(
+                L.latLng(json.bounds[0][0], json.bounds[0][1]),
+                L.latLng(json.bounds[1][0], json.bounds[1][1])
+            );
+
+            if (_gaMwMapOverlay && detailMap) {
+                detailMap.removeLayer(_gaMwMapOverlay);
+            }
+            _gaMwMapOverlay = L.imageOverlay(imgUrl, bounds, {
+                opacity: 0.8, interactive: false, zIndex: 180
+            });
+            if (_gaMwVisible && detailMap) _gaMwMapOverlay.addTo(detailMap);
+
+            if (status) status.textContent = json.sensor + ' ' + json.datetime;
+        })
+        .catch(function (e) {
+            if (status) status.textContent = 'Error: ' + e.message;
+        });
+};
+
+/**
+ * Remove the MW overlay and reset state (called when switching storms).
+ */
+function removeGlobalMWOverlay() {
+    if (_gaMwMapOverlay && detailMap) { detailMap.removeLayer(_gaMwMapOverlay); _gaMwMapOverlay = null; }
+    if (_gaMwMarkers && detailMap) { detailMap.removeLayer(_gaMwMarkers); _gaMwMarkers = null; }
+    _gaMwOverpassData = [];
+    _gaMwVisible = false;
+    _gaMwLastAtcf = null;
+    var btn = document.getElementById('ga-mw-toggle-btn');
+    if (btn) btn.textContent = '\uD83D\uDCE1 MW';
+    var controls = document.getElementById('ga-mw-controls');
+    if (controls) controls.style.display = 'none';
+}
+
 
 })();
