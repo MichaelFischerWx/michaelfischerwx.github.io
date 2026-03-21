@@ -609,6 +609,7 @@
         var csBtn = document.getElementById('rt-cs-btn'); if (csBtn) csBtn.disabled = false;
         var volBtn = document.getElementById('rt-vol-btn'); if (volBtn) volBtn.disabled = false;
         var azBtn = document.getElementById('rt-az-btn'); if (azBtn) azBtn.disabled = false;
+        var cfadBtn = document.getElementById('rt-cfad-btn'); if (cfadBtn) cfadBtn.disabled = false;
         var tiltBtn = document.getElementById('rt-tilt-btn'); if (tiltBtn) tiltBtn.disabled = false;
         var barbBtn = document.getElementById('rt-barb-btn'); if (barbBtn) barbBtn.disabled = false;
         // Anomaly + Quadrant buttons stay disabled until SHIPS is loaded
@@ -5394,5 +5395,88 @@
         Plotly.addTraces(chartDiv, [lineTrace, markerTrace]);
         if (btn) btn.classList.add('active');
     };
+
+
+    // ── Single-Case CFAD for Real-Time TDR ──────────────────────────
+    window.rtFetchCFAD = function () {
+        if (!_rtCurrentFileUrl) return;
+        var btn = document.getElementById('rt-cfad-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Loading...'; }
+
+        var variable = (document.getElementById('rt-var-select') || {}).value || 'REFLECTIVITY';
+        var url = RT_API_BASE + '/cfad?file_url=' + encodeURIComponent(_rtCurrentFileUrl) +
+            '&variable=' + variable + '&max_radius=200&normalise=height';
+
+        fetch(url)
+            .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(function (json) { _rtRenderCFAD(json); })
+            .catch(function (e) { alert('CFAD error: ' + e.message); })
+            .finally(function () { if (btn) { btn.disabled = false; btn.textContent = '\u2593 CFAD'; } });
+    };
+
+    function _rtRenderCFAD(json) {
+        var cfad = json.cfad;
+        var binCenters = json.bin_centers;
+        var heightKm = json.height_km;
+        var varInfo = json.variable;
+        var normLabel = json.norm_label;
+        var meta = json.case_meta || {};
+
+        var title = '';
+        if (meta.storm_name) title += meta.storm_name;
+        if (meta.datetime) title += ' | ' + meta.datetime;
+        title += '<br>CFAD: ' + varInfo.display_name + ' (' + varInfo.units + ')';
+
+        var trace = {
+            z: cfad,
+            x: binCenters,
+            y: heightKm,
+            type: 'heatmap',
+            colorscale: [
+                [0,    'rgba(10,10,30,0)'],
+                [0.01, '#1a1a4e'],
+                [0.05, '#2d1b69'],
+                [0.10, '#4a0e7f'],
+                [0.20, '#7b2a8e'],
+                [0.35, '#b84e8e'],
+                [0.50, '#e0735e'],
+                [0.70, '#f5a623'],
+                [0.85, '#f5d76e'],
+                [1.0,  '#fafafa']
+            ],
+            colorbar: {
+                title: { text: normLabel, font: { color: '#ccc', size: 11 } },
+                tickfont: { color: '#aaa', size: 10 },
+                thickness: 12,
+                len: 0.7,
+            },
+            hoverongaps: false,
+            hovertemplate: '<b>' + varInfo.display_name + ':</b> %{x:.2f} ' + varInfo.units +
+                '<br><b>Height:</b> %{y:.1f} km<br><b>Freq:</b> %{z:.2f}%<extra></extra>',
+        };
+
+        var layout = {
+            title: { text: title, font: { color: '#e0e0e0', size: 13 }, x: 0.5 },
+            xaxis: {
+                title: { text: varInfo.display_name + ' (' + varInfo.units + ')', font: { color: '#aaa', size: 12 } },
+                color: '#aaa', gridcolor: 'rgba(255,255,255,0.06)', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.2)',
+            },
+            yaxis: {
+                title: { text: 'Height (km)', font: { color: '#aaa', size: 12 } },
+                color: '#aaa', gridcolor: 'rgba(255,255,255,0.06)',
+            },
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: '#0f172a',
+            margin: { t: 50, b: 45, l: 50, r: 10 },
+            font: { family: 'JetBrains Mono, monospace' },
+        };
+
+        var el = document.getElementById('rt-az-result');
+        if (!el) el = document.getElementById('rt-cs-result');
+        if (el) {
+            el.innerHTML = '<div id="rt-cfad-chart" style="width:100%;height:400px;border-radius:6px;overflow:hidden;"></div>';
+            Plotly.newPlot('rt-cfad-chart', [trace], layout, { responsive: true, displayModeBar: true, displaylogo: false });
+        }
+    }
 
 })();

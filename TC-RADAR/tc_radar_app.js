@@ -331,6 +331,7 @@ function openSidePanel(caseData, fromQuickSelect) {
                         '<button class="cs-btn" id="vol-btn" onclick="fetch3DVolume()" disabled>\uD83D\uDDA5 3D Volume</button>' +
                         '<button class="cs-btn" id="vp-scatter-btn" onclick="fetchVPScatter()" style="background:rgba(251,191,36,0.12);border-color:rgba(251,191,36,0.35);color:#fde68a;">\u2B24 VP Scatter</button>' +
                         '<button class="cs-btn" id="anom-btn" onclick="document.getElementById(\'az-coord-mode\').value=\'anomaly\';dispatchAzimuthalMean();" disabled style="background:rgba(52,211,153,0.12);border-color:rgba(52,211,153,0.35);color:#6ee7b7;">Z* Anomaly</button>' +
+                        '<button class="cs-btn" id="cfad-btn" onclick="fetchSingleCFAD()" disabled style="background:rgba(168,85,247,0.12);border-color:rgba(168,85,247,0.35);color:#c4b5fd;">\u2593 CFAD</button>' +
                     '</div>' +
                 '</div>' +
                 // ── STORM EVOLUTION: temporal context ──
@@ -3920,6 +3921,7 @@ function renderPlotFromJSON(json, resultDiv) {
     var sqBtn = document.getElementById('sq-btn'); if (sqBtn) sqBtn.disabled = false;
     var volBtn = document.getElementById('vol-btn'); if (volBtn) volBtn.disabled = false;
     var anomBtn = document.getElementById('anom-btn'); if (anomBtn) anomBtn.disabled = false;
+    var cfadBtn = document.getElementById('cfad-btn'); if (cfadBtn) cfadBtn.disabled = false;
     document.getElementById('plotly-chart').on('plotly_click', handlePlotClick);
 
     // Auto-scroll the side panel to show the plot (skip during animation)
@@ -4746,6 +4748,107 @@ function renderVPScatterInto(targetId, json, fullsize) {
         Plotly.newPlot('az-chart', traces, layout, { responsive:true,displayModeBar:false });
     } else {
         Plotly.newPlot(targetId, traces, layout, { responsive:true,displayModeBar:true,displaylogo:false });
+    }
+}
+
+
+// ── Single-Case CFAD ────────────────────────────────────────────
+var _lastCFADJson = null;
+
+function fetchSingleCFAD() {
+    if (!_selectedCaseIndex && _selectedCaseIndex !== 0) return;
+    var btn = document.getElementById('cfad-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Loading...'; }
+
+    var variable = (document.getElementById('var-select') || {}).value || 'REFLECTIVITY';
+    var dataType = (_currentDataType || 'swath');
+    var era = (_currentEra || '');
+    var maxR = 200;
+
+    var url = API_BASE + '/cfad/single?case_index=' + _selectedCaseIndex +
+        '&variable=' + variable + '&data_type=' + dataType +
+        '&era=' + encodeURIComponent(era) + '&max_radius=' + maxR + '&normalise=height';
+
+    fetch(url)
+        .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(function(json) {
+            _lastCFADJson = json;
+            _lastAzJson = null; _lastHybridAzJson = null; _lastAnomalyAzJson = null; _lastVPScatterJson = null;
+            renderSingleCFADInto('az-result', json, false);
+            openPlotModal();
+        })
+        .catch(function(e) { alert('CFAD error: ' + e.message); })
+        .finally(function() { if (btn) { btn.disabled = false; btn.textContent = '\u2593 CFAD'; } });
+}
+
+function renderSingleCFADInto(targetId, json, fullsize) {
+    var cfad = json.cfad;
+    var binCenters = json.bin_centers;
+    var heightKm = json.height_km;
+    var varInfo = json.variable;
+    var normLabel = json.norm_label;
+    var caseMeta = json.case_meta || {};
+
+    // Build title
+    var title = '';
+    if (caseMeta.storm_name) title += caseMeta.storm_name;
+    if (caseMeta.vmax) title += ' (' + caseMeta.vmax + ' kt)';
+    title += '<br>CFAD: ' + varInfo.display_name + ' (' + varInfo.units + ')';
+
+    var trace = {
+        z: cfad,
+        x: binCenters,
+        y: heightKm,
+        type: 'heatmap',
+        colorscale: [
+            [0,    'rgba(10,10,30,0)'],
+            [0.01, '#1a1a4e'],
+            [0.05, '#2d1b69'],
+            [0.10, '#4a0e7f'],
+            [0.20, '#7b2a8e'],
+            [0.35, '#b84e8e'],
+            [0.50, '#e0735e'],
+            [0.70, '#f5a623'],
+            [0.85, '#f5d76e'],
+            [1.0,  '#fafafa']
+        ],
+        colorbar: {
+            title: { text: normLabel, font: { color: '#ccc', size: 11 } },
+            tickfont: { color: '#aaa', size: 10 },
+            thickness: 12,
+            len: 0.7,
+        },
+        hoverongaps: false,
+        hovertemplate: '<b>' + varInfo.display_name + ':</b> %{x:.2f} ' + varInfo.units +
+            '<br><b>Height:</b> %{y:.1f} km<br><b>Freq:</b> %{z:.2f}' +
+            (json.normalise === 'raw' ? '' : '%') + '<extra></extra>',
+    };
+
+    var layout = {
+        title: { text: title, font: { color: '#e0e0e0', size: fullsize ? 15 : 13 }, x: 0.5 },
+        xaxis: {
+            title: { text: varInfo.display_name + ' (' + varInfo.units + ')', font: { color: '#aaa', size: 12 } },
+            color: '#aaa', gridcolor: 'rgba(255,255,255,0.06)', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.2)',
+        },
+        yaxis: {
+            title: { text: 'Height (km)', font: { color: '#aaa', size: 12 } },
+            color: '#aaa', gridcolor: 'rgba(255,255,255,0.06)',
+        },
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: '#0f172a',
+        margin: fullsize ? { t: 50, b: 50, l: 55, r: 20 } : { t: 50, b: 45, l: 50, r: 10 },
+        font: { family: 'JetBrains Mono, monospace' },
+    };
+
+    var el = document.getElementById(targetId);
+    if (!fullsize && el) {
+        var thumbWrap = document.getElementById('thumbnail-wrap');
+        if (thumbWrap) thumbWrap.style.display = 'none';
+        el.innerHTML = '<div style="position:relative;"><div id="az-chart" style="width:100%;height:360px;border-radius:6px;overflow:hidden;"></div>' +
+            '<button onclick="openPlotModal()" title="Expand" style="position:absolute;top:6px;right:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:30px;height:30px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;">\u26F6</button></div>';
+        Plotly.newPlot('az-chart', [trace], layout, { responsive: true, displayModeBar: false });
+    } else {
+        Plotly.newPlot(targetId, [trace], layout, { responsive: true, displayModeBar: true, displaylogo: false });
     }
 }
 
@@ -6440,7 +6543,7 @@ function openPlotModal(csJson) {
         container.appendChild(sqDivider); container.appendChild(sqFull);
     }
     modal.classList.add('active'); document.body.style.overflow = 'hidden';
-    var hasCrossSection = !!csJson, hasAzMean = !!_lastAzJson || !!_lastHybridAzJson || !!_lastAnomalyAzJson || !!_lastVPScatterJson, hasShearQuads = !!_lastSqJson;
+    var hasCrossSection = !!csJson, hasAzMean = !!_lastAzJson || !!_lastHybridAzJson || !!_lastAnomalyAzJson || !!_lastVPScatterJson || !!_lastCFADJson, hasShearQuads = !!_lastSqJson;
     var hasSub = hasCrossSection || hasAzMean || hasShearQuads;
     if (hasSub) box.classList.add('split'); else box.classList.remove('split');
     csFull.style.display = hasCrossSection?'block':'none'; csDivider.style.display = hasCrossSection?'block':'none';
@@ -6512,7 +6615,8 @@ function openPlotModal(csJson) {
     Plotly.newPlot('plotly-fullscreen', [fullHeatmap].concat(liveTraces).concat(d.maxTraces||[]).concat(d.tiltTraces||[]), fullLayout, d.config);
     if (hasCrossSection) renderCrossSectionInto('cs-fullscreen', csJson, true);
     if (hasAzMean) {
-        if (_lastVPScatterJson) renderVPScatterInto('az-fullscreen', _lastVPScatterJson, true);
+        if (_lastCFADJson) renderSingleCFADInto('az-fullscreen', _lastCFADJson, true);
+        else if (_lastVPScatterJson) renderVPScatterInto('az-fullscreen', _lastVPScatterJson, true);
         else if (_lastAnomalyAzJson) renderAnomalyAzimuthalMeanInto('az-fullscreen', _lastAnomalyAzJson, true);
         else if (_lastHybridAzJson) renderHybridAzimuthalMeanInto('az-fullscreen', _lastHybridAzJson, true);
         else renderAzimuthalMeanInto('az-fullscreen', _lastAzJson, true);
