@@ -331,7 +331,24 @@ function openSidePanel(caseData, fromQuickSelect) {
                         '<button class="cs-btn" id="vol-btn" onclick="fetch3DVolume()" disabled>\uD83D\uDDA5 3D Volume</button>' +
                         '<button class="cs-btn" id="vp-scatter-btn" onclick="fetchVPScatter()" style="background:rgba(251,191,36,0.12);border-color:rgba(251,191,36,0.35);color:#fde68a;">\u2B24 VP Scatter</button>' +
                         '<button class="cs-btn" id="anom-btn" onclick="document.getElementById(\'az-coord-mode\').value=\'anomaly\';dispatchAzimuthalMean();" disabled style="background:rgba(52,211,153,0.12);border-color:rgba(52,211,153,0.35);color:#6ee7b7;">Z* Anomaly</button>' +
-                        '<button class="cs-btn" id="cfad-btn" onclick="fetchSingleCFAD()" disabled style="background:rgba(168,85,247,0.12);border-color:rgba(168,85,247,0.35);color:#c4b5fd;">\u2593 CFAD</button>' +
+                        '<div style="position:relative;display:inline;">' +
+                            '<button class="cs-btn" id="cfad-btn" onclick="toggleSingleCFADConfig()" disabled style="background:rgba(168,85,247,0.12);border-color:rgba(168,85,247,0.35);color:#c4b5fd;">\u2593 CFAD</button>' +
+                            '<div id="cfad-config-popover" style="display:none;position:absolute;bottom:calc(100% + 6px);left:0;z-index:1000;width:290px;background:#1e293b;border:1px solid rgba(168,85,247,0.35);border-radius:8px;padding:10px 12px;box-shadow:0 8px 24px rgba(0,0,0,0.5);">' +
+                                '<div style="font-size:10px;font-weight:600;color:#c4b5fd;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">\u2593 CFAD Options</div>' +
+                                '<div style="display:flex;flex-direction:column;gap:6px;">' +
+                                    '<div style="display:flex;align-items:center;gap:6px;"><label style="font-size:10px;color:#9ca3af;width:80px;flex-shrink:0;">Bin Width</label><input type="number" id="sc-cfad-bin-width" placeholder="auto" min="0.1" step="any" style="width:70px;padding:3px 6px;font-size:10px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;"></div>' +
+                                    '<div style="display:flex;align-items:center;gap:6px;"><label style="font-size:10px;color:#9ca3af;width:80px;flex-shrink:0;"># Bins</label><input type="number" id="sc-cfad-n-bins" value="40" min="5" max="200" step="1" style="width:70px;padding:3px 6px;font-size:10px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;"><span style="font-size:8px;color:#6b7280;">(if no width)</span></div>' +
+                                    '<div style="display:flex;align-items:center;gap:6px;"><label style="font-size:10px;color:#9ca3af;width:80px;flex-shrink:0;">Bin Range</label><input type="number" id="sc-cfad-bin-min" placeholder="auto" step="any" style="width:55px;padding:3px 6px;font-size:10px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;"><span style="font-size:9px;color:#6b7280;">to</span><input type="number" id="sc-cfad-bin-max" placeholder="auto" step="any" style="width:55px;padding:3px 6px;font-size:10px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;"></div>' +
+                                    '<div style="display:flex;align-items:center;gap:6px;"><label style="font-size:10px;color:#9ca3af;width:80px;flex-shrink:0;">Normalise</label><select id="sc-cfad-normalise" style="font-size:10px;padding:3px 4px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;"><option value="height">% at Each Height</option><option value="total">% of Total</option><option value="raw">Raw Counts</option></select></div>' +
+                                    '<div style="display:flex;align-items:center;gap:6px;"><label style="font-size:10px;color:#9ca3af;width:80px;flex-shrink:0;">Radial (km)</label><input type="number" id="sc-cfad-min-radius" value="0" min="0" max="500" step="any" style="width:55px;padding:3px 6px;font-size:10px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;"><span style="font-size:9px;color:#6b7280;">to</span><input type="number" id="sc-cfad-max-radius" value="200" min="0.1" max="500" step="any" style="width:55px;padding:3px 6px;font-size:10px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;"></div>' +
+                                    '<div style="display:flex;align-items:center;gap:4px;"><input type="checkbox" id="sc-cfad-log-scale"><label for="sc-cfad-log-scale" style="font-size:10px;color:#9ca3af;">Log-scale colorbar</label></div>' +
+                                '</div>' +
+                                '<div style="display:flex;gap:6px;margin-top:10px;">' +
+                                    '<button onclick="fetchSingleCFAD()" style="flex:1;padding:6px 0;font-size:11px;font-weight:700;border:none;border-radius:5px;background:rgba(168,85,247,0.5);color:#e9d5ff;cursor:pointer;font-family:\'JetBrains Mono\',monospace;transition:background 0.2s;" onmouseover="this.style.background=\'rgba(168,85,247,0.7)\'" onmouseout="this.style.background=\'rgba(168,85,247,0.5)\'">Generate CFAD</button>' +
+                                    '<button onclick="toggleSingleCFADConfig()" style="padding:6px 10px;font-size:11px;font-weight:700;border:1px solid rgba(255,255,255,0.1);border-radius:5px;background:transparent;color:#9ca3af;cursor:pointer;font-family:\'JetBrains Mono\',monospace;">Cancel</button>' +
+                                '</div>' +
+                            '</div>' +
+                        '</div>' +
                     '</div>' +
                 '</div>' +
                 // ── STORM EVOLUTION: temporal context ──
@@ -4755,23 +4772,49 @@ function renderVPScatterInto(targetId, json, fullsize) {
 // ── Single-Case CFAD ────────────────────────────────────────────
 var _lastCFADJson = null;
 
+function toggleSingleCFADConfig() {
+    var pop = document.getElementById('cfad-config-popover');
+    if (!pop) return;
+    pop.style.display = pop.style.display === 'none' ? 'block' : 'none';
+}
+
 function fetchSingleCFAD() {
     if (!_selectedCaseIndex && _selectedCaseIndex !== 0) return;
     var btn = document.getElementById('cfad-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Loading...'; }
 
+    // Hide the config popover
+    var pop = document.getElementById('cfad-config-popover');
+    if (pop) pop.style.display = 'none';
+
     var variable = (document.getElementById('var-select') || {}).value || 'REFLECTIVITY';
     var dataType = (_currentDataType || 'swath');
     var era = (_currentEra || '');
-    var maxR = 200;
+
+    // Read config from popover inputs
+    var binWidth = parseFloat((document.getElementById('sc-cfad-bin-width') || {}).value) || 0;
+    var nBins = parseInt((document.getElementById('sc-cfad-n-bins') || {}).value, 10) || 40;
+    var binMinVal = (document.getElementById('sc-cfad-bin-min') || {}).value;
+    var binMaxVal = (document.getElementById('sc-cfad-bin-max') || {}).value;
+    var normalise = (document.getElementById('sc-cfad-normalise') || {}).value || 'height';
+    var minRadius = parseFloat((document.getElementById('sc-cfad-min-radius') || {}).value) || 0;
+    var maxRadius = parseFloat((document.getElementById('sc-cfad-max-radius') || {}).value) || 200;
+    var logScale = !!(document.getElementById('sc-cfad-log-scale') || {}).checked;
 
     var url = API_BASE + '/cfad/single?case_index=' + _selectedCaseIndex +
         '&variable=' + variable + '&data_type=' + dataType +
-        '&era=' + encodeURIComponent(era) + '&max_radius=' + maxR + '&normalise=height';
+        '&era=' + encodeURIComponent(era) +
+        '&min_radius=' + minRadius + '&max_radius=' + maxRadius +
+        '&normalise=' + encodeURIComponent(normalise) +
+        '&n_bins=' + nBins;
+    if (binWidth > 0) url += '&bin_width=' + binWidth;
+    if (binMinVal !== '' && binMinVal !== undefined && !isNaN(parseFloat(binMinVal))) url += '&bin_min=' + parseFloat(binMinVal);
+    if (binMaxVal !== '' && binMaxVal !== undefined && !isNaN(parseFloat(binMaxVal))) url += '&bin_max=' + parseFloat(binMaxVal);
 
     fetch(url)
         .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
         .then(function(json) {
+            json._logScale = logScale;
             _lastCFADJson = json;
             _lastAzJson = null; _lastHybridAzJson = null; _lastAnomalyAzJson = null; _lastVPScatterJson = null;
             renderSingleCFADInto('az-result', json, false);
@@ -4788,15 +4831,25 @@ function renderSingleCFADInto(targetId, json, fullsize) {
     var varInfo = json.variable;
     var normLabel = json.norm_label;
     var caseMeta = json.case_meta || {};
+    var useLog = !!json._logScale;
+
+    // Apply log transform if requested
+    var plotData = cfad;
+    if (useLog) {
+        plotData = cfad.map(function(row) {
+            return row.map(function(v) { return v > 0 ? Math.log10(v) : null; });
+        });
+    }
 
     // Build title
     var title = '';
     if (caseMeta.storm_name) title += caseMeta.storm_name;
     if (caseMeta.vmax) title += ' (' + caseMeta.vmax + ' kt)';
     title += '<br>CFAD: ' + varInfo.display_name + ' (' + varInfo.units + ')';
+    if (useLog) title += ' [log scale]';
 
     var trace = {
-        z: cfad,
+        z: plotData,
         x: binCenters,
         y: heightKm,
         type: 'heatmap',
@@ -4813,15 +4866,18 @@ function renderSingleCFADInto(targetId, json, fullsize) {
             [1.0,  '#fafafa']
         ],
         colorbar: {
-            title: { text: normLabel, font: { color: '#ccc', size: 11 } },
+            title: { text: useLog ? 'log₁₀(' + normLabel + ')' : normLabel, font: { color: '#ccc', size: 11 } },
             tickfont: { color: '#aaa', size: 10 },
             thickness: 12,
             len: 0.7,
         },
         hoverongaps: false,
-        hovertemplate: '<b>' + varInfo.display_name + ':</b> %{x:.2f} ' + varInfo.units +
-            '<br><b>Height:</b> %{y:.1f} km<br><b>Freq:</b> %{z:.2f}' +
-            (json.normalise === 'raw' ? '' : '%') + '<extra></extra>',
+        hovertemplate: useLog
+            ? '<b>' + varInfo.display_name + ':</b> %{x:.2f} ' + varInfo.units +
+              '<br><b>Height:</b> %{y:.1f} km<br><b>log₁₀(Freq):</b> %{z:.2f}<extra></extra>'
+            : '<b>' + varInfo.display_name + ':</b> %{x:.2f} ' + varInfo.units +
+              '<br><b>Height:</b> %{y:.1f} km<br><b>Freq:</b> %{z:.2f}' +
+              (json.normalise === 'raw' ? '' : '%') + '<extra></extra>',
     };
 
     var layout = {

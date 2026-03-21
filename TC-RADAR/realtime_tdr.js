@@ -5398,18 +5398,45 @@
 
 
     // ── Single-Case CFAD for Real-Time TDR ──────────────────────────
+    window.rtToggleCFADConfig = function () {
+        var pop = document.getElementById('rt-cfad-config-popover');
+        if (!pop) return;
+        pop.style.display = pop.style.display === 'none' ? 'block' : 'none';
+    };
+
     window.rtFetchCFAD = function () {
         if (!_rtCurrentFileUrl) return;
         var btn = document.getElementById('rt-cfad-btn');
         if (btn) { btn.disabled = true; btn.textContent = 'Loading...'; }
 
+        // Hide config popover
+        var pop = document.getElementById('rt-cfad-config-popover');
+        if (pop) pop.style.display = 'none';
+
         var variable = (document.getElementById('rt-var-select') || {}).value || 'REFLECTIVITY';
+
+        // Read config from popover inputs
+        var binWidth = parseFloat((document.getElementById('rt-cfad-bin-width') || {}).value) || 0;
+        var nBins = parseInt((document.getElementById('rt-cfad-n-bins') || {}).value, 10) || 40;
+        var binMinVal = (document.getElementById('rt-cfad-bin-min') || {}).value;
+        var binMaxVal = (document.getElementById('rt-cfad-bin-max') || {}).value;
+        var normalise = (document.getElementById('rt-cfad-normalise') || {}).value || 'height';
+        var minRadius = parseFloat((document.getElementById('rt-cfad-min-radius') || {}).value) || 0;
+        var maxRadius = parseFloat((document.getElementById('rt-cfad-max-radius') || {}).value) || 200;
+        var logScale = !!(document.getElementById('rt-cfad-log-scale') || {}).checked;
+
         var url = RT_API_BASE + '/cfad?file_url=' + encodeURIComponent(_rtCurrentFileUrl) +
-            '&variable=' + variable + '&max_radius=200&normalise=height';
+            '&variable=' + variable +
+            '&min_radius=' + minRadius + '&max_radius=' + maxRadius +
+            '&normalise=' + encodeURIComponent(normalise) +
+            '&n_bins=' + nBins;
+        if (binWidth > 0) url += '&bin_width=' + binWidth;
+        if (binMinVal !== '' && binMinVal !== undefined && !isNaN(parseFloat(binMinVal))) url += '&bin_min=' + parseFloat(binMinVal);
+        if (binMaxVal !== '' && binMaxVal !== undefined && !isNaN(parseFloat(binMaxVal))) url += '&bin_max=' + parseFloat(binMaxVal);
 
         fetch(url)
             .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
-            .then(function (json) { _rtRenderCFAD(json); })
+            .then(function (json) { json._logScale = logScale; _rtRenderCFAD(json); })
             .catch(function (e) { alert('CFAD error: ' + e.message); })
             .finally(function () { if (btn) { btn.disabled = false; btn.textContent = '\u2593 CFAD'; } });
     };
@@ -5421,14 +5448,24 @@
         var varInfo = json.variable;
         var normLabel = json.norm_label;
         var meta = json.case_meta || {};
+        var useLog = !!json._logScale;
+
+        // Apply log transform if requested
+        var plotData = cfad;
+        if (useLog) {
+            plotData = cfad.map(function(row) {
+                return row.map(function(v) { return v > 0 ? Math.log10(v) : null; });
+            });
+        }
 
         var title = '';
         if (meta.storm_name) title += meta.storm_name;
         if (meta.datetime) title += ' | ' + meta.datetime;
         title += '<br>CFAD: ' + varInfo.display_name + ' (' + varInfo.units + ')';
+        if (useLog) title += ' [log scale]';
 
         var trace = {
-            z: cfad,
+            z: plotData,
             x: binCenters,
             y: heightKm,
             type: 'heatmap',
@@ -5445,14 +5482,18 @@
                 [1.0,  '#fafafa']
             ],
             colorbar: {
-                title: { text: normLabel, font: { color: '#ccc', size: 11 } },
+                title: { text: useLog ? 'log₁₀(' + normLabel + ')' : normLabel, font: { color: '#ccc', size: 11 } },
                 tickfont: { color: '#aaa', size: 10 },
                 thickness: 12,
                 len: 0.7,
             },
             hoverongaps: false,
-            hovertemplate: '<b>' + varInfo.display_name + ':</b> %{x:.2f} ' + varInfo.units +
-                '<br><b>Height:</b> %{y:.1f} km<br><b>Freq:</b> %{z:.2f}%<extra></extra>',
+            hovertemplate: useLog
+                ? '<b>' + varInfo.display_name + ':</b> %{x:.2f} ' + varInfo.units +
+                  '<br><b>Height:</b> %{y:.1f} km<br><b>log₁₀(Freq):</b> %{z:.2f}<extra></extra>'
+                : '<b>' + varInfo.display_name + ':</b> %{x:.2f} ' + varInfo.units +
+                  '<br><b>Height:</b> %{y:.1f} km<br><b>Freq:</b> %{z:.2f}' +
+                  (json.normalise === 'raw' ? '' : '%') + '<extra></extra>',
         };
 
         var layout = {
