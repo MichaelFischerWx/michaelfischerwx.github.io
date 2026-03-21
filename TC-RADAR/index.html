@@ -185,6 +185,20 @@
                                 <button class="overlay-pill" id="rt-sonde-btn" onclick="rtToggleDropsondes()" disabled data-color="green" title="Dropsonde Data">🪂 Sondes</button>
                                 <button class="overlay-pill" id="rt-barb-btn" onclick="rtToggleBarbs()" disabled data-color="slate" title="Wind Barbs">🌬 Barbs</button>
                                 <button class="overlay-pill" id="rt-tilt-btn" onclick="rtToggleTilt()" disabled data-color="pink" title="Vortex Tilt Profile">🎯 Tilt</button>
+                                <button class="overlay-pill" id="rt-mw-overlay-btn" onclick="rtToggleMicrowaveOverlay()" data-color="orange" title="Microwave Satellite Overlay">📡 MW</button>
+                            </div>
+                            <!-- Microwave overpass selector (hidden by default) -->
+                            <div id="rt-mw-overpass-panel" style="display:none;margin-top:6px;background:rgba(30,41,59,0.95);border:1px solid rgba(251,146,60,0.35);border-radius:8px;padding:8px 12px;">
+                                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                    <label style="font-size:10px;font-weight:600;color:#fdba74;text-transform:uppercase;letter-spacing:0.5px;">Overpass</label>
+                                    <select id="rt-mw-overpass-select" onchange="rtLoadMicrowaveOverpass()" style="flex:1;min-width:180px;font-size:10px;padding:4px 6px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:'JetBrains Mono',monospace;"></select>
+                                    <label style="font-size:10px;color:#9ca3af;">Product</label>
+                                    <select id="rt-mw-product-select" onchange="rtLoadMicrowaveOverpass()" style="font-size:10px;padding:4px 6px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:'JetBrains Mono',monospace;">
+                                        <option value="89pct">89 GHz PCT</option>
+                                        <option value="37h">37 GHz H-pol</option>
+                                    </select>
+                                    <span id="rt-mw-status" style="font-size:9px;color:#64748b;"></span>
+                                </div>
                             </div>
                             <div class="action-section">
                                 <span class="action-section-label">Analysis</span>

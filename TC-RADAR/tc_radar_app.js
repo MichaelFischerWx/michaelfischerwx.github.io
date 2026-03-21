@@ -319,6 +319,20 @@ function openSidePanel(caseData, fromQuickSelect) {
                     '<button class="overlay-pill" id="barb-btn" onclick="toggleWindBarbs()" data-color="slate" title="Wind Barbs">\uD83C\uDF2C Barbs</button>' +
                     '<button class="overlay-pill" id="tilt-btn" onclick="toggleTiltProfile()" data-color="pink" title="Vortex Tilt Profile">\uD83C\uDFAF Tilt</button>' +
                     '<button class="overlay-pill" id="env-case-btn" onclick="toggleEnvOverlay()" data-color="emerald" title="ERA5 Environment Diagnostics">\uD83C\uDF0D Env</button>' +
+                    '<button class="overlay-pill" id="mw-overlay-btn" onclick="toggleMicrowaveOverlay()" data-color="orange" title="Microwave Satellite Overlay">\uD83D\uDCE1 MW</button>' +
+                '</div>' +
+                // ── Microwave overpass selector (hidden by default) ──
+                '<div id="mw-overpass-panel" style="display:none;margin-top:6px;background:rgba(30,41,59,0.95);border:1px solid rgba(251,146,60,0.35);border-radius:8px;padding:8px 12px;">' +
+                    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
+                        '<label style="font-size:10px;font-weight:600;color:#fdba74;text-transform:uppercase;letter-spacing:0.5px;">Overpass</label>' +
+                        '<select id="mw-overpass-select" onchange="loadMicrowaveOverpass()" style="flex:1;min-width:180px;font-size:10px;padding:4px 6px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;"></select>' +
+                        '<label style="font-size:10px;color:#9ca3af;">Product</label>' +
+                        '<select id="mw-product-select" onchange="loadMicrowaveOverpass()" style="font-size:10px;padding:4px 6px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;background:var(--navy);color:var(--text);font-family:\'JetBrains Mono\',monospace;">' +
+                            '<option value="89pct">89 GHz PCT</option>' +
+                            '<option value="37h">37 GHz H-pol</option>' +
+                        '</select>' +
+                        '<span id="mw-status" style="font-size:9px;color:#64748b;"></span>' +
+                    '</div>' +
                 '</div>' +
                 '<div class="fl-archive-status" id="fl-archive-status" style="display:none;font-size:10px;color:#fbbf24;padding:2px 8px;"></div>' +
                 // ── ANALYSIS: primary action buttons ──
@@ -356,6 +370,7 @@ function openSidePanel(caseData, fromQuickSelect) {
                     '<div class="display-actions">' +
                         '<button class="cs-btn" id="storm-timeline-btn" onclick="toggleStormTimeline()" style="background:rgba(0,212,255,0.12);border-color:rgba(0,212,255,0.35);color:#67e8f9;">\uD83D\uDCCA Intensity</button>' +
                         '<button class="cs-btn" id="hovmoller-btn" onclick="toggleHovmoller()" style="background:rgba(251,146,60,0.12);border-color:rgba(251,146,60,0.35);color:#fdba74;">\u2630 Hovm\u00f6ller</button>' +
+                        '<button class="cs-btn" id="mw-timeline-btn" onclick="toggleMWTimeline()" style="background:rgba(251,146,60,0.12);border-color:rgba(251,146,60,0.35);color:#fde68a;">\uD83D\uDCE1 MW Timeline</button>' +
                     '</div>' +
                 '</div>' +
                 // ── Storm intensity timeline (hidden by default) ──
@@ -390,6 +405,15 @@ function openSidePanel(caseData, fromQuickSelect) {
                     '</div>' +
                     '<div id="hovmoller-status" style="font-size:10px;color:#64748b;padding:2px 8px;"></div>' +
                     '<div id="hovmoller-chart" style="width:100%;height:340px;"></div>' +
+                '</div>' +
+                // ── MW Timeline panel (hidden by default) ──
+                '<div id="mw-timeline-panel" class="storm-timeline-panel" style="display:none;">' +
+                    '<div class="fl-ts-header">' +
+                        '<span class="fl-ts-title">\uD83D\uDCE1 MW Overpass Timeline</span>' +
+                        '<button onclick="closeMWTimeline()" class="fl-ts-close" title="Close">&times;</button>' +
+                    '</div>' +
+                    '<div id="mw-timeline-status" style="font-size:10px;color:#64748b;padding:2px 8px;"></div>' +
+                    '<div id="mw-timeline-chart" style="width:100%;height:300px;"></div>' +
                 '</div>' +
                 // ── Pre-rendered FL time-series panel (hidden by default) ──
                 '<div id="fl-archive-ts" class="fl-archive-ts" style="display:none;">' +
@@ -578,6 +602,7 @@ function closeSidePanel() {
     currentCaseData = null;
     animStop();
     removeIRMapOverlay();
+    removeMicrowaveOverlay();
     _irPlotlyVisible = false;
     cleanupERA5();
     _csMode = false; _csPointA = null; _removeRubberBand();
@@ -13353,6 +13378,265 @@ function _archiveSondeReset() {
     var btn = document.getElementById('btn-archive-sonde');
     if (btn) { btn.textContent = '\uD83E\uDE82 Sondes'; btn.classList.remove('sonde-active'); btn.classList.remove('active'); btn.disabled = false; }
     _archiveHideSondePanel();
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// ── MICROWAVE SATELLITE OVERLAY (TC-PRIMED) ──────────────────
+// ═══════════════════════════════════════════════════════════════
+
+var _mwMapOverlay = null;       // L.imageOverlay on the Leaflet map
+var _mwOverpassData = [];       // array of overpass objects from the API
+var _mwVisible = false;         // whether the MW layer is shown
+var _mwLastCaseIndex = null;    // last case we fetched overpasses for
+
+/**
+ * Toggle the microwave satellite overlay on/off.
+ * First click: fetch overpasses for the current case & show the selector panel.
+ * Subsequent: toggle visibility.
+ */
+function toggleMicrowaveOverlay() {
+    var btn = document.getElementById('mw-overlay-btn');
+    var panel = document.getElementById('mw-overpass-panel');
+    if (!btn || !panel) return;
+
+    if (_mwVisible) {
+        // Hide
+        _mwVisible = false;
+        btn.classList.remove('active');
+        panel.style.display = 'none';
+        if (_mwMapOverlay) _mwMapOverlay.setOpacity(0);
+        return;
+    }
+
+    // Show
+    _mwVisible = true;
+    btn.classList.add('active');
+    panel.style.display = 'block';
+
+    // If case changed or first time, fetch overpass list
+    if (currentCaseIndex !== _mwLastCaseIndex) {
+        _mwLastCaseIndex = currentCaseIndex;
+        fetchMicrowaveOverpasses(currentCaseIndex);
+    } else if (_mwMapOverlay) {
+        _mwMapOverlay.setOpacity(0.8);
+    }
+}
+
+/**
+ * Fetch the list of available microwave overpasses for a case.
+ */
+function fetchMicrowaveOverpasses(caseIdx) {
+    var sel = document.getElementById('mw-overpass-select');
+    var status = document.getElementById('mw-status');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Loading...</option>';
+    if (status) status.textContent = '';
+
+    fetch(API_BASE + '/microwave/overpasses?case_index=' + caseIdx)
+        .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(function(json) {
+            _mwOverpassData = json.overpasses || [];
+            sel.innerHTML = '';
+
+            if (_mwOverpassData.length === 0) {
+                sel.innerHTML = '<option value="">No overpasses found</option>';
+                if (status) status.textContent = 'No MW data within \u00b1' + (json.window_hours || 6) + 'h';
+                return;
+            }
+
+            for (var i = 0; i < _mwOverpassData.length; i++) {
+                var op = _mwOverpassData[i];
+                var sign = op.offset_minutes >= 0 ? '+' : '';
+                var label = op.sensor + ' / ' + op.platform +
+                    ' (' + sign + Math.round(op.offset_minutes) + ' min)';
+                var opt = document.createElement('option');
+                opt.value = i;
+                opt.textContent = label;
+                sel.appendChild(opt);
+            }
+
+            if (status) status.textContent = _mwOverpassData.length + ' overpass(es)';
+
+            // Auto-load the first (closest) overpass
+            loadMicrowaveOverpass();
+        })
+        .catch(function(e) {
+            sel.innerHTML = '<option value="">Error loading overpasses</option>';
+            if (status) status.textContent = 'Error: ' + e.message;
+        });
+}
+
+/**
+ * Load the selected overpass image onto the Leaflet map.
+ */
+function loadMicrowaveOverpass() {
+    var sel = document.getElementById('mw-overpass-select');
+    var prodSel = document.getElementById('mw-product-select');
+    var status = document.getElementById('mw-status');
+    if (!sel || sel.value === '') return;
+
+    var idx = parseInt(sel.value, 10);
+    var op = _mwOverpassData[idx];
+    if (!op) return;
+
+    var product = (prodSel && prodSel.value) || '89pct';
+
+    // Check if the sensor supports this product
+    if (product === '37h' && !op.has_37) {
+        if (status) status.textContent = op.sensor + ' does not have 37 GHz';
+        return;
+    }
+
+    if (status) status.textContent = 'Loading ' + product + '...';
+
+    var url = API_BASE + '/microwave/data?s3_key=' + encodeURIComponent(op.s3_key) +
+        '&product=' + product;
+    if (currentCaseData) {
+        url += '&center_lat=' + currentCaseData.latitude +
+               '&center_lon=' + currentCaseData.longitude;
+    }
+
+    fetch(url)
+        .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(function(json) {
+            if (!json.image_b64 || !json.bounds) {
+                if (status) status.textContent = 'No data returned';
+                return;
+            }
+
+            var imgUrl = 'data:image/png;base64,' + json.image_b64;
+            var bounds = L.latLngBounds(
+                L.latLng(json.bounds[0][0], json.bounds[0][1]),
+                L.latLng(json.bounds[1][0], json.bounds[1][1])
+            );
+
+            if (_mwMapOverlay) {
+                map.removeLayer(_mwMapOverlay);
+            }
+            _mwMapOverlay = L.imageOverlay(imgUrl, bounds, {
+                opacity: 0.8, interactive: false, zIndex: 190
+            });
+            if (_mwVisible) _mwMapOverlay.addTo(map);
+
+            if (status) status.textContent = json.sensor + ' ' + json.datetime;
+        })
+        .catch(function(e) {
+            if (status) status.textContent = 'Error: ' + e.message;
+        });
+}
+
+// ── MW Timeline (Storm Evolution section) ──
+
+var _mwTimelineOpen = false;
+
+function toggleMWTimeline() {
+    var panel = document.getElementById('mw-timeline-panel');
+    if (!panel) return;
+    if (_mwTimelineOpen) { closeMWTimeline(); return; }
+    _mwTimelineOpen = true;
+    panel.style.display = 'block';
+    fetchMWTimeline();
+}
+
+function closeMWTimeline() {
+    _mwTimelineOpen = false;
+    var panel = document.getElementById('mw-timeline-panel');
+    if (panel) panel.style.display = 'none';
+}
+
+function fetchMWTimeline() {
+    if (!currentCaseData) return;
+    var status = document.getElementById('mw-timeline-status');
+    if (status) status.textContent = 'Loading storm overpasses...';
+
+    var stormName = (currentCaseData.storm_name || '').toUpperCase();
+    var year = currentCaseData.year;
+
+    fetch(API_BASE + '/microwave/storm_overpasses?storm_name=' +
+          encodeURIComponent(stormName) + '&year=' + year)
+        .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(function(json) {
+            var ops = json.overpasses || [];
+            if (ops.length === 0) {
+                if (status) status.textContent = 'No overpasses found for ' + stormName + ' ' + year;
+                return;
+            }
+            if (status) status.textContent = json.atcf_id + ': ' + ops.length + ' overpasses';
+            renderMWTimeline(ops);
+        })
+        .catch(function(e) {
+            if (status) status.textContent = 'Error: ' + e.message;
+        });
+}
+
+function renderMWTimeline(overpasses) {
+    // Group by sensor for colour coding
+    var sensorColors = {
+        'GMI': '#00bcd4', 'SSMIS': '#ff7043', 'AMSR2': '#66bb6a',
+        'SSMI': '#ab47bc', 'TMI': '#ffa726', 'ATMS': '#42a5f5', 'MHS': '#78909c'
+    };
+
+    var traces = {};
+    for (var i = 0; i < overpasses.length; i++) {
+        var op = overpasses[i];
+        var key = op.sensor;
+        if (!traces[key]) {
+            traces[key] = {
+                x: [], y: [], text: [], name: key,
+                mode: 'markers',
+                marker: { color: sensorColors[key] || '#aaa', size: 8, symbol: 'diamond' },
+                hovertemplate: '%{text}<extra>' + key + '</extra>',
+                type: 'scatter'
+            };
+        }
+        var dt = op.datetime;
+        traces[key].x.push(dt);
+        traces[key].y.push(key);
+        traces[key].text.push(op.platform + '<br>' + dt);
+    }
+
+    var data = [];
+    for (var s in traces) { data.push(traces[s]); }
+
+    // Add vertical line for current TDR case time
+    var shapes = [];
+    if (currentCaseData && currentCaseData.datetime) {
+        var caseDt = currentCaseData.datetime.replace(' UTC', '');
+        shapes.push({
+            type: 'line', x0: caseDt, x1: caseDt, y0: -0.5, y1: data.length - 0.5,
+            line: { color: 'rgba(255,0,0,0.6)', width: 2, dash: 'dash' }
+        });
+    }
+
+    var layout = {
+        title: { text: 'MW Overpasses Across Storm Lifecycle', font: { color: '#e2e8f0', size: 13 } },
+        xaxis: { title: { text: 'Date/Time (UTC)', font: { color: '#aaa', size: 11 } }, color: '#aaa', gridcolor: 'rgba(255,255,255,0.06)' },
+        yaxis: { title: '', color: '#aaa', gridcolor: 'rgba(255,255,255,0.06)', type: 'category' },
+        paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: '#0f172a',
+        margin: { t: 40, b: 50, l: 60, r: 10 },
+        font: { family: 'JetBrains Mono, monospace' },
+        showlegend: true, legend: { font: { color: '#aaa', size: 9 }, bgcolor: 'rgba(0,0,0,0)' },
+        shapes: shapes,
+    };
+
+    var el = document.getElementById('mw-timeline-chart');
+    if (el) Plotly.newPlot(el, data, layout, { responsive: true, displayModeBar: true, displaylogo: false });
+}
+
+
+/**
+ * Remove the microwave overlay and reset state.
+ */
+function removeMicrowaveOverlay() {
+    if (_mwMapOverlay) { map.removeLayer(_mwMapOverlay); _mwMapOverlay = null; }
+    _mwOverpassData = [];
+    _mwVisible = false;
+    _mwLastCaseIndex = null;
+    var btn = document.getElementById('mw-overlay-btn');
+    if (btn) btn.classList.remove('active');
+    var panel = document.getElementById('mw-overpass-panel');
+    if (panel) panel.style.display = 'none';
 }
 
 

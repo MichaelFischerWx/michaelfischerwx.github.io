@@ -5520,4 +5520,162 @@
         }
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // ── MICROWAVE SATELLITE OVERLAY (TC-PRIMED) — REALTIME MODE ──
+    // ═══════════════════════════════════════════════════════════════
+
+    var _rtMwMapOverlay = null;
+    var _rtMwOverpassData = [];
+    var _rtMwVisible = false;
+    var _rtMwLastFileUrl = null;
+
+    window.rtToggleMicrowaveOverlay = function () {
+        var btn = document.getElementById('rt-mw-overlay-btn');
+        var panel = document.getElementById('rt-mw-overpass-panel');
+        if (!btn || !panel) return;
+
+        if (_rtMwVisible) {
+            _rtMwVisible = false;
+            btn.classList.remove('active');
+            panel.style.display = 'none';
+            if (_rtMwMapOverlay) _rtMwMapOverlay.setOpacity(0);
+            return;
+        }
+
+        _rtMwVisible = true;
+        btn.classList.add('active');
+        panel.style.display = 'block';
+
+        if (_currentFileUrl !== _rtMwLastFileUrl) {
+            _rtMwLastFileUrl = _currentFileUrl;
+            _rtFetchMicrowaveOverpasses();
+        } else if (_rtMwMapOverlay) {
+            _rtMwMapOverlay.setOpacity(0.8);
+        }
+    };
+
+    function _rtFetchMicrowaveOverpasses() {
+        var sel = document.getElementById('rt-mw-overpass-select');
+        var status = document.getElementById('rt-mw-status');
+        if (!sel) return;
+        sel.innerHTML = '<option value="">Loading...</option>';
+        if (status) status.textContent = '';
+
+        // Extract storm info from the loaded case meta
+        var stormName = '', year = '', analysisDt = '';
+        if (_rtCaseMeta) {
+            stormName = (_rtCaseMeta.storm_name || '').toUpperCase();
+            var dtStr = _rtCaseMeta.datetime || '';
+            year = dtStr ? dtStr.substring(0, 4) : '';
+            analysisDt = dtStr ? dtStr.replace(' UTC', '').replace(' ', 'T') + ':00+00:00' : '';
+        }
+
+        if (!stormName || !year) {
+            sel.innerHTML = '<option value="">No storm metadata</option>';
+            return;
+        }
+
+        var url = API_BASE + '/microwave/realtime_overpasses?storm_name=' +
+            encodeURIComponent(stormName) + '&year=' + year +
+            '&analysis_time=' + encodeURIComponent(analysisDt);
+
+        fetch(url)
+            .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(function (json) {
+                _rtMwOverpassData = json.overpasses || [];
+                sel.innerHTML = '';
+
+                if (_rtMwOverpassData.length === 0) {
+                    sel.innerHTML = '<option value="">No overpasses found</option>';
+                    if (status) status.textContent = 'No MW data within \u00b1' + (json.window_hours || 6) + 'h';
+                    return;
+                }
+
+                for (var i = 0; i < _rtMwOverpassData.length; i++) {
+                    var op = _rtMwOverpassData[i];
+                    var sign = op.offset_minutes >= 0 ? '+' : '';
+                    var label = op.sensor + ' / ' + op.platform +
+                        ' (' + sign + Math.round(op.offset_minutes) + ' min)';
+                    var opt = document.createElement('option');
+                    opt.value = i;
+                    opt.textContent = label;
+                    sel.appendChild(opt);
+                }
+
+                if (status) status.textContent = _rtMwOverpassData.length + ' overpass(es)';
+                window.rtLoadMicrowaveOverpass();
+            })
+            .catch(function (e) {
+                sel.innerHTML = '<option value="">Error</option>';
+                if (status) status.textContent = 'Error: ' + e.message;
+            });
+    }
+
+    window.rtLoadMicrowaveOverpass = function () {
+        var sel = document.getElementById('rt-mw-overpass-select');
+        var prodSel = document.getElementById('rt-mw-product-select');
+        var status = document.getElementById('rt-mw-status');
+        if (!sel || sel.value === '') return;
+
+        var idx = parseInt(sel.value, 10);
+        var op = _rtMwOverpassData[idx];
+        if (!op) return;
+
+        var product = (prodSel && prodSel.value) || '89pct';
+
+        if (product === '37h' && !op.has_37) {
+            if (status) status.textContent = op.sensor + ' does not have 37 GHz';
+            return;
+        }
+
+        if (status) status.textContent = 'Loading ' + product + '...';
+
+        var dataUrl = API_BASE + '/microwave/data?s3_key=' + encodeURIComponent(op.s3_key) +
+            '&product=' + product;
+        if (_rtCaseMeta) {
+            dataUrl += '&center_lat=' + (_rtCaseMeta.latitude || 0) +
+                       '&center_lon=' + (_rtCaseMeta.longitude || 0);
+        }
+
+        fetch(dataUrl)
+            .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(function (json) {
+                if (!json.image_b64 || !json.bounds) {
+                    if (status) status.textContent = 'No data returned';
+                    return;
+                }
+
+                var imgUrl = 'data:image/png;base64,' + json.image_b64;
+                var bounds = L.latLngBounds(
+                    L.latLng(json.bounds[0][0], json.bounds[0][1]),
+                    L.latLng(json.bounds[1][0], json.bounds[1][1])
+                );
+
+                if (_rtMwMapOverlay && _rtMap) {
+                    _rtMap.removeLayer(_rtMwMapOverlay);
+                }
+                _rtMwMapOverlay = L.imageOverlay(imgUrl, bounds, {
+                    opacity: 0.8, interactive: false, zIndex: 190
+                });
+                if (_rtMwVisible && _rtMap) _rtMwMapOverlay.addTo(_rtMap);
+
+                if (status) status.textContent = json.sensor + ' ' + json.datetime;
+            })
+            .catch(function (e) {
+                if (status) status.textContent = 'Error: ' + e.message;
+            });
+    };
+
+    // Cleanup when switching files
+    function _rtRemoveMicrowaveOverlay() {
+        if (_rtMwMapOverlay && _rtMap) { _rtMap.removeLayer(_rtMwMapOverlay); _rtMwMapOverlay = null; }
+        _rtMwOverpassData = [];
+        _rtMwVisible = false;
+        _rtMwLastFileUrl = null;
+        var btn = document.getElementById('rt-mw-overlay-btn');
+        if (btn) btn.classList.remove('active');
+        var panel = document.getElementById('rt-mw-overpass-panel');
+        if (panel) panel.style.display = 'none';
+    }
+
 })();
