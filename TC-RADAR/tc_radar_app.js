@@ -413,7 +413,8 @@ function openSidePanel(caseData, fromQuickSelect) {
                         '<button onclick="closeMWTimeline()" class="fl-ts-close" title="Close">&times;</button>' +
                     '</div>' +
                     '<div id="mw-timeline-status" style="font-size:10px;color:#64748b;padding:2px 8px;"></div>' +
-                    '<div id="mw-timeline-chart" style="width:100%;height:300px;"></div>' +
+                    '<div id="mw-timeline-chart" style="width:100%;height:260px;"></div>' +
+                    '<div style="font-size:9px;color:#475569;padding:0 8px 4px;text-align:right;">Click a marker to load that overpass</div>' +
                 '</div>' +
                 // ── Pre-rendered FL time-series panel (hidden by default) ──
                 '<div id="fl-archive-ts" class="fl-archive-ts" style="display:none;">' +
@@ -13571,57 +13572,163 @@ function fetchMWTimeline() {
 }
 
 function renderMWTimeline(overpasses) {
-    // Group by sensor for colour coding
     var sensorColors = {
         'GMI': '#00bcd4', 'SSMIS': '#ff7043', 'AMSR2': '#66bb6a',
         'SSMI': '#ab47bc', 'TMI': '#ffa726', 'ATMS': '#42a5f5', 'MHS': '#78909c'
     };
 
-    var traces = {};
+    // Sort overpasses chronologically
+    overpasses.sort(function(a, b) {
+        return new Date(a.datetime) - new Date(b.datetime);
+    });
+
+    // Build ordered sensor list by first-appearance
+    var sensorOrder = [];
+    var sensorSeen = {};
     for (var i = 0; i < overpasses.length; i++) {
-        var op = overpasses[i];
+        var s = overpasses[i].sensor;
+        if (!sensorSeen[s]) { sensorOrder.push(s); sensorSeen[s] = true; }
+    }
+    // Map sensor → numeric row (bottom to top for visual clarity)
+    var sensorRow = {};
+    for (var si = 0; si < sensorOrder.length; si++) {
+        sensorRow[sensorOrder[si]] = si;
+    }
+
+    // Build traces per sensor using numeric y with small jitter to reduce overlap
+    var traces = {};
+    var sensorCount = {}; // count per sensor for jitter
+    for (var j = 0; j < overpasses.length; j++) {
+        var op = overpasses[j];
         var key = op.sensor;
-        if (!traces[key]) {
-            traces[key] = {
-                x: [], y: [], text: [], name: key,
+        if (!sensorCount[key]) sensorCount[key] = 0;
+        sensorCount[key]++;
+    }
+    sensorCount = {}; // reset to use as running index
+    for (var k = 0; k < overpasses.length; k++) {
+        var op2 = overpasses[k];
+        var key2 = op2.sensor;
+        if (!traces[key2]) {
+            traces[key2] = {
+                x: [], y: [], text: [], customdata: [], name: key2,
                 mode: 'markers',
-                marker: { color: sensorColors[key] || '#aaa', size: 8, symbol: 'diamond' },
-                hovertemplate: '%{text}<extra>' + key + '</extra>',
+                marker: {
+                    color: sensorColors[key2] || '#aaa',
+                    size: 7, symbol: 'circle',
+                    opacity: 0.85,
+                    line: { width: 1, color: 'rgba(255,255,255,0.3)' }
+                },
+                hovertemplate: '<b>%{text}</b><extra></extra>',
                 type: 'scatter'
             };
+            sensorCount[key2] = 0;
         }
-        var dt = op.datetime;
-        traces[key].x.push(dt);
-        traces[key].y.push(key);
-        traces[key].text.push(op.platform + '<br>' + dt);
+        var dt = op2.datetime;
+        var baseY = sensorRow[key2];
+        // Tiny y-jitter so overlapping same-time overpasses separate slightly
+        var jitter = (sensorCount[key2] % 3 - 1) * 0.08;
+        sensorCount[key2]++;
+        traces[key2].x.push(dt);
+        traces[key2].y.push(baseY + jitter);
+        // Build hover text: sensor / platform / formatted time
+        var dtObj = new Date(dt);
+        var dateStr = (dtObj.getUTCMonth() + 1) + '/' + dtObj.getUTCDate() + ' ' +
+            String(dtObj.getUTCHours()).padStart(2, '0') + ':' +
+            String(dtObj.getUTCMinutes()).padStart(2, '0') + 'z';
+        traces[key2].text.push(key2 + ' / ' + op2.platform + '<br>' + dateStr);
+        traces[key2].customdata.push(k); // index into overpasses array
     }
 
     var data = [];
-    for (var s in traces) { data.push(traces[s]); }
+    for (var ts in traces) { data.push(traces[ts]); }
 
-    // Add vertical line for current TDR case time
+    // Current TDR case time indicator
     var shapes = [];
+    var annotations = [];
     if (currentCaseData && currentCaseData.datetime) {
-        var caseDt = currentCaseData.datetime.replace(' UTC', '');
+        var caseDt = currentCaseData.datetime.replace(' UTC', '').replace(' ', 'T');
         shapes.push({
-            type: 'line', x0: caseDt, x1: caseDt, y0: -0.5, y1: data.length - 0.5,
-            line: { color: 'rgba(255,0,0,0.6)', width: 2, dash: 'dash' }
+            type: 'line', x0: caseDt, x1: caseDt,
+            y0: -0.5, y1: sensorOrder.length - 0.5,
+            line: { color: 'rgba(248,113,113,0.7)', width: 2, dash: 'dot' }
+        });
+        annotations.push({
+            x: caseDt, y: sensorOrder.length - 0.5,
+            text: 'TDR', showarrow: false,
+            font: { color: '#f87171', size: 9, family: 'JetBrains Mono, monospace' },
+            yshift: 10, xanchor: 'center'
         });
     }
 
+    // Y-axis tick labels = sensor names
+    var tickvals = [];
+    var ticktext = [];
+    for (var ti = 0; ti < sensorOrder.length; ti++) {
+        tickvals.push(ti);
+        ticktext.push(sensorOrder[ti]);
+    }
+
     var layout = {
-        title: { text: 'MW Overpasses Across Storm Lifecycle', font: { color: '#e2e8f0', size: 13 } },
-        xaxis: { title: { text: 'Date/Time (UTC)', font: { color: '#aaa', size: 11 } }, color: '#aaa', gridcolor: 'rgba(255,255,255,0.06)' },
-        yaxis: { title: '', color: '#aaa', gridcolor: 'rgba(255,255,255,0.06)', type: 'category' },
-        paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: '#0f172a',
-        margin: { t: 40, b: 50, l: 60, r: 10 },
+        xaxis: {
+            title: { text: 'Date / Time (UTC)', font: { color: '#94a3b8', size: 10 } },
+            color: '#94a3b8',
+            gridcolor: 'rgba(255,255,255,0.05)',
+            tickfont: { size: 9, color: '#94a3b8' },
+            tickformat: '%b %d\n%Hz',
+            hoverformat: '%Y-%m-%d %H:%Mz'
+        },
+        yaxis: {
+            title: '',
+            color: '#94a3b8',
+            gridcolor: 'rgba(255,255,255,0.06)',
+            tickvals: tickvals,
+            ticktext: ticktext,
+            tickfont: { size: 10, color: '#cbd5e1' },
+            range: [-0.6, sensorOrder.length - 0.4],
+            fixedrange: true
+        },
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: '#0f172a',
+        margin: { t: 12, b: 44, l: 56, r: 8 },
         font: { family: 'JetBrains Mono, monospace' },
-        showlegend: true, legend: { font: { color: '#aaa', size: 9 }, bgcolor: 'rgba(0,0,0,0)' },
+        showlegend: false, // sensor names are on y-axis — legend redundant
         shapes: shapes,
+        annotations: annotations,
+        hovermode: 'closest',
+        dragmode: 'zoom'
     };
 
     var el = document.getElementById('mw-timeline-chart');
-    if (el) Plotly.newPlot(el, data, layout, { responsive: true, displayModeBar: true, displaylogo: false });
+    if (!el) return;
+
+    Plotly.newPlot(el, data, layout, {
+        responsive: true,
+        displayModeBar: true,
+        displaylogo: false,
+        modeBarButtonsToRemove: ['lasso2d', 'select2d', 'autoScale2d']
+    });
+
+    // Click on a marker → load that overpass in the main archive view
+    el.on('plotly_click', function(evtData) {
+        if (!evtData || !evtData.points || !evtData.points[0]) return;
+        var pt = evtData.points[0];
+        var opIdx = pt.customdata;
+        if (opIdx == null) return;
+        var clicked = overpasses[opIdx];
+        if (!clicked) return;
+        // Find the matching entry in the overpass dropdown and select it
+        var sel = document.getElementById('mw-overpass-select');
+        if (sel) {
+            for (var oi = 0; oi < sel.options.length; oi++) {
+                if (sel.options[oi].value.indexOf(clicked.datetime) !== -1 &&
+                    sel.options[oi].value.indexOf(clicked.sensor) !== -1) {
+                    sel.selectedIndex = oi;
+                    loadMicrowaveOverpass();
+                    break;
+                }
+            }
+        }
+    });
 }
 
 
