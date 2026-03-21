@@ -3187,40 +3187,47 @@ function toggleTDRVisibility() {
     var plotDiv = document.getElementById('plotly-chart');
     if (!plotDiv || !plotDiv.data) { _tdrVisible = true; return; }
 
-    // Trace 0 is the TDR heatmap; also hide any contour overlay traces
-    // that belong to the TDR data (but keep sonde, FL, tilt, etc.)
-    var updates = {};
+    // Collect TDR trace indices — skip any trace tagged as _isMW
     var lastPlotData = window._lastPlotlyData;
-    var nBaseTDR = 1; // heatmap is always trace 0
+    var nBaseTDR = 1; // heatmap is always trace 0 (before MW insertion)
     if (lastPlotData) {
-        // overlayTraces are contour lines from TDR (contour overlay variable)
         nBaseTDR = 1 + (lastPlotData.overlayTraces ? lastPlotData.overlayTraces.length : 0) +
                        (lastPlotData.maxTraces ? lastPlotData.maxTraces.length : 0);
     }
 
-    for (var i = 0; i < nBaseTDR && i < plotDiv.data.length; i++) {
-        updates['data[' + i + '].visible'] = _tdrVisible;
+    // Build indices of TDR-only traces (skip MW-tagged traces)
+    var tdrIndices = [];
+    var tdrFirstIdx = null;
+    for (var i = 0; i < plotDiv.data.length; i++) {
+        if (plotDiv.data[i]._isMW) continue;  // skip MW traces
+        tdrIndices.push(i);
+        if (tdrFirstIdx === null) tdrFirstIdx = i;
+        if (tdrIndices.length >= nBaseTDR) break;
     }
 
-    // Also toggle colorbar — hide when TDR hidden
-    if (!_tdrVisible) {
-        updates['data[0].showscale'] = false;
-    } else {
-        updates['data[0].showscale'] = true;
-    }
+    if (tdrIndices.length === 0) return;
 
     Plotly.update('plotly-chart', {}, {});  // force redraw
-    // Use restyle for trace visibility
-    var indices = [];
-    for (var i = 0; i < nBaseTDR && i < plotDiv.data.length; i++) indices.push(i);
-    Plotly.restyle('plotly-chart', { visible: _tdrVisible, showscale: _tdrVisible ? true : undefined }, indices);
+    Plotly.restyle('plotly-chart', {
+        visible: _tdrVisible,
+        showscale: _tdrVisible ? true : undefined
+    }, tdrIndices);
 
     // Also update fullscreen if open
     var fsdiv = document.getElementById('plotly-fullscreen');
     if (fsdiv && fsdiv.data) {
         var fsIndices = [];
-        for (var i = 0; i < nBaseTDR && i < fsdiv.data.length; i++) fsIndices.push(i);
-        Plotly.restyle('plotly-fullscreen', { visible: _tdrVisible, showscale: _tdrVisible ? true : undefined }, fsIndices);
+        for (var i = 0; i < fsdiv.data.length; i++) {
+            if (fsdiv.data[i]._isMW) continue;
+            fsIndices.push(i);
+            if (fsIndices.length >= nBaseTDR) break;
+        }
+        if (fsIndices.length > 0) {
+            Plotly.restyle('plotly-fullscreen', {
+                visible: _tdrVisible,
+                showscale: _tdrVisible ? true : undefined
+            }, fsIndices);
+        }
     }
 
     var btn = document.getElementById('tdr-toggle-btn');
