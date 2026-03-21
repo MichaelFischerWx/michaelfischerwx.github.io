@@ -4347,8 +4347,14 @@ window.loadGlobalMWOverpass = function () {
 
     var product = (prodSel && prodSel.value) || '89pct';
 
-    if ((product === '37h' || product === '37color') && !op.has_37) {
+    var is37 = (product === '37h' || product === '37v' || product === '37color');
+    var is89 = (product === '89pct' || product === '89v' || product === '89h');
+    if (is37 && !op.has_37) {
         if (status) status.textContent = op.sensor + ' has no 37 GHz';
+        return;
+    }
+    if (is89 && !op.has_89) {
+        if (status) status.textContent = op.sensor + ' has no 89 GHz';
         return;
     }
 

@@ -3581,7 +3581,9 @@ function _allCompChartIds() {
         'comp-az-chart','comp-sq-chart','comp-pv-chart',
         'comp-diff-az-a','comp-diff-az-b','comp-diff-az-d',
         'comp-diff-sq-a','comp-diff-sq-b','comp-diff-sq-d',
-        'comp-diff-pv-a','comp-diff-pv-b','comp-diff-pv-d'
+        'comp-diff-pv-a','comp-diff-pv-b','comp-diff-pv-d',
+        'comp-diff-irpv-a','comp-diff-irpv-b','comp-diff-irpv-d',
+        'comp-diff-iraz-a','comp-diff-iraz-b','comp-diff-iraz-d'
     ];
 }
 
@@ -8143,6 +8145,13 @@ function _wizardGenerateSelected() {
         if (document.getElementById('wiz-chk-anom') && document.getElementById('wiz-chk-anom').checked) {
             diffQueue.push({ fn: generateCompDiffAnomaly, name: 'Anomaly' });
         }
+        // IR diff outputs (satellite)
+        if (document.getElementById('wiz-chk-ir-pv') && document.getElementById('wiz-chk-ir-pv').checked) {
+            diffQueue.push({ fn: generateCompDiffIRPlanView, name: 'IR PlanView' });
+        }
+        if (document.getElementById('wiz-chk-ir-az') && document.getElementById('wiz-chk-ir-az').checked) {
+            diffQueue.push({ fn: generateCompDiffIRAzMean, name: 'IR AzMean' });
+        }
         // Run diff functions sequentially via promise chain.
         // Each step catches its own error so the chain always continues.
         var chain = Promise.resolve();
@@ -8157,16 +8166,10 @@ function _wizardGenerateSelected() {
                 // Resolve so the chain continues to the next output
             });
         });
-        // After all diffs, run non-diff outputs
+        // After all diffs, run non-diff outputs (VP scatter, env)
         chain.then(function() {
             if (document.getElementById('wiz-chk-vpsc') && document.getElementById('wiz-chk-vpsc').checked) {
                 generateCompositeVPScatter();
-            }
-            if (document.getElementById('wiz-chk-ir-pv') && document.getElementById('wiz-chk-ir-pv').checked) {
-                generateCompositeIRPlanView();
-            }
-            if (document.getElementById('wiz-chk-ir-az') && document.getElementById('wiz-chk-ir-az').checked) {
-                generateCompositeIRAzMean();
             }
             var anyEnv = document.getElementById('wiz-chk-env-pv').checked ||
                          document.getElementById('wiz-chk-env-sc').checked ||
@@ -10445,6 +10448,309 @@ function _appendCaseList(el, caseList, nCases) {
     el.appendChild(wrap);
 }
 
+// ── IR Satellite Difference Composites ────────────────────────────────
+
+function generateCompDiffIRPlanView() {
+    var filtersA = _getCompositeFilters();
+    var filtersB = _getCompGroupBFilters();
+    var irParams = _getIRCompositeParams();
+    var dataType = document.getElementById('comp-dtype').value;
+
+    var _crp = document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
+    _showCompStatus('loading', 'Computing IR plan-view difference composite (A\u2212B)\u2026');
+
+    var baseQS = '&ir_variable=ir_brightness_temp' +
+        '&data_type=' + dataType +
+        '&coverage_min=' + irParams.coverage +
+        '&normalize_rmw=' + (irParams.normalize_rmw ? 'true' : 'false') +
+        '&max_r_rmw=' + irParams.max_r_rmw +
+        '&dr_rmw=' + irParams.dr_rmw +
+        '&shear_relative=' + (irParams.shear_relative ? 'true' : 'false') +
+        '&max_radius_km=' + irParams.max_radius_km +
+        '&include_tilt=' + (irParams.tilt_overlay ? 'true' : 'false');
+    var urlA = API_BASE + '/composite/ir_plan_view?' + _compositeQueryString(filtersA) + baseQS;
+    var urlB = API_BASE + '/composite/ir_plan_view?' + _compositeQueryString(filtersB) + baseQS;
+
+    var jsonA;
+    return _fetchCompositeStream(urlA, 'Group A IR plan view').then(function(result) {
+        jsonA = result;
+        _showCompStatus('loading', 'Group A done (' + jsonA.n_cases + ' cases). Computing Group B\u2026');
+        return _fetchCompositeStream(urlB, 'Group B IR plan view');
+    }).then(function(jsonB) {
+        var diffData = _subtractArrays2D(jsonA.plan_view, jsonB.plan_view);
+        var symRange = _symmetricRange(diffData);
+
+        var diffJson = {
+            plan_view: diffData,
+            x_axis: jsonA.x_axis,
+            y_axis: jsonA.y_axis,
+            x_label: jsonA.x_label,
+            y_label: jsonA.y_label,
+            normalize_rmw: jsonA.normalize_rmw,
+            shear_relative: jsonA.shear_relative,
+            coverage_min: jsonA.coverage_min,
+            n_cases: jsonA.n_cases,
+            case_list: jsonA.case_list,
+            case_list_b: jsonB.case_list,
+            _isDiff: true,
+            _nA: jsonA.n_cases,
+            _nB: jsonB.n_cases,
+            _filtersA: filtersA,
+            _filtersB: filtersB,
+            variable: {
+                key: jsonA.variable.key,
+                display_name: '\u0394 ' + jsonA.variable.display_name,
+                units: jsonA.variable.units,
+                vmin: -symRange,
+                vmax: symRange,
+                colorscale: _DIFF_COLORSCALE,
+            }
+        };
+
+        _showCompStatus('success', '\u2713 IR PV difference computed: Group A (' + jsonA.n_cases + ') \u2212 Group B (' + jsonB.n_cases + ')');
+        _renderDiffIRPlanView('comp-result-ir-pv', diffJson, jsonA, jsonB, filtersA, filtersB, irParams);
+    }).catch(function(err) {
+        _showCompStatus('error', '\u2717 IR Plan View Diff: ' + (err.message || String(err)));
+    });
+}
+
+function _renderDiffIRPlanView(targetId, diffJson, jsonA, jsonB, filtersA, filtersB, irParams) {
+    var el = document.getElementById(targetId); if (!el) return;
+    el.style.display = 'block';
+    _lastCompJson = diffJson; _lastCompType = 'ir-pv';
+
+    var varInfoA = jsonA.variable;
+    var diffVarInfo = diffJson.variable;
+
+    el.innerHTML =
+        '<div style="margin-bottom:4px;padding:6px 10px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#60a5fa;">\uD83D\uDD35 Group A</div>' +
+        '<div id="comp-diff-irpv-a" style="width:100%;height:520px;border-radius:8px;overflow:hidden;"></div>' +
+        '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#f59e0b;">\uD83D\uDFE0 Group B</div>' +
+        '<div id="comp-diff-irpv-b" style="width:100%;height:520px;border-radius:8px;overflow:hidden;"></div>' +
+        _buildShadingControlsRow('shd-dirpv-ab', {label: 'Panels A &amp; B', defaultVmin: varInfoA.vmin, defaultVmax: varInfoA.vmax}) +
+        '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#ef4444;">\u0394 Difference (A \u2212 B)</div>' +
+        '<div id="comp-diff-irpv-d" style="width:100%;height:520px;border-radius:8px;overflow:hidden;"></div>' +
+        _buildShadingControlsRow('shd-dirpv-d', {label: 'Difference', defaultVmin: diffVarInfo.vmin, defaultVmax: diffVarInfo.vmax}) +
+        _buildCompToolbar();
+
+    _registerShadingTargets('shd-dirpv-ab', ['comp-diff-irpv-a', 'comp-diff-irpv-b'], varInfoA.colorscale, varInfoA.vmin, varInfoA.vmax);
+
+    var plotOpts = { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] };
+    var plotBg = '#0a1628';
+    var xAxis = jsonA.x_axis, yAxis = jsonA.y_axis;
+    var xLabel = jsonA.x_label, yLabel = jsonA.y_label;
+    var normLabel = jsonA.normalize_rmw ? ' (RMW-norm)' : '';
+    var shearLabel = jsonA.shear_relative ? ' [Shear \u2192 Right]' : '';
+
+    function rmwCircleTrace() {
+        if (!jsonA.normalize_rmw) return [];
+        var nPts = 120, cx = [], cy = [];
+        for (var j = 0; j <= nPts; j++) {
+            var a = 2 * Math.PI * j / nPts;
+            cx.push(parseFloat(Math.cos(a).toFixed(4)));
+            cy.push(parseFloat(Math.sin(a).toFixed(4)));
+        }
+        return [{ x:cx, y:cy, type:'scatter', mode:'lines', line:{color:'white',width:1.5,dash:'dash'}, showlegend:false, hoverinfo:'skip' }];
+    }
+
+    function shearShapes() {
+        if (!jsonA.shear_relative) return { shapes:[], annotations:[] };
+        return buildShearInset(90, true);
+    }
+
+    function buildIRPvPlot(chartId, data, titleText, colorscale, zmin, zmax, units, srcJson) {
+        var hm = {
+            z: data, x: xAxis, y: yAxis, type: 'heatmap',
+            colorscale: colorscale, zmin: zmin, zmax: zmax,
+            colorbar: { title:{text:units,font:{color:'#ccc',size:11}}, tickfont:{color:'#ccc',size:10}, thickness:14, len:0.85 },
+            hovertemplate: '<b>IR Tb</b>: %{z:.1f} ' + units + '<br>' + xLabel + ': %{x:.1f}<br>' + yLabel + ': %{y:.1f}<extra></extra>',
+            hoverongaps: false,
+            reversescale: (colorscale !== _DIFF_COLORSCALE)
+        };
+        var traces = [hm].concat(rmwCircleTrace());
+        // Add tilt overlay for individual group panels
+        if (srcJson && srcJson.tilt_overlay) {
+            var tilt = srcJson.tilt_overlay;
+            var tiltX = [], tiltY = [], tiltColors = [], tiltText = [];
+            for (var ti = 0; ti < tilt.height_km.length; ti++) {
+                if (tilt.x[ti] !== null && tilt.y[ti] !== null) {
+                    tiltX.push(tilt.x[ti]); tiltY.push(tilt.y[ti]);
+                    tiltColors.push(tilt.height_km[ti]); tiltText.push(tilt.height_km[ti] + ' km');
+                }
+            }
+            if (tiltX.length > 1) {
+                traces.push({ x: tiltX, y: tiltY, type:'scatter', mode:'lines', line:{color:'rgba(255,255,255,0.5)',width:1.5}, showlegend:false, hoverinfo:'skip' });
+                traces.push({ x: tiltX, y: tiltY, type:'scatter', mode:'markers+text',
+                    marker: { size:8, color:tiltColors, colorscale:[[0,'#22d3ee'],[0.5,'#a855f7'],[1,'#ef4444']], cmin:0, cmax:15,
+                        colorbar: { title:{text:'Height (km)',font:{color:'#ccc',size:10}}, tickfont:{color:'#ccc',size:9}, thickness:10, len:0.4, x:1.12, xpad:2, y:0.15, yanchor:'bottom' },
+                        line:{width:1,color:'rgba(255,255,255,0.6)'} },
+                    text: tiltText, textposition:'top right', textfont:{size:8,color:'rgba(255,255,255,0.6)'},
+                    hovertemplate: '<b>Tilt</b> at %{text}<br>X: %{x:.2f}<br>Y: %{y:.2f}<extra></extra>', name:'Vortex Tilt', showlegend:false });
+            }
+        }
+        var sInset = shearShapes();
+        var layout = {
+            title: { text:titleText, font:{color:'#e5e7eb',size:13}, y:0.97, x:0.5, xanchor:'center' },
+            paper_bgcolor:plotBg, plot_bgcolor:plotBg,
+            xaxis: { title:{text:xLabel,font:{color:'#aaa',size:11}}, tickfont:{color:'#aaa',size:10}, gridcolor:'rgba(255,255,255,0.04)', zeroline:true, zerolinecolor:'rgba(255,255,255,0.12)' },
+            yaxis: { title:{text:yLabel,font:{color:'#aaa',size:11}}, tickfont:{color:'#aaa',size:10}, gridcolor:'rgba(255,255,255,0.04)', zeroline:true, zerolinecolor:'rgba(255,255,255,0.12)', scaleanchor:'x', scaleratio:1 },
+            margin:{ l:60, r:24, t:100, b:50 },
+            shapes: sInset.shapes || [], annotations: sInset.annotations || [],
+            showlegend:false
+        };
+        Plotly.newPlot(chartId, traces, layout, plotOpts);
+    }
+
+    var activeColorscale = varInfoA.colorscale;
+    var activeVmin = varInfoA.vmin;
+    var activeVmax = varInfoA.vmax;
+
+    // Group A
+    var titleA = _compositeFilterSummary(filtersA, jsonA.n_cases) +
+                 '<br>\uD83D\uDEF0\uFE0F IR Brightness Temperature' + normLabel + shearLabel;
+    buildIRPvPlot('comp-diff-irpv-a', jsonA.plan_view, titleA, activeColorscale, activeVmin, activeVmax, varInfoA.units, jsonA);
+
+    // Group B
+    var titleB = _compositeFilterSummary(filtersB, jsonB.n_cases) +
+                 '<br>\uD83D\uDEF0\uFE0F IR Brightness Temperature' + normLabel + shearLabel;
+    buildIRPvPlot('comp-diff-irpv-b', jsonB.plan_view, titleB, activeColorscale, activeVmin, activeVmax, varInfoA.units, jsonB);
+
+    // Difference
+    var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) +
+                 '<br>\u0394 \uD83D\uDEF0\uFE0F IR Brightness Temperature' + normLabel + shearLabel;
+    _registerShadingTargets('shd-dirpv-d', ['comp-diff-irpv-d'], _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax);
+    buildIRPvPlot('comp-diff-irpv-d', diffJson.plan_view, titleD, _DIFF_COLORSCALE, diffVarInfo.vmin, diffVarInfo.vmax, diffVarInfo.units, null);
+}
+
+function generateCompDiffIRAzMean() {
+    var filtersA = _getCompositeFilters();
+    var filtersB = _getCompGroupBFilters();
+    var irParams = _getIRCompositeParams();
+    var dataType = document.getElementById('comp-dtype').value;
+
+    var _crp = document.getElementById('wiz-result-placeholder'); if (_crp) _crp.style.display = 'none';
+    _showCompStatus('loading', 'Computing IR azimuthal mean difference composite (A\u2212B)\u2026');
+
+    var baseQS = '&ir_variable=ir_brightness_temp' +
+        '&data_type=' + dataType +
+        '&coverage_min=' + irParams.coverage +
+        '&normalize_rmw=' + (irParams.normalize_rmw ? 'true' : 'false') +
+        '&max_r_rmw=' + irParams.max_r_rmw +
+        '&dr_rmw=' + irParams.dr_rmw +
+        '&max_radius_km=' + irParams.max_radius_km;
+    var urlA = API_BASE + '/composite/ir_azimuthal_mean?' + _compositeQueryString(filtersA) + baseQS;
+    var urlB = API_BASE + '/composite/ir_azimuthal_mean?' + _compositeQueryString(filtersB) + baseQS;
+
+    var jsonA;
+    return _fetchCompositeStream(urlA, 'Group A IR azimuthal mean').then(function(result) {
+        jsonA = result;
+        _showCompStatus('loading', 'Group A done (' + jsonA.n_cases + ' cases). Computing Group B\u2026');
+        return _fetchCompositeStream(urlB, 'Group B IR azimuthal mean');
+    }).then(function(jsonB) {
+        // Element-wise subtraction of 1D radial profiles
+        var diffProfile = jsonA.radial_profile.map(function(v, i) {
+            var a = v, b = jsonB.radial_profile[i];
+            if (a === null || a === undefined || isNaN(a)) return null;
+            if (b === null || b === undefined || isNaN(b)) return null;
+            return a - b;
+        });
+        var maxAbs = 0;
+        diffProfile.forEach(function(v) { if (v !== null && Math.abs(v) > maxAbs) maxAbs = Math.abs(v); });
+        if (maxAbs === 0) maxAbs = 1;
+
+        _showCompStatus('success', '\u2713 IR Az Mean difference computed: Group A (' + jsonA.n_cases + ') \u2212 Group B (' + jsonB.n_cases + ')');
+        _renderDiffIRAzMean('comp-result-ir-az', jsonA, jsonB, diffProfile, maxAbs, filtersA, filtersB);
+    }).catch(function(err) {
+        _showCompStatus('error', '\u2717 IR Az Mean Diff: ' + (err.message || String(err)));
+    });
+}
+
+function _renderDiffIRAzMean(targetId, jsonA, jsonB, diffProfile, maxAbs, filtersA, filtersB) {
+    var el = document.getElementById(targetId); if (!el) return;
+    el.style.display = 'block';
+    _lastCompJson = {
+        _isDiff: true, _nA: jsonA.n_cases, _nB: jsonB.n_cases,
+        _filtersA: filtersA, _filtersB: filtersB,
+        case_list: jsonA.case_list, case_list_b: jsonB.case_list,
+        n_cases: jsonA.n_cases, variable: jsonA.variable
+    };
+    _lastCompType = 'ir-az';
+
+    var rCenters = jsonA.r_centers;
+    var rLabel = jsonA.r_label;
+    var varInfoA = jsonA.variable;
+    var normLabel = jsonA.normalize_rmw ? ' (RMW-norm)' : '';
+    var plotOpts = { responsive:true, displayModeBar:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d','toggleSpikelines'] };
+    var plotBg = '#0a1628';
+
+    el.innerHTML =
+        '<div style="margin-bottom:4px;padding:6px 10px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#60a5fa;">\uD83D\uDD35 Group A</div>' +
+        '<div id="comp-diff-iraz-a" style="width:100%;height:360px;border-radius:8px;overflow:hidden;"></div>' +
+        '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#f59e0b;">\uD83D\uDFE0 Group B</div>' +
+        '<div id="comp-diff-iraz-b" style="width:100%;height:360px;border-radius:8px;overflow:hidden;"></div>' +
+        '<div style="margin:12px 0 4px;padding:6px 10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;font:600 11px \'JetBrains Mono\',monospace;color:#ef4444;">\u0394 Difference (A \u2212 B)</div>' +
+        '<div id="comp-diff-iraz-d" style="width:100%;height:360px;border-radius:8px;overflow:hidden;"></div>' +
+        _buildCompToolbar();
+
+    var rmwShapes = [];
+    if (jsonA.normalize_rmw) {
+        rmwShapes.push({
+            type: 'line', x0: 1, x1: 1, y0: 0, y1: 1, yref: 'paper',
+            line: { color: 'rgba(255,255,255,0.4)', width: 1.5, dash: 'dash' }
+        });
+    }
+
+    function buildAzLine(chartId, profile, titleText, lineColor) {
+        var trace = {
+            x: rCenters, y: profile, type: 'scatter', mode: 'lines',
+            line: { color: lineColor, width: 2.5 },
+            hovertemplate: '<b>Tb</b>: %{y:.1f} K<br>' + rLabel + ': %{x:.2f}<extra></extra>',
+            name: 'IR Tb'
+        };
+        var layout = {
+            title: { text:titleText, font:{color:'#e2e8f0',size:13}, y:0.98 },
+            xaxis: { title:{text:rLabel,font:{color:'#9ca3af',size:11}}, tickfont:{color:'#6b7280',size:10}, gridcolor:'rgba(255,255,255,0.05)', zeroline:false, range:[0, rCenters[rCenters.length-1]] },
+            yaxis: { title:{text:'Brightness Temperature (K)',font:{color:'#9ca3af',size:11}}, tickfont:{color:'#6b7280',size:10}, gridcolor:'rgba(255,255,255,0.05)', zeroline:false, autorange:'reversed' },
+            paper_bgcolor:plotBg, plot_bgcolor:plotBg,
+            margin:{l:65,r:20,t:70,b:55}, shapes:rmwShapes, showlegend:false
+        };
+        Plotly.newPlot(chartId, [trace], layout, plotOpts);
+    }
+
+    function buildDiffLine(chartId, profile, titleText, maxRange) {
+        var trace = {
+            x: rCenters, y: profile, type: 'scatter', mode: 'lines',
+            line: { color: '#ef4444', width: 2.5 },
+            fill: 'tozeroy',
+            fillcolor: 'rgba(239,68,68,0.15)',
+            hovertemplate: '<b>\u0394Tb</b>: %{y:.1f} K<br>' + rLabel + ': %{x:.2f}<extra></extra>',
+            name: '\u0394 IR Tb'
+        };
+        var layout = {
+            title: { text:titleText, font:{color:'#e2e8f0',size:13}, y:0.98 },
+            xaxis: { title:{text:rLabel,font:{color:'#9ca3af',size:11}}, tickfont:{color:'#6b7280',size:10}, gridcolor:'rgba(255,255,255,0.05)', zeroline:false, range:[0, rCenters[rCenters.length-1]] },
+            yaxis: { title:{text:'\u0394 Brightness Temperature (K)',font:{color:'#9ca3af',size:11}}, tickfont:{color:'#6b7280',size:10}, gridcolor:'rgba(255,255,255,0.05)', zeroline:true, zerolinecolor:'rgba(255,255,255,0.2)', range:[-maxRange*1.1, maxRange*1.1] },
+            paper_bgcolor:plotBg, plot_bgcolor:plotBg,
+            margin:{l:65,r:20,t:70,b:55}, shapes:rmwShapes, showlegend:false
+        };
+        Plotly.newPlot(chartId, [trace], layout, plotOpts);
+    }
+
+    // Group A
+    var titleA = _compositeFilterSummary(filtersA, jsonA.n_cases) +
+                 '<br>\uD83D\uDEF0\uFE0F Azimuthal Mean IR Brightness Temperature' + normLabel;
+    buildAzLine('comp-diff-iraz-a', jsonA.radial_profile, titleA, '#22d3ee');
+
+    // Group B
+    var titleB = _compositeFilterSummary(filtersB, jsonB.n_cases) +
+                 '<br>\uD83D\uDEF0\uFE0F Azimuthal Mean IR Brightness Temperature' + normLabel;
+    buildAzLine('comp-diff-iraz-b', jsonB.radial_profile, titleB, '#f59e0b');
+
+    // Difference
+    var titleD = _diffFilterSummary(filtersA, filtersB, jsonA.n_cases, jsonB.n_cases) +
+                 '<br>\u0394 Azimuthal Mean IR Brightness Temperature' + normLabel;
+    buildDiffLine('comp-diff-iraz-d', diffProfile, titleD, maxAbs);
+}
 
 var _DIFF_COLORSCALE = [[0,'rgb(5,48,97)'],[0.1,'rgb(33,102,172)'],[0.2,'rgb(67,147,195)'],[0.3,'rgb(146,197,222)'],[0.4,'rgb(209,229,240)'],[0.5,'rgb(247,247,247)'],[0.6,'rgb(253,219,199)'],[0.7,'rgb(239,163,128)'],[0.8,'rgb(214,96,77)'],[0.9,'rgb(178,24,43)'],[1,'rgb(103,0,31)']];
 
