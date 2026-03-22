@@ -11,25 +11,28 @@
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="TC-RADAR: A comprehensive database of post-processed airborne Doppler radar analyses of tropical cyclones (1997–2024). Explore 3D vortex structure, IR satellite imagery, ERA5 environmental diagnostics, and more.">
-    <meta name="keywords" content="tropical cyclone, hurricane, radar, TC-RADAR, airborne Doppler, vortex structure, NOAA, HRD, wind analysis">
+    <meta name="description" content="TC-ATLAS: Tropical Cyclone Analysis Tool for Live and Archived Structure. Explore 1,500+ airborne Doppler radar analyses of tropical cyclones (1997–2024) with 3D vortex structure, IR satellite imagery, microwave overlays, ERA5 environmental diagnostics, and more.">
+    <meta name="keywords" content="tropical cyclone, hurricane, radar, TC-ATLAS, airborne Doppler, vortex structure, NOAA, HRD, wind analysis, microwave, satellite">
     <meta name="author" content="Dr. Michael Fischer, University of Miami / NOAA HRD">
 
     <!-- Open Graph / Social Sharing -->
     <meta property="og:type" content="website">
-    <meta property="og:title" content="TC-RADAR — Tropical Cyclone Radar Database">
-    <meta property="og:description" content="Explore 1,500+ airborne Doppler radar analyses of tropical cyclones. Interactive 3D wind fields, IR satellite overlays, ERA5 environmental diagnostics, and compositing tools.">
+    <meta property="og:title" content="TC-ATLAS — Tropical Cyclone Analysis Tool for Live and Archived Structure">
+    <meta property="og:description" content="Explore 1,500+ airborne Doppler radar analyses of tropical cyclones. Interactive 3D wind fields, IR satellite overlays, microwave imagery, ERA5 environmental diagnostics, and compositing tools.">
     <meta property="og:url" content="https://michaelfischerwx.github.io/TC-RADAR/">
     <meta property="og:image" content="https://michaelfischerwx.github.io/TC-RADAR/images/og-preview.png">
-    <meta property="og:site_name" content="TC-RADAR">
+    <meta property="og:site_name" content="TC-ATLAS">
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="TC-RADAR — Tropical Cyclone Radar Database">
-    <meta name="twitter:description" content="Explore 1,500+ airborne Doppler radar analyses of tropical cyclones with interactive 3D visualization.">
+    <meta name="twitter:title" content="TC-ATLAS — Tropical Cyclone Analysis Tool for Live and Archived Structure">
+    <meta name="twitter:description" content="Explore 1,500+ airborne Doppler radar analyses of tropical cyclones with interactive 3D visualization, microwave imagery, and environmental diagnostics.">
     <meta name="twitter:image" content="https://michaelfischerwx.github.io/TC-RADAR/images/og-preview.png">
 
-    <title>TC-RADAR — Tropical Cyclone Radar Database</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="assets/tc-atlas-icon.png">
+
+    <title>TC-ATLAS — Tropical Cyclone Analysis Tool for Live and Archived Structure</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
@@ -44,9 +47,10 @@
     <header class="topbar" role="banner">
         <div class="topbar-inner">
             <div class="topbar-brand">
-                <div class="topbar-logo" role="heading" aria-level="1">TC-RADAR</div>
+                <img src="assets/tc-atlas-icon.png" alt="" class="topbar-icon" width="28" height="28">
+                <div class="topbar-logo" role="heading" aria-level="1">TC-ATLAS</div>
                 <div class="topbar-divider"></div>
-                <div class="topbar-subtitle">Tropical Cyclone Radar Archive</div>
+                <div class="topbar-subtitle">Tropical Cyclone Analysis Tool for Live and Archived Structure</div>
             </div>
             <div class="topbar-stats">
                 <div class="topbar-stat"><span class="topbar-stat-val" id="total-cases">&mdash;</span><span class="topbar-stat-label">Analyses</span></div>
