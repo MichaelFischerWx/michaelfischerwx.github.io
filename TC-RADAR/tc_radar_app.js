@@ -3977,6 +3977,9 @@ function renderPlotFromJSON(json, resultDiv) {
     Plotly.newPlot('plotly-chart', [heatmap].concat(overlayTraces).concat(maxTraces).concat(tiltTraces), smallLayout, config);
     window._lastPlotlyData = { heatmap: heatmap, overlayTraces: overlayTraces, maxTraces: maxTraces, tiltTraces: tiltTraces, baseLayout: baseLayout, title: title, config: config, barbShapes: barbShapes };
 
+    // Re-apply MW overlay if it was visible (e.g. was shown as standalone before TDR was generated)
+    if (_mwPlanViewVisible && (_mwStormGrid || (_mwIsRGB && _mwStormGridRGBb64))) _applyMWPlanViewOverlay();
+
     // Auto-generate azimuthal mean in the right pane (non-blocking)
     _autoFetchDualAzimuthalMean();
 
@@ -14298,18 +14301,123 @@ function loadMicrowaveOverpass() {
             _showMWMapColorbar(product, _mwVmin, _mwVmax);
 
             if (status) status.textContent = json.sensor + ' ' + json.datetime;
+
+            // Add/update download button next to status text
+            var dlBtn = document.getElementById('mw-download-btn');
+            if (!dlBtn) {
+                dlBtn = document.createElement('a');
+                dlBtn.id = 'mw-download-btn';
+                dlBtn.style.cssText = 'font-size:9px;padding:2px 6px;border:1px solid rgba(251,146,60,0.5);border-radius:3px;color:#fdba74;text-decoration:none;white-space:nowrap;cursor:pointer;';
+                dlBtn.textContent = '\u2193 Save';
+                if (status && status.parentNode) status.parentNode.insertBefore(dlBtn, status.nextSibling);
+            }
+            var dtSafe = (json.datetime || '').replace(/[^0-9A-Za-z]/g, '_').replace(/_+/g, '_').replace(/_$/, '');
+            dlBtn.href = imgUrl;
+            dlBtn.download = 'MW_' + (json.sensor || 'sensor') + '_' + product + '_' + dtSafe + '.png';
         })
         .catch(function(e) {
             if (status) status.textContent = 'Error: ' + e.message;
+            var dlBtn = document.getElementById('mw-download-btn');
+            if (dlBtn) dlBtn.remove();
         });
 }
 
 // ── MW Plan-View Overlay (Plotly contour on the TDR plan view) ──
 
+function _createStandaloneMWPlanView() {
+    var chartEl = document.getElementById('plotly-chart');
+    if (!chartEl) return;
+
+    var prodSel = document.getElementById('mw-product-select');
+    var product = (prodSel && prodSel.value) || '89pct';
+    var sel = document.getElementById('mw-overpass-select');
+    var idx = sel ? parseInt(sel.value, 10) : 0;
+    var op = (_mwOverpassData && _mwOverpassData[idx]) || {};
+    var statusEl = document.getElementById('mw-status');
+    var sensorDt = statusEl ? statusEl.textContent : ((op.sensor || 'MW') + ' ' + (op.datetime || ''));
+    var titleText = sensorDt + ' | ' + product.toUpperCase();
+
+    var plotBg = '#0a1628';
+    var config = { responsive: true, displayModeBar: true,
+        modeBarButtonsToRemove: ['lasso2d','select2d','toggleSpikelines'], displaylogo: false };
+    var centerTrace = { x: [0], y: [0], type: 'scatter', mode: 'markers',
+        marker: { symbol: 'cross', size: 10, color: 'white', line: { color: 'white', width: 2 } },
+        showlegend: false, hoverinfo: 'skip', _isMW: true };
+
+    if (_mwIsRGB && _mwStormGridRGBb64) {
+        var ext = (_mwStormGrid && _mwStormGrid.extent_km) || 250;
+        var layout = {
+            title: { text: titleText, font: { color: '#e5e7eb', size: 11 }, y: 0.96, x: 0.5, xanchor: 'center', yanchor: 'top' },
+            paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+            xaxis: { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } },
+                     tickfont: { color: '#aaa', size: 9 },
+                     gridcolor: 'rgba(255,255,255,0.04)', zeroline: true,
+                     zerolinecolor: 'rgba(255,255,255,0.12)',
+                     scaleanchor: 'y', range: [-ext, ext] },
+            yaxis: { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } },
+                     tickfont: { color: '#aaa', size: 9 },
+                     gridcolor: 'rgba(255,255,255,0.04)', zeroline: true,
+                     zerolinecolor: 'rgba(255,255,255,0.12)',
+                     scaleanchor: 'x', scaleratio: 1, range: [-ext, ext] },
+            margin: { l: 52, r: 16, t: 46, b: 44 },
+            images: [{ source: 'data:image/png;base64,' + _mwStormGridRGBb64,
+                xref: 'x', yref: 'y', x: -ext, y: ext,
+                sizex: 2 * ext, sizey: 2 * ext,
+                xanchor: 'left', yanchor: 'top',
+                sizing: 'stretch', opacity: 0.95, layer: 'below', _isMW: true }],
+            hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 12 } },
+            showlegend: false
+        };
+        Plotly.newPlot('plotly-chart', [centerTrace], layout, config);
+        _mwPlanViewTraceIdx = -1;
+
+    } else if (_mwStormGrid && _mwStormGrid.z) {
+        var cs = _mwColorscale || [
+            [0.000, '#303030'], [0.100, '#606060'], [0.225, '#800000'],
+            [0.375, '#FF0000'], [0.500, '#FF8C00'], [0.535, '#FFD700'],
+            [0.615, '#ADFF2F'], [0.700, '#00CC44'], [0.745, '#00DDCC'],
+            [0.825, '#0066FF'], [0.875, '#0000CC'], [1.000, '#8888FF']
+        ];
+        var cbarTitle = product === '89pct' ? 'PCT (K)' : '37H (K)';
+        var ext2 = _mwStormGrid.extent_km || 250;
+        var mwTrace = {
+            z: _mwStormGrid.z, x: _mwStormGrid.x_axis, y: _mwStormGrid.y_axis,
+            type: 'heatmap', colorscale: cs, zmin: _mwVmin, zmax: _mwVmax,
+            colorbar: { title: { text: cbarTitle, font: { color: '#ccc', size: 10 } },
+                        tickfont: { color: '#ccc', size: 9 }, thickness: 12, len: 0.85 },
+            hovertemplate: '<b>MW %{z:.0f} K</b><br>X: %{x:.0f} km  Y: %{y:.0f} km<extra>MW</extra>',
+            hoverongaps: false, name: 'MW ' + cbarTitle.replace(' (K)', ''), _isMW: true
+        };
+        var layout2 = {
+            title: { text: titleText, font: { color: '#e5e7eb', size: 11 }, y: 0.96, x: 0.5, xanchor: 'center', yanchor: 'top' },
+            paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+            xaxis: { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } },
+                     tickfont: { color: '#aaa', size: 9 },
+                     gridcolor: 'rgba(255,255,255,0.04)', zeroline: true,
+                     zerolinecolor: 'rgba(255,255,255,0.12)',
+                     scaleanchor: 'y', range: [-ext2, ext2] },
+            yaxis: { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } },
+                     tickfont: { color: '#aaa', size: 9 },
+                     gridcolor: 'rgba(255,255,255,0.04)', zeroline: true,
+                     zerolinecolor: 'rgba(255,255,255,0.12)',
+                     scaleanchor: 'x', scaleratio: 1, range: [-ext2, ext2] },
+            margin: { l: 52, r: 60, t: 46, b: 44 },
+            hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 12 } },
+            showlegend: false
+        };
+        Plotly.newPlot('plotly-chart', [mwTrace, centerTrace], layout2, config);
+        _mwPlanViewTraceIdx = 0;
+    }
+}
+
 function _applyMWPlanViewOverlay() {
     if (!_mwPlanViewVisible) return;
     var chartEl = document.getElementById('plotly-chart');
-    if (!chartEl || !chartEl.data) return;
+    if (!chartEl) return;
+    if (!chartEl.data || !chartEl.data.length) {
+        _createStandaloneMWPlanView();
+        return;
+    }
 
     // Remove any existing MW trace/image first
     removeMWPlanViewOverlay();
@@ -14714,6 +14822,8 @@ function removeMicrowaveOverlay() {
     if (btn) btn.classList.remove('active');
     var panel = document.getElementById('mw-overpass-panel');
     if (panel) panel.style.display = 'none';
+    var dlBtn = document.getElementById('mw-download-btn');
+    if (dlBtn) dlBtn.remove();
 }
 
 
