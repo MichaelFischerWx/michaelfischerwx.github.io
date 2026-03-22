@@ -333,6 +333,7 @@ function openSidePanel(caseData, fromQuickSelect) {
                             '<option value="37color">37 GHz Color</option>' +
                         '</select>' +
                         '<span id="mw-status" style="font-size:9px;color:#64748b;"></span>' +
+                        '<span style="font-size:8px;color:#64748b;margin-left:auto;">Data: <a href="https://rammb-data.cira.colostate.edu/tcprimed/" target="_blank" rel="noopener" style="color:#94a3b8;text-decoration:none;border-bottom:1px dotted #64748b;">TC-PRIMED</a> (NOAA/CSU)</span>' +
                     '</div>' +
                     '<div style="display:flex;align-items:center;gap:6px;margin-top:5px;flex-wrap:wrap;">' +
                         '<button id="mw-planview-btn" class="overlay-pill active" onclick="toggleMWPlanView()" style="font-size:9px;padding:2px 8px;background:rgba(251,146,60,0.2);border:1px solid rgba(251,146,60,0.4);border-radius:4px;color:#fdba74;cursor:pointer;" title="Toggle MW on Plan View">Plan View</button>' +
@@ -423,7 +424,10 @@ function openSidePanel(caseData, fromQuickSelect) {
                     '</div>' +
                     '<div id="mw-timeline-status" style="font-size:10px;color:#64748b;padding:2px 8px;"></div>' +
                     '<div id="mw-timeline-chart" style="width:100%;height:260px;"></div>' +
-                    '<div style="font-size:9px;color:#475569;padding:0 8px 4px;text-align:right;">Click a marker to load that overpass</div>' +
+                    '<div style="font-size:9px;color:#475569;padding:0 8px 4px;display:flex;justify-content:space-between;">' +
+                        '<span>Data: <a href="https://rammb-data.cira.colostate.edu/tcprimed/" target="_blank" rel="noopener" style="color:#64748b;">TC-PRIMED</a> (NOAA/CSU)</span>' +
+                        '<span>Click a marker to load that overpass</span>' +
+                    '</div>' +
                 '</div>' +
                 // ── Pre-rendered FL time-series panel (hidden by default) ──
                 '<div id="fl-archive-ts" class="fl-archive-ts" style="display:none;">' +
