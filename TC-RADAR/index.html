@@ -60,12 +60,13 @@
             </div>
             <nav aria-label="Main navigation">
             <ul class="topbar-nav">
-                <li><a href="javascript:void(0)" onclick="showArchiveTab()" role="button" id="archive-nav-link">Archive</a></li>
+                <li><a href="../TC-ATLAS/" role="button">Home</a></li>
+                <li><a href="javascript:void(0)" onclick="showArchiveTab()" role="button" id="archive-nav-link">TC-RADAR</a></li>
                 <li><a href="javascript:void(0)" onclick="toggleRealtimeTab()" role="button" id="rt-nav-link" class="rt-nav-highlight"><span class="nav-full">Real-Time TDR</span><span class="nav-short">RT TDR</span></a></li>
                 <li><a href="javascript:void(0)" onclick="toggleCompositePanel()" role="button"><span class="nav-full">Composites</span><span class="nav-short">Comp.</span></a></li>
                 <li><a href="global_archive.html" role="button"><span class="nav-full">Global Archive</span><span class="nav-short">Global</span></a></li>
                 <li><a href="#about">About</a></li>
-                <li><a href="#download">Download</a></li>
+                <li><a href="#tc-radar-db">TC-RADAR</a></li>
                 <li><a href="#contact">Contact</a></li>
             </ul>
             </nav>
@@ -403,18 +404,19 @@
     <section id="about">
         <div class="content-section">
             <h2 class="section-title">About <span class="accent">TC-ATLAS</span></h2>
-            <p class="section-desc"><strong>TC-ATLAS</strong> &mdash; <em>Tropical Cyclone Analysis Tool for Live and Archived Structure</em> &mdash; provides a comprehensive, multi-source platform for exploring tropical cyclone vortex structure. Built around 1,500+ post-processed airborne Doppler radar analyses, TC-ATLAS integrates passive microwave satellite imagery, infrared satellite data, ERA5 environmental diagnostics, dropsonde profiles, and flight-level observations into a unified interactive tool. Developed by Dr. Michael Fischer (University of Miami) in collaboration with NOAA's Hurricane Research Division, TC-ATLAS enables researchers to conduct storm-to-storm comparisons and climatological analyses of TC vortex and convective characteristics across all stages of the tropical cyclone lifecycle.</p>
+            <p class="section-desc"><strong>TC-ATLAS</strong> &mdash; <em>Tropical Cyclone Analysis Tool for Live and Archived Structure</em> &mdash; provides a comprehensive, multi-source platform for exploring tropical cyclone vortex structure. Developed by Dr. Michael Fischer (University of Miami) in collaboration with NOAA's Hurricane Research Division, TC-ATLAS enables researchers to conduct storm-to-storm comparisons and climatological analyses of TC vortex and convective characteristics across all stages of the tropical cyclone lifecycle.</p>
             <div class="feature-grid">
-                <div class="feature-card"><div class="feature-icon">&#127744;</div><h3>Storm-Centered Grids</h3><p>All analyses use a weighted circulation maximization (WCM) method for precise TC center identification, enabling accurate vortex-relative analyses.</p></div>
-                <div class="feature-card"><div class="feature-icon">&#128202;</div><h3>Rich Metadata</h3><p>Includes best-track information and environmental diagnostics from the operational SHIPS model for comprehensive storm context.</p></div>
-                <div class="feature-card"><div class="feature-icon">&#127919;</div><h3>High Resolution</h3><p>2.0 km horizontal grid spacing, 0.5 km vertical grid spacing, spanning 0-18 km in height for detailed 3D structure analysis.</p></div>
+                <div class="feature-card"><div class="feature-icon">&#128752;</div><h3>Multi-Source Integration</h3><p>Combines airborne Doppler radar, passive microwave and infrared satellite imagery, ERA5 reanalysis, flight-level data, and dropsonde profiles in a unified interactive environment.</p></div>
+                <div class="feature-card"><div class="feature-icon">&#128225;</div><h3>Real-Time Monitoring</h3><p>Track active NOAA hurricane reconnaissance missions with live tail Doppler radar visualizations, flight-level observations, and environmental diagnostics as they happen.</p></div>
+                <div class="feature-card"><div class="feature-icon">&#127758;</div><h3>Global Coverage</h3><p>Browse the complete IBTrACS record of tropical cyclones from 1842 to present with satellite imagery, intensity timelines, climatology, and multi-storm comparison tools.</p></div>
             </div>
         </div>
     </section>
 
-    <section id="features" class="section-bg">
+    <section id="tc-radar-db" class="section-bg">
         <div class="content-section">
-            <h2 class="section-title">Database <span class="accent">Features</span></h2>
+            <h2 class="section-title">The <span class="accent">TC-RADAR</span> Database</h2>
+            <p class="section-desc">The TC-RADAR dataset forms the backbone of TC-ATLAS, providing over 1,500 post-processed airborne Doppler radar analyses of tropical cyclones from 1997 to 2024. All analyses are mapped onto storm-centered grids at 2.0 km horizontal and 0.5 km vertical resolution, spanning 0&ndash;18 km in height.</p>
             <div style="max-width:800px;margin:0 auto;">
                 <h3 style="color:var(--blue-light);margin-bottom:0.5rem;font-size:1.1rem;">Available Variables</h3>
                 <ul class="variables-list">
@@ -435,7 +437,7 @@
 
     <section id="download">
         <div class="content-section">
-            <h2 class="section-title">Download <span class="accent">Database Files</span></h2>
+            <h2 class="section-title">Download <span class="accent">TC-RADAR</span></h2>
             <p class="section-desc">TC-RADAR consists of four netCDF files, grouped by data type and time period. Each file is approximately 10 GB.</p>
             <div class="data-files">
                 <div class="file-card"><h3>Swath Data</h3><p class="file-period">1997&ndash;2019</p><div class="file-size">~10 GB</div><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/tc_radar_v3m_1997_2019_xy_rel_swath_ships.nc" class="download-btn" target="_blank">Download</a></div>
@@ -453,6 +455,7 @@
                 <p style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid var(--border);">
                 <strong style="color:var(--blue-light);">For vortex tilt analyses, also cite:</strong><br>Fischer, M. S., P. D. Reasor, J. P. Dunion, and R. F. Rogers, 2024: An Observational Analysis of the Relationship between Tropical Cyclone Vortex Tilt, Precipitation Structure, and Intensity Change. Mon. Wea. Rev., 152, 203-225, https://doi.org/10.1175/MWR-D-23-0089.1.</p>
             </div>
+            <p style="margin-top:1.5rem;text-align:center;"><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/TC_RADAR_README.pdf" target="_blank" style="color:var(--blue-light);font-size:0.9rem;">Full TC-RADAR Documentation (README PDF)</a></p>
         </div>
     </section>
 
@@ -486,18 +489,18 @@
 
     <section class="contact-section" id="contact">
         <h2 class="section-title" style="color:white;">Get in Touch</h2>
-        <p style="font-size:1.1rem;margin-bottom:2rem;opacity:0.9;">Questions about TC-RADAR? Contact the developer.</p>
+        <p style="font-size:1.1rem;margin-bottom:2rem;opacity:0.9;">Questions about TC-ATLAS? Contact the developer.</p>
         <div class="contact-info">
             <p style="font-size:1.15rem;margin-bottom:0.75rem;"><strong>Dr. Michael Fischer</strong></p>
-            <p style="opacity:0.85;">TC-RADAR Developer</p>
+            <p style="opacity:0.85;">TC-ATLAS Developer &middot; University of Miami</p>
             <p style="margin-top:1rem;"><a href="mailto:mike.fischer@miami.edu" style="font-size:1rem;">mike.fischer@miami.edu</a></p>
-            <p style="margin-top:1.5rem;font-size:0.85rem;opacity:0.75;">Please include details about your research project and intended use of TC-RADAR data.</p>
+            <p style="margin-top:1.5rem;font-size:0.85rem;opacity:0.75;">Please include details about your research project and intended use of the data.</p>
         </div>
     </section>
 
     <footer>
         <div>Created by Michael S. Fischer &middot; University of Miami</div>
-        <div style="margin-top:6px;"><a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/TC_RADAR_README.pdf" target="_blank">Full Documentation (README)</a></div>
+        <div style="margin-top:6px;"><a href="../TC-ATLAS/">TC-ATLAS Home</a> &middot; <a href="https://www.aoml.noaa.gov/ftp/pub/hrd/data/radar/level3/TC_RADAR_README.pdf" target="_blank">TC-RADAR Documentation</a></div>
     </footer>
 
     <div id="imageModal" class="image-modal" onclick="closeImageModal()">
