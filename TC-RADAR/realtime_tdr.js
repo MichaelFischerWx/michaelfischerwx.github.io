@@ -5528,6 +5528,7 @@
     var _rtMwOverpassData = [];
     var _rtMwVisible = false;
     var _rtMwLastFileUrl = null;
+    var _rtMwCurrentJson = null;
 
     window.rtToggleMicrowaveOverlay = function () {
         var btn = document.getElementById('rt-mw-overlay-btn');
@@ -5573,7 +5574,8 @@
         }
     };
 
-    function _rtFetchMicrowaveOverpasses() {
+    function _rtFetchMicrowaveOverpasses(retryCount) {
+        retryCount = retryCount || 0;
         var sel = document.getElementById('rt-mw-overpass-select');
         var status = document.getElementById('rt-mw-status');
         if (!sel) return;
@@ -5599,8 +5601,18 @@
             '&analysis_time=' + encodeURIComponent(analysisDt);
 
         fetch(url)
-            .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(function (r) {
+                if (r.status === 503 && retryCount < 3) {
+                    if (status) status.textContent = 'Building index, retrying...';
+                    sel.innerHTML = '<option value="">Building index...</option>';
+                    setTimeout(function () { _rtFetchMicrowaveOverpasses(retryCount + 1); }, 3000);
+                    return null;
+                }
+                if (!r.ok) throw new Error(r.status);
+                return r.json();
+            })
             .then(function (json) {
+                if (!json) return;
                 _rtMwOverpassData = json.overpasses || [];
                 sel.innerHTML = '';
 
@@ -5678,6 +5690,9 @@
                 });
                 if (_rtMwVisible && _rtMap) _rtMwMapOverlay.addTo(_rtMap);
 
+                _rtMwCurrentJson = json;
+                _rtCreateStandaloneMWPlanView(json);
+
                 if (status) status.textContent = json.sensor + ' ' + json.datetime;
 
                 // Add/update download button next to status text
@@ -5700,12 +5715,112 @@
             });
     };
 
+    function _rtCreateStandaloneMWPlanView(json) {
+        // Only show standalone if no TDR plan view is currently displayed
+        if (document.getElementById('rt-dual-panel-wrap')) return;
+
+        var displayArea = document.getElementById('rt-display-area');
+        if (!displayArea) return;
+
+        var existing = document.getElementById('rt-mw-standalone-wrap');
+        if (existing) existing.remove();
+
+        var hasRGB = json.is_rgb && json.storm_grid_rgb_b64;
+        var hasGrid = json.storm_grid && json.storm_grid.z;
+        if (!hasRGB && !hasGrid) return;
+
+        var wrap = document.createElement('div');
+        wrap.id = 'rt-mw-standalone-wrap';
+        wrap.innerHTML =
+            '<div class="dual-panel-wrap" style="height:100%;">' +
+                '<div class="dual-pane" id="rt-mw-standalone-pane" style="width:100%;flex:1;">' +
+                    '<div class="dual-pane-label">Plan View (Microwave)</div>' +
+                    '<div class="dual-pane-inner" style="position:relative;">' +
+                        '<div id="rt-mw-plotly-chart" style="width:100%;height:100%;min-height:360px;"></div>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+        displayArea.appendChild(wrap);
+
+        var product = json.product || '89pct';
+        var titleText = (json.sensor || 'MW') + ' ' + (json.platform || '') +
+            ' | ' + product.toUpperCase() + '<br>' + (json.datetime || '');
+        var plotBg = '#0a1628';
+        var config = { responsive: true, displayModeBar: true,
+            modeBarButtonsToRemove: ['lasso2d', 'select2d', 'toggleSpikelines'], displaylogo: false };
+        var centerTrace = { x: [0], y: [0], type: 'scatter', mode: 'markers',
+            marker: { symbol: 'cross', size: 10, color: 'white', line: { color: 'white', width: 2 } },
+            showlegend: false, hoverinfo: 'skip' };
+
+        if (hasRGB) {
+            var ext = (json.storm_grid && json.storm_grid.extent_km) || 250;
+            var layout = {
+                title: { text: titleText, font: { color: '#e5e7eb', size: 11 }, y: 0.96, x: 0.5, xanchor: 'center', yanchor: 'top' },
+                paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+                xaxis: { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } },
+                         tickfont: { color: '#aaa', size: 9 }, gridcolor: 'rgba(255,255,255,0.04)',
+                         zeroline: true, zerolinecolor: 'rgba(255,255,255,0.12)',
+                         scaleanchor: 'y', range: [-ext, ext] },
+                yaxis: { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } },
+                         tickfont: { color: '#aaa', size: 9 }, gridcolor: 'rgba(255,255,255,0.04)',
+                         zeroline: true, zerolinecolor: 'rgba(255,255,255,0.12)',
+                         scaleanchor: 'x', scaleratio: 1, range: [-ext, ext] },
+                margin: { l: 52, r: 16, t: 46, b: 44 },
+                images: [{ source: 'data:image/png;base64,' + json.storm_grid_rgb_b64,
+                    xref: 'x', yref: 'y', x: -ext, y: ext,
+                    sizex: 2 * ext, sizey: 2 * ext,
+                    xanchor: 'left', yanchor: 'top',
+                    sizing: 'stretch', opacity: 0.95, layer: 'below' }],
+                hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 12 } },
+                showlegend: false
+            };
+            Plotly.newPlot('rt-mw-plotly-chart', [centerTrace], layout, config);
+        } else {
+            var sg = json.storm_grid;
+            var ext2 = sg.extent_km || 250;
+            var cs = json.colorscale || [
+                [0.000, '#303030'], [0.100, '#606060'], [0.225, '#800000'],
+                [0.375, '#FF0000'], [0.500, '#FF8C00'], [0.535, '#FFD700'],
+                [0.615, '#ADFF2F'], [0.700, '#00CC44'], [0.745, '#00DDCC'],
+                [0.825, '#0066FF'], [0.875, '#0000CC'], [1.000, '#8888FF']
+            ];
+            var cbarTitle = product === '37h' ? '37H (K)' : 'PCT (K)';
+            var mwTrace = {
+                z: sg.z, x: sg.x_axis, y: sg.y_axis,
+                type: 'heatmap', colorscale: cs, zmin: json.vmin, zmax: json.vmax,
+                colorbar: { title: { text: cbarTitle, font: { color: '#ccc', size: 10 } },
+                            tickfont: { color: '#ccc', size: 9 }, thickness: 12, len: 0.85 },
+                hovertemplate: '<b>MW %{z:.0f} K</b><br>X: %{x:.0f} km  Y: %{y:.0f} km<extra>MW</extra>',
+                hoverongaps: false, name: 'MW ' + cbarTitle.replace(' (K)', '')
+            };
+            var layout2 = {
+                title: { text: titleText, font: { color: '#e5e7eb', size: 11 }, y: 0.96, x: 0.5, xanchor: 'center', yanchor: 'top' },
+                paper_bgcolor: plotBg, plot_bgcolor: plotBg,
+                xaxis: { title: { text: 'Eastward distance (km)', font: { color: '#aaa', size: 10 } },
+                         tickfont: { color: '#aaa', size: 9 }, gridcolor: 'rgba(255,255,255,0.04)',
+                         zeroline: true, zerolinecolor: 'rgba(255,255,255,0.12)',
+                         scaleanchor: 'y', range: [-ext2, ext2] },
+                yaxis: { title: { text: 'Northward distance (km)', font: { color: '#aaa', size: 10 } },
+                         tickfont: { color: '#aaa', size: 9 }, gridcolor: 'rgba(255,255,255,0.04)',
+                         zeroline: true, zerolinecolor: 'rgba(255,255,255,0.12)',
+                         scaleanchor: 'x', scaleratio: 1, range: [-ext2, ext2] },
+                margin: { l: 52, r: 60, t: 46, b: 44 },
+                hoverlabel: { bgcolor: '#1f2937', font: { color: '#e5e7eb', size: 12 } },
+                showlegend: false
+            };
+            Plotly.newPlot('rt-mw-plotly-chart', [mwTrace, centerTrace], layout2, config);
+        }
+    }
+
     // Cleanup when switching files
     function _rtRemoveMicrowaveOverlay() {
         if (_rtMwMapOverlay && _rtMap) { _rtMap.removeLayer(_rtMwMapOverlay); _rtMwMapOverlay = null; }
         _rtMwOverpassData = [];
         _rtMwVisible = false;
         _rtMwLastFileUrl = null;
+        _rtMwCurrentJson = null;
+        var standaloneWrap = document.getElementById('rt-mw-standalone-wrap');
+        if (standaloneWrap) standaloneWrap.remove();
         var btn = document.getElementById('rt-mw-overlay-btn');
         if (btn) btn.classList.remove('active');
         var panel = document.getElementById('rt-mw-overpass-panel');

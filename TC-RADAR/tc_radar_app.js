@@ -14328,7 +14328,31 @@ function loadMicrowaveOverpass() {
 
 function _createStandaloneMWPlanView() {
     var chartEl = document.getElementById('plotly-chart');
-    if (!chartEl) return;
+    if (!chartEl) {
+        // The dual-panel structure hasn't been created yet (no TDR plot generated).
+        // Create it now so we have a plotly-chart div to render into.
+        var resultDiv = document.getElementById('explorer-result');
+        if (!resultDiv) return;
+        var thumbWrap = document.getElementById('thumbnail-wrap');
+        if (thumbWrap) thumbWrap.style.display = 'none';
+        resultDiv.innerHTML =
+            '<div class="dual-panel-wrap" id="dual-panel-wrap">' +
+                '<div class="dual-pane" id="dual-pane-left">' +
+                    '<div class="dual-pane-label">Microwave Satellite</div>' +
+                    '<div class="dual-pane-inner" style="position:relative;">' +
+                        '<div id="plotly-chart" style="width:100%;height:100%;min-height:360px;"></div>' +
+                        '<button onclick="openPlotModal()" title="Expand to fullscreen" style="position:absolute;top:6px;left:6px;z-index:10;background:rgba(255,255,255,0.08);border:none;color:#ccc;font-size:16px;width:28px;height:28px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;" onmouseover="this.style.background=\'rgba(255,255,255,0.2)\'" onmouseout="this.style.background=\'rgba(255,255,255,0.08)\'">\u26F6</button>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="dual-pane-divider" title="Toggle azimuthal mean panel" onclick="_toggleDualPane()"></div>' +
+                '<div class="dual-pane" id="dual-pane-right">' +
+                    '<div class="dual-pane-label">Azimuthal Mean</div>' +
+                    '<div id="az-result" class="az-result"></div>' +
+                '</div>' +
+            '</div>';
+        chartEl = document.getElementById('plotly-chart');
+        if (!chartEl) return;
+    }
 
     var prodSel = document.getElementById('mw-product-select');
     var product = (prodSel && prodSel.value) || '89pct';
