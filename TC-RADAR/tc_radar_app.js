@@ -14722,7 +14722,7 @@ function renderMWTimeline(overpasses) {
             };
             sensorCount[key2] = 0;
         }
-        var dt = op2.datetime;
+        var dt = op2.datetime.replace(' UTC', '').replace(' ', 'T');
         var baseY = sensorRow[key2];
         // Tiny y-jitter so overlapping same-time overpasses separate slightly
         var jitter = (sensorCount[key2] % 3 - 1) * 0.08;
