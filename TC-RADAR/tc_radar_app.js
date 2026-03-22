@@ -1,4 +1,4 @@
-const API_BASE = 'https://tc-radar-api.onrender.com';
+const API_BASE = 'https://tc-atlas-api-361010099051.us-east1.run.app';
 
 // ── Prevent browser from restoring previous scroll position on reload ──
 if ('scrollRestoration' in history) {

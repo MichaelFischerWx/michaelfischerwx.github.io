@@ -7,7 +7,7 @@
 'use strict';
 
 // ── Configuration ────────────────────────────────────────────
-var API_BASE = 'https://tc-radar-api.onrender.com';
+var API_BASE = 'https://tc-atlas-api-361010099051.us-east1.run.app';
 var STORMS_JSON = 'ibtracs_storms.json';
 var TRACKS_MANIFEST = 'ibtracs_tracks_manifest.json';
 var TRACKS_JSON_FALLBACK = 'ibtracs_tracks.json';  // Fallback for single-file mode
