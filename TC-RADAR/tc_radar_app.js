@@ -6673,17 +6673,8 @@ function openPlotModal(csJson) {
     var modal = document.getElementById('plotModal'), box = document.getElementById('plotModalBox');
     var csFull = document.getElementById('cs-fullscreen'), csDivider = document.getElementById('cs-full-divider');
     var azFull = document.getElementById('az-fullscreen'), azDivider = document.getElementById('az-full-divider');
-    // Dynamically create sq-fullscreen and sq-full-divider if they don't exist
     var sqFull = document.getElementById('sq-fullscreen');
     var sqDivider = document.getElementById('sq-full-divider');
-    if (!sqFull) {
-        sqDivider = document.createElement('div'); sqDivider.id = 'sq-full-divider';
-        sqDivider.style.cssText = 'height:1px;background:rgba(255,255,255,0.1);margin:8px 0;display:none;';
-        sqFull = document.createElement('div'); sqFull.id = 'sq-fullscreen';
-        sqFull.style.cssText = 'width:100%;display:none;';
-        var container = azFull ? azFull.parentElement : csFull.parentElement;
-        container.appendChild(sqDivider); container.appendChild(sqFull);
-    }
     modal.classList.add('active'); document.body.style.overflow = 'hidden';
     var hasCrossSection = !!csJson, hasAzMean = !!_lastAzJson || !!_lastHybridAzJson || !!_lastAnomalyAzJson || !!_lastVPScatterJson || !!_lastCFADJson, hasShearQuads = !!_lastSqJson;
     var hasSub = hasCrossSection || hasAzMean || hasShearQuads;

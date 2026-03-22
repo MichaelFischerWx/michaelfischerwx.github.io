@@ -314,6 +314,7 @@ input[type="range"]::-moz-range-track { height: 4px; background: transparent; bo
 .plot-modal-box.split #plotly-fullscreen { height: 55%; min-height: 300px; }
 .plot-modal-box.split #cs-fullscreen { height: 40%; min-height: 220px; width: 100%; }
 .plot-modal-box.split #az-fullscreen { height: 40%; min-height: 220px; width: 100%; }
+.plot-modal-box.split #sq-fullscreen { height: 42%; min-height: 260px; width: 100%; }
 .cs-full-divider { height: 1px; background: var(--border); margin: 4px 16px; }
 
 /* ── 3D Volume modal ─────────────────────────────── */
@@ -1253,6 +1254,7 @@ footer a:hover { text-decoration: underline; }
     .plot-modal-box.split #plotly-fullscreen { height: 50%; min-height: 200px; }
     .plot-modal-box.split #cs-fullscreen { height: 45%; min-height: 180px; }
     .plot-modal-box.split #az-fullscreen { height: 45%; min-height: 180px; }
+    .plot-modal-box.split #sq-fullscreen { height: 45%; min-height: 220px; }
     .vol3d-modal-box { width: 100vw; height: 100vh; border-radius: 0; }
     .vol3d-controls { gap: 5px; padding: 6px 44px 5px 8px; }
     .ir-map-controls { padding: 4px 8px; }
