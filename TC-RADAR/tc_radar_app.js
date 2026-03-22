@@ -14288,12 +14288,14 @@ function loadMicrowaveOverpass() {
             }
 
             // ── Plotly plan-view overlay ──
-            if (_mwIsRGB && _mwStormGridRGBb64) {
-                // 37color: use the RGB image as a Plotly layout image
-                _mwStormGrid = json.storm_grid;  // still need extent info
-                _applyMWPlanViewOverlay();
-            } else if (json.storm_grid && json.storm_grid.z) {
+            // Auto-enable MW plan view when storm grid data is available
+            if ((_mwIsRGB && _mwStormGridRGBb64) || (json.storm_grid && json.storm_grid.z)) {
                 _mwStormGrid = json.storm_grid;
+                if (!_mwPlanViewVisible) {
+                    _mwPlanViewVisible = true;
+                    var pvBtn = document.getElementById('mw-planview-btn');
+                    if (pvBtn) pvBtn.classList.add('active');
+                }
                 _applyMWPlanViewOverlay();
             }
 
