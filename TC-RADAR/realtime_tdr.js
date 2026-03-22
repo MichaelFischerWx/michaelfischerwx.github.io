@@ -5546,6 +5546,25 @@
         btn.classList.add('active');
         panel.style.display = 'block';
 
+        // If metadata not yet loaded, show status and retry until it arrives
+        if (!_rtCaseMeta) {
+            var status = document.getElementById('rt-mw-status');
+            var sel = document.getElementById('rt-mw-overpass-select');
+            if (status) status.textContent = 'Loading metadata...';
+            if (sel) sel.innerHTML = '<option value="">Waiting for metadata\u2026</option>';
+            var _retryMwFetch = function () {
+                if (!_rtMwVisible) return; // user toggled off while waiting
+                if (_rtCaseMeta) {
+                    _rtMwLastFileUrl = null; // force fresh fetch
+                    _rtFetchMicrowaveOverpasses();
+                } else {
+                    setTimeout(_retryMwFetch, 500);
+                }
+            };
+            setTimeout(_retryMwFetch, 500);
+            return;
+        }
+
         if (_currentFileUrl !== _rtMwLastFileUrl) {
             _rtMwLastFileUrl = _currentFileUrl;
             _rtFetchMicrowaveOverpasses();
@@ -5660,9 +5679,24 @@
                 if (_rtMwVisible && _rtMap) _rtMwMapOverlay.addTo(_rtMap);
 
                 if (status) status.textContent = json.sensor + ' ' + json.datetime;
+
+                // Add/update download button next to status text
+                var dlBtn = document.getElementById('rt-mw-download-btn');
+                if (!dlBtn) {
+                    dlBtn = document.createElement('a');
+                    dlBtn.id = 'rt-mw-download-btn';
+                    dlBtn.style.cssText = 'font-size:9px;padding:2px 6px;border:1px solid rgba(251,146,60,0.5);border-radius:3px;color:#fdba74;text-decoration:none;white-space:nowrap;cursor:pointer;';
+                    dlBtn.textContent = '\u2193 Save';
+                    if (status && status.parentNode) status.parentNode.insertBefore(dlBtn, status.nextSibling);
+                }
+                var dtSafe = (json.datetime || '').replace(/[^0-9A-Za-z]/g, '_').replace(/_+/g, '_').replace(/_$/, '');
+                dlBtn.href = imgUrl;
+                dlBtn.download = 'MW_' + (json.sensor || 'sensor') + '_' + product + '_' + dtSafe + '.png';
             })
             .catch(function (e) {
                 if (status) status.textContent = 'Error: ' + e.message;
+                var dlBtn = document.getElementById('rt-mw-download-btn');
+                if (dlBtn) dlBtn.remove();
             });
     };
 
@@ -5676,6 +5710,8 @@
         if (btn) btn.classList.remove('active');
         var panel = document.getElementById('rt-mw-overpass-panel');
         if (panel) panel.style.display = 'none';
+        var dlBtn = document.getElementById('rt-mw-download-btn');
+        if (dlBtn) dlBtn.remove();
     }
 
 })();
