@@ -1,889 +1,1465 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Michael Fischer - Atmospheric Scientist</title>
-    
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        :root {
-            --primary-blue: #3b82f6;
-            --dark-blue: #1e3a8a;
-            --light-blue: #93c5fd;
-            --gray-50: #f9fafb;
-            --gray-100: #f3f4f6;
-            --gray-600: #4b5563;
-            --gray-800: #1f2937;
-            --gray-900: #111827;
-        }
-
-        html {
-            scroll-behavior: smooth;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            line-height: 1.6;
-            color: var(--gray-800);
-        }
-
-        /* Navigation */
-        nav {
-            position: fixed;
-            top: 0;
-            width: 100%;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
-            z-index: 1000;
-            padding: 1rem 0;
-        }
-
-        .nav-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0 2rem;
-        }
-
-        .nav-logo {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--primary-blue);
-        }
-
-        .nav-links {
-            display: flex;
-            gap: 2rem;
-            list-style: none;
-            align-items: center;
-        }
-
-        .nav-links a {
-            text-decoration: none;
-            color: var(--gray-800);
-            font-weight: 500;
-            transition: color 0.3s;
-        }
-
-        .nav-links a:hover {
-            color: var(--primary-blue);
-        }
-
-        .nav-btn {
-            background: var(--primary-blue);
-            color: white !important;
-            padding: 0.5rem 1.5rem;
-            border-radius: 6px;
-            transition: all 0.3s;
-        }
-
-        .nav-btn:hover {
-            background: var(--dark-blue);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
-        }
-
-        /* Mobile menu toggle */
-        .mobile-menu-toggle {
-            display: none;
-            flex-direction: column;
-            cursor: pointer;
-        }
-
-        .mobile-menu-toggle span {
-            width: 25px;
-            height: 3px;
-            background: var(--gray-800);
-            margin: 3px 0;
-            transition: 0.3s;
-        }
-
-        /* Sections */
-        section {
-            padding: 5rem 2rem;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        section:first-of-type {
-            padding-top: 8rem;
-        }
-
-        h1 {
-            font-size: 3rem;
-            font-weight: 700;
-            color: var(--gray-900);
-            margin-bottom: 1rem;
-        }
-
-        h2 {
-            font-size: 2.5rem;
-            font-weight: 700;
-            color: var(--gray-900);
-            margin-bottom: 2rem;
-            text-align: center;
-        }
-
-        h3 {
-            font-size: 1.5rem;
-            font-weight: 600;
-            color: var(--gray-900);
-            margin-bottom: 1rem;
-        }
-
-        /* Hero Section */
-        #home {
-            min-height: 90vh;
-            display: flex;
-            align-items: center;
-            background: linear-gradient(135deg, var(--gray-50) 0%, #e0f2fe 100%);
-        }
-
-        .hero-content {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 4rem;
-            align-items: center;
-        }
-
-        .hero-text h1 {
-            font-size: 3.5rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .hero-subtitle {
-            font-size: 1.5rem;
-            color: var(--primary-blue);
-            font-weight: 600;
-            margin-bottom: 1rem;
-        }
-
-        .hero-description {
-            font-size: 1.1rem;
-            color: var(--gray-600);
-            margin-bottom: 2rem;
-            line-height: 1.8;
-        }
-
-        .hero-buttons {
-            display: flex;
-            gap: 1rem;
-        }
-
-        .btn {
-            padding: 0.75rem 2rem;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: 600;
-            transition: all 0.3s;
-            display: inline-block;
-        }
-
-        .btn-primary {
-            background: var(--primary-blue);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background: var(--dark-blue);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
-        }
-
-        .btn-secondary {
-            background: white;
-            color: var(--primary-blue);
-            border: 2px solid var(--primary-blue);
-        }
-
-        .btn-secondary:hover {
-            background: var(--primary-blue);
-            color: white;
-        }
-
-        .hero-image {
-            text-align: center;
-        }
-
-        .profile-image {
-            width: 300px;
-            height: 300px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 5px solid white;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
-        }
-
-        /* About Section */
-        #about {
-            background: white;
-        }
-
-        .about-content {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 3rem;
-        }
-
-        .about-text {
-            font-size: 1.1rem;
-            line-height: 1.8;
-            color: var(--gray-600);
-        }
-
-        .about-text p {
-            margin-bottom: 1rem;
-        }
-
-        .about-highlights {
-            background: var(--gray-50);
-            padding: 2rem;
-            border-radius: 12px;
-        }
-
-        .highlight-item {
-            margin-bottom: 1.5rem;
-        }
-
-        .highlight-item h4 {
-            color: var(--primary-blue);
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 0.5rem;
-        }
-
-        .highlight-item p {
-            color: var(--gray-800);
-            font-weight: 600;
-        }
-
-        /* Research Section */
-        #research {
-            background: var(--gray-50);
-        }
-
-        .research-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-            margin-top: 3rem;
-        }
-
-        .research-card {
-            background: white;
-            border-radius: 12px;
-            padding: 2rem;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            transition: transform 0.3s, box-shadow 0.3s;
-        }
-
-        .research-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-        }
-
-        .research-icon {
-            font-size: 2.5rem;
-            margin-bottom: 1rem;
-        }
-
-        .research-card h3 {
-            color: var(--gray-900);
-            margin-bottom: 1rem;
-        }
-
-        .research-card p {
-            color: var(--gray-600);
-            line-height: 1.6;
-        }
-
-        /* TC-RADAR Featured Section */
-        .featured-project {
-            background: linear-gradient(135deg, var(--primary-blue), var(--dark-blue));
-            border-radius: 16px;
-            padding: 3rem;
-            margin-top: 3rem;
-            color: white;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 3rem;
-            align-items: center;
-        }
-
-        .featured-content h3 {
-            color: white;
-            font-size: 2rem;
-            margin-bottom: 1rem;
-        }
-
-        .featured-content p {
-            line-height: 1.8;
-            margin-bottom: 1.5rem;
-            opacity: 0.9;
-        }
-
-        .featured-stats {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 1rem;
-            margin: 2rem 0;
-        }
-
-        .stat-item {
-            text-align: center;
-        }
-
-        .stat-number {
-            font-size: 2rem;
-            font-weight: 700;
-        }
-
-        .stat-label {
-            font-size: 0.9rem;
-            opacity: 0.9;
-        }
-
-        .featured-image {
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-        }
-
-        .featured-image img {
-            width: 100%;
-            height: auto;
-            display: block;
-        }
-
-        /* Publications Section */
-        #publications {
-            background: white;
-        }
-
-        .publication-list {
-            max-width: 900px;
-            margin: 0 auto;
-        }
-
-        .publication-item {
-            background: var(--gray-50);
-            padding: 1.5rem;
-            border-radius: 12px;
-            margin-bottom: 1.5rem;
-            border-left: 4px solid var(--primary-blue);
-        }
-
-        .publication-title {
-            font-weight: 600;
-            color: var(--gray-900);
-            margin-bottom: 0.5rem;
-            font-size: 1.1rem;
-        }
-
-        .publication-authors {
-            color: var(--gray-600);
-            margin-bottom: 0.5rem;
-        }
-
-        .publication-journal {
-            color: var(--primary-blue);
-            font-style: italic;
-            margin-bottom: 0.5rem;
-        }
-
-        .publication-links {
-            display: flex;
-            gap: 1rem;
-            margin-top: 1rem;
-        }
-
-        .publication-link {
-            font-size: 0.9rem;
-            color: var(--primary-blue);
-            text-decoration: none;
-            font-weight: 500;
-        }
-
-        .publication-link:hover {
-            text-decoration: underline;
-        }
-
-        /* Contact Section */
-        #contact {
-            background: var(--gray-50);
-            text-align: center;
-        }
-
-        .contact-content {
-            max-width: 600px;
-            margin: 0 auto;
-        }
-
-        .contact-info {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-            margin: 2rem 0;
-        }
-
-        .contact-item {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 1rem;
-            font-size: 1.1rem;
-        }
-
-        .contact-item span {
-            font-size: 1.5rem;
-        }
-
-        .social-links {
-            display: flex;
-            gap: 1.5rem;
-            justify-content: center;
-            margin-top: 2rem;
-        }
-
-        .social-link {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            background: var(--primary-blue);
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-decoration: none;
-            font-size: 1.5rem;
-            transition: all 0.3s;
-        }
-
-        .social-link:hover {
-            background: var(--dark-blue);
-            transform: translateY(-3px);
-        }
-
-        /* Footer */
-        footer {
-            background: var(--gray-900);
-            color: white;
-            text-align: center;
-            padding: 2rem;
-        }
-
-        footer p {
-            opacity: 0.7;
-        }
-
-        /* Responsive */
-        @media (max-width: 768px) {
-            .nav-links {
-                display: none;
-            }
-
-            .mobile-menu-toggle {
-                display: flex;
-            }
-
-            .hero-content,
-            .about-content,
-            .featured-project {
-                grid-template-columns: 1fr;
-            }
-
-            h1 {
-                font-size: 2rem;
-            }
-
-            .hero-text h1 {
-                font-size: 2.5rem;
-            }
-
-            h2 {
-                font-size: 2rem;
-            }
-
-            .research-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .featured-stats {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Michael Fischer — Tropical Cyclone Scientist, University of Miami</title>
+<meta name="description" content="Michael S. Fischer is an Assistant Professor at the University of Miami Rosenstiel School, studying hurricane structure and intensity change with airborne radar, satellite observations, and machine learning. Creator of TC-ATLAS and TC-SWARM.">
+<meta name="author" content="Michael S. Fischer">
+<link rel="canonical" href="https://michaelfischerwx.github.io/">
+<meta name="theme-color" content="#005030" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0a0e14" media="(prefers-color-scheme: dark)">
+
+<meta property="og:type" content="profile">
+<meta property="og:title" content="Michael Fischer — Tropical Cyclone Scientist">
+<meta property="og:description" content="Hurricane structure and intensity change: airborne Doppler radar, satellite observations, and machine learning. Creator of TC-ATLAS and TC-SWARM.">
+<meta property="og:url" content="https://michaelfischerwx.github.io/">
+<meta property="og:image" content="https://michaelfischerwx.github.io/assets/profile.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@MikeFischerWx">
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23005030'/%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='5.5' stroke-linecap='round'%3E%3Cpath d='M32 32c2-5 9-6 13-2 5 5 3 14-4 17'/%3E%3Cpath d='M32 32c-2 5-9 6-13 2-5-5-3-14 4-17'/%3E%3C/g%3E%3Ccircle cx='32' cy='32' r='3' fill='%23f47321'/%3E%3C/svg%3E">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
+
+<script>
+  // Set the theme before first paint so there is no flash.
+  (function () {
+    try {
+      var saved = localStorage.getItem('theme');
+      var dark = saved ? saved === 'dark'
+                       : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    } catch (e) {}
+  })();
+</script>
+
+<style>
+/* ---------------------------------------------------------------- tokens */
+:root {
+  --bg:          #ffffff;
+  --bg-alt:      #f5f8f6;
+  --surface:     #ffffff;
+  --surface-2:   #f7f9f8;
+  --line:        #e2e8e5;
+  --line-strong: #cbd5d0;
+
+  --ink:   #0f1720;
+  --ink-2: #4b5563;
+  --ink-3: #737f8c;
+
+  --brand:      #005030;   /* University of Miami green */
+  --brand-hi:   #00714a;
+  --brand-soft: rgba(0, 80, 48, 0.07);
+  --accent:     #d95e12;   /* UM orange, darkened for contrast on white */
+  --accent-pure:#f47321;
+  --accent-soft:rgba(244, 115, 33, 0.10);
+
+  --on-brand: #ffffff;
+
+  --shadow-sm: 0 1px 2px rgba(15, 23, 32, .04), 0 2px 8px rgba(15, 23, 32, .04);
+  --shadow-md: 0 2px 6px rgba(15, 23, 32, .05), 0 12px 32px rgba(15, 23, 32, .08);
+  --shadow-lg: 0 4px 12px rgba(15, 23, 32, .06), 0 24px 60px rgba(15, 23, 32, .12);
+
+  --radius:    16px;
+  --radius-sm: 10px;
+  --maxw:      1140px;
+  --nav-h:     68px;
+
+  --font-sans:  'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-serif: 'Source Serif 4', 'Iowan Old Style', Georgia, 'Times New Roman', serif;
+}
+
+html[data-theme="dark"] {
+  --bg:          #0a0e14;
+  --bg-alt:      #0d1219;
+  --surface:     #131a23;
+  --surface-2:   #171f29;
+  --line:        #222c38;
+  --line-strong: #33404f;
+
+  --ink:   #e7ecea;
+  --ink-2: #a6b2bd;
+  --ink-3: #7f8b98;
+
+  --brand:      #4a9b6e;
+  --brand-hi:   #6db993;
+  --brand-soft: rgba(74, 155, 110, 0.12);
+  --accent:     #f7924e;
+  --accent-pure:#f47321;
+  --accent-soft:rgba(244, 115, 33, 0.14);
+
+  --on-brand: #06130d;
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.35);
+  --shadow-md: 0 2px 8px rgba(0,0,0,.4), 0 16px 40px rgba(0,0,0,.35);
+  --shadow-lg: 0 4px 14px rgba(0,0,0,.45), 0 28px 70px rgba(0,0,0,.5);
+}
+
+/* ---------------------------------------------------------------- base */
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 1.0625rem;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+img { max-width: 100%; height: auto; display: block; }
+a { color: var(--brand-hi); text-decoration: none; }
+a:hover { color: var(--accent); }
+
+:focus-visible {
+  outline: 2px solid var(--accent-pure);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+::selection { background: var(--brand); color: var(--on-brand); }
+
+.skip-link {
+  position: absolute; left: 50%; top: 0;
+  transform: translate(-50%, -120%);
+  background: var(--brand); color: var(--on-brand);
+  padding: .7rem 1.4rem; border-radius: 0 0 8px 8px;
+  font-weight: 600; z-index: 2000;
+  transition: transform .18s ease;
+}
+.skip-link:focus { transform: translate(-50%, 0); color: var(--on-brand); }
+
+/* ---------------------------------------------------------------- layout */
+.wrap { width: 100%; max-width: var(--maxw); margin-inline: auto; padding-inline: 1.5rem; }
+
+section { padding-block: clamp(4rem, 9vw, 7rem); scroll-margin-top: var(--nav-h); }
+section.alt { background: var(--bg-alt); }
+section + section { border-top: 1px solid var(--line); }
+
+.eyebrow {
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--brand-hi);
+  margin-bottom: .85rem;
+}
+
+h1, h2, h3, h4 { font-family: var(--font-serif); line-height: 1.18; font-weight: 600; letter-spacing: -0.015em; }
+
+h2 { font-size: clamp(1.95rem, 3.6vw, 2.6rem); color: var(--ink); }
+h3 { font-size: 1.3rem; }
+
+.section-head { max-width: 46rem; margin-bottom: clamp(2.5rem, 5vw, 3.5rem); }
+.section-head p { color: var(--ink-2); font-size: 1.075rem; margin-top: .9rem; }
+
+.rule {
+  width: 46px; height: 3px; border-radius: 2px;
+  background: linear-gradient(90deg, var(--brand) 0%, var(--accent-pure) 100%);
+  margin-bottom: 1.4rem;
+}
+
+/* ---------------------------------------------------------------- buttons */
+.btn {
+  display: inline-flex; align-items: center; gap: .5rem;
+  padding: .72rem 1.4rem;
+  border-radius: var(--radius-sm);
+  font-size: .95rem; font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background .18s ease, border-color .18s ease, color .18s ease, transform .18s ease, box-shadow .18s ease;
+  white-space: nowrap;
+}
+.btn-primary { background: var(--brand); color: var(--on-brand); }
+.btn-primary:hover { background: var(--brand-hi); color: var(--on-brand); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+
+.btn-ghost { background: transparent; color: var(--ink); border-color: var(--line-strong); }
+.btn-ghost:hover { border-color: var(--brand); color: var(--brand-hi); background: var(--brand-soft); transform: translateY(-1px); }
+
+.btn-accent { background: var(--accent-pure); color: #fff; }
+.btn-accent:hover { background: var(--accent); color: #fff; transform: translateY(-1px); box-shadow: var(--shadow-md); }
+
+.arrow { transition: transform .18s ease; }
+.btn:hover .arrow, .link-arrow:hover .arrow { transform: translateX(3px); }
+
+.link-arrow {
+  display: inline-flex; align-items: center; gap: .4rem;
+  font-weight: 600; font-size: .95rem; color: var(--brand-hi);
+}
+
+/* ---------------------------------------------------------------- nav */
+header.site {
+  position: fixed; inset: 0 0 auto 0; z-index: 1000;
+  height: var(--nav-h);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: saturate(180%) blur(14px);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+  border-bottom: 1px solid transparent;
+  transition: border-color .25s ease, box-shadow .25s ease, background .25s ease;
+}
+header.site.scrolled { border-bottom-color: var(--line); box-shadow: var(--shadow-sm); }
+
+.nav {
+  height: 100%;
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+}
+
+.brand { display: flex; align-items: center; gap: .65rem; color: var(--ink); font-weight: 600; }
+.brand:hover { color: var(--ink); }
+.brand svg { width: 30px; height: 30px; flex: none; }
+.brand-name { font-family: var(--font-serif); font-size: 1.14rem; letter-spacing: -.01em; }
+
+.nav-links { display: flex; align-items: center; gap: 1.9rem; list-style: none; }
+.nav-links a {
+  position: relative;
+  color: var(--ink-2); font-size: .93rem; font-weight: 500;
+  padding-block: .35rem;
+  transition: color .18s ease;
+}
+.nav-links a::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -2px;
+  height: 2px; border-radius: 2px; background: var(--accent-pure);
+  transform: scaleX(0); transform-origin: left; transition: transform .22s ease;
+}
+.nav-links a:hover { color: var(--ink); }
+.nav-links a.active { color: var(--ink); font-weight: 600; }
+.nav-links a.active::after { transform: scaleX(1); }
+
+.nav-tools { display: flex; align-items: center; gap: .65rem; }
+
+.icon-btn {
+  width: 38px; height: 38px;
+  display: grid; place-items: center;
+  border-radius: 9px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--ink-2);
+  cursor: pointer;
+  transition: color .18s ease, border-color .18s ease, background .18s ease;
+}
+.icon-btn:hover { color: var(--brand-hi); border-color: var(--brand); }
+.icon-btn svg { width: 18px; height: 18px; }
+html[data-theme="dark"] .sun { display: none; }
+html[data-theme="light"] .moon { display: none; }
+
+.nav-cta { padding: .5rem 1.05rem; font-size: .88rem; }
+
+.burger { display: none; }
+
+/* mobile drawer */
+.drawer {
+  position: fixed; inset: var(--nav-h) 0 auto 0; z-index: 999;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  box-shadow: var(--shadow-md);
+  padding: .75rem 1.5rem 1.5rem;
+  display: none;
+}
+.drawer.open { display: block; }
+.drawer ul { list-style: none; }
+.drawer a {
+  display: block; padding: .8rem 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink); font-weight: 500;
+}
+.drawer .btn { margin-top: 1.1rem; width: 100%; justify-content: center; }
+
+/* ---------------------------------------------------------------- hero */
+#home {
+  position: relative;
+  padding-top: calc(var(--nav-h) + clamp(3rem, 8vw, 6rem));
+  padding-bottom: clamp(3.5rem, 8vw, 6rem);
+  overflow: hidden;
+  border-top: none;
+}
+#home::before {
+  content: '';
+  position: absolute; inset: 0; z-index: 0;
+  background:
+    radial-gradient(60rem 40rem at 78% -10%, var(--accent-soft) 0%, transparent 62%),
+    radial-gradient(52rem 38rem at 6% 8%, var(--brand-soft) 0%, transparent 60%);
+}
+.cyclone {
+  position: absolute; z-index: 0;
+  right: -14vw; top: -10vh;
+  width: min(78vw, 900px); aspect-ratio: 1;
+  color: var(--brand);
+  opacity: .085;
+  pointer-events: none;
+  animation: spin 150s linear infinite;
+}
+html[data-theme="dark"] .cyclone { opacity: .14; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.hero-grid {
+  position: relative; z-index: 1;
+  display: grid; grid-template-columns: 1.35fr .85fr;
+  gap: clamp(2.5rem, 6vw, 5rem); align-items: center;
+}
+
+.hero h1 {
+  font-size: clamp(2.6rem, 6.2vw, 4.15rem);
+  letter-spacing: -0.03em;
+  margin-bottom: .55rem;
+}
+.hero-role {
+  font-size: clamp(1.05rem, 2vw, 1.28rem);
+  font-weight: 600; color: var(--brand-hi);
+  margin-bottom: .35rem;
+}
+.hero-affil { color: var(--ink-3); font-size: .98rem; margin-bottom: 1.6rem; }
+.hero-lede {
+  font-size: clamp(1.05rem, 1.6vw, 1.18rem);
+  color: var(--ink-2); max-width: 34rem; margin-bottom: 2rem;
+}
+.hero-lede strong { color: var(--ink); font-weight: 600; }
+.hero-actions { display: flex; flex-wrap: wrap; gap: .8rem; }
+
+.portrait-frame { position: relative; max-width: 340px; margin-inline: auto; width: 100%; }
+.portrait-frame::after {
+  content: ''; position: absolute; inset: 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  pointer-events: none;
+}
+.portrait-frame::before {
+  content: ''; position: absolute;
+  inset: 14px -14px -14px 14px;
+  border-radius: var(--radius);
+  background: linear-gradient(150deg, var(--brand) 0%, var(--accent-pure) 100%);
+  opacity: .22;
+}
+.portrait-frame img {
+  position: relative;
+  width: 100%; border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  background: var(--surface-2);
+}
+
+/* stat strip */
+.metrics {
+  position: relative; z-index: 1;
+  margin-top: clamp(3rem, 6vw, 4.5rem);
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.metric { padding: 1.5rem 1.4rem; border-left: 1px solid var(--line); }
+.metric:first-child { border-left: none; }
+.metric dt {
+  font-size: .72rem; font-weight: 600; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--ink-3); margin-bottom: .3rem;
+}
+.metric dd {
+  font-family: var(--font-serif); font-size: 1.85rem;
+  font-weight: 600; color: var(--ink); letter-spacing: -.02em; line-height: 1.1;
+}
+.metric dd span { font-size: .95rem; color: var(--ink-3); font-family: var(--font-sans); font-weight: 500; }
+
+/* ---------------------------------------------------------------- about */
+.about-grid { display: grid; grid-template-columns: 1.25fr .75fr; gap: clamp(2.5rem, 5vw, 4rem); }
+.prose p { color: var(--ink-2); margin-bottom: 1.15rem; }
+.prose p:last-child { margin-bottom: 0; }
+.prose strong { color: var(--ink); font-weight: 600; }
+
+.facts {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 1.9rem;
+  box-shadow: var(--shadow-sm);
+  align-self: start;
+}
+.fact + .fact { margin-top: 1.6rem; padding-top: 1.6rem; border-top: 1px solid var(--line); }
+.fact h4 {
+  font-family: var(--font-sans);
+  font-size: .72rem; font-weight: 600; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: .6rem;
+}
+.fact p { font-size: .95rem; color: var(--ink-2); line-height: 1.55; }
+.fact p.lead { color: var(--ink); font-weight: 600; }
+.tags { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .2rem; }
+.tag {
+  font-size: .8rem; font-weight: 500;
+  padding: .28rem .7rem; border-radius: 999px;
+  background: var(--brand-soft); color: var(--brand-hi);
+  border: 1px solid color-mix(in srgb, var(--brand) 22%, transparent);
+}
+
+/* ---------------------------------------------------------------- research */
+.card-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.9rem 1.7rem;
+  box-shadow: var(--shadow-sm);
+  transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;
+}
+.card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); border-color: var(--line-strong); }
+.card h3 { margin-bottom: .7rem; font-size: 1.18rem; }
+.card p { font-size: .96rem; color: var(--ink-2); }
+
+.card-icon {
+  width: 42px; height: 42px; border-radius: 11px;
+  display: grid; place-items: center; margin-bottom: 1.15rem;
+  background: var(--brand-soft); color: var(--brand-hi);
+  border: 1px solid color-mix(in srgb, var(--brand) 18%, transparent);
+}
+.card-icon svg { width: 21px; height: 21px; }
+
+/* ---------------------------------------------------------------- projects */
+.project {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+.project + .project { margin-top: 2rem; }
+
+.project-inner { display: grid; grid-template-columns: 1fr 1fr; align-items: stretch; }
+.project-body { padding: clamp(1.9rem, 3.4vw, 3rem); display: flex; flex-direction: column; justify-content: center; }
+.project-visual {
+  position: relative; min-height: 320px;
+  background: var(--surface-2);
+  border-left: 1px solid var(--line);
+  display: grid; place-items: center;
+  padding: clamp(1.4rem, 2.5vw, 2.2rem);
+  overflow: hidden;
+}
+.project.flip .project-visual { border-left: none; border-right: 1px solid var(--line); order: -1; }
+
+/* soft plotted-canvas backdrop so the panel reads as designed, not empty */
+.project-visual::before {
+  content: ''; position: absolute; inset: 0;
+  background-image: radial-gradient(var(--line-strong) 1px, transparent 1px);
+  background-size: 22px 22px;
+  opacity: .5;
+  mask-image: radial-gradient(120% 90% at 50% 50%, #000 25%, transparent 78%);
+  -webkit-mask-image: radial-gradient(120% 90% at 50% 50%, #000 25%, transparent 78%);
+}
+.project-visual > * { position: relative; z-index: 1; }
+
+.project-visual img {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-lg);
+}
+
+.badges { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+.badge {
+  display: inline-flex; align-items: center; gap: .4rem;
+  font-size: .72rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+  padding: .3rem .7rem; border-radius: 999px;
+  background: var(--surface-2); color: var(--ink-3);
+  border: 1px solid var(--line);
+}
+.badge.live { color: var(--brand-hi); background: var(--brand-soft); border-color: color-mix(in srgb, var(--brand) 25%, transparent); }
+.badge.review { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent-pure) 30%, transparent); }
+.dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: currentColor;
+  animation: pulse 2.4s ease-out infinite;
+}
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 60%, transparent); }
+  70%  { box-shadow: 0 0 0 7px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.project h3 { font-size: clamp(1.6rem, 2.8vw, 2.1rem); letter-spacing: -.02em; margin-bottom: .5rem; }
+.project .tagline { color: var(--brand-hi); font-weight: 600; font-size: 1.02rem; margin-bottom: 1.1rem; }
+.project p { color: var(--ink-2); font-size: 1rem; }
+.project p + p { margin-top: .9rem; }
+
+.project-stats {
+  display: flex; flex-wrap: wrap; gap: 2rem;
+  margin: 1.7rem 0;
+  padding: 1.1rem 0;
+  border-block: 1px solid var(--line);
+}
+.project-stats div strong {
+  display: block; font-family: var(--font-serif); font-size: 1.45rem;
+  font-weight: 600; color: var(--ink); line-height: 1.2;
+}
+.project-stats div span { font-size: .78rem; color: var(--ink-3); letter-spacing: .05em; }
+
+.project-links { display: flex; flex-wrap: wrap; gap: .7rem; margin-top: .4rem; }
+.chip {
+  font-size: .85rem; font-weight: 500;
+  padding: .45rem .9rem; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--ink-2);
+  background: var(--surface);
+  transition: border-color .18s ease, color .18s ease, background .18s ease;
+}
+.chip:hover { border-color: var(--brand); color: var(--brand-hi); background: var(--brand-soft); }
+
+.project-cta { margin-top: 1.6rem; display: flex; flex-wrap: wrap; gap: .8rem; }
+
+/* pipeline diagram */
+.pipeline { width: 100%; max-width: 460px; display: flex; flex-direction: column; gap: .55rem; }
+.stage {
+  border: 1px solid var(--line); border-radius: 11px;
+  background: var(--surface); padding: .85rem 1.1rem;
+  box-shadow: var(--shadow-sm);
+}
+.stage-label {
+  font-size: .68rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ink-3); margin-bottom: .18rem;
+}
+.stage-title { font-weight: 600; font-size: .97rem; color: var(--ink); line-height: 1.35; }
+.stage-sub { font-size: .82rem; color: var(--ink-3); line-height: 1.45; margin-top: .12rem; }
+.stage.input  { border-left: 3px solid var(--ink-3); }
+.stage.ghost  { border-left: 3px solid var(--accent-pure); }
+.stage.ghost .stage-label { color: var(--accent); }
+.stage.swarm  { border-left: 3px solid var(--brand); background: var(--brand-soft); }
+.stage.swarm .stage-label { color: var(--brand-hi); }
+.pipe-arrow { display: grid; place-items: center; color: var(--line-strong); height: 14px; }
+.pipe-arrow svg { width: 14px; height: 14px; }
+
+.trained-note {
+  margin-top: .3rem; font-size: .78rem; color: var(--ink-3);
+  text-align: center; line-height: 1.5;
+}
+
+/* ---------------------------------------------------------------- publications */
+.pub-group + .pub-group { margin-top: 3rem; }
+.pub-group > h3 {
+  font-family: var(--font-sans);
+  font-size: .74rem; font-weight: 700; letter-spacing: .15em; text-transform: uppercase;
+  color: var(--ink-3);
+  padding-bottom: .7rem; margin-bottom: 1.3rem;
+  border-bottom: 1px solid var(--line);
+}
+.pub {
+  display: grid; grid-template-columns: 4.5rem 1fr; gap: 1.5rem;
+  padding: 1.35rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.pub:last-child { border-bottom: none; }
+.pub-year {
+  font-family: var(--font-serif); font-size: 1.05rem; font-weight: 600;
+  color: var(--ink-3); padding-top: .1rem;
+}
+.pub-title {
+  font-family: var(--font-serif); font-size: 1.14rem; font-weight: 600;
+  color: var(--ink); line-height: 1.4; margin-bottom: .4rem;
+}
+.pub-authors { font-size: .93rem; color: var(--ink-2); }
+.pub-authors strong { color: var(--ink); font-weight: 600; }
+.pub-venue { font-size: .93rem; color: var(--brand-hi); font-style: italic; margin-top: .18rem; }
+.pub-venue em { font-style: normal; color: var(--accent); font-weight: 600; }
+.pub-doi {
+  display: inline-flex; align-items: center; gap: .35rem;
+  margin-top: .55rem; font-size: .85rem; font-weight: 500;
+}
+.pub-doi svg { width: 14px; height: 14px; }
+
+.pubs-footer { margin-top: 2.6rem; text-align: center; }
+
+/* ---------------------------------------------------------------- contact */
+#contact .wrap { max-width: 60rem; }
+.contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(2rem, 5vw, 3.5rem); align-items: start; }
+.contact-list { list-style: none; margin-top: 1.8rem; }
+.contact-list li { display: flex; gap: .9rem; align-items: flex-start; padding: .7rem 0; }
+.contact-list svg { width: 19px; height: 19px; color: var(--brand-hi); flex: none; margin-top: .28rem; }
+.contact-list span { color: var(--ink-2); font-size: .98rem; }
+
+.socials { display: flex; gap: .7rem; margin-top: 1.6rem; flex-wrap: wrap; }
+.social {
+  display: inline-flex; align-items: center; gap: .55rem;
+  padding: .6rem 1rem; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface);
+  color: var(--ink-2); font-size: .9rem; font-weight: 500;
+  transition: border-color .18s ease, color .18s ease, transform .18s ease, background .18s ease;
+}
+.social:hover { border-color: var(--brand); color: var(--brand-hi); background: var(--brand-soft); transform: translateY(-1px); }
+.social svg { width: 17px; height: 17px; }
+
+.contact-card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 1.9rem;
+  box-shadow: var(--shadow-sm);
+}
+.contact-card h3 { font-size: 1.15rem; margin-bottom: .7rem; }
+.contact-card p { font-size: .95rem; color: var(--ink-2); margin-bottom: 1.3rem; }
+
+/* ---------------------------------------------------------------- footer */
+footer.site {
+  border-top: 1px solid var(--line);
+  background: var(--bg-alt);
+  padding-block: 2.4rem;
+}
+.foot {
+  display: flex; flex-wrap: wrap; gap: 1rem;
+  align-items: center; justify-content: space-between;
+}
+.foot p { font-size: .88rem; color: var(--ink-3); }
+.foot nav { display: flex; gap: 1.4rem; flex-wrap: wrap; }
+.foot nav a { font-size: .88rem; color: var(--ink-3); }
+.foot nav a:hover { color: var(--brand-hi); }
+
+/* ---------------------------------------------------------------- reveal */
+.reveal { opacity: 0; transform: translateY(18px); transition: opacity .6s ease, transform .6s ease; }
+.reveal.in { opacity: 1; transform: none; }
+
+/* ---------------------------------------------------------------- responsive */
+@media (max-width: 1000px) {
+  .hero-grid { grid-template-columns: 1fr; }
+  .portrait-frame { max-width: 260px; margin-inline: 0; order: -1; }
+  .metrics { grid-template-columns: repeat(2, 1fr); }
+  .metric:nth-child(3) { border-left: none; }
+  .metric:nth-child(n+3) { border-top: 1px solid var(--line); }
+  .about-grid { grid-template-columns: 1fr; }
+  .project-inner { grid-template-columns: 1fr; }
+  .project-visual { border-left: none; border-top: 1px solid var(--line); min-height: 0; }
+  .project.flip .project-visual { border-right: none; border-top: 1px solid var(--line); order: 0; }
+  .contact-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 840px) {
+  .nav-links, .nav-cta { display: none; }
+  .burger { display: grid; }
+}
+
+@media (max-width: 760px) {
+  .card-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 560px) {
+  body { font-size: 1rem; }
+  .metrics { grid-template-columns: 1fr; }
+  .metric { border-left: none; }
+  .metric + .metric { border-top: 1px solid var(--line); }
+  .pub { grid-template-columns: 1fr; gap: .35rem; }
+  .pub-year { font-size: .85rem; letter-spacing: .06em; }
+  .project-stats { gap: 1.4rem; }
+  .hero-actions .btn { flex: 1 1 auto; justify-content: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+  .reveal { opacity: 1; transform: none; }
+}
+
+@media print {
+  header.site, .drawer, .cyclone, .icon-btn, .hero-actions, .project-cta { display: none !important; }
+  section { padding-block: 1.5rem; }
+  body { font-size: 11pt; }
+}
+</style>
 </head>
+
 <body>
-    <!-- Navigation -->
-    <nav>
-        <div class="nav-container">
-            <div class="nav-logo">Michael Fischer</div>
-            <ul class="nav-links">
-                <li><a href="#home">Home</a></li>
-                <li><a href="#about">About</a></li>
-                <li><a href="#research">Research</a></li>
-                <li><a href="#publications">Publications</a></li>
-                <li><a href="#contact">Contact</a></li>
-                <li><a href="TC-RADAR/index.html" class="nav-btn">TC-RADAR</a></li>
-            </ul>
-            <div class="mobile-menu-toggle">
-                <span></span>
-                <span></span>
-                <span></span>
-            </div>
-        </div>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<!-- ============================================================ nav -->
+<header class="site" id="siteHeader">
+  <div class="wrap nav">
+    <a class="brand" href="#home" aria-label="Michael Fischer — home">
+      <svg viewBox="0 0 64 64" aria-hidden="true">
+        <rect width="64" height="64" rx="14" fill="var(--brand)"/>
+        <g fill="none" stroke="#fff" stroke-width="5.5" stroke-linecap="round">
+          <path d="M32 32c2-5 9-6 13-2 5 5 3 14-4 17"/>
+          <path d="M32 32c-2 5-9 6-13 2-5-5-3-14 4-17"/>
+        </g>
+        <circle cx="32" cy="32" r="3" fill="var(--accent-pure)"/>
+      </svg>
+      <span class="brand-name">Michael&nbsp;Fischer</span>
+    </a>
+
+    <nav aria-label="Primary">
+      <ul class="nav-links" id="navLinks">
+        <li><a href="#about">About</a></li>
+        <li><a href="#research">Research</a></li>
+        <li><a href="#projects">Projects</a></li>
+        <li><a href="#publications">Publications</a></li>
+        <li><a href="#contact">Contact</a></li>
+      </ul>
     </nav>
 
-    <!-- Hero Section -->
-    <section id="home">
-        <div class="hero-content">
-            <div class="hero-text">
-                <h1>Michael Fischer</h1>
-                <div class="hero-subtitle">Assistant Professor</div>
-                <p class="hero-description">
-                    Assistant Professor at the University of Miami's Rosenstiel School of Marine, 
-                    Atmospheric, and Earth Science and a Frost Institute for Data Science and Computing (IDSC) 
-                    Core Faculty Member. My research examines hurricane structure and intensity change,
-                    with a focus on better understanding and predicting rapid intensification.
-                </p>
-                <div class="hero-buttons">
-                    <a href="#research" class="btn btn-primary">View Research</a>
-                    <a href="assets/cv.pdf" class="btn btn-secondary" target="_blank">Download CV</a>
-                </div>
-            </div>
-            <div class="hero-image">
-                <img src="assets/profile.jpg" alt="Michael Fischer" class="profile-image">
-            </div>
+    <div class="nav-tools">
+      <button class="icon-btn" id="themeBtn" type="button" aria-label="Switch color theme">
+        <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.2"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>
+        </svg>
+        <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20.5 14.6A8.6 8.6 0 1 1 9.4 3.5a7 7 0 0 0 11.1 11.1z"/>
+        </svg>
+      </button>
+
+      <a class="btn btn-primary nav-cta" href="https://tcatlas.org" target="_blank" rel="noopener">
+        TC-ATLAS <span class="arrow" aria-hidden="true">↗</span>
+      </a>
+
+      <button class="icon-btn burger" id="burger" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="drawer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="M3 6h18M3 12h18M3 18h18"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<div class="drawer" id="drawer">
+  <ul>
+    <li><a href="#about">About</a></li>
+    <li><a href="#research">Research</a></li>
+    <li><a href="#projects">Projects</a></li>
+    <li><a href="#publications">Publications</a></li>
+    <li><a href="#contact">Contact</a></li>
+  </ul>
+  <a class="btn btn-primary" href="https://tcatlas.org" target="_blank" rel="noopener">Open TC-ATLAS <span class="arrow" aria-hidden="true">↗</span></a>
+</div>
+
+<main id="main">
+
+<!-- ============================================================ hero -->
+<section id="home" class="hero">
+  <svg class="cyclone" viewBox="0 0 600 600" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round">
+    <g stroke-width="16" opacity=".9">
+      <path d="M300 300c0-52 44-96 100-92 66 5 116 61 110 128-7 82-79 142-166 134-102-9-176-95-166-198"/>
+      <path d="M300 300c0 52-44 96-100 92-66-5-116-61-110-128 7-82 79-142 166-134 102 9 176 95 166 198"/>
+    </g>
+    <g stroke-width="7" opacity=".45">
+      <circle cx="300" cy="300" r="248"/>
+      <circle cx="300" cy="300" r="170"/>
+      <circle cx="300" cy="300" r="46"/>
+    </g>
+  </svg>
+
+  <div class="wrap">
+    <div class="hero-grid">
+      <div>
+        <p class="eyebrow">University of Miami · Rosenstiel School</p>
+        <h1>Michael&nbsp;Fischer</h1>
+        <p class="hero-role">Assistant Professor of Atmospheric Sciences</p>
+        <p class="hero-affil">Core Faculty, Frost Institute for Data Science &amp; Computing (IDSC)</p>
+        <p class="hero-lede">
+          I study why hurricanes intensify — and how quickly. My work combines
+          <strong>airborne Doppler radar</strong>, <strong>satellite observations</strong>, and
+          <strong>machine learning</strong> to describe the inner structure of tropical cyclones,
+          and to turn that understanding into tools forecasters can actually use.
+        </p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="#projects">Explore the work <span class="arrow" aria-hidden="true">→</span></a>
+          <a class="btn btn-ghost" href="assets/cv.pdf" target="_blank" rel="noopener">Curriculum vitae</a>
         </div>
-    </section>
+      </div>
 
-    <!-- About Section -->
-    <section id="about">
-        <h2>About Me</h2>
-        <div class="about-content">
-            <div class="about-text">
-                <p>
-                    I am an Assistant Professor in the Department of Atmospheric Sciences at the 
-                    University of Miami Rosenstiel School of Marine, Atmospheric, and Earth Science. 
-                    My research uses data science methods to better understand tropical cyclones, 
-                    with the overarching goal of providing tools that can be used to improve their prediction.
-                </p>
-                <p>
-                    My work typically uses a combination of observations, numerical modeling simulations
-                    and machine learning methods to investigate the complex relationships 
-                    between convective processes, vortex structure, and storm intensification. I am particularly
-                    interested in better understanding the processes that lead to rapid intensification.
-                </p>
-                <p>
-                    I am passionate about bridging the gap between research and operations, with a focus 
-                    on improving tropical cyclone intensity forecasts through better understanding of 
-                    internal storm dynamics.
-                </p>
-            </div>
-            <div class="about-highlights">
-                <div class="highlight-item">
-                    <h4>Current Position</h4>
-                    <p>Assistant Professor</p>
-                    <p>Rosenstiel School for Marine, Atmospheric, and Earth Science;</p>
-                    <p>Frost Institute for Data Science and Computing (IDSC) Core Faculty Member</p>
-                    <p>University of Miami</p>
-                </div>
-                <div class="highlight-item">
-                    <h4>Education</h4>
-                    <p>Ph.D. Atmospheric Science</p>
-                    <p>University at Albany (SUNY)</p>
-                </div>
-                <div class="highlight-item">
-                    <h4>Research Interests</h4>
-                    <p>Tropical Cyclone Intensity Change</p>
-                    <p>Tropical Cyclone Structure</p>
-                    <p>Machine Learning</p>
-                    <p>Convective Processes</p>
-                </div>
-            </div>
+      <div class="portrait-frame">
+        <picture>
+          <source srcset="assets/profile.webp" type="image/webp">
+          <img src="assets/profile.jpg" width="900" height="1015"
+               alt="Portrait of Michael Fischer" fetchpriority="high">
+        </picture>
+      </div>
+    </div>
+
+    <dl class="metrics">
+      <div class="metric">
+        <dt>Doppler radar analyses</dt>
+        <dd>1,510 <span>swaths</span></dd>
+      </div>
+      <div class="metric">
+        <dt>Storms in the archive</dt>
+        <dd>13,554 <span>global</span></dd>
+      </div>
+      <div class="metric">
+        <dt>Radar record</dt>
+        <dd>1997–2024</dd>
+      </div>
+      <div class="metric">
+        <dt>Open platforms</dt>
+        <dd>3 <span>public tools</span></dd>
+      </div>
+    </dl>
+  </div>
+</section>
+
+<!-- ============================================================ about -->
+<section id="about" class="alt">
+  <div class="wrap">
+    <div class="about-grid">
+      <div>
+        <div class="rule"></div>
+        <p class="eyebrow">About</p>
+        <h2 style="margin-bottom:1.6rem">Understanding the storm from the inside out</h2>
+        <div class="prose">
+          <p>
+            I am an Assistant Professor in the Department of Atmospheric Sciences at the University of
+            Miami Rosenstiel School of Marine, Atmospheric, and Earth Science, and a core faculty member
+            of the Frost Institute for Data Science and Computing. Much of my research grows out of work
+            with NOAA's Hurricane Research Division and the airborne radar observations that remain its
+            backbone.
+          </p>
+          <p>
+            Operational forecasts of where a hurricane will go have improved dramatically. Forecasts of
+            <strong>how strong it will get</strong> have not kept pace. That gap is where my work lives.
+            Using observations, numerical simulations, and machine learning, I study how convection,
+            vortex tilt, and the surrounding environment interact to determine whether a storm intensifies
+            rapidly or stalls.
+          </p>
+          <p>
+            A second thread runs through everything: reconnaissance aircraft sample only a small fraction
+            of the world's storms, almost entirely in the North Atlantic. Much of my recent work asks how
+            far we can push <strong>satellite-only</strong> analysis — training on aircraft data, but
+            requiring none at the moment of use — so that the rest of the planet's storms can be described
+            with the same rigor.
+          </p>
         </div>
-    </section>
+      </div>
 
-    <!-- Research Section -->
-    <section id="research">
-        <h2>Research Areas</h2>
-        <div class="research-grid">
-            <div class="research-card">
-                <div class="research-icon">🌀</div>
-                <h3>Tropical Cyclone Structure</h3>
-                <p>
-                    Investigating the three-dimensional structure of tropical cyclones using airborne 
-                    Doppler radar observations and machine learning methods, with emphasis on precipitation structure, 
-                    vortex tilt, and storm size.
-                </p>
-            </div>
-            <div class="research-card">
-                <div class="research-icon">📊</div>
-                <h3>Intensity Change Mechanisms</h3>
-                <p>
-                    Analyzing the physical processes leading to tropical cyclone rapid intensification, 
-                    including the role of convective bursts and environmental interactions.
-                </p>
-            </div>
-            <div class="research-card">
-                <div class="research-icon">🛩️</div>
-                <h3>Airborne Observations</h3>
-                <p>
-                    Utilizing tail Doppler radar observations from NOAA reconnaissance 
-                    aircraft to create comprehensive datasets of tropical cyclone inner-core structure.
-                    See the TC-RADAR database below for more.
-                </p>
-            </div>
+      <aside class="facts">
+        <div class="fact">
+          <h4>Position</h4>
+          <p class="lead">Assistant Professor</p>
+          <p>Department of Atmospheric Sciences<br>Rosenstiel School of Marine, Atmospheric, and Earth Science<br>University of Miami</p>
+        </div>
+        <div class="fact">
+          <h4>Affiliation</h4>
+          <p class="lead">Core Faculty</p>
+          <p>Frost Institute for Data Science and Computing (IDSC)</p>
+        </div>
+        <div class="fact">
+          <h4>Education</h4>
+          <p class="lead">Ph.D., Atmospheric Science</p>
+          <p>University at Albany, SUNY</p>
+        </div>
+        <div class="fact">
+          <h4>Focus areas</h4>
+          <div class="tags">
+            <span class="tag">Rapid intensification</span>
+            <span class="tag">Vortex structure</span>
+            <span class="tag">Airborne radar</span>
+            <span class="tag">Machine learning</span>
+            <span class="tag">Satellite remote sensing</span>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ research -->
+<section id="research">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="rule"></div>
+      <p class="eyebrow">Research</p>
+      <h2>Four questions I keep coming back to</h2>
+      <p>
+        They overlap constantly — an answer about vortex tilt becomes a predictor in a model,
+        which becomes a layer in a public tool.
+      </p>
+    </div>
+
+    <div class="card-grid">
+      <article class="card reveal">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 17.5 8.5 10l4 4.2L21 4.5"/><path d="M16.4 4.5H21v4.6"/><path d="M3 20.5h18"/>
+          </svg>
+        </div>
+        <h3>What is the predictability limit for rapid intensification?</h3>
+        <p>
+          Track forecasts have improved dramatically; intensity forecasts have not kept pace. How much
+          of that remaining error is irreducible — set by the chaotic, convective-scale processes
+          inside the core — and how much is still recoverable with better observations and models?
+        </p>
+      </article>
+
+      <article class="card reveal">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 12c0-4 3.4-7 7.5-6.6"/><path d="M12 12c0 4-3.4 7-7.5 6.6"/>
+            <path d="M12 12c-3 2.6-7.6 1.7-9.3-1.7"/><path d="M12 12c3-2.6 7.6-1.7 9.3 1.7"/>
+            <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/>
+          </svg>
+        </div>
+        <h3>By what pathways does a tilted vortex align?</h3>
+        <p>
+          A misaligned vortex can come into alignment by more than one route, and the route it takes
+          appears to matter for what happens next. Identifying those pathways in observations — and
+          working out what selects among them — is the thread behind several of my recent papers.
+        </p>
+      </article>
+
+      <article class="card reveal">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M4.8 12.4c1.6-3.2 3.2-3.2 4.8 0s3.2 3.2 4.8 0 3.2-3.2 4.8 0"/>
+          </svg>
+        </div>
+        <h3>Over what scales is S2S tropical cyclone activity predictable?</h3>
+        <p>
+          Between the weather-scale forecast and the seasonal outlook sits the subseasonal range,
+          where modes such as the MJO and BSISO modulate where and when storms form. How far that
+          skill extends in space and time is still being mapped.
+        </p>
+      </article>
+
+      <article class="card reveal">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="6" cy="6.5" r="2.3"/><circle cx="6" cy="17.5" r="2.3"/><circle cx="18" cy="12" r="2.3"/>
+            <path d="M8.3 7.6 15.8 11M8.3 16.4 15.8 13"/>
+          </svg>
+        </div>
+        <h3>Can machine learning estimate 3-D storm structure in real time?</h3>
+        <p>
+          Aircraft reach only a small fraction of storms. TC-SWARM asks whether continuously available
+          satellite and reanalysis data can reconstruct the full three-dimensional wind field quickly
+          enough to be useful operationally, not only in hindsight.
+        </p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ projects -->
+<section id="projects" class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="rule"></div>
+      <p class="eyebrow">Projects &amp; platforms</p>
+      <h2>Research that ships</h2>
+      <p>
+        Each of these started as a research question and ended up as something other people can
+        use — a public web platform, a model, or an open dataset.
+      </p>
+    </div>
+
+    <!-- ---------------------------------------------------- TC-ATLAS -->
+    <article class="project reveal">
+      <div class="project-inner">
+        <div class="project-body">
+          <div class="badges">
+            <span class="badge live"><span class="dot" aria-hidden="true"></span> Live platform</span>
+            <span class="badge">tcatlas.org</span>
+          </div>
+          <h3>TC-ATLAS</h3>
+          <p class="tagline">Every tropical cyclone, past and present, in one interface</p>
+          <p>
+            TC-ATLAS brings satellite, radar, aircraft, and environmental data for tropical cyclones
+            into a single interactive platform. A real-time monitor follows every active storm on the
+            globe with infrared animation, microwave overlays, scatterometer winds, aircraft
+            reconnaissance, and model guidance. A global archive covers the full historical best-track
+            record, and the complete TC-RADAR airborne Doppler database is browsable case by case.
+          </p>
+          <p>
+            It is built for three audiences at once: forecasters who need the current picture quickly,
+            researchers who need the underlying data, and students who need to see what a hurricane
+            actually looks like on the inside.
+          </p>
+
+          <div class="project-stats">
+            <div><strong>13,554</strong><span>STORMS</span></div>
+            <div><strong>1842–2026</strong><span>RECORD</span></div>
+            <div><strong>7</strong><span>BASINS</span></div>
+          </div>
+
+          <div class="project-links">
+            <a class="chip" href="https://tcatlas.org/realtime_ir.html" target="_blank" rel="noopener">Real-time monitor</a>
+            <a class="chip" href="https://tcatlas.org/global_archive.html" target="_blank" rel="noopener">Global archive</a>
+            <a class="chip" href="https://tcatlas.org/explorer.html" target="_blank" rel="noopener">TC-RADAR explorer</a>
+            <a class="chip" href="https://tcatlas.org/tc_climatology.html" target="_blank" rel="noopener">Climatology</a>
+          </div>
+
+          <div class="project-cta">
+            <a class="btn btn-primary" href="https://tcatlas.org" target="_blank" rel="noopener">
+              Open TC-ATLAS <span class="arrow" aria-hidden="true">↗</span>
+            </a>
+          </div>
         </div>
 
-        <!-- Featured Project: TC-RADAR -->
-        <div class="featured-project">
-            <div class="featured-content">
-                <h3>Featured: TC-RADAR Database</h3>
-                <p>
-                    A comprehensive database of tropical cyclone reconnaissance airborne Doppler radar 
-                    observations spanning 1997-2024. This dataset provides unprecedented access to the 
-                    three-dimensional structure of over 1,500 tropical cyclone cases.
-                </p>
-                <div class="featured-stats">
-                    <div class="stat-item">
-                        <div class="stat-number">1,510</div>
-                        <div class="stat-label">Cases</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-number">28</div>
-                        <div class="stat-label">Years</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-number">100+</div>
-                        <div class="stat-label">Storms</div>
-                    </div>
-                </div>
-                <a href="TC-RADAR/index.html" class="btn btn-secondary">Explore TC-RADAR →</a>
-            </div>
-            <div class="featured-image">
-                <img src="assets/tc-radar-preview.png" alt="TC-RADAR Preview">
-            </div>
+        <div class="project-visual">
+          <img src="assets/tc-atlas-preview.webp" width="1600" height="840" loading="lazy"
+               alt="TC-ATLAS storm detail view showing Hurricane Melissa (2025): a flight-level time series alongside an infrared satellite map with aircraft reconnaissance tracks and model guidance.">
         </div>
-    </section>
+      </div>
+    </article>
 
-    <!-- Publications Section -->
-    <section id="publications">
-        <h2>Recent Publications</h2>
+    <!-- ---------------------------------------------------- TC-SWARM -->
+    <article class="project flip reveal">
+      <div class="project-inner">
+        <div class="project-body">
+          <div class="badges">
+            <span class="badge review">Manuscript in review</span>
+            <span class="badge">Machine learning</span>
+          </div>
+          <h3>TC-SWARM &amp; GHOST</h3>
+          <p class="tagline">Hurricane structure from satellite imagery alone</p>
+          <p>
+            Aircraft reconnaissance gives the most reliable picture of a hurricane's core, but it
+            reaches only a minority of storms and, for those it does reach, only intermittently.
+            <strong>TC-SWARM</strong> — the Tropical Cyclone Satellite Wind Analysis and Reconstruction
+            Model — is a hierarchical machine-learning framework that learns the mapping from
+            continuously available geostationary infrared imagery and reanalysis environmental fields
+            to the three-dimensional wind fields measured by airborne Doppler radar.
+          </p>
+          <p>
+            Underneath it sits <strong>GHOST</strong>, the Geostationary-based Hurricane Objective
+            Strength Technique, which estimates a storm's scalar state — maximum sustained wind,
+            minimum pressure, and radius of maximum wind — from satellite and environmental data.
+            Both are trained on reconnaissance but require none at the moment of use:
+            reconnaissance-informed training, reconnaissance-independent inference. The aim is a
+            structural analysis of every storm on Earth, not only the sampled ones.
+          </p>
 
-        <div class="publication-list">
+          <div class="project-stats">
+            <div><strong>~1,500</strong><span>RADAR ANALYSES</span></div>
+            <div><strong>3</strong><span>PIPELINE STAGES</span></div>
+            <div><strong>0</strong><span>AIRCRAFT REQUIRED</span></div>
+          </div>
 
-            <!-- Refereed Publications -->
-            <h3 style="margin-bottom:1rem;">Refereed Journal Articles</h3>
-
-            <div class="publication-item">
-                <div class="publication-title">
-                    Reconsideration of the mass and condensate sources for the tropical cyclone outflow
-                </div>
-                <div class="publication-authors">
-                    Nolan, D. S., <strong>Fischer, M. S.</strong>, and M. E O’Neill
-                </div>
-                <div class="publication-journal">
-                    Bulletin of the American Meteorological Society, 106, E1342–E1359 (2025)
-                </div>
-            </div>
-
-            <div class="publication-item">
-                <div class="publication-title">
-                    Are rapidly intensifying tropical cyclones associated with unique vortex and convective characteristics?
-                </div>
-                <div class="publication-authors">
-                    <strong>Fischer, M. S.</strong>, P. D. Reasor, J. P. Dunion, and R. F. Rogers
-                </div>
-                <div class="publication-journal">
-                    Monthly Weather Review, 153, 183–203 (2025)
-                </div>
-            </div>
-
-            <div class="publication-item">
-                <div class="publication-title">
-                    A review of the effects of vertical wind shear on tropical cyclone structure and intensity
-                </div>
-                <div class="publication-authors">
-                    Rios-Berrios, R., P. M. Finocchio, J. J. Alland, X. Chen, <strong>Fischer, M. S.</strong>, et al.
-                </div>
-                <div class="publication-journal">
-                    Journal of the Atmospheric Sciences, 81, 713–741 (2024)
-                </div>
-            </div>
-
-            <div class="publication-item">
-                <div class="publication-title">
-                    An observational analysis of the relationship between tropical cyclone vortex tilt, precipitation structure, and intensity change
-                </div>
-                <div class="publication-authors">
-                    <strong>Fischer, M. S.</strong>, R. F. Rogers, P. D. Reasor, and J. P. Dunion
-                </div>
-                <div class="publication-journal">
-                    Monthly Weather Review, 152, 203–225 (2024)
-                </div>
-            </div>
-
-            <div class="publication-item">
-                <div class="publication-title">
-                    On the distribution of convective and stratiform precipitation in tropical cyclones and its relationship to intensity change
-                </div>
-                <div class="publication-authors">
-                    Wadler, J. B., J. J. Cione, R. F. Rogers, and <strong>Fischer, M. S.</strong>
-                </div>
-                <div class="publication-journal">
-                    Monthly Weather Review, 151, 3209–3233 (2023)
-                </div>
-            </div>
-
-            <div class="publication-item">
-                <div class="publication-title">
-                    A tale of two vortex evolutions: Assessing ventilation impacts on tropical cyclone rapid intensification
-                </div>
-                <div class="publication-authors">
-                    <strong>Fischer, M. S.</strong>, P. D. Reasor, B. H. Tang, et al.
-                </div>
-                <div class="publication-journal">
-                    Monthly Weather Review, 151, 297–320 (2023)
-                </div>
-            </div>
-
-            <!-- Publications in Review / Preparation -->
-            <h3 style="margin:2.5rem 0 1rem;">In Review / In Preparation</h3>
-
-            <div class="publication-item">
-                <div class="publication-title">
-                    To align or not to align? That is the question
-                </div>
-                <div class="publication-authors">
-                    <strong>Fischer, M. S.</strong>, G. R. Alvey III, D. Jariwala, and P. D. Reasor
-                </div>
-                <div class="publication-journal">
-                    Journal of Geophysical Research: Atmospheres, in review (2026)
-                </div>
-            </div>
-
-            <div class="publication-item">
-                <div class="publication-title">
-                    Estimating tropical cyclone vortex tilt from geostationary satellite imagery using a random forest
-                </div>
-                <div class="publication-authors">
-                    <strong>Fischer, M. S.</strong>, W. Bouza, D. Jariwala, and M. Reardon
-                </div>
-                <div class="publication-journal">
-                    Weather and Forecasting, in preparation (2026)
-                </div>
-            </div>
-
-            <!-- Book Chapters -->
-            <h3 style="margin:2.5rem 0 1rem;">Book & Encyclopedia Chapters</h3>
-
-            <div class="publication-item">
-                <div class="publication-title">
-                    Tropical cyclone intensity predictability
-                </div>
-                <div class="publication-authors">
-                    Sippel, J. A., and <strong>Fischer, M. S.</strong>
-                </div>
-                <div class="publication-journal">
-                    Encyclopedia of Atmospheric Sciences (3rd Ed.), Vol. 1, 446–459 (2026)
-                </div>
-                <div class="publication-links">
-                    <a href="https://doi.org/10.1016/B978-0-323-96026-7.00140-5" class="publication-link" target="_blank">
-                        📄 DOI
-                    </a>
-                </div>
-            </div>
-
+          <p style="font-size:.9rem;color:var(--ink-3)">
+            The GHOST manuscript is in review at <em>Weather and Forecasting</em>; the TC-SWARM
+            wind-field reconstruction is in preparation.
+          </p>
         </div>
-    </section>
 
+        <div class="project-visual">
+          <div class="pipeline" role="img"
+               aria-label="TC-SWARM pipeline: geostationary infrared imagery and reanalysis environmental fields feed GHOST, which estimates maximum wind, minimum pressure and radius of maximum wind; that scalar state feeds a vortex tilt and alignment stage, which feeds the TC-SWARM three-dimensional wind field reconstruction.">
+            <div class="stage input">
+              <div class="stage-label">Inputs</div>
+              <div class="stage-title">Geostationary IR + environment</div>
+              <div class="stage-sub">Infrared brightness temperature · SHIPS / ERA5 diagnostics — available globally, every storm</div>
+            </div>
 
-    <!-- Contact Section -->
-    <section id="contact">
-        <h2>Get In Touch</h2>
-        <div class="contact-content">
-            <p class="hero-description">
-                Interested in collaboration or have questions about my research? 
-                Feel free to reach out!
-            </p>
-            <div class="contact-info">
-                <div class="contact-item">
-                    <span>📧</span>
-                    <a href="mailto:mike.fischer@miami.edu" style="color: var(--primary-blue); text-decoration: none;">
-                        mike.fischer@miami.edu
-                    </a>
-                </div>
-                <div class="contact-item">
-                    <span>🏢</span>
-                    <span>University of Miami</span>
-                </div>
-                <div class="contact-item">
-                    <span>📍</span>
-                    <span>Miami, Florida</span>
-                </div>
+            <div class="pipe-arrow" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16M6 14l6 6 6-6"/></svg>
             </div>
-            <div class="social-links">
-                <a href="https://scholar.google.com/citations?user=6o1mfJYAAAAJ&hl=en&oi=sra" class="social-link" title="Google Scholar">🎓</a>
-                <a href="https://github.com/MichaelFischerWx" class="social-link" title="GitHub">💻</a>
-                <a href="https://x.com/MikeFischerWx" class="social-link" title="Twitter">🐦</a>
+
+            <div class="stage ghost">
+              <div class="stage-label">Stage 1 · GHOST</div>
+              <div class="stage-title">Scalar strength state</div>
+              <div class="stage-sub">Maximum wind · minimum pressure · radius of maximum wind</div>
             </div>
+
+            <div class="pipe-arrow" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16M6 14l6 6 6-6"/></svg>
+            </div>
+
+            <div class="stage ghost">
+              <div class="stage-label">Stage 2</div>
+              <div class="stage-title">Vortex tilt &amp; alignment</div>
+              <div class="stage-sub">Magnitude and direction of the tilt vector</div>
+            </div>
+
+            <div class="pipe-arrow" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16M6 14l6 6 6-6"/></svg>
+            </div>
+
+            <div class="stage swarm">
+              <div class="stage-label">Stage 3 · TC-SWARM</div>
+              <div class="stage-title">Three-dimensional wind field</div>
+              <div class="stage-sub">Tangential, radial, and vertical winds on a storm-centered grid</div>
+            </div>
+
+            <p class="trained-note">Trained on TC-RADAR airborne Doppler analyses · applied with satellite data alone</p>
+          </div>
         </div>
-    </section>
+      </div>
+    </article>
 
-    <!-- Footer -->
-    <footer>
-        <p>&copy; 2026 Michael Fischer. All rights reserved.</p>
-    </footer>
+    <!-- ---------------------------------------------------- TC-RADAR -->
+    <article class="project reveal">
+      <div class="project-inner">
+        <div class="project-body">
+          <div class="badges">
+            <span class="badge">Open dataset</span>
+            <span class="badge">Hosted in TC-ATLAS</span>
+          </div>
+          <h3>TC-RADAR</h3>
+          <p class="tagline">Three decades of hurricane interiors, analysis-ready</p>
+          <p>
+            The Tropical Cyclone Radar Archive of Doppler Analyses with Recentering compiles tail
+            Doppler radar observations from NOAA P-3 reconnaissance flights into a uniform,
+            storm-centered database: 1,510 individual swath analyses and 436 merged analyses spanning
+            the North Atlantic and eastern and central North Pacific.
+          </p>
+          <p>
+            Every case carries three-dimensional winds, reflectivity, and derived kinematic fields on a
+            common grid, with multiple center-fix conventions including tilt-relative recentering. It is
+            the observational foundation for much of my own work and the training data behind TC-SWARM.
+          </p>
 
-    <script>
-        // Smooth scrolling
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function (e) {
-                e.preventDefault();
-                const target = document.querySelector(this.getAttribute('href'));
-                if (target) {
-                    target.scrollIntoView({
-                        behavior: 'smooth',
-                        block: 'start'
-                    });
-                }
-            });
-        });
+          <div class="project-stats">
+            <div><strong>1,510</strong><span>SWATH ANALYSES</span></div>
+            <div><strong>436</strong><span>MERGED ANALYSES</span></div>
+            <div><strong>1997–2024</strong><span>COVERAGE</span></div>
+          </div>
 
-        // Active nav link on scroll
-        window.addEventListener('scroll', () => {
-            let current = '';
-            const sections = document.querySelectorAll('section');
-            
-            sections.forEach(section => {
-                const sectionTop = section.offsetTop;
-                const sectionHeight = section.clientHeight;
-                if (scrollY >= (sectionTop - 100)) {
-                    current = section.getAttribute('id');
-                }
-            });
+          <div class="project-cta">
+            <a class="btn btn-ghost" href="https://tcatlas.org/explorer.html" target="_blank" rel="noopener">
+              Browse the database <span class="arrow" aria-hidden="true">↗</span>
+            </a>
+          </div>
+        </div>
 
-            document.querySelectorAll('.nav-links a').forEach(link => {
-                link.classList.remove('active');
-                if (link.getAttribute('href').slice(1) === current) {
-                    link.style.color = 'var(--primary-blue)';
-                } else {
-                    link.style.color = 'var(--gray-800)';
-                }
-            });
-        });
-    </script>
+        <div class="project-visual">
+          <img src="assets/tc-radar-preview.webp" width="1400" height="1033" loading="lazy"
+               alt="Four sequential tail Doppler radar swath analyses of a tropical cyclone, showing radar reflectivity and wind barbs over infrared brightness temperature with 2-km and 7-km circulation centers marked.">
+        </div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<!-- ============================================================ publications -->
+<section id="publications">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="rule"></div>
+      <p class="eyebrow">Publications</p>
+      <h2>Selected work</h2>
+      <p>Recent peer-reviewed articles, manuscripts under review, and invited chapters.</p>
+    </div>
+
+    <div class="pub-group">
+      <h3>Refereed journal articles</h3>
+
+      <article class="pub">
+        <div class="pub-year">2026</div>
+        <div>
+          <div class="pub-title">To align or not to align? That is the question</div>
+          <div class="pub-authors"><strong>Fischer, M. S.</strong>, G. R. Alvey III, D. Jariwala, and P. D. Reasor</div>
+          <div class="pub-venue">Journal of Geophysical Research: Atmospheres, 131, e2025JD045986</div>
+          <a class="pub-doi" href="https://doi.org/10.1029/2025JD045986" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14 3h7v7"/><path d="M21 3 10 14"/><path d="M19 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/>
+            </svg>
+            Open access
+          </a>
+        </div>
+      </article>
+
+      <article class="pub">
+        <div class="pub-year">2025</div>
+        <div>
+          <div class="pub-title">Reconsideration of the mass and condensate sources for the tropical cyclone outflow</div>
+          <div class="pub-authors">Nolan, D. S., <strong>M. S. Fischer</strong>, and M. E. O'Neill</div>
+          <div class="pub-venue">Bulletin of the American Meteorological Society, 106, E1342–E1359</div>
+        </div>
+      </article>
+
+      <article class="pub">
+        <div class="pub-year">2025</div>
+        <div>
+          <div class="pub-title">Are rapidly intensifying tropical cyclones associated with unique vortex and convective characteristics?</div>
+          <div class="pub-authors"><strong>Fischer, M. S.</strong>, P. D. Reasor, J. P. Dunion, and R. F. Rogers</div>
+          <div class="pub-venue">Monthly Weather Review, 153, 183–203</div>
+        </div>
+      </article>
+
+      <article class="pub">
+        <div class="pub-year">2024</div>
+        <div>
+          <div class="pub-title">A review of the effects of vertical wind shear on tropical cyclone structure and intensity</div>
+          <div class="pub-authors">Rios-Berrios, R., P. M. Finocchio, J. J. Alland, X. Chen, <strong>M. S. Fischer</strong>, et al.</div>
+          <div class="pub-venue">Journal of the Atmospheric Sciences, 81, 713–741</div>
+        </div>
+      </article>
+
+      <article class="pub">
+        <div class="pub-year">2024</div>
+        <div>
+          <div class="pub-title">An observational analysis of the relationship between tropical cyclone vortex tilt, precipitation structure, and intensity change</div>
+          <div class="pub-authors"><strong>Fischer, M. S.</strong>, R. F. Rogers, P. D. Reasor, and J. P. Dunion</div>
+          <div class="pub-venue">Monthly Weather Review, 152, 203–225</div>
+        </div>
+      </article>
+
+      <article class="pub">
+        <div class="pub-year">2023</div>
+        <div>
+          <div class="pub-title">On the distribution of convective and stratiform precipitation in tropical cyclones and its relationship to intensity change</div>
+          <div class="pub-authors">Wadler, J. B., J. J. Cione, R. F. Rogers, and <strong>M. S. Fischer</strong></div>
+          <div class="pub-venue">Monthly Weather Review, 151, 3209–3233</div>
+        </div>
+      </article>
+
+      <article class="pub">
+        <div class="pub-year">2023</div>
+        <div>
+          <div class="pub-title">A tale of two vortex evolutions: Assessing ventilation impacts on tropical cyclone rapid intensification</div>
+          <div class="pub-authors"><strong>Fischer, M. S.</strong>, P. D. Reasor, B. H. Tang, et al.</div>
+          <div class="pub-venue">Monthly Weather Review, 151, 297–320</div>
+        </div>
+      </article>
+    </div>
+
+    <div class="pub-group">
+      <h3>In review &amp; in preparation</h3>
+
+      <article class="pub">
+        <div class="pub-year">2026</div>
+        <div>
+          <div class="pub-title">A geostationary, reconnaissance-independent technique for estimating tropical cyclone intensity and radius of maximum wind (GHOST)</div>
+          <div class="pub-authors"><strong>Fischer, M. S.</strong>, and co-authors</div>
+          <div class="pub-venue">Weather and Forecasting — <em>in review</em></div>
+        </div>
+      </article>
+
+      <article class="pub">
+        <div class="pub-year">2026</div>
+        <div>
+          <div class="pub-title">Estimating tropical cyclone vortex tilt from geostationary satellite imagery using a random forest</div>
+          <div class="pub-authors"><strong>Fischer, M. S.</strong>, W. Bouza, D. Jariwala, and M. Reardon</div>
+          <div class="pub-venue">Weather and Forecasting — <em>in preparation</em></div>
+        </div>
+      </article>
+    </div>
+
+    <div class="pub-group">
+      <h3>Book &amp; encyclopedia chapters</h3>
+
+      <article class="pub">
+        <div class="pub-year">2026</div>
+        <div>
+          <div class="pub-title">Tropical cyclone intensity predictability</div>
+          <div class="pub-authors">Sippel, J. A., and <strong>M. S. Fischer</strong></div>
+          <div class="pub-venue">Encyclopedia of Atmospheric Sciences (3rd Ed.), Vol. 1, 446–459</div>
+          <a class="pub-doi" href="https://doi.org/10.1016/B978-0-323-96026-7.00140-5" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14 3h7v7"/><path d="M21 3 10 14"/><path d="M19 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/>
+            </svg>
+            View DOI
+          </a>
+        </div>
+      </article>
+    </div>
+
+    <div class="pubs-footer">
+      <a class="btn btn-ghost" href="https://scholar.google.com/citations?user=6o1mfJYAAAAJ&amp;hl=en" target="_blank" rel="noopener">
+        Full publication list on Google Scholar <span class="arrow" aria-hidden="true">↗</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ contact -->
+<section id="contact" class="alt">
+  <div class="wrap">
+    <div class="contact-grid">
+      <div>
+        <div class="rule"></div>
+        <p class="eyebrow">Contact</p>
+        <h2>Get in touch</h2>
+        <ul class="contact-list">
+          <li>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="2.5" y="4.5" width="19" height="15" rx="2.5"/><path d="m3 7 9 6 9-6"/>
+            </svg>
+            <span><a href="mailto:mike.fischer@miami.edu">mike.fischer@miami.edu</a></span>
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 21h18"/><path d="M5 21V8l7-4 7 4v13"/><path d="M9.5 21v-5h5v5"/>
+            </svg>
+            <span>Rosenstiel School of Marine, Atmospheric, and Earth Science<br>University of Miami</span>
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 21s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/>
+            </svg>
+            <span>Miami, Florida</span>
+          </li>
+        </ul>
+
+        <div class="socials">
+          <a class="social" href="https://scholar.google.com/citations?user=6o1mfJYAAAAJ&amp;hl=en" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3 2 8.5 12 14l10-5.5z"/><path d="M6 11v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/>
+            </svg>
+            Google Scholar
+          </a>
+          <a class="social" href="https://github.com/MichaelFischerWx" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 2A10 10 0 0 0 8.8 21.5c.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.3-3.4-1.3-.4-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.4 1.1 3 .8.1-.7.4-1.1.6-1.4-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.7 1a9.4 9.4 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.4 4.7-4.6 5 .4.3.7 1 .7 2v2.9c0 .3.2.6.7.5A10 10 0 0 0 12 2z"/>
+            </svg>
+            GitHub
+          </a>
+          <a class="social" href="https://x.com/MikeFischerWx" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M17.5 3h3.2l-7 8 8.2 10h-6.4l-5-6.1L4.7 21H1.5l7.5-8.6L1.1 3h6.6l4.5 5.6zm-1.1 16h1.8L7.7 4.8H5.8z"/>
+            </svg>
+            @MikeFischerWx
+          </a>
+        </div>
+      </div>
+
+      <div class="contact-card">
+        <h3>Prospective students &amp; collaborators</h3>
+        <p>
+          I am always glad to hear from students interested in tropical cyclones, remote sensing, or
+          applied machine learning, and from colleagues looking to work with TC-RADAR, TC-ATLAS, or
+          the satellite-based reconstruction models. A short note describing what you're interested
+          in is the best place to start.
+        </p>
+        <a class="btn btn-accent" href="mailto:mike.fischer@miami.edu">Send an email</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ============================================================ footer -->
+<footer class="site">
+  <div class="wrap foot">
+    <p>© <span id="year">2026</span> Michael S. Fischer · University of Miami</p>
+    <nav aria-label="Footer">
+      <a href="https://tcatlas.org" target="_blank" rel="noopener">TC-ATLAS</a>
+      <a href="assets/cv.pdf" target="_blank" rel="noopener">CV</a>
+      <a href="https://scholar.google.com/citations?user=6o1mfJYAAAAJ&amp;hl=en" target="_blank" rel="noopener">Scholar</a>
+      <a href="https://github.com/MichaelFischerWx" target="_blank" rel="noopener">GitHub</a>
+      <a href="mailto:mike.fischer@miami.edu">Email</a>
+    </nav>
+  </div>
+</footer>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Person",
+  "name": "Michael S. Fischer",
+  "givenName": "Michael",
+  "familyName": "Fischer",
+  "jobTitle": "Assistant Professor of Atmospheric Sciences",
+  "url": "https://michaelfischerwx.github.io/",
+  "image": "https://michaelfischerwx.github.io/assets/profile.jpg",
+  "email": "mailto:mike.fischer@miami.edu",
+  "affiliation": {
+    "@type": "CollegeOrUniversity",
+    "name": "University of Miami Rosenstiel School of Marine, Atmospheric, and Earth Science"
+  },
+  "alumniOf": { "@type": "CollegeOrUniversity", "name": "University at Albany, SUNY" },
+  "knowsAbout": [
+    "Tropical cyclones", "Hurricane rapid intensification", "Airborne Doppler radar",
+    "Satellite remote sensing", "Machine learning", "Atmospheric science"
+  ],
+  "sameAs": [
+    "https://scholar.google.com/citations?user=6o1mfJYAAAAJ",
+    "https://github.com/MichaelFischerWx",
+    "https://x.com/MikeFischerWx",
+    "https://tcatlas.org"
+  ]
+}
+</script>
+
+<script>
+(function () {
+  'use strict';
+
+  var root   = document.documentElement;
+  var header = document.getElementById('siteHeader');
+  var burger = document.getElementById('burger');
+  var drawer = document.getElementById('drawer');
+
+  /* ---- current year ---- */
+  document.getElementById('year').textContent = new Date().getFullYear();
+
+  /* ---- theme toggle ---- */
+  document.getElementById('themeBtn').addEventListener('click', function () {
+    var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('theme', next); } catch (e) {}
+  });
+
+  /* ---- mobile drawer ---- */
+  function closeDrawer() {
+    drawer.classList.remove('open');
+    burger.setAttribute('aria-expanded', 'false');
+  }
+  burger.addEventListener('click', function () {
+    var open = drawer.classList.toggle('open');
+    burger.setAttribute('aria-expanded', String(open));
+  });
+  drawer.addEventListener('click', function (e) {
+    if (e.target.closest('a')) closeDrawer();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeDrawer();
+  });
+  window.addEventListener('resize', function () {
+    if (window.innerWidth > 840) closeDrawer();
+  });
+
+  /* ---- header shadow on scroll ---- */
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () {
+      header.classList.toggle('scrolled', window.scrollY > 8);
+      ticking = false;
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  /* ---- scroll spy + reveal ---- */
+  var links = {};
+  document.querySelectorAll('#navLinks a[href^="#"]').forEach(function (a) {
+    links[a.getAttribute('href').slice(1)] = a;
+  });
+
+  if ('IntersectionObserver' in window) {
+    var order   = ['about', 'research', 'projects', 'publications', 'contact'];
+    var visible = {};
+
+    var spy = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        visible[entry.target.id] = entry.isIntersecting;
+      });
+      var current = null;
+      for (var i = 0; i < order.length; i++) {
+        if (visible[order[i]]) { current = order[i]; break; }
+      }
+      Object.keys(links).forEach(function (id) {
+        links[id].classList.toggle('active', id === current);
+      });
+    }, { rootMargin: '-45% 0px -50% 0px', threshold: 0 });
+
+    order.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) spy.observe(el);
+    });
+
+    var reveal = new IntersectionObserver(function (entries, obs) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add('in');
+        obs.unobserve(entry.target);
+      });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.06 });
+
+    document.querySelectorAll('.reveal').forEach(function (el, i) {
+      el.style.transitionDelay = (Math.min(i, 3) * 70) + 'ms';
+      reveal.observe(el);
+    });
+  } else {
+    document.querySelectorAll('.reveal').forEach(function (el) { el.classList.add('in'); });
+  }
+})();
+</script>
 </body>
 </html>
