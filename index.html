@@ -18,7 +18,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@MikeFischerWx">
 
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23005030'/%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='5.5' stroke-linecap='round'%3E%3Cpath d='M32 32c2-5 9-6 13-2 5 5 3 14-4 17'/%3E%3Cpath d='M32 32c-2 5-9 6-13 2-5-5-3-14 4-17'/%3E%3C/g%3E%3Ccircle cx='32' cy='32' r='3' fill='%23f47321'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23005030'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-family='Georgia,serif' font-size='30' font-weight='600' fill='%23ffffff'%3EMF%3C/text%3E%3C/svg%3E">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -212,10 +212,22 @@ header.site.scrolled { border-bottom-color: var(--line); box-shadow: var(--shado
   display: flex; align-items: center; justify-content: space-between; gap: 1rem;
 }
 
-.brand { display: flex; align-items: center; gap: .65rem; color: var(--ink); font-weight: 600; }
+.brand { display: flex; align-items: center; color: var(--ink); font-weight: 600; }
 .brand:hover { color: var(--ink); }
-.brand svg { width: 30px; height: 30px; flex: none; }
-.brand-name { font-family: var(--font-serif); font-size: 1.14rem; letter-spacing: -.01em; }
+.brand-name {
+  position: relative;
+  font-family: var(--font-serif);
+  font-size: 1.24rem;
+  letter-spacing: -.012em;
+  padding-bottom: 3px;
+}
+.brand-name::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0;
+  height: 2px; border-radius: 2px; background: var(--accent-pure);
+  transform: scaleX(0); transform-origin: left;
+  transition: transform .24s ease;
+}
+.brand:hover .brand-name::after { transform: scaleX(1); }
 
 .nav-links { display: flex; align-items: center; gap: 1.9rem; list-style: none; }
 .nav-links a {
@@ -697,14 +709,6 @@ footer.site {
 <header class="site" id="siteHeader">
   <div class="wrap nav">
     <a class="brand" href="#home" aria-label="Michael Fischer — home">
-      <svg viewBox="0 0 64 64" aria-hidden="true">
-        <rect width="64" height="64" rx="14" fill="var(--brand)"/>
-        <g fill="none" stroke="#fff" stroke-width="5.5" stroke-linecap="round">
-          <path d="M32 32c2-5 9-6 13-2 5 5 3 14-4 17"/>
-          <path d="M32 32c-2 5-9 6-13 2-5-5-3-14 4-17"/>
-        </g>
-        <circle cx="32" cy="32" r="3" fill="var(--accent-pure)"/>
-      </svg>
       <span class="brand-name">Michael&nbsp;Fischer</span>
     </a>
 
