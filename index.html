@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Michael Fischer — Tropical Cyclone Scientist, University of Miami</title>
-<meta name="description" content="Michael S. Fischer is an Assistant Professor at the University of Miami Rosenstiel School, studying hurricane structure and intensity change with airborne radar, satellite observations, and machine learning. Creator of TC-ATLAS and TC-SWARM.">
+<meta name="description" content="Michael S. Fischer holds a joint appointment at the University of Miami — Assistant Professor of Atmospheric Sciences at the Rosenstiel School and core faculty at the Frost Institute for Data Science and Computing — studying hurricane structure and intensity change with airborne radar, satellite observations, and machine learning. Creator of TC-ATLAS and TC-SWARM.">
 <meta name="author" content="Michael S. Fischer">
 <link rel="canonical" href="https://michaelfischerwx.github.io/">
 <meta name="theme-color" content="#005030" media="(prefers-color-scheme: light)">
@@ -12,7 +12,7 @@
 
 <meta property="og:type" content="profile">
 <meta property="og:title" content="Michael Fischer — Tropical Cyclone Scientist">
-<meta property="og:description" content="Hurricane structure and intensity change: airborne Doppler radar, satellite observations, and machine learning. Creator of TC-ATLAS and TC-SWARM.">
+<meta property="og:description" content="University of Miami — Rosenstiel School &amp; Frost Institute for Data Science and Computing. Hurricane structure and intensity change: airborne Doppler radar, satellite observations, and machine learning. Creator of TC-ATLAS and TC-SWARM.">
 <meta property="og:url" content="https://michaelfischerwx.github.io/">
 <meta property="og:image" content="https://michaelfischerwx.github.io/assets/profile.jpg">
 <meta name="twitter:card" content="summary_large_image">
@@ -313,7 +313,33 @@ html[data-theme="dark"] .cyclone { opacity: .14; }
   font-weight: 600; color: var(--brand-hi);
   margin-bottom: .35rem;
 }
-.hero-affil { color: var(--ink-3); font-size: .98rem; margin-bottom: 1.6rem; }
+/* dual appointment — the two units presented as equals */
+.affil-dual {
+  display: flex; flex-wrap: wrap;
+  gap: .9rem 1.8rem;
+  margin: 1.15rem 0 1.8rem;
+}
+.affil-dual > div {
+  padding-left: .9rem;
+  border-left: 2px solid var(--line-strong);
+}
+.affil-dual > div:nth-child(1) { border-left-color: var(--brand); }
+.affil-dual > div:nth-child(2) { border-left-color: var(--accent-pure); }
+.affil-dual .unit {
+  display: block; font-weight: 600; font-size: .95rem;
+  color: var(--ink); line-height: 1.4;
+}
+.affil-dual .role {
+  display: block; font-size: .85rem; color: var(--ink-3);
+  letter-spacing: .02em; margin-top: .1rem;
+}
+
+/* same pairing inside the About facts card */
+.appt > div { padding-left: .8rem; border-left: 2px solid var(--line-strong); }
+.appt > div:nth-child(1) { border-left-color: var(--brand); }
+.appt > div:nth-child(2) { border-left-color: var(--accent-pure); margin-top: .95rem; }
+.appt .unit { display: block; font-weight: 600; color: var(--ink); font-size: .93rem; line-height: 1.4; }
+.appt .sub  { display: block; font-size: .87rem; color: var(--ink-2); line-height: 1.5; margin-top: .1rem; }
 .hero-lede {
   font-size: clamp(1.05rem, 1.6vw, 1.18rem);
   color: var(--ink-2); max-width: 34rem; margin-bottom: 2rem;
@@ -745,10 +771,21 @@ footer.site {
   <div class="wrap">
     <div class="hero-grid">
       <div>
-        <p class="eyebrow">University of Miami · Rosenstiel School</p>
+        <p class="eyebrow">University of Miami</p>
         <h1>Michael&nbsp;Fischer</h1>
         <p class="hero-role">Assistant Professor of Atmospheric Sciences</p>
-        <p class="hero-affil">Core Faculty, Frost Institute for Data Science &amp; Computing (IDSC)</p>
+
+        <div class="affil-dual">
+          <div>
+            <span class="unit">Department of Atmospheric Sciences</span>
+            <span class="role">Assistant Professor · Rosenstiel School</span>
+          </div>
+          <div>
+            <span class="unit">Frost Institute for Data Science &amp; Computing (IDSC)</span>
+            <span class="role">Core Faculty</span>
+          </div>
+        </div>
+
         <p class="hero-lede">
           I study why hurricanes intensify — and how quickly. My work combines
           <strong>airborne Doppler radar</strong>, <strong>satellite observations</strong>, and
@@ -773,7 +810,7 @@ footer.site {
     <dl class="metrics">
       <div class="metric">
         <dt>Doppler radar analyses</dt>
-        <dd>1,510 <span>swaths</span></dd>
+        <dd>1,640 <span>swaths</span></dd>
       </div>
       <div class="metric">
         <dt>Storms in the archive</dt>
@@ -781,7 +818,7 @@ footer.site {
       </div>
       <div class="metric">
         <dt>Radar record</dt>
-        <dd>1997–2024</dd>
+        <dd>1997–2025</dd>
       </div>
       <div class="metric">
         <dt>Open platforms</dt>
@@ -801,11 +838,12 @@ footer.site {
         <h2 style="margin-bottom:1.6rem">Understanding the storm from the inside out</h2>
         <div class="prose">
           <p>
-            I am an Assistant Professor in the Department of Atmospheric Sciences at the University of
-            Miami Rosenstiel School of Marine, Atmospheric, and Earth Science, and a core faculty member
-            of the Frost Institute for Data Science and Computing. Much of my research grows out of work
-            with NOAA's Hurricane Research Division and the airborne radar observations that remain its
-            backbone.
+            My appointment at the University of Miami spans two units: I am an Assistant Professor in
+            the <strong>Department of Atmospheric Sciences</strong> at the Rosenstiel School, and core
+            faculty at the <strong>Frost Institute for Data Science and Computing</strong>. The pairing
+            is the point — one side supplies the storms and the observations, the other the methods for
+            learning from them. Much of the research grows out of work with NOAA's Hurricane Research
+            Division and the airborne radar that remains its backbone.
           </p>
           <p>
             Operational forecasts of where a hurricane will go have improved dramatically. Forecasts of
@@ -826,14 +864,18 @@ footer.site {
 
       <aside class="facts">
         <div class="fact">
-          <h4>Position</h4>
-          <p class="lead">Assistant Professor</p>
-          <p>Department of Atmospheric Sciences<br>Rosenstiel School of Marine, Atmospheric, and Earth Science<br>University of Miami</p>
-        </div>
-        <div class="fact">
-          <h4>Affiliation</h4>
-          <p class="lead">Core Faculty</p>
-          <p>Frost Institute for Data Science and Computing (IDSC)</p>
+          <h4>Appointment</h4>
+          <p class="lead" style="margin-bottom:.9rem">Joint, University of Miami</p>
+          <div class="appt">
+            <div>
+              <span class="unit">Department of Atmospheric Sciences</span>
+              <span class="sub">Assistant Professor · Rosenstiel School of Marine, Atmospheric, and Earth Science</span>
+            </div>
+            <div>
+              <span class="unit">Frost Institute for Data Science and Computing (IDSC)</span>
+              <span class="sub">Core Faculty</span>
+            </div>
+          </div>
         </div>
         <div class="fact">
           <h4>Education</h4>
@@ -1000,7 +1042,7 @@ footer.site {
       <div class="project-inner">
         <div class="project-body">
           <div class="badges">
-            <span class="badge review">Manuscript in review</span>
+            <span class="badge review">Manuscript in preparation</span>
             <span class="badge">Machine learning</span>
           </div>
           <h3>TC-SWARM &amp; GHOST</h3>
@@ -1029,8 +1071,8 @@ footer.site {
           </div>
 
           <p style="font-size:.9rem;color:var(--ink-3)">
-            The GHOST manuscript is in review at <em>Weather and Forecasting</em>; the TC-SWARM
-            wind-field reconstruction is in preparation.
+            The GHOST manuscript is in preparation for <em>Weather and Forecasting</em>, with the
+            TC-SWARM wind-field reconstruction to follow.
           </p>
         </div>
 
@@ -1085,6 +1127,7 @@ footer.site {
         <div class="project-body">
           <div class="badges">
             <span class="badge">Open dataset</span>
+            <span class="badge">Version 4.0</span>
             <span class="badge">Hosted in TC-ATLAS</span>
           </div>
           <h3>TC-RADAR</h3>
@@ -1092,8 +1135,9 @@ footer.site {
           <p>
             The Tropical Cyclone Radar Archive of Doppler Analyses with Recentering compiles tail
             Doppler radar observations from NOAA P-3 reconnaissance flights into a uniform,
-            storm-centered database: 1,510 individual swath analyses and 436 merged analyses spanning
-            the North Atlantic and eastern and central North Pacific.
+            storm-centered database. Version 4.0 extends the record through the 2025 season:
+            1,640 individual swath analyses and 474 merged analyses spanning the North Atlantic and
+            eastern and central North Pacific.
           </p>
           <p>
             Every case carries three-dimensional winds, reflectivity, and derived kinematic fields on a
@@ -1102,9 +1146,9 @@ footer.site {
           </p>
 
           <div class="project-stats">
-            <div><strong>1,510</strong><span>SWATH ANALYSES</span></div>
-            <div><strong>436</strong><span>MERGED ANALYSES</span></div>
-            <div><strong>1997–2024</strong><span>COVERAGE</span></div>
+            <div><strong>1,640</strong><span>SWATH ANALYSES</span></div>
+            <div><strong>474</strong><span>MERGED ANALYSES</span></div>
+            <div><strong>1997–2025</strong><span>COVERAGE</span></div>
           </div>
 
           <div class="project-cta">
@@ -1207,14 +1251,14 @@ footer.site {
     </div>
 
     <div class="pub-group">
-      <h3>In review &amp; in preparation</h3>
+      <h3>In preparation</h3>
 
       <article class="pub">
         <div class="pub-year">2026</div>
         <div>
           <div class="pub-title">A geostationary, reconnaissance-independent technique for estimating tropical cyclone intensity and radius of maximum wind (GHOST)</div>
           <div class="pub-authors"><strong>Fischer, M. S.</strong>, and co-authors</div>
-          <div class="pub-venue">Weather and Forecasting — <em>in review</em></div>
+          <div class="pub-venue">Weather and Forecasting — <em>in preparation</em></div>
         </div>
       </article>
 
@@ -1347,10 +1391,17 @@ footer.site {
   "url": "https://michaelfischerwx.github.io/",
   "image": "https://michaelfischerwx.github.io/assets/profile.jpg",
   "email": "mailto:mike.fischer@miami.edu",
-  "affiliation": {
-    "@type": "CollegeOrUniversity",
-    "name": "University of Miami Rosenstiel School of Marine, Atmospheric, and Earth Science"
-  },
+  "affiliation": [
+    {
+      "@type": "CollegeOrUniversity",
+      "name": "University of Miami Rosenstiel School of Marine, Atmospheric, and Earth Science",
+      "department": { "@type": "Organization", "name": "Department of Atmospheric Sciences" }
+    },
+    {
+      "@type": "Organization",
+      "name": "Frost Institute for Data Science and Computing, University of Miami"
+    }
+  ],
   "alumniOf": { "@type": "CollegeOrUniversity", "name": "University at Albany, SUNY" },
   "knowsAbout": [
     "Tropical cyclones", "Hurricane rapid intensification", "Airborne Doppler radar",
