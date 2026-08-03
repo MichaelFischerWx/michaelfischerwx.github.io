@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Michael Fischer — Tropical Cyclone Scientist, University of Miami</title>
-<meta name="description" content="Michael S. Fischer holds a joint appointment at the University of Miami — Assistant Professor of Atmospheric Sciences at the Rosenstiel School and core faculty at the Frost Institute for Data Science and Computing — studying hurricane structure and intensity change with airborne radar, satellite observations, and machine learning. Creator of TC-ATLAS and TC-SWARM.">
+<meta name="description" content="Michael S. Fischer holds a joint appointment at the University of Miami: Assistant Professor in the Department of Atmospheric Sciences at the Rosenstiel School, and core faculty at the Frost Institute for Data Science and Computing. Research on tropical cyclone structure and intensity change using airborne Doppler radar, satellite observations, and machine learning. Develops TC-ATLAS and TC-SWARM.">
 <meta name="author" content="Michael S. Fischer">
 <link rel="canonical" href="https://michaelfischerwx.github.io/">
 <meta name="theme-color" content="#005030" media="(prefers-color-scheme: light)">
@@ -12,7 +12,7 @@
 
 <meta property="og:type" content="profile">
 <meta property="og:title" content="Michael Fischer — Tropical Cyclone Scientist">
-<meta property="og:description" content="University of Miami — Rosenstiel School &amp; Frost Institute for Data Science and Computing. Hurricane structure and intensity change: airborne Doppler radar, satellite observations, and machine learning. Creator of TC-ATLAS and TC-SWARM.">
+<meta property="og:description" content="University of Miami — Department of Atmospheric Sciences &amp; Frost Institute for Data Science and Computing. Tropical cyclone structure and intensity change: airborne Doppler radar, satellite observations, and machine learning. Develops TC-ATLAS and TC-SWARM.">
 <meta property="og:url" content="https://michaelfischerwx.github.io/">
 <meta property="og:image" content="https://michaelfischerwx.github.io/assets/profile.jpg">
 <meta name="twitter:card" content="summary_large_image">
@@ -787,13 +787,13 @@ footer.site {
         </div>
 
         <p class="hero-lede">
-          I study why hurricanes intensify — and how quickly. My work combines
-          <strong>airborne Doppler radar</strong>, <strong>satellite observations</strong>, and
-          <strong>machine learning</strong> to describe the inner structure of tropical cyclones,
-          and to turn that understanding into tools forecasters can actually use.
+          My research examines tropical cyclone structure and intensity change using
+          <strong>airborne Doppler radar</strong>, <strong>geostationary satellite
+          observations</strong>, and <strong>machine learning</strong>. The emphasis is on inner-core processes governing rapid intensification, and on methods that transfer to an
+          operational setting.
         </p>
         <div class="hero-actions">
-          <a class="btn btn-primary" href="#projects">Explore the work <span class="arrow" aria-hidden="true">→</span></a>
+          <a class="btn btn-primary" href="#projects">View research <span class="arrow" aria-hidden="true">→</span></a>
           <a class="btn btn-ghost" href="assets/cv.pdf" target="_blank" rel="noopener">Curriculum vitae</a>
         </div>
       </div>
@@ -821,8 +821,8 @@ footer.site {
         <dd>1997–2025</dd>
       </div>
       <div class="metric">
-        <dt>Open platforms</dt>
-        <dd>3 <span>public tools</span></dd>
+        <dt>Public resources</dt>
+        <dd>3 <span>datasets &amp; tools</span></dd>
       </div>
     </dl>
   </div>
@@ -835,29 +835,30 @@ footer.site {
       <div>
         <div class="rule"></div>
         <p class="eyebrow">About</p>
-        <h2 style="margin-bottom:1.6rem">Understanding the storm from the inside out</h2>
+        <h2 style="margin-bottom:1.6rem">Inner-core structure and intensity change</h2>
         <div class="prose">
           <p>
-            My appointment at the University of Miami spans two units: I am an Assistant Professor in
-            the <strong>Department of Atmospheric Sciences</strong> at the Rosenstiel School, and core
-            faculty at the <strong>Frost Institute for Data Science and Computing</strong>. The pairing
-            is the point — one side supplies the storms and the observations, the other the methods for
-            learning from them. Much of the research grows out of work with NOAA's Hurricane Research
-            Division and the airborne radar that remains its backbone.
+            My appointment at the University of Miami spans two units: I am an Assistant Professor
+            in the <strong>Department of Atmospheric Sciences</strong> at the Rosenstiel School, and
+            core faculty at the <strong>Frost Institute for Data Science and Computing</strong>. The
+            joint appointment reflects the structure of the work, which draws on tropical
+            meteorology and on statistical and machine-learning methodology in roughly equal
+            measure. Much of it develops from collaboration with NOAA's Hurricane Research Division
+            and the airborne radar observations that underpin it.
           </p>
           <p>
-            Operational forecasts of where a hurricane will go have improved dramatically. Forecasts of
-            <strong>how strong it will get</strong> have not kept pace. That gap is where my work lives.
-            Using observations, numerical simulations, and machine learning, I study how convection,
-            vortex tilt, and the surrounding environment interact to determine whether a storm intensifies
-            rapidly or stalls.
+            Operational track forecasts have improved substantially over recent decades; forecasts
+            of <strong>intensity</strong> have improved far less. My work addresses that disparity.
+            Using observations, numerical simulations, and machine learning, I examine how
+            convection, vortex tilt, and the surrounding environment interact to determine whether a
+            storm undergoes rapid intensification.
           </p>
           <p>
-            A second thread runs through everything: reconnaissance aircraft sample only a small fraction
-            of the world's storms, almost entirely in the North Atlantic. Much of my recent work asks how
-            far we can push <strong>satellite-only</strong> analysis — training on aircraft data, but
-            requiring none at the moment of use — so that the rest of the planet's storms can be described
-            with the same rigor.
+            A second theme concerns observational coverage. Aircraft reconnaissance samples only a
+            small fraction of global tropical cyclones, almost entirely in the North Atlantic.
+            Recent work asks how much of the storm state can be recovered from <strong>satellite-only</strong> inputs — models trained on aircraft observations but requiring none at
+            inference — in order to extend structural analysis to basins where reconnaissance is
+            unavailable.
           </p>
         </div>
       </div>
@@ -905,8 +906,8 @@ footer.site {
       <p class="eyebrow">Research</p>
       <h2>Four questions I keep coming back to</h2>
       <p>
-        They overlap constantly — an answer about vortex tilt becomes a predictor in a model,
-        which becomes a layer in a public tool.
+        The questions are interdependent: results on vortex tilt inform predictor selection in the
+        statistical models, which in turn supply the data products described below.
       </p>
     </div>
 
@@ -919,9 +920,10 @@ footer.site {
         </div>
         <h3>What is the predictability limit for rapid intensification?</h3>
         <p>
-          Track forecasts have improved dramatically; intensity forecasts have not kept pace. How much
-          of that remaining error is irreducible — set by the chaotic, convective-scale processes
-          inside the core — and how much is still recoverable with better observations and models?
+          Track forecast skill has improved substantially; intensity forecast skill has not. How
+          much of the residual error is intrinsic — set by chaotic, convective-scale variability in
+          the inner core — and how much remains recoverable through improved observations and model
+          formulation?
         </p>
       </article>
 
@@ -935,9 +937,10 @@ footer.site {
         </div>
         <h3>By what pathways does a tilted vortex align?</h3>
         <p>
-          A misaligned vortex can come into alignment by more than one route, and the route it takes
-          appears to matter for what happens next. Identifying those pathways in observations — and
-          working out what selects among them — is the thread behind several of my recent papers.
+          A vertically misaligned vortex can align by more than one route, and the pathway taken
+          appears to condition the subsequent intensity evolution. Identifying these pathways in
+          observations, and determining what selects among them, is the subject of several recent
+          papers.
         </p>
       </article>
 
@@ -950,9 +953,9 @@ footer.site {
         </div>
         <h3>Over what scales is S2S tropical cyclone activity predictable?</h3>
         <p>
-          Between the weather-scale forecast and the seasonal outlook sits the subseasonal range,
-          where modes such as the MJO and BSISO modulate where and when storms form. How far that
-          skill extends in space and time is still being mapped.
+          Between the synoptic forecast range and the seasonal outlook lies the subseasonal range,
+          where modes such as the MJO and BSISO modulate the timing and location of genesis. The
+          spatial and temporal limits of that predictability remain to be established.
         </p>
       </article>
 
@@ -965,9 +968,9 @@ footer.site {
         </div>
         <h3>Can machine learning estimate 3-D storm structure in real time?</h3>
         <p>
-          Aircraft reach only a small fraction of storms. TC-SWARM asks whether continuously available
-          satellite and reanalysis data can reconstruct the full three-dimensional wind field quickly
-          enough to be useful operationally, not only in hindsight.
+          Aircraft sample only a small fraction of storms. TC-SWARM evaluates whether continuously
+          available satellite and reanalysis fields can reconstruct the three-dimensional wind field
+          at latencies compatible with operational use rather than retrospective analysis.
         </p>
       </article>
     </div>
@@ -980,10 +983,10 @@ footer.site {
     <div class="section-head">
       <div class="rule"></div>
       <p class="eyebrow">Projects &amp; platforms</p>
-      <h2>Research that ships</h2>
+      <h2>Open datasets and analysis tools</h2>
       <p>
-        Each of these started as a research question and ended up as something other people can
-        use — a public web platform, a model, or an open dataset.
+        Each originated as a research requirement and is now maintained as a public resource: an
+        interactive platform, a modeling framework, and an open observational dataset.
       </p>
     </div>
 
@@ -996,18 +999,19 @@ footer.site {
             <span class="badge">tcatlas.org</span>
           </div>
           <h3>TC-ATLAS</h3>
-          <p class="tagline">Every tropical cyclone, past and present, in one interface</p>
+          <p class="tagline">Interactive access to real-time and historical tropical cyclone observations</p>
           <p>
-            TC-ATLAS brings satellite, radar, aircraft, and environmental data for tropical cyclones
-            into a single interactive platform. A real-time monitor follows every active storm on the
-            globe with infrared animation, microwave overlays, scatterometer winds, aircraft
-            reconnaissance, and model guidance. A global archive covers the full historical best-track
-            record, and the complete TC-RADAR airborne Doppler database is browsable case by case.
+            TC-ATLAS integrates satellite, radar, aircraft, and environmental observations for
+            tropical cyclones within a single interactive platform. The real-time component tracks
+            active storms globally using infrared imagery, passive microwave overlays, scatterometer
+            surface winds, aircraft reconnaissance, and numerical model guidance. A global archive
+            spans the historical best-track record, and the TC-RADAR airborne Doppler database is
+            accessible case by case.
           </p>
           <p>
-            It is built for three audiences at once: forecasters who need the current picture quickly,
-            researchers who need the underlying data, and students who need to see what a hurricane
-            actually looks like on the inside.
+            The platform is intended to serve operational situational awareness, research access to
+            the underlying observations, and instructional use, exposing the same data at each
+            level.
           </p>
 
           <div class="project-stats">
@@ -1048,8 +1052,8 @@ footer.site {
           <h3>TC-SWARM &amp; GHOST</h3>
           <p class="tagline">Hurricane structure from satellite imagery alone</p>
           <p>
-            Aircraft reconnaissance gives the most reliable picture of a hurricane's core, but it
-            reaches only a minority of storms and, for those it does reach, only intermittently.
+            Aircraft reconnaissance provides the most reliable constraint on inner-core structure,
+            but samples only a minority of storms and, for those, only intermittently.
             <strong>TC-SWARM</strong> — the Tropical Cyclone Satellite Wind Analysis and Reconstruction
             Model — is a hierarchical machine-learning framework that learns the mapping from
             continuously available geostationary infrared imagery and reanalysis environmental fields
@@ -1059,15 +1063,15 @@ footer.site {
             Underneath it sits <strong>GHOST</strong>, the Geostationary-based Hurricane Objective
             Strength Technique, which estimates a storm's scalar state — maximum sustained wind,
             minimum pressure, and radius of maximum wind — from satellite and environmental data.
-            Both are trained on reconnaissance but require none at the moment of use:
-            reconnaissance-informed training, reconnaissance-independent inference. The aim is a
-            structural analysis of every storm on Earth, not only the sampled ones.
+            Both are trained on reconnaissance observations but require none at inference:
+            reconnaissance-informed training, reconnaissance-independent application. The objective
+            is to extend structural analysis to storms that reconnaissance does not sample.
           </p>
 
           <div class="project-stats">
-            <div><strong>~1,500</strong><span>RADAR ANALYSES</span></div>
-            <div><strong>3</strong><span>PIPELINE STAGES</span></div>
-            <div><strong>0</strong><span>AIRCRAFT REQUIRED</span></div>
+            <div><strong>~1,500</strong><span>TRAINING ANALYSES</span></div>
+            <div><strong>3</strong><span>MODEL STAGES</span></div>
+            <div><strong>0</strong><span>RECONNAISSANCE INPUTS</span></div>
           </div>
 
           <p style="font-size:.9rem;color:var(--ink-3)">
@@ -1115,7 +1119,7 @@ footer.site {
               <div class="stage-sub">Tangential, radial, and vertical winds on a storm-centered grid</div>
             </div>
 
-            <p class="trained-note">Trained on TC-RADAR airborne Doppler analyses · applied with satellite data alone</p>
+            <p class="trained-note">Trained on TC-RADAR airborne Doppler analyses · applied to satellite and reanalysis inputs</p>
           </div>
         </div>
       </div>
@@ -1131,7 +1135,7 @@ footer.site {
             <span class="badge">Hosted in TC-ATLAS</span>
           </div>
           <h3>TC-RADAR</h3>
-          <p class="tagline">Three decades of hurricane interiors, analysis-ready</p>
+          <p class="tagline">Storm-centered airborne Doppler radar analyses, 1997–2025</p>
           <p>
             The Tropical Cyclone Radar Archive of Doppler Analyses with Recentering compiles tail
             Doppler radar observations from NOAA P-3 reconnaissance flights into a uniform,
@@ -1141,8 +1145,7 @@ footer.site {
           </p>
           <p>
             Every case carries three-dimensional winds, reflectivity, and derived kinematic fields on a
-            common grid, with multiple center-fix conventions including tilt-relative recentering. It is
-            the observational foundation for much of my own work and the training data behind TC-SWARM.
+            common grid, with multiple center-fix conventions including tilt-relative recentering. The dataset underlies much of the observational work described above and provides the training labels for TC-SWARM.
           </p>
 
           <div class="project-stats">
@@ -1174,7 +1177,7 @@ footer.site {
       <div class="rule"></div>
       <p class="eyebrow">Publications</p>
       <h2>Selected work</h2>
-      <p>Recent peer-reviewed articles, manuscripts under review, and invited chapters.</p>
+      <p>Recent peer-reviewed articles, manuscripts in preparation, and invited chapters.</p>
     </div>
 
     <div class="pub-group">
@@ -1353,10 +1356,10 @@ footer.site {
       <div class="contact-card">
         <h3>Prospective students &amp; collaborators</h3>
         <p>
-          I am always glad to hear from students interested in tropical cyclones, remote sensing, or
-          applied machine learning, and from colleagues looking to work with TC-RADAR, TC-ATLAS, or
-          the satellite-based reconstruction models. A short note describing what you're interested
-          in is the best place to start.
+          I welcome inquiries from students interested in tropical cyclones, remote sensing, or
+          applied machine learning, and from colleagues working with TC-RADAR, TC-ATLAS, or the
+          satellite-based reconstruction models. A brief note describing your interests and
+          background is a useful starting point.
         </p>
         <a class="btn btn-accent" href="mailto:mike.fischer@miami.edu">Send an email</a>
       </div>
