@@ -14,9 +14,13 @@
 <meta property="og:title" content="Michael S. Fischer — Tropical Cyclone Scientist">
 <meta property="og:description" content="University of Miami — Department of Atmospheric Sciences &amp; Frost Institute for Data Science and Computing. Tropical cyclone structure and intensity change: airborne Doppler radar, satellite observations, and machine learning. Develops TC-ATLAS and TC-SWARM.">
 <meta property="og:url" content="https://michaelfischerwx.github.io/">
-<meta property="og:image" content="https://michaelfischerwx.github.io/assets/profile.jpg">
+<meta property="og:image" content="https://michaelfischerwx.github.io/assets/og-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Michael S. Fischer, University of Miami: Department of Atmospheric Sciences and Frost Institute for Data Science and Computing, with a TC-ATLAS storm view.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@MikeFischerWx">
+<meta name="twitter:image" content="https://michaelfischerwx.github.io/assets/og-card.png">
 
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23005030'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-family='Georgia,serif' font-size='30' font-weight='600' fill='%23ffffff'%3EMF%3C/text%3E%3C/svg%3E">
 
@@ -604,6 +608,24 @@ html[data-theme="dark"] .cyclone { opacity: .14; }
 
 .pubs-footer { margin-top: 2.6rem; text-align: center; }
 
+/* ---------------------------------------------------------------- group & teaching */
+.group-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start; }
+.roster {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 1.9rem 1.8rem;
+  box-shadow: var(--shadow-sm);
+}
+.roster h3 {
+  font-family: var(--font-sans);
+  font-size: .72rem; font-weight: 600; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: .9rem;
+}
+.roster h3:not(:first-child) { margin-top: 1.7rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
+.roster ul { list-style: none; }
+.roster li { padding: .42rem 0; }
+.roster .who  { display: block; font-weight: 600; color: var(--ink); font-size: .97rem; line-height: 1.4; }
+.roster .what { display: block; font-size: .87rem; color: var(--ink-3); line-height: 1.5; }
+
 /* ---------------------------------------------------------------- contact */
 #contact .wrap { max-width: 60rem; }
 .contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(2rem, 5vw, 3.5rem); align-items: start; }
@@ -662,9 +684,10 @@ footer.site {
   .project-visual { border-left: none; border-top: 1px solid var(--line); min-height: 0; }
   .project.flip .project-visual { border-right: none; border-top: 1px solid var(--line); order: 0; }
   .contact-grid { grid-template-columns: 1fr; }
+  .group-grid { grid-template-columns: 1fr; }
 }
 
-@media (max-width: 840px) {
+@media (max-width: 960px) {
   .nav-links, .nav-cta { display: none; }
   .burger { display: grid; }
 }
@@ -718,6 +741,7 @@ footer.site {
         <li><a href="#research">Research</a></li>
         <li><a href="#projects">Projects</a></li>
         <li><a href="#publications">Publications</a></li>
+        <li><a href="#group">Group</a></li>
         <li><a href="#contact">Contact</a></li>
       </ul>
     </nav>
@@ -751,6 +775,7 @@ footer.site {
     <li><a href="#research">Research</a></li>
     <li><a href="#projects">Projects</a></li>
     <li><a href="#publications">Publications</a></li>
+    <li><a href="#group">Group</a></li>
     <li><a href="#contact">Contact</a></li>
   </ul>
   <a class="btn btn-primary" href="https://tcatlas.org" target="_blank" rel="noopener">Open TC-ATLAS <span class="arrow" aria-hidden="true">↗</span></a>
@@ -818,7 +843,7 @@ footer.site {
       </div>
       <div class="metric">
         <dt>Storms in the archive</dt>
-        <dd>13,554 <span>global</span></dd>
+        <dd>13,559 <span>global</span></dd>
       </div>
       <div class="metric">
         <dt>Radar record</dt>
@@ -884,8 +909,17 @@ footer.site {
         </div>
         <div class="fact">
           <h4>Education</h4>
-          <p class="lead">Ph.D., Atmospheric Science</p>
+          <p class="lead">Ph.D., Atmospheric Science, 2018</p>
           <p>University at Albany, SUNY</p>
+          <p class="lead" style="margin-top:.6rem">B.S., Geosciences, 2013</p>
+          <p>Florida International University</p>
+        </div>
+        <div class="fact">
+          <h4>Service</h4>
+          <p class="lead">Associate Editor, <em>Monthly Weather Review</em></p>
+          <p>2020–present</p>
+          <p class="lead" style="margin-top:.6rem">PI, Vortex Alignment Module</p>
+          <p>NOAA Hurricane Research Division Field Program</p>
         </div>
         <div class="fact">
           <h4>Focus areas</h4>
@@ -1019,7 +1053,7 @@ footer.site {
           </p>
 
           <div class="project-stats">
-            <div><strong>13,554</strong><span>STORMS</span></div>
+            <div><strong>13,559</strong><span>STORMS</span></div>
             <div><strong>1842–2026</strong><span>RECORD</span></div>
             <div><strong>7</strong><span>BASINS</span></div>
           </div>
@@ -1162,6 +1196,9 @@ footer.site {
             <a class="btn btn-ghost" href="https://tcatlas.org/explorer.html" target="_blank" rel="noopener">
               Browse the database <span class="arrow" aria-hidden="true">↗</span>
             </a>
+            <a class="btn btn-ghost" href="https://doi.org/10.1175/MWR-D-21-0223.1" target="_blank" rel="noopener">
+              Database paper <span class="arrow" aria-hidden="true">↗</span>
+            </a>
           </div>
         </div>
 
@@ -1181,7 +1218,7 @@ footer.site {
       <div class="rule"></div>
       <p class="eyebrow">Publications</p>
       <h2>Selected work</h2>
-      <p>Recent peer-reviewed articles, manuscripts in preparation, and invited chapters.</p>
+      <p>Selected from 20 peer-reviewed articles, with manuscripts in preparation and invited chapters. The complete list is on Google Scholar and in the CV.</p>
     </div>
 
     <div class="pub-group">
@@ -1208,6 +1245,12 @@ footer.site {
           <div class="pub-title">Reconsideration of the mass and condensate sources for the tropical cyclone outflow</div>
           <div class="pub-authors">Nolan, D. S., <strong>M. S. Fischer</strong>, and M. E. O'Neill</div>
           <div class="pub-venue">Bulletin of the American Meteorological Society, 106, E1342–E1359</div>
+          <a class="pub-doi" href="https://doi.org/10.1175/BAMS-D-24-0284.1" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14 3h7v7"/><path d="M21 3 10 14"/><path d="M19 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/>
+            </svg>
+            DOI
+          </a>
         </div>
       </article>
 
@@ -1217,15 +1260,27 @@ footer.site {
           <div class="pub-title">Are rapidly intensifying tropical cyclones associated with unique vortex and convective characteristics?</div>
           <div class="pub-authors"><strong>Fischer, M. S.</strong>, P. D. Reasor, J. P. Dunion, and R. F. Rogers</div>
           <div class="pub-venue">Monthly Weather Review, 153, 183–203</div>
+          <a class="pub-doi" href="https://doi.org/10.1175/MWR-D-24-0118.1" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14 3h7v7"/><path d="M21 3 10 14"/><path d="M19 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/>
+            </svg>
+            DOI
+          </a>
         </div>
       </article>
 
       <article class="pub">
         <div class="pub-year">2024</div>
         <div>
-          <div class="pub-title">A review of the effects of vertical wind shear on tropical cyclone structure and intensity</div>
-          <div class="pub-authors">Rios-Berrios, R., P. M. Finocchio, J. J. Alland, X. Chen, <strong>M. S. Fischer</strong>, et al.</div>
+          <div class="pub-title">A review of the interactions between tropical cyclones and environmental vertical wind shear</div>
+          <div class="pub-authors">Rios-Berrios, R., P. M. Finocchio, J. J. Alland, X. Chen, <strong>M. S. Fischer</strong>, S. Stevenson, and D. Tao</div>
           <div class="pub-venue">Journal of the Atmospheric Sciences, 81, 713–741</div>
+          <a class="pub-doi" href="https://doi.org/10.1175/JAS-D-23-0022.1" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14 3h7v7"/><path d="M21 3 10 14"/><path d="M19 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/>
+            </svg>
+            DOI
+          </a>
         </div>
       </article>
 
@@ -1235,30 +1290,72 @@ footer.site {
           <div class="pub-title">An observational analysis of the relationship between tropical cyclone vortex tilt, precipitation structure, and intensity change</div>
           <div class="pub-authors"><strong>Fischer, M. S.</strong>, R. F. Rogers, P. D. Reasor, and J. P. Dunion</div>
           <div class="pub-venue">Monthly Weather Review, 152, 203–225</div>
+          <a class="pub-doi" href="https://doi.org/10.1175/MWR-D-23-0089.1" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14 3h7v7"/><path d="M21 3 10 14"/><path d="M19 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/>
+            </svg>
+            DOI
+          </a>
         </div>
       </article>
 
       <article class="pub">
         <div class="pub-year">2023</div>
         <div>
-          <div class="pub-title">On the distribution of convective and stratiform precipitation in tropical cyclones and its relationship to intensity change</div>
+          <div class="pub-title">On the distribution of convective and stratiform precipitation in tropical cyclones from airborne Doppler radar and its relationship to intensity change and environmental wind shear direction</div>
           <div class="pub-authors">Wadler, J. B., J. J. Cione, R. F. Rogers, and <strong>M. S. Fischer</strong></div>
           <div class="pub-venue">Monthly Weather Review, 151, 3209–3233</div>
+          <a class="pub-doi" href="https://doi.org/10.1175/MWR-D-23-0048.1" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14 3h7v7"/><path d="M21 3 10 14"/><path d="M19 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/>
+            </svg>
+            DOI
+          </a>
         </div>
       </article>
 
       <article class="pub">
         <div class="pub-year">2023</div>
         <div>
-          <div class="pub-title">A tale of two vortex evolutions: Assessing ventilation impacts on tropical cyclone rapid intensification</div>
-          <div class="pub-authors"><strong>Fischer, M. S.</strong>, P. D. Reasor, B. H. Tang, et al.</div>
+          <div class="pub-title">A tale of two vortex evolutions: Using a high-resolution ensemble to assess the impacts of ventilation on a tropical cyclone rapid intensification event</div>
+          <div class="pub-authors"><strong>Fischer, M. S.</strong>, P. D. Reasor, B. H. Tang, K. L. Corbosiero, R. D. Torn, and X. Chen</div>
           <div class="pub-venue">Monthly Weather Review, 151, 297–320</div>
+          <a class="pub-doi" href="https://doi.org/10.1175/MWR-D-22-0037.1" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14 3h7v7"/><path d="M21 3 10 14"/><path d="M19 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/>
+            </svg>
+            DOI
+          </a>
+        </div>
+      </article>
+
+      <article class="pub">
+        <div class="pub-year">2022</div>
+        <div>
+          <div class="pub-title">An analysis of tropical cyclone vortex and convective characteristics in relation to storm intensity using a novel airborne Doppler radar database</div>
+          <div class="pub-authors"><strong>Fischer, M. S.</strong>, P. D. Reasor, R. F. Rogers, and J. F. Gamache</div>
+          <div class="pub-venue">Monthly Weather Review, 150, 2255–2278 — <em>TC-RADAR database description</em></div>
+          <a class="pub-doi" href="https://doi.org/10.1175/MWR-D-21-0223.1" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14 3h7v7"/><path d="M21 3 10 14"/><path d="M19 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/>
+            </svg>
+            DOI
+          </a>
         </div>
       </article>
     </div>
 
     <div class="pub-group">
       <h3>In preparation</h3>
+
+      <article class="pub">
+        <div class="pub-year">2026</div>
+        <div>
+          <div class="pub-title">The path to alignment: Dual-Doppler and SAMURAI observations of Tropical Cyclone Fiona (2022)</div>
+          <div class="pub-authors">Alvey III, G. R., J. Zhang, J. Dunion, B. Dahl, and <strong>M. S. Fischer</strong></div>
+          <div class="pub-venue">Monthly Weather Review — <em>in preparation</em></div>
+        </div>
+      </article>
 
       <article class="pub">
         <div class="pub-year">2026</div>
@@ -1292,7 +1389,7 @@ footer.site {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M14 3h7v7"/><path d="M21 3 10 14"/><path d="M19 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/>
             </svg>
-            View DOI
+            DOI
           </a>
         </div>
       </article>
@@ -1306,8 +1403,64 @@ footer.site {
   </div>
 </section>
 
+<!-- ============================================================ group & teaching -->
+<section id="group" class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="rule"></div>
+      <p class="eyebrow">Group &amp; teaching</p>
+      <h2>Students and courses</h2>
+      <p>
+        Graduate and undergraduate researchers working on tropical cyclone structure, airborne radar,
+        and machine learning, and the courses I teach at the University of Miami.
+      </p>
+    </div>
+
+    <div class="group-grid">
+      <div class="roster reveal">
+        <h3>Ph.D. students</h3>
+        <ul>
+          <li><span class="who">Kelly Neighbour</span><span class="what">2025–present · Advisor</span></li>
+          <li><span class="who">Helena Tsigos</span><span class="what">2025–present · Advisor</span></li>
+          <li><span class="who">Cameron Pine</span><span class="what">2023–present · Co-advised with D. Nolan and G. Alvey</span></li>
+        </ul>
+
+        <h3>Undergraduate researchers</h3>
+        <ul>
+          <li><span class="who">Arielle Jorge</span><span class="what">2025–present · Undergraduate thesis</span></li>
+          <li><span class="who">Deelan Jariwala</span><span class="what">2026 · Undergraduate thesis</span></li>
+          <li><span class="who">Matthew Reardon</span><span class="what">2026 · Undergraduate thesis</span></li>
+        </ul>
+
+        <h3>Former advisees</h3>
+        <ul>
+          <li><span class="who">Shannon McCloskey</span><span class="what">M.P.S., 2026 · Rapidly intensifying tropical cyclones undergoing eyewall replacement cycles</span></li>
+          <li><span class="who">Amanda Keane</span><span class="what">M.P.S., 2022 · Evolution of vortex tilt in Hurricane Ida (2021) from tail Doppler radar</span></li>
+        </ul>
+      </div>
+
+      <div class="roster reveal">
+        <h3>Courses</h3>
+        <ul>
+          <li><span class="who">RSM 780 — Machine Learning Applications in the Atmospheric Sciences</span><span class="what">Graduate · Fall 2026</span></li>
+          <li><span class="who">ATM 102 — Introduction to Weather and Climate</span><span class="what">Undergraduate · Fall 2025</span></li>
+          <li><span class="who">RSM 780 — Directed Readings in Tropical Weather and Climate</span><span class="what">Graduate · Spring 2025</span></li>
+          <li><span class="who">ATM 411 / 412 — Research in Atmospheric Science</span><span class="what">Undergraduate thesis supervision · 2025–present</span></li>
+        </ul>
+
+        <h3>Guest lectures</h3>
+        <ul>
+          <li><span class="who">ATM 652 — Introduction to Atmospheric Physics</span><span class="what">Fall 2024, 2025</span></li>
+          <li><span class="who">ATM 536 — Hurricanes</span><span class="what">Spring 2024</span></li>
+          <li><span class="who">ATM 303 — Meteorological Instrumentation and Observation</span><span class="what">Spring 2022, 2025</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ============================================================ contact -->
-<section id="contact" class="alt">
+<section id="contact">
   <div class="wrap">
     <div class="contact-grid">
       <div>
@@ -1458,7 +1611,7 @@ footer.site {
     if (e.key === 'Escape') closeDrawer();
   });
   window.addEventListener('resize', function () {
-    if (window.innerWidth > 840) closeDrawer();
+    if (window.innerWidth > 960) closeDrawer();
   });
 
   /* ---- header shadow on scroll ---- */
@@ -1481,7 +1634,7 @@ footer.site {
   });
 
   if ('IntersectionObserver' in window) {
-    var order   = ['about', 'research', 'projects', 'publications', 'contact'];
+    var order   = ['about', 'research', 'projects', 'publications', 'group', 'contact'];
     var visible = {};
 
     var spy = new IntersectionObserver(function (entries) {
