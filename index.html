@@ -4,13 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Michael S. Fischer — Tropical Cyclone Scientist, University of Miami</title>
-<meta name="description" content="Michael S. Fischer holds a joint appointment at the University of Miami: Assistant Professor in the Department of Atmospheric Sciences at the Rosenstiel School, and core faculty at the Frost Institute for Data Science and Computing. Research on tropical cyclone structure and intensity change using airborne Doppler radar, satellite observations, and machine learning. Develops TC-ATLAS and TC-SWARM.">
+<meta name="description" content="Michael S. Fischer, Assistant Professor of Atmospheric Sciences at the University of Miami. Research on tropical cyclone structure and intensity change using airborne Doppler radar, satellite observations, and machine learning.">
 <meta name="author" content="Michael S. Fischer">
 <link rel="canonical" href="https://michaelfischerwx.github.io/">
 <meta name="theme-color" content="#005030" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0a0e14" media="(prefers-color-scheme: dark)">
 
 <meta property="og:type" content="profile">
+<meta property="og:site_name" content="Michael S. Fischer">
+<meta property="og:locale" content="en_US">
+<meta property="profile:first_name" content="Michael">
+<meta property="profile:last_name" content="Fischer">
 <meta property="og:title" content="Michael S. Fischer — Tropical Cyclone Scientist">
 <meta property="og:description" content="University of Miami — Department of Atmospheric Sciences &amp; Frost Institute for Data Science and Computing. Tropical cyclone structure and intensity change: airborne Doppler radar, satellite observations, and machine learning. Develops TC-ATLAS and TC-SWARM.">
 <meta property="og:url" content="https://michaelfischerwx.github.io/">
@@ -20,17 +24,23 @@
 <meta property="og:image:alt" content="Michael S. Fischer, University of Miami: Department of Atmospheric Sciences and Frost Institute for Data Science and Computing, with a TC-ATLAS storm view.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@MikeFischerWx">
+<meta name="twitter:title" content="Michael S. Fischer — Tropical Cyclone Scientist">
+<meta name="twitter:description" content="Assistant Professor of Atmospheric Sciences, University of Miami. Tropical cyclone structure and intensity change: airborne Doppler radar, satellite observations, and machine learning.">
 <meta name="twitter:image" content="https://michaelfischerwx.github.io/assets/og-card.png">
 
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23005030'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-family='Georgia,serif' font-size='30' font-weight='600' fill='%23ffffff'%3EMF%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,600&display=swap" rel="stylesheet">
 
 <script>
-  // Set the theme before first paint so there is no flash.
+  // Set the theme before first paint so there is no flash, and flag that
+  // scripting is available so scroll-reveal never hides content without it.
   (function () {
+    document.documentElement.classList.add('js');
     try {
       var saved = localStorage.getItem('theme');
       var dark = saved ? saved === 'dark'
@@ -52,12 +62,12 @@
 
   --ink:   #0f1720;
   --ink-2: #4b5563;
-  --ink-3: #737f8c;
+  --ink-3: #5f6b78;
 
   --brand:      #005030;   /* University of Miami green */
   --brand-hi:   #00714a;
   --brand-soft: rgba(0, 80, 48, 0.07);
-  --accent:     #d95e12;   /* UM orange, darkened for contrast on white */
+  --accent:     #b34a06;   /* UM orange, darkened to meet 4.5:1 on white */
   --accent-pure:#f47321;
   --accent-soft:rgba(244, 115, 33, 0.10);
 
@@ -157,13 +167,13 @@ section + section { border-top: 1px solid var(--line); }
   margin-bottom: .85rem;
 }
 
-h1, h2, h3, h4 { font-family: var(--font-serif); line-height: 1.18; font-weight: 600; letter-spacing: -0.015em; }
+h1, h2, h3 { font-family: var(--font-serif); line-height: 1.18; font-weight: 600; letter-spacing: -0.015em; }
 
 h2 { font-size: clamp(1.95rem, 3.6vw, 2.6rem); color: var(--ink); }
 h3 { font-size: 1.3rem; }
 
 .section-head { max-width: 46rem; margin-bottom: clamp(2.5rem, 5vw, 3.5rem); }
-.section-head p { color: var(--ink-2); font-size: 1.075rem; margin-top: .9rem; }
+.section-head > p:not(.eyebrow) { color: var(--ink-2); font-size: 1.075rem; margin-top: .9rem; }
 
 .rule {
   width: 46px; height: 3px; border-radius: 2px;
@@ -187,9 +197,6 @@ h3 { font-size: 1.3rem; }
 
 .btn-ghost { background: transparent; color: var(--ink); border-color: var(--line-strong); }
 .btn-ghost:hover { border-color: var(--brand); color: var(--brand-hi); background: var(--brand-soft); transform: translateY(-1px); }
-
-.btn-accent { background: var(--accent-pure); color: #fff; }
-.btn-accent:hover { background: var(--accent); color: #fff; transform: translateY(-1px); box-shadow: var(--shadow-md); }
 
 .arrow { transition: transform .18s ease; }
 .btn:hover .arrow, .link-arrow:hover .arrow { transform: translateX(3px); }
@@ -233,7 +240,7 @@ header.site.scrolled { border-bottom-color: var(--line); box-shadow: var(--shado
 }
 .brand:hover .brand-name::after { transform: scaleX(1); }
 
-.nav-links { display: flex; align-items: center; gap: 1.9rem; list-style: none; }
+.nav-links { display: flex; align-items: center; gap: clamp(1.1rem, 2vw, 1.9rem); list-style: none; }
 .nav-links a {
   position: relative;
   color: var(--ink-2); font-size: .93rem; font-weight: 500;
@@ -301,18 +308,6 @@ html[data-theme="light"] .moon { display: none; }
     radial-gradient(60rem 40rem at 78% -10%, var(--accent-soft) 0%, transparent 62%),
     radial-gradient(52rem 38rem at 6% 8%, var(--brand-soft) 0%, transparent 60%);
 }
-.cyclone {
-  position: absolute; z-index: 0;
-  right: -14vw; top: -10vh;
-  width: min(78vw, 900px); aspect-ratio: 1;
-  color: var(--brand);
-  opacity: .085;
-  pointer-events: none;
-  animation: spin 150s linear infinite;
-}
-html[data-theme="dark"] .cyclone { opacity: .14; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
 .hero-grid {
   position: relative; z-index: 1;
   display: grid; grid-template-columns: 1.35fr .85fr;
@@ -419,7 +414,7 @@ html[data-theme="dark"] .cyclone { opacity: .14; }
   align-self: start;
 }
 .fact + .fact { margin-top: 1.6rem; padding-top: 1.6rem; border-top: 1px solid var(--line); }
-.fact h4 {
+.fact h3 {
   font-family: var(--font-sans);
   font-size: .72rem; font-weight: 600; letter-spacing: .14em;
   text-transform: uppercase; color: var(--accent); margin-bottom: .6rem;
@@ -467,34 +462,22 @@ html[data-theme="dark"] .cyclone { opacity: .14; }
 }
 .project + .project { margin-top: 2rem; }
 
-.project-inner { display: grid; grid-template-columns: 1fr 1fr; align-items: stretch; }
-.project-body { padding: clamp(1.9rem, 3.4vw, 3rem); display: flex; flex-direction: column; justify-content: center; }
-.project-visual {
-  position: relative; min-height: 320px;
+.project-inner { display: grid; grid-template-columns: 1.08fr .92fr; align-items: stretch; }
+.project-body { padding: clamp(1.9rem, 3.4vw, 3rem); }
+.project-aside {
   background: var(--surface-2);
   border-left: 1px solid var(--line);
-  display: grid; place-items: center;
-  padding: clamp(1.4rem, 2.5vw, 2.2rem);
-  overflow: hidden;
+  padding: clamp(1.5rem, 2.6vw, 2.3rem);
+  display: flex; flex-direction: column; gap: 1.5rem;
 }
-.project.flip .project-visual { border-left: none; border-right: 1px solid var(--line); order: -1; }
+.project.flip .project-inner { grid-template-columns: .92fr 1.08fr; }
+.project.flip .project-aside { border-left: none; border-right: 1px solid var(--line); order: -1; }
 
-/* soft plotted-canvas backdrop so the panel reads as designed, not empty */
-.project-visual::before {
-  content: ''; position: absolute; inset: 0;
-  background-image: radial-gradient(var(--line-strong) 1px, transparent 1px);
-  background-size: 22px 22px;
-  opacity: .5;
-  mask-image: radial-gradient(120% 90% at 50% 50%, #000 25%, transparent 78%);
-  -webkit-mask-image: radial-gradient(120% 90% at 50% 50%, #000 25%, transparent 78%);
-}
-.project-visual > * { position: relative; z-index: 1; }
-
-.project-visual img {
+.project-aside img {
   width: 100%;
   border-radius: 10px;
   border: 1px solid var(--line);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-md);
 }
 
 .badges { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
@@ -507,16 +490,7 @@ html[data-theme="dark"] .cyclone { opacity: .14; }
 }
 .badge.live { color: var(--brand-hi); background: var(--brand-soft); border-color: color-mix(in srgb, var(--brand) 25%, transparent); }
 .badge.review { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent-pure) 30%, transparent); }
-.dot {
-  width: 7px; height: 7px; border-radius: 50%;
-  background: currentColor;
-  animation: pulse 2.4s ease-out infinite;
-}
-@keyframes pulse {
-  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 60%, transparent); }
-  70%  { box-shadow: 0 0 0 7px transparent; }
-  100% { box-shadow: 0 0 0 0 transparent; }
-}
+.dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 
 .project h3 { font-size: clamp(1.6rem, 2.8vw, 2.1rem); letter-spacing: -.02em; margin-bottom: .5rem; }
 .project .tagline { color: var(--brand-hi); font-weight: 600; font-size: 1.02rem; margin-bottom: 1.1rem; }
@@ -524,18 +498,21 @@ html[data-theme="dark"] .cyclone { opacity: .14; }
 .project p + p { margin-top: .9rem; }
 
 .project-stats {
-  display: flex; flex-wrap: wrap; gap: 2rem;
-  margin: 1.7rem 0;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem;
   padding: 1.1rem 0;
   border-block: 1px solid var(--line);
 }
-.project-stats div strong {
-  display: block; font-family: var(--font-serif); font-size: 1.45rem;
-  font-weight: 600; color: var(--ink); line-height: 1.2;
+.project-stats dd {
+  font-family: var(--font-serif); font-size: 1.4rem;
+  font-weight: 600; color: var(--ink); line-height: 1.2; white-space: nowrap;
 }
-.project-stats div span { font-size: .78rem; color: var(--ink-3); letter-spacing: .05em; }
+.project-stats dt {
+  font-size: .7rem; font-weight: 600; color: var(--ink-3);
+  letter-spacing: .08em; text-transform: uppercase; line-height: 1.4; margin-top: .25rem;
+}
+.project-stats > div { display: flex; flex-direction: column-reverse; justify-content: flex-end; }
 
-.project-links { display: flex; flex-wrap: wrap; gap: .7rem; margin-top: .4rem; }
+.project-links { display: flex; flex-wrap: wrap; gap: .6rem; }
 .chip {
   font-size: .85rem; font-weight: 500;
   padding: .45rem .9rem; border-radius: 999px;
@@ -545,10 +522,11 @@ html[data-theme="dark"] .cyclone { opacity: .14; }
 }
 .chip:hover { border-color: var(--brand); color: var(--brand-hi); background: var(--brand-soft); }
 
-.project-cta { margin-top: 1.6rem; display: flex; flex-wrap: wrap; gap: .8rem; }
+.project-cta { display: flex; flex-wrap: wrap; gap: .8rem; }
+.project-note { font-size: .9rem !important; color: var(--ink-3) !important; }
 
 /* pipeline diagram */
-.pipeline { width: 100%; max-width: 460px; display: flex; flex-direction: column; gap: .55rem; }
+.pipeline { width: 100%; display: flex; flex-direction: column; gap: .55rem; }
 .stage {
   border: 1px solid var(--line); border-radius: 11px;
   background: var(--surface); padding: .85rem 1.1rem;
@@ -568,8 +546,8 @@ html[data-theme="dark"] .cyclone { opacity: .14; }
 .pipe-arrow { display: grid; place-items: center; color: var(--line-strong); height: 14px; }
 .pipe-arrow svg { width: 14px; height: 14px; }
 
-.trained-note {
-  margin-top: .3rem; font-size: .78rem; color: var(--ink-3);
+.project .trained-note {
+  margin-top: .3rem; font-size: .8rem; color: var(--ink-3);
   text-align: center; line-height: 1.5;
 }
 
@@ -598,13 +576,20 @@ html[data-theme="dark"] .cyclone { opacity: .14; }
 }
 .pub-authors { font-size: .93rem; color: var(--ink-2); }
 .pub-authors strong { color: var(--ink); font-weight: 600; }
-.pub-venue { font-size: .93rem; color: var(--brand-hi); font-style: italic; margin-top: .18rem; }
+.pub-venue { font-size: .93rem; color: var(--ink-2); margin-top: .18rem; }
+.pub-venue cite { font-style: italic; }
+.pub-venue b { font-weight: 600; color: var(--ink); }
 .pub-venue em { font-style: normal; color: var(--accent); font-weight: 600; }
 .pub-doi {
-  display: inline-flex; align-items: center; gap: .35rem;
-  margin-top: .55rem; font-size: .85rem; font-weight: 500;
+  display: inline-block; margin-top: .5rem;
+  font-size: .85rem; font-weight: 500; overflow-wrap: anywhere;
 }
-.pub-doi svg { width: 14px; height: 14px; }
+.pub-oa {
+  display: inline-block; margin-left: .6rem; padding: .1rem .5rem;
+  font-size: .7rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--brand-hi); background: var(--brand-soft);
+  border: 1px solid color-mix(in srgb, var(--brand) 22%, transparent); border-radius: 999px;
+}
 
 .pubs-footer { margin-top: 2.6rem; text-align: center; }
 
@@ -626,8 +611,14 @@ html[data-theme="dark"] .cyclone { opacity: .14; }
 .roster .who  { display: block; font-weight: 600; color: var(--ink); font-size: .97rem; line-height: 1.4; }
 .roster .what { display: block; font-size: .87rem; color: var(--ink-3); line-height: 1.5; }
 
+.roster .when {
+  display: block; font-size: .8rem; font-weight: 600; color: var(--ink-3);
+  letter-spacing: .04em; font-variant-numeric: tabular-nums;
+}
+.roster.dated li { display: grid; grid-template-columns: 6.6rem 1fr; gap: .9rem; padding: .5rem 0; }
+.roster.dated .when { padding-top: .12rem; }
+
 /* ---------------------------------------------------------------- contact */
-#contact .wrap { max-width: 60rem; }
 .contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(2rem, 5vw, 3.5rem); align-items: start; }
 .contact-list { list-style: none; margin-top: 1.8rem; }
 .contact-list li { display: flex; gap: .9rem; align-items: flex-start; padding: .7rem 0; }
@@ -669,8 +660,8 @@ footer.site {
 .foot nav a:hover { color: var(--brand-hi); }
 
 /* ---------------------------------------------------------------- reveal */
-.reveal { opacity: 0; transform: translateY(18px); transition: opacity .6s ease, transform .6s ease; }
-.reveal.in { opacity: 1; transform: none; }
+.js .reveal { opacity: 0; transform: translateY(18px); transition: opacity .6s ease, transform .6s ease; }
+.js .reveal.in { opacity: 1; transform: none; }
 
 /* ---------------------------------------------------------------- responsive */
 @media (max-width: 1000px) {
@@ -680,14 +671,13 @@ footer.site {
   .metric:nth-child(3) { border-left: none; }
   .metric:nth-child(n+3) { border-top: 1px solid var(--line); }
   .about-grid { grid-template-columns: 1fr; }
-  .project-inner { grid-template-columns: 1fr; }
-  .project-visual { border-left: none; border-top: 1px solid var(--line); min-height: 0; }
-  .project.flip .project-visual { border-right: none; border-top: 1px solid var(--line); order: 0; }
+  .project-inner, .project.flip .project-inner { grid-template-columns: 1fr; }
+  .project-aside, .project.flip .project-aside { border-left: none; border-right: none; border-top: 1px solid var(--line); order: 0; }
   .contact-grid { grid-template-columns: 1fr; }
   .group-grid { grid-template-columns: 1fr; }
 }
 
-@media (max-width: 960px) {
+@media (max-width: 1040px) {
   .nav-links, .nav-cta { display: none; }
   .burger { display: grid; }
 }
@@ -702,8 +692,9 @@ footer.site {
   .metric { border-left: none; }
   .metric + .metric { border-top: 1px solid var(--line); }
   .pub { grid-template-columns: 1fr; gap: .35rem; }
+  .roster.dated li { grid-template-columns: 1fr; gap: .1rem; }
   .pub-year { font-size: .85rem; letter-spacing: .06em; }
-  .project-stats { gap: 1.4rem; }
+  .project-stats dd { font-size: 1.2rem; }
   .hero-actions .btn { flex: 1 1 auto; justify-content: center; }
 }
 
@@ -714,11 +705,21 @@ footer.site {
     animation-iteration-count: 1 !important;
     transition-duration: .001ms !important;
   }
-  .reveal { opacity: 1; transform: none; }
+  .js .reveal { opacity: 1; transform: none; }
 }
 
 @media print {
-  header.site, .drawer, .cyclone, .icon-btn, .hero-actions, .project-cta { display: none !important; }
+  html[data-theme="dark"] {
+    --bg: #fff; --bg-alt: #fff; --surface: #fff; --surface-2: #fff;
+    --line: #d5dbd8; --line-strong: #b9c3be;
+    --ink: #0f1720; --ink-2: #333c46; --ink-3: #5f6b78;
+    --brand: #005030; --brand-hi: #00714a; --accent: #b34a06;
+  }
+  .js .reveal { opacity: 1 !important; transform: none !important; transition: none !important; }
+  #home { padding-top: 1rem; }
+  .card, .project, .pub, .roster li { break-inside: avoid; }
+  .card, .project, .roster, .facts, .metrics, .contact-card { box-shadow: none; }
+  header.site, .drawer, .skip-link, .hero-actions, .project-cta, .socials { display: none !important; }
   section { padding-block: 1.5rem; }
   body { font-size: 11pt; }
 }
@@ -741,6 +742,7 @@ footer.site {
         <li><a href="#research">Research</a></li>
         <li><a href="#projects">Projects</a></li>
         <li><a href="#publications">Publications</a></li>
+        <li><a href="#experience">Experience</a></li>
         <li><a href="#group">Group</a></li>
         <li><a href="#contact">Contact</a></li>
       </ul>
@@ -769,34 +771,23 @@ footer.site {
   </div>
 </header>
 
-<div class="drawer" id="drawer">
+<nav class="drawer" id="drawer" aria-label="Mobile">
   <ul>
     <li><a href="#about">About</a></li>
     <li><a href="#research">Research</a></li>
     <li><a href="#projects">Projects</a></li>
     <li><a href="#publications">Publications</a></li>
+    <li><a href="#experience">Experience</a></li>
     <li><a href="#group">Group</a></li>
     <li><a href="#contact">Contact</a></li>
   </ul>
   <a class="btn btn-primary" href="https://tcatlas.org" target="_blank" rel="noopener">Open TC-ATLAS <span class="arrow" aria-hidden="true">↗</span></a>
-</div>
+</nav>
 
 <main id="main">
 
 <!-- ============================================================ hero -->
 <section id="home" class="hero">
-  <svg class="cyclone" viewBox="0 0 600 600" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round">
-    <g stroke-width="16" opacity=".9">
-      <path d="M300 300c0-52 44-96 100-92 66 5 116 61 110 128-7 82-79 142-166 134-102-9-176-95-166-198"/>
-      <path d="M300 300c0 52-44 96-100 92-66-5-116-61-110-128 7-82 79-142 166-134 102 9 176 95 166 198"/>
-    </g>
-    <g stroke-width="7" opacity=".45">
-      <circle cx="300" cy="300" r="248"/>
-      <circle cx="300" cy="300" r="170"/>
-      <circle cx="300" cy="300" r="46"/>
-    </g>
-  </svg>
-
   <div class="wrap">
     <div class="hero-grid">
       <div>
@@ -810,7 +801,7 @@ footer.site {
             <span class="role">Assistant Professor · Rosenstiel School</span>
           </div>
           <div>
-            <span class="unit">Frost Institute for Data Science &amp; Computing (IDSC)</span>
+            <span class="unit">Frost Institute for Data Science and Computing (IDSC)</span>
             <span class="role">Core Faculty</span>
           </div>
         </div>
@@ -872,7 +863,7 @@ footer.site {
             core faculty at the <strong>Frost Institute for Data Science and Computing</strong>. The
             joint appointment reflects the structure of the work, which draws on tropical
             meteorology and on statistical and machine-learning methodology in roughly equal
-            measure. Much of it develops from collaboration with NOAA's Hurricane Research Division
+            measure. Much of it develops from collaboration with NOAA’s Hurricane Research Division
             and the airborne radar observations that underpin it.
           </p>
           <p>
@@ -894,7 +885,7 @@ footer.site {
 
       <aside class="facts">
         <div class="fact">
-          <h4>Appointment</h4>
+          <h3>Appointment</h3>
           <p class="lead" style="margin-bottom:.9rem">Joint, University of Miami</p>
           <div class="appt">
             <div>
@@ -908,21 +899,21 @@ footer.site {
           </div>
         </div>
         <div class="fact">
-          <h4>Education</h4>
+          <h3>Education</h3>
           <p class="lead">Ph.D., Atmospheric Science, 2018</p>
           <p>University at Albany, SUNY</p>
           <p class="lead" style="margin-top:.6rem">B.S., Geosciences, 2013</p>
           <p>Florida International University</p>
         </div>
         <div class="fact">
-          <h4>Service</h4>
+          <h3>Service</h3>
           <p class="lead">Associate Editor, <em>Monthly Weather Review</em></p>
           <p>2020–present</p>
           <p class="lead" style="margin-top:.6rem">PI, Vortex Alignment Module</p>
           <p>NOAA Hurricane Research Division Field Program</p>
         </div>
         <div class="fact">
-          <h4>Focus areas</h4>
+          <h3>Focus areas</h3>
           <div class="tags">
             <span class="tag">Rapid intensification</span>
             <span class="tag">Vortex structure</span>
@@ -942,7 +933,7 @@ footer.site {
     <div class="section-head">
       <div class="rule"></div>
       <p class="eyebrow">Research</p>
-      <h2>Four questions I keep coming back to</h2>
+      <h2>Current research questions</h2>
       <p>
         The questions are interdependent: results on vortex tilt inform predictor selection in the
         statistical models, which in turn supply the data products described below.
@@ -1052,11 +1043,17 @@ footer.site {
             level.
           </p>
 
-          <div class="project-stats">
-            <div><strong>13,559</strong><span>STORMS</span></div>
-            <div><strong>1842–2026</strong><span>RECORD</span></div>
-            <div><strong>7</strong><span>BASINS</span></div>
-          </div>
+        </div>
+
+        <div class="project-aside">
+          <img src="assets/tc-atlas-preview.webp" width="1600" height="840" loading="lazy"
+               alt="TC-ATLAS storm detail view showing Hurricane Melissa (2025): a flight-level time series alongside an infrared satellite map with aircraft reconnaissance tracks and model guidance.">
+
+          <dl class="project-stats">
+            <div><dt>Storms</dt><dd>13,559</dd></div>
+            <div><dt>Record</dt><dd>1842–2026</dd></div>
+            <div><dt>Basins</dt><dd>7</dd></div>
+          </dl>
 
           <div class="project-links">
             <a class="chip" href="https://tcatlas.org/realtime_ir.html" target="_blank" rel="noopener">Real-time monitor</a>
@@ -1070,11 +1067,6 @@ footer.site {
               Open TC-ATLAS <span class="arrow" aria-hidden="true">↗</span>
             </a>
           </div>
-        </div>
-
-        <div class="project-visual">
-          <img src="assets/tc-atlas-preview.webp" width="1600" height="840" loading="lazy"
-               alt="TC-ATLAS storm detail view showing Hurricane Melissa (2025): a flight-level time series alongside an infrared satellite map with aircraft reconnaissance tracks and model guidance.">
         </div>
       </div>
     </article>
@@ -1098,27 +1090,21 @@ footer.site {
             to the three-dimensional wind fields measured by airborne Doppler radar.
           </p>
           <p>
-            Underneath it sits <strong>GHOST</strong>, the Geostationary-based Hurricane Objective
-            Strength Technique, which estimates a storm's scalar state — maximum sustained wind,
+            Its first stage is <strong>GHOST</strong>, the Geostationary-based Hurricane Objective
+            Strength Technique, which estimates a storm’s scalar state — maximum sustained wind,
             minimum pressure, and radius of maximum wind — from satellite and environmental data.
             Both are trained on reconnaissance observations but require none at inference:
             reconnaissance-informed training, reconnaissance-independent application. The objective
             is to extend structural analysis to storms that reconnaissance does not sample.
           </p>
 
-          <div class="project-stats">
-            <div><strong>~1,500</strong><span>TRAINING ANALYSES</span></div>
-            <div><strong>3</strong><span>MODEL STAGES</span></div>
-            <div><strong>0</strong><span>RECONNAISSANCE INPUTS</span></div>
-          </div>
-
-          <p style="font-size:.9rem;color:var(--ink-3)">
+          <p class="project-note">
             The GHOST manuscript is in preparation for <em>Weather and Forecasting</em>, with the
             TC-SWARM wind-field reconstruction to follow.
           </p>
         </div>
 
-        <div class="project-visual">
+        <div class="project-aside">
           <div class="pipeline" role="img"
                aria-label="TC-SWARM pipeline: geostationary infrared imagery and reanalysis environmental fields feed GHOST, which estimates maximum wind, minimum pressure and radius of maximum wind; that scalar state feeds a vortex tilt and alignment stage, which feeds the TC-SWARM three-dimensional wind field reconstruction.">
             <div class="stage input">
@@ -1159,6 +1145,12 @@ footer.site {
 
             <p class="trained-note">Trained on TC-RADAR airborne Doppler analyses · applied to satellite and reanalysis inputs</p>
           </div>
+
+          <dl class="project-stats">
+            <div><dt>Training analyses</dt><dd>~1,500</dd></div>
+            <div><dt>Model stages</dt><dd>3</dd></div>
+            <div><dt>Aircraft inputs at inference</dt><dd>0</dd></div>
+          </dl>
         </div>
       </div>
     </article>
@@ -1186,11 +1178,17 @@ footer.site {
             common grid, with multiple center-fix conventions including tilt-relative recentering. The dataset underlies much of the observational work described above and provides the training labels for TC-SWARM.
           </p>
 
-          <div class="project-stats">
-            <div><strong>1,640</strong><span>SWATH ANALYSES</span></div>
-            <div><strong>474</strong><span>MERGED ANALYSES</span></div>
-            <div><strong>1997–2025</strong><span>COVERAGE</span></div>
-          </div>
+        </div>
+
+        <div class="project-aside">
+          <img src="assets/tc-radar-preview.webp" width="1400" height="1033" loading="lazy"
+               alt="Four sequential tail Doppler radar swath analyses of a tropical cyclone, showing radar reflectivity and wind barbs over infrared brightness temperature with 2-km and 7-km circulation centers marked.">
+
+          <dl class="project-stats">
+            <div><dt>Swath analyses</dt><dd>1,640</dd></div>
+            <div><dt>Merged analyses</dt><dd>474</dd></div>
+            <div><dt>Coverage</dt><dd>1997–2025</dd></div>
+          </dl>
 
           <div class="project-cta">
             <a class="btn btn-ghost" href="https://tcatlas.org/explorer.html" target="_blank" rel="noopener">
@@ -1200,11 +1198,6 @@ footer.site {
               Database paper <span class="arrow" aria-hidden="true">↗</span>
             </a>
           </div>
-        </div>
-
-        <div class="project-visual">
-          <img src="assets/tc-radar-preview.webp" width="1400" height="1033" loading="lazy"
-               alt="Four sequential tail Doppler radar swath analyses of a tropical cyclone, showing radar reflectivity and wind barbs over infrared brightness temperature with 2-km and 7-km circulation centers marked.">
         </div>
       </div>
     </article>
@@ -1229,13 +1222,8 @@ footer.site {
         <div>
           <div class="pub-title">To align or not to align? That is the question</div>
           <div class="pub-authors"><strong>Fischer, M. S.</strong>, G. R. Alvey III, D. Jariwala, and P. D. Reasor</div>
-          <div class="pub-venue">Journal of Geophysical Research: Atmospheres, 131, e2025JD045986</div>
-          <a class="pub-doi" href="https://doi.org/10.1029/2025JD045986" target="_blank" rel="noopener">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M14 3h7v7"/><path d="M21 3 10 14"/><path d="M19 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/>
-            </svg>
-            Open access
-          </a>
+          <div class="pub-venue"><cite>Journal of Geophysical Research: Atmospheres</cite>, <b>131</b>, e2025JD045986</div>
+          <a class="pub-doi" href="https://doi.org/10.1029/2025JD045986" target="_blank" rel="noopener">https://doi.org/10.1029/2025JD045986</a> <span class="pub-oa">Open access</span>
         </div>
       </article>
 
@@ -1243,14 +1231,9 @@ footer.site {
         <div class="pub-year">2025</div>
         <div>
           <div class="pub-title">Reconsideration of the mass and condensate sources for the tropical cyclone outflow</div>
-          <div class="pub-authors">Nolan, D. S., <strong>M. S. Fischer</strong>, and M. E. O'Neill</div>
-          <div class="pub-venue">Bulletin of the American Meteorological Society, 106, E1342–E1359</div>
-          <a class="pub-doi" href="https://doi.org/10.1175/BAMS-D-24-0284.1" target="_blank" rel="noopener">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M14 3h7v7"/><path d="M21 3 10 14"/><path d="M19 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/>
-            </svg>
-            DOI
-          </a>
+          <div class="pub-authors">Nolan, D. S., <strong>M. S. Fischer</strong>, and M. E. O’Neill</div>
+          <div class="pub-venue"><cite>Bulletin of the American Meteorological Society</cite>, <b>106</b>, E1342–E1359</div>
+          <a class="pub-doi" href="https://doi.org/10.1175/BAMS-D-24-0284.1" target="_blank" rel="noopener">https://doi.org/10.1175/BAMS-D-24-0284.1</a>
         </div>
       </article>
 
@@ -1259,13 +1242,8 @@ footer.site {
         <div>
           <div class="pub-title">Are rapidly intensifying tropical cyclones associated with unique vortex and convective characteristics?</div>
           <div class="pub-authors"><strong>Fischer, M. S.</strong>, P. D. Reasor, J. P. Dunion, and R. F. Rogers</div>
-          <div class="pub-venue">Monthly Weather Review, 153, 183–203</div>
-          <a class="pub-doi" href="https://doi.org/10.1175/MWR-D-24-0118.1" target="_blank" rel="noopener">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M14 3h7v7"/><path d="M21 3 10 14"/><path d="M19 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/>
-            </svg>
-            DOI
-          </a>
+          <div class="pub-venue"><cite>Monthly Weather Review</cite>, <b>153</b>, 183–203</div>
+          <a class="pub-doi" href="https://doi.org/10.1175/MWR-D-24-0118.1" target="_blank" rel="noopener">https://doi.org/10.1175/MWR-D-24-0118.1</a>
         </div>
       </article>
 
@@ -1274,13 +1252,8 @@ footer.site {
         <div>
           <div class="pub-title">A review of the interactions between tropical cyclones and environmental vertical wind shear</div>
           <div class="pub-authors">Rios-Berrios, R., P. M. Finocchio, J. J. Alland, X. Chen, <strong>M. S. Fischer</strong>, S. Stevenson, and D. Tao</div>
-          <div class="pub-venue">Journal of the Atmospheric Sciences, 81, 713–741</div>
-          <a class="pub-doi" href="https://doi.org/10.1175/JAS-D-23-0022.1" target="_blank" rel="noopener">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M14 3h7v7"/><path d="M21 3 10 14"/><path d="M19 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/>
-            </svg>
-            DOI
-          </a>
+          <div class="pub-venue"><cite>Journal of the Atmospheric Sciences</cite>, <b>81</b>, 713–741</div>
+          <a class="pub-doi" href="https://doi.org/10.1175/JAS-D-23-0022.1" target="_blank" rel="noopener">https://doi.org/10.1175/JAS-D-23-0022.1</a>
         </div>
       </article>
 
@@ -1289,13 +1262,8 @@ footer.site {
         <div>
           <div class="pub-title">An observational analysis of the relationship between tropical cyclone vortex tilt, precipitation structure, and intensity change</div>
           <div class="pub-authors"><strong>Fischer, M. S.</strong>, R. F. Rogers, P. D. Reasor, and J. P. Dunion</div>
-          <div class="pub-venue">Monthly Weather Review, 152, 203–225</div>
-          <a class="pub-doi" href="https://doi.org/10.1175/MWR-D-23-0089.1" target="_blank" rel="noopener">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M14 3h7v7"/><path d="M21 3 10 14"/><path d="M19 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/>
-            </svg>
-            DOI
-          </a>
+          <div class="pub-venue"><cite>Monthly Weather Review</cite>, <b>152</b>, 203–225</div>
+          <a class="pub-doi" href="https://doi.org/10.1175/MWR-D-23-0089.1" target="_blank" rel="noopener">https://doi.org/10.1175/MWR-D-23-0089.1</a>
         </div>
       </article>
 
@@ -1304,13 +1272,8 @@ footer.site {
         <div>
           <div class="pub-title">On the distribution of convective and stratiform precipitation in tropical cyclones from airborne Doppler radar and its relationship to intensity change and environmental wind shear direction</div>
           <div class="pub-authors">Wadler, J. B., J. J. Cione, R. F. Rogers, and <strong>M. S. Fischer</strong></div>
-          <div class="pub-venue">Monthly Weather Review, 151, 3209–3233</div>
-          <a class="pub-doi" href="https://doi.org/10.1175/MWR-D-23-0048.1" target="_blank" rel="noopener">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M14 3h7v7"/><path d="M21 3 10 14"/><path d="M19 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/>
-            </svg>
-            DOI
-          </a>
+          <div class="pub-venue"><cite>Monthly Weather Review</cite>, <b>151</b>, 3209–3233</div>
+          <a class="pub-doi" href="https://doi.org/10.1175/MWR-D-23-0048.1" target="_blank" rel="noopener">https://doi.org/10.1175/MWR-D-23-0048.1</a>
         </div>
       </article>
 
@@ -1319,13 +1282,8 @@ footer.site {
         <div>
           <div class="pub-title">A tale of two vortex evolutions: Using a high-resolution ensemble to assess the impacts of ventilation on a tropical cyclone rapid intensification event</div>
           <div class="pub-authors"><strong>Fischer, M. S.</strong>, P. D. Reasor, B. H. Tang, K. L. Corbosiero, R. D. Torn, and X. Chen</div>
-          <div class="pub-venue">Monthly Weather Review, 151, 297–320</div>
-          <a class="pub-doi" href="https://doi.org/10.1175/MWR-D-22-0037.1" target="_blank" rel="noopener">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M14 3h7v7"/><path d="M21 3 10 14"/><path d="M19 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/>
-            </svg>
-            DOI
-          </a>
+          <div class="pub-venue"><cite>Monthly Weather Review</cite>, <b>151</b>, 297–320</div>
+          <a class="pub-doi" href="https://doi.org/10.1175/MWR-D-22-0037.1" target="_blank" rel="noopener">https://doi.org/10.1175/MWR-D-22-0037.1</a>
         </div>
       </article>
 
@@ -1334,13 +1292,8 @@ footer.site {
         <div>
           <div class="pub-title">An analysis of tropical cyclone vortex and convective characteristics in relation to storm intensity using a novel airborne Doppler radar database</div>
           <div class="pub-authors"><strong>Fischer, M. S.</strong>, P. D. Reasor, R. F. Rogers, and J. F. Gamache</div>
-          <div class="pub-venue">Monthly Weather Review, 150, 2255–2278 — <em>TC-RADAR database description</em></div>
-          <a class="pub-doi" href="https://doi.org/10.1175/MWR-D-21-0223.1" target="_blank" rel="noopener">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M14 3h7v7"/><path d="M21 3 10 14"/><path d="M19 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/>
-            </svg>
-            DOI
-          </a>
+          <div class="pub-venue"><cite>Monthly Weather Review</cite>, <b>150</b>, 2255–2278 — <em>TC-RADAR database description</em></div>
+          <a class="pub-doi" href="https://doi.org/10.1175/MWR-D-21-0223.1" target="_blank" rel="noopener">https://doi.org/10.1175/MWR-D-21-0223.1</a>
         </div>
       </article>
     </div>
@@ -1353,7 +1306,7 @@ footer.site {
         <div>
           <div class="pub-title">The path to alignment: Dual-Doppler and SAMURAI observations of Tropical Cyclone Fiona (2022)</div>
           <div class="pub-authors">Alvey III, G. R., J. Zhang, J. Dunion, B. Dahl, and <strong>M. S. Fischer</strong></div>
-          <div class="pub-venue">Monthly Weather Review — <em>in preparation</em></div>
+          <div class="pub-venue"><cite>Monthly Weather Review</cite> — <em>in preparation</em></div>
         </div>
       </article>
 
@@ -1362,7 +1315,7 @@ footer.site {
         <div>
           <div class="pub-title">A geostationary, reconnaissance-independent technique for estimating tropical cyclone intensity and radius of maximum wind (GHOST)</div>
           <div class="pub-authors"><strong>Fischer, M. S.</strong>, and co-authors</div>
-          <div class="pub-venue">Weather and Forecasting — <em>in preparation</em></div>
+          <div class="pub-venue"><cite>Weather and Forecasting</cite> — <em>in preparation</em></div>
         </div>
       </article>
 
@@ -1371,7 +1324,7 @@ footer.site {
         <div>
           <div class="pub-title">Estimating tropical cyclone vortex tilt from geostationary satellite imagery using a random forest</div>
           <div class="pub-authors"><strong>Fischer, M. S.</strong>, W. Bouza, D. Jariwala, and M. Reardon</div>
-          <div class="pub-venue">Weather and Forecasting — <em>in preparation</em></div>
+          <div class="pub-venue"><cite>Weather and Forecasting</cite> — <em>in preparation</em></div>
         </div>
       </article>
     </div>
@@ -1384,13 +1337,8 @@ footer.site {
         <div>
           <div class="pub-title">Tropical cyclone intensity predictability</div>
           <div class="pub-authors">Sippel, J. A., and <strong>M. S. Fischer</strong></div>
-          <div class="pub-venue">Encyclopedia of Atmospheric Sciences (3rd Ed.), Vol. 1, 446–459</div>
-          <a class="pub-doi" href="https://doi.org/10.1016/B978-0-323-96026-7.00140-5" target="_blank" rel="noopener">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M14 3h7v7"/><path d="M21 3 10 14"/><path d="M19 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/>
-            </svg>
-            DOI
-          </a>
+          <div class="pub-venue"><cite>Encyclopedia of Atmospheric Sciences</cite>, 3rd ed., Vol. 1, 446–459</div>
+          <a class="pub-doi" href="https://doi.org/10.1016/B978-0-323-96026-7.00140-5" target="_blank" rel="noopener">https://doi.org/10.1016/B978-0-323-96026-7.00140-5</a>
         </div>
       </article>
     </div>
@@ -1403,8 +1351,61 @@ footer.site {
   </div>
 </section>
 
+<!-- ============================================================ experience -->
+<section id="experience" class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="rule"></div>
+      <p class="eyebrow">Experience &amp; recognition</p>
+      <h2>Positions, funding, and honors</h2>
+      <p>A summary of appointments, sponsored research, and awards. Full detail is in the
+        <a href="assets/cv.pdf" target="_blank" rel="noopener">curriculum vitae</a>.</p>
+    </div>
+
+    <div class="group-grid">
+      <div class="roster dated reveal">
+        <h3>Positions</h3>
+        <ul>
+          <li><span class="when">2024–present</span><span><span class="who">Assistant Professor</span><span class="what">Department of Atmospheric Sciences, University of Miami</span></span></li>
+          <li><span class="when">2023–2024</span><span><span class="who">Associate Scientist</span><span class="what">Cooperative Institute for Marine and Atmospheric Studies (CIMAS), University of Miami</span></span></li>
+          <li><span class="when">2020–2023</span><span><span class="who">Assistant Scientist</span><span class="what">Cooperative Institute for Marine and Atmospheric Studies (CIMAS), University of Miami</span></span></li>
+          <li><span class="when">2018–2020</span><span><span class="who">NRC Postdoctoral Research Associate</span><span class="what">NOAA Atlantic Oceanographic and Meteorological Laboratory, Hurricane Research Division</span></span></li>
+          <li><span class="when">2018</span><span><span class="who">Scientific Programmer</span><span class="what">Innovim / NOAA National Hurricane Center</span></span></li>
+        </ul>
+
+        <h3>Honors and awards</h3>
+        <ul>
+          <li><span class="when">2026</span><span><span class="who">Editor’s Award</span><span class="what"><em>Advances in Atmospheric Sciences</em></span></span></li>
+          <li><span class="when">2024</span><span><span class="who">Editor’s Award</span><span class="what"><em>Journal of the Atmospheric Sciences</em></span></span></li>
+          <li><span class="when">2020</span><span><span class="who">Quarterly Journal Prize Reviewer’s Certificate</span></span></li>
+          <li><span class="when">2019</span><span><span class="who">Distinguished Dissertation Award</span><span class="what">University at Albany, SUNY</span></span></li>
+          <li><span class="when">2018</span><span><span class="who">Narayan R. Gokhale Distinguished Research Scholarship Award</span></span></li>
+          <li><span class="when">2018</span><span><span class="who">Outstanding Student Oral Presentation Award</span><span class="what">33rd Conference on Hurricanes and Tropical Meteorology</span></span></li>
+        </ul>
+      </div>
+
+      <div class="roster dated reveal">
+        <h3>Sponsored research</h3>
+        <ul>
+          <li><span class="when">2024–2027</span><span><span class="who">Collaborative Research: Tropical Cyclones from 400 to 40 hPa</span><span class="what">National Science Foundation · Co-PI, with D. Nolan and M. O’Neill</span></span></li>
+          <li><span class="when">2023–2026</span><span><span class="who">A comprehensive observational examination of the physical processes that link tropical cyclone vortex alignment to future intensity change</span><span class="what">National Science Foundation · Co-PI, with G. Alvey and D. Nolan</span></span></li>
+          <li><span class="when">2023–2025</span><span><span class="who">Application of machine learning techniques to the automated quality control of airborne Doppler radar data used in operational analysis of hurricane winds and reflectivity</span><span class="what">NOAA · PI, with Co-PI M. Bell</span></span></li>
+        </ul>
+
+        <h3>Professional service</h3>
+        <ul>
+          <li><span class="when">2020–present</span><span><span class="who">Associate Editor, <em>Monthly Weather Review</em></span></span></li>
+          <li><span class="when">2018–present</span><span><span class="who">NOAA Hurricane Research Division Field Program science team</span><span class="what">Principal Investigator, Vortex Alignment Module</span></span></li>
+          <li><span class="when">2023–present</span><span><span class="who">Proposal reviewer</span><span class="what">National Science Foundation and NASA</span></span></li>
+          <li><span class="when">2022–2026</span><span><span class="who">Session chair, Tropical Cyclone Rapid Intensification</span><span class="what">35th–37th Conferences on Hurricanes and Tropical Meteorology</span></span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ============================================================ group & teaching -->
-<section id="group" class="alt">
+<section id="group">
   <div class="wrap">
     <div class="section-head">
       <div class="rule"></div>
@@ -1460,7 +1461,7 @@ footer.site {
 </section>
 
 <!-- ============================================================ contact -->
-<section id="contact">
+<section id="contact" class="alt">
   <div class="wrap">
     <div class="contact-grid">
       <div>
@@ -1518,7 +1519,7 @@ footer.site {
           satellite-based reconstruction models. A brief note describing your interests and
           background is a useful starting point.
         </p>
-        <a class="btn btn-accent" href="mailto:mike.fischer@miami.edu">Send an email</a>
+        <a class="btn btn-primary" href="mailto:mike.fischer@miami.edu">Send an email</a>
       </div>
     </div>
   </div>
@@ -1562,7 +1563,16 @@ footer.site {
       "name": "Frost Institute for Data Science and Computing, University of Miami"
     }
   ],
-  "alumniOf": { "@type": "CollegeOrUniversity", "name": "University at Albany, SUNY" },
+  "worksFor": { "@type": "CollegeOrUniversity", "name": "University of Miami", "url": "https://www.miami.edu/" },
+  "alumniOf": [
+    { "@type": "CollegeOrUniversity", "name": "University at Albany, SUNY" },
+    { "@type": "CollegeOrUniversity", "name": "Florida International University" }
+  ],
+  "award": [
+    "Advances in Atmospheric Sciences Editor’s Award (2026)",
+    "Journal of the Atmospheric Sciences Editor’s Award (2024)",
+    "University at Albany Distinguished Dissertation Award (2019)"
+  ],
   "knowsAbout": [
     "Tropical cyclones", "Hurricane rapid intensification", "Airborne Doppler radar",
     "Satellite remote sensing", "Machine learning", "Atmospheric science"
@@ -1596,13 +1606,14 @@ footer.site {
   });
 
   /* ---- mobile drawer ---- */
-  function closeDrawer() {
-    drawer.classList.remove('open');
-    burger.setAttribute('aria-expanded', 'false');
-  }
-  burger.addEventListener('click', function () {
-    var open = drawer.classList.toggle('open');
+  function setDrawer(open) {
+    drawer.classList.toggle('open', open);
     burger.setAttribute('aria-expanded', String(open));
+    burger.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+  }
+  function closeDrawer() { setDrawer(false); }
+  burger.addEventListener('click', function () {
+    setDrawer(!drawer.classList.contains('open'));
   });
   drawer.addEventListener('click', function (e) {
     if (e.target.closest('a')) closeDrawer();
@@ -1611,7 +1622,7 @@ footer.site {
     if (e.key === 'Escape') closeDrawer();
   });
   window.addEventListener('resize', function () {
-    if (window.innerWidth > 960) closeDrawer();
+    if (window.innerWidth > 1040) closeDrawer();
   });
 
   /* ---- header shadow on scroll ---- */
@@ -1634,7 +1645,7 @@ footer.site {
   });
 
   if ('IntersectionObserver' in window) {
-    var order   = ['about', 'research', 'projects', 'publications', 'group', 'contact'];
+    var order   = ['about', 'research', 'projects', 'publications', 'experience', 'group', 'contact'];
     var visible = {};
 
     var spy = new IntersectionObserver(function (entries) {
