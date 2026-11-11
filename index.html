@@ -199,7 +199,7 @@ h3 { font-size: 1.3rem; }
 .btn-ghost:hover { border-color: var(--brand); color: var(--brand-hi); background: var(--brand-soft); transform: translateY(-1px); }
 
 .arrow { transition: transform .18s ease; }
-.btn:hover .arrow, .link-arrow:hover .arrow { transform: translateX(3px); }
+.btn:hover .arrow, .link-arrow:hover .arrow, .media-feature:hover .arrow { transform: translateX(3px); }
 
 .link-arrow {
   display: inline-flex; align-items: center; gap: .4rem;
@@ -593,6 +593,48 @@ html[data-theme="light"] .moon { display: none; }
 
 .pubs-footer { margin-top: 2.6rem; text-align: center; }
 
+/* ---------------------------------------------------------------- media */
+.media-grid { display: grid; grid-template-columns: 1.05fr .95fr; gap: clamp(1.5rem, 3vw, 2.5rem); align-items: start; }
+
+.media-feature {
+  display: block; color: inherit; text-decoration: none;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  overflow: hidden; box-shadow: var(--shadow-sm);
+  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+}
+.media-feature:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); border-color: var(--line-strong); }
+.media-feature:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.media-thumb { position: relative; aspect-ratio: 16 / 9; background: #0a0e14; }
+.media-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.media-thumb .play {
+  position: absolute; inset: 0; margin: auto; width: 68px; height: 68px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: rgba(10, 14, 20, .72); color: #fff;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .35);
+  transition: background .2s ease, transform .2s ease;
+}
+.media-thumb .play svg { width: 26px; height: 26px; margin-left: 4px; }
+.media-feature:hover .play { background: var(--brand); transform: scale(1.06); }
+.media-feature-body { padding: 1.5rem 1.6rem 1.7rem; }
+.media-feature-body h3 { font-size: 1.32rem; line-height: 1.3; margin: .45rem 0 .6rem; }
+.media-feature-body p { color: var(--ink-2); font-size: .96rem; }
+.media-feature-body .link-arrow { margin-top: 1rem; }
+
+.media-meta {
+  font-family: var(--font-sans); font-size: .72rem; font-weight: 600;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3);
+}
+.media-meta .outlet { color: var(--accent); }
+
+.media-stories { display: flex; flex-direction: column; }
+.media-story { padding: 1.35rem 0; border-bottom: 1px solid var(--line); }
+.media-story:first-child { padding-top: .2rem; }
+.media-story:last-child { border-bottom: none; }
+.media-story h3 { font-size: 1.12rem; line-height: 1.4; margin: .4rem 0 .45rem; }
+.media-story p { color: var(--ink-2); font-size: .93rem; }
+.media-outlets { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .8rem; }
+.media-outlets .chip { font-size: .8rem; padding: .32rem .75rem; }
+
 /* ---------------------------------------------------------------- group & teaching */
 .group-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start; }
 .roster {
@@ -675,6 +717,7 @@ footer.site {
   .project-aside, .project.flip .project-aside { border-left: none; border-right: none; border-top: 1px solid var(--line); order: 0; }
   .contact-grid { grid-template-columns: 1fr; }
   .group-grid { grid-template-columns: 1fr; }
+  .media-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 1040px) {
@@ -742,6 +785,7 @@ footer.site {
         <li><a href="#research">Research</a></li>
         <li><a href="#projects">Projects</a></li>
         <li><a href="#publications">Publications</a></li>
+        <li><a href="#media">Media</a></li>
         <li><a href="#experience">Experience</a></li>
         <li><a href="#group">Group</a></li>
         <li><a href="#contact">Contact</a></li>
@@ -777,6 +821,7 @@ footer.site {
     <li><a href="#research">Research</a></li>
     <li><a href="#projects">Projects</a></li>
     <li><a href="#publications">Publications</a></li>
+    <li><a href="#media">Media</a></li>
     <li><a href="#experience">Experience</a></li>
     <li><a href="#group">Group</a></li>
     <li><a href="#contact">Contact</a></li>
@@ -1360,8 +1405,76 @@ footer.site {
   </div>
 </section>
 
+<!-- ============================================================ media -->
+<section id="media" class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="rule"></div>
+      <p class="eyebrow">Media</p>
+      <h2>In the news</h2>
+      <p>Television and press coverage of recent research, and commentary on storms as they develop.</p>
+    </div>
+
+    <div class="media-grid">
+      <a class="media-feature reveal" href="https://www.youtube.com/watch?v=d0-ux7N1QU8" target="_blank" rel="noopener">
+        <div class="media-thumb">
+          <img src="https://i.ytimg.com/vi/d0-ux7N1QU8/hqdefault.jpg" width="480" height="360" loading="lazy"
+               alt="FOX Weather segment: The four signs of a growing hurricane.">
+          <span class="play" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10.5-6.5z"/></svg>
+          </span>
+        </div>
+        <div class="media-feature-body">
+          <p class="media-meta"><span class="outlet">FOX Weather</span> · Television · October 2026</p>
+          <h3>The four signs of a growing hurricane</h3>
+          <p>Interview on new research showing how Hurricane Hunter radar observations reveal, about a
+            day in advance, that a tilted storm is about to align and strengthen.</p>
+          <span class="link-arrow">Watch on YouTube <span class="arrow" aria-hidden="true">↗</span></span>
+        </div>
+      </a>
+
+      <div class="media-stories reveal">
+        <article class="media-story">
+          <p class="media-meta">Research coverage · August–September 2026</p>
+          <h3>Hurricane Hunter data reveal early signs of strengthening tropical cyclones</h3>
+          <p>Four structural signs that a tilted storm is about to become vertically aligned, from
+            <cite>Fischer et al.</cite> (2026) in the <cite>Journal of Geophysical Research: Atmospheres</cite>.</p>
+          <div class="media-outlets">
+            <a class="chip" href="https://news.miami.edu/rosenstiel/stories/2026/08/hurricane-hunter-data-reveal-early-signs-of-strengthening-tropical-cyclones.html" target="_blank" rel="noopener">UM News</a>
+            <a class="chip" href="https://scitechdaily.com/30-years-of-hurricane-data-reveal-4-warning-signs-before-storms-strengthen/" target="_blank" rel="noopener">SciTechDaily</a>
+            <a class="chip" href="https://sciencedaily.com/releases/2026/09/260919031037.htm" target="_blank" rel="noopener">ScienceDaily</a>
+            <a class="chip" href="https://www.carriermanagement.com/news/2026/09/30/292391.htm" target="_blank" rel="noopener">Carrier Management</a>
+            <a class="chip" href="https://www.yourweather.co.uk/news/trending/hurricane-hunter-data-reveals-the-first-signs-of-strengthening-tropical-cyclones.html" target="_blank" rel="noopener">Meteored</a>
+          </div>
+        </article>
+
+        <article class="media-story">
+          <p class="media-meta">Hurricane Melissa · October–November 2025</p>
+          <h3>How Hurricane Melissa exploded into a monster</h3>
+          <p>Commentary on Melissa’s extreme rapid intensification and its eyewall evolution, and
+            real-time analysis cited as the storm approached Jamaica.</p>
+          <div class="media-outlets">
+            <a class="chip" href="https://news.miami.edu/stories/2025/11/how-hurricane-melissa-exploded-into-a-monster.html" target="_blank" rel="noopener">UM News</a>
+            <a class="chip" href="https://yaleclimateconnections.org/2025/10/hurricane-melissa-poised-to-rapidly-intensify-as-it-heads-toward-jamaica/" target="_blank" rel="noopener">Yale Climate Connections</a>
+          </div>
+        </article>
+
+        <article class="media-story">
+          <p class="media-meta">Profiles · 2024–2025</p>
+          <h3>Predicting rapid intensification with data science</h3>
+          <p>Features on the path from Hurricane Andrew to airborne radar and machine learning research.</p>
+          <div class="media-outlets">
+            <a class="chip" href="https://idsc.miami.edu/magazine/michael-s-fischer-tackles-predicting-rapid-intensification-in-hurricanes/" target="_blank" rel="noopener">IDSC Magazine</a>
+            <a class="chip" href="https://news.miami.edu/stories/2024/09/a-powerful-new-tool-in-hurricane-forecasting.html" target="_blank" rel="noopener">UM News</a>
+          </div>
+        </article>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ============================================================ experience -->
-<section id="experience" class="alt">
+<section id="experience">
   <div class="wrap">
     <div class="section-head">
       <div class="rule"></div>
@@ -1416,7 +1529,7 @@ footer.site {
 </section>
 
 <!-- ============================================================ group & teaching -->
-<section id="group">
+<section id="group" class="alt">
   <div class="wrap">
     <div class="section-head">
       <div class="rule"></div>
@@ -1471,7 +1584,7 @@ footer.site {
 </section>
 
 <!-- ============================================================ contact -->
-<section id="contact" class="alt">
+<section id="contact">
   <div class="wrap">
     <div class="contact-grid">
       <div>
@@ -1655,7 +1768,7 @@ footer.site {
   });
 
   if ('IntersectionObserver' in window) {
-    var order   = ['about', 'research', 'projects', 'publications', 'experience', 'group', 'contact'];
+    var order   = ['about', 'research', 'projects', 'publications', 'media', 'experience', 'group', 'contact'];
     var visible = {};
 
     var spy = new IntersectionObserver(function (entries) {
