@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Michael S. Fischer — Curriculum Vitae</title>
+<!--
+  Source for assets/cv.pdf. Edit this file, then run cv/build.sh to regenerate the PDF.
+  Layout is tuned for US Letter print; the screen view is only a preview.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400;1,8..60,600&display=block" rel="stylesheet">
+<style>
+  :root {
+    --ink:    #14191f;
+    --ink-2:  #3d4651;
+    --ink-3:  #66717d;
+    --line:   #cfd8d3;
+    --brand:  #005030;
+    --accent: #b34a06;
+    --serif:  'Source Serif 4', Georgia, 'Times New Roman', serif;
+    --sans:   'Inter', -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  }
+
+  @page {
+    size: letter;
+    margin: 0.65in 0.8in 0.7in;
+    @bottom-left {
+      content: "Michael S. Fischer · Curriculum Vitae";
+      font: 400 7.5pt 'Inter', sans-serif; color: #66717d; letter-spacing: .02em;
+    }
+    @bottom-right {
+      content: counter(page) " of " counter(pages);
+      font: 400 7.5pt 'Inter', sans-serif; color: #66717d;
+    }
+  }
+  @page :first {
+    @bottom-left { content: "Updated November 2026"; }
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: #fff; }
+  body {
+    font-family: var(--serif);
+    font-size: 10pt; line-height: 1.35;
+    color: var(--ink); background: #fff;
+    font-variant-numeric: oldstyle-nums proportional-nums;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  @media screen {
+    body { max-width: 8.5in; margin: 0 auto; padding: .7in .8in; }
+  }
+  a { color: inherit; text-decoration: none; }
+  em, cite { font-style: italic; }
+
+  /* ---------------------------------------------------------- header */
+  .masthead {
+    display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 2rem;
+    padding-bottom: 11pt; border-bottom: 1.4pt solid var(--brand);
+  }
+  .masthead h1 {
+    font-size: 25pt; font-weight: 600; line-height: 1.05; letter-spacing: -.015em;
+  }
+  .masthead .position { margin-top: 6pt; font-size: 10.2pt; color: var(--ink-2); line-height: 1.4; }
+  .masthead .position strong { color: var(--ink); font-weight: 600; }
+  .contact {
+    font-family: var(--sans); font-size: 8.1pt; line-height: 1.6; color: var(--ink-2);
+    text-align: right; white-space: nowrap; font-variant-numeric: lining-nums;
+  }
+  .contact a { color: var(--brand); }
+
+  .interests {
+    margin-top: 9pt; font-size: 9.8pt; color: var(--ink-2);
+  }
+  .interests b {
+    font-family: var(--sans); font-size: 7.6pt; font-weight: 600; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--brand); margin-right: .5em;
+  }
+
+  /* ---------------------------------------------------------- sections */
+  section { margin-top: 14pt; }
+  h2 {
+    font-family: var(--sans); font-size: 8.4pt; font-weight: 600;
+    letter-spacing: .15em; text-transform: uppercase; color: var(--brand);
+    padding-bottom: 3pt; margin-bottom: 7pt;
+    border-bottom: .6pt solid var(--line);
+    break-after: avoid;
+  }
+  h3 {
+    font-size: 10pt; font-weight: 600; font-style: italic; color: var(--ink-2);
+    margin: 8pt 0 3.5pt; break-after: avoid;
+  }
+  h2 + h3 { margin-top: 0; }
+
+  /* dated entries: content left, date right */
+  .entry {
+    display: grid; grid-template-columns: 1fr auto; column-gap: 1.6em;
+    break-inside: avoid;
+  }
+  .entry + .entry { margin-top: 5pt; }
+  .entry.tight + .entry.tight { margin-top: 1.5pt; }
+  .entry .what { font-weight: 600; }
+  .entry .where { color: var(--ink-2); }
+  .entry .note { color: var(--ink-2); font-size: 9.5pt; }
+  .when {
+    font-family: var(--sans); font-size: 8.3pt; color: var(--ink-3);
+    text-align: right; white-space: nowrap; padding-top: 1.5pt;
+    font-variant-numeric: lining-nums tabular-nums;
+  }
+  .when .amt { display: block; color: var(--ink-2); }
+
+  /* citations */
+  ol.cites {
+    list-style: none; counter-reset: cite var(--start, 0);
+  }
+  ol.cites > li {
+    position: relative; padding-left: 2.1em; break-inside: avoid;
+    counter-increment: cite -1;
+  }
+  ol.cites > li + li { margin-top: 4.5pt; }
+  ol.cites > li::before {
+    content: counter(cite) ".";
+    position: absolute; left: 0; width: 1.6em; text-align: right;
+    font-family: var(--sans); font-size: 8.1pt; color: var(--ink-3); padding-top: 1.3pt;
+    font-variant-numeric: lining-nums tabular-nums;
+  }
+  ul.cites { list-style: none; }
+  ul.cites > li { padding-left: 2.1em; text-indent: 0; break-inside: avoid; }
+  ul.cites > li + li { margin-top: 4.5pt; }
+  .me { font-weight: 600; }
+  .status {
+    font-family: var(--sans); font-size: 7.4pt; font-weight: 600; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--accent); white-space: nowrap;
+  }
+  .tag {
+    font-family: var(--sans); font-size: 7.4pt; font-weight: 500; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--brand); white-space: nowrap;
+  }
+  .vol { font-weight: 600; }
+
+  /* plain lists */
+  ul.plain { list-style: none; }
+  ul.plain > li { break-inside: avoid; }
+  ul.plain > li + li { margin-top: 3pt; }
+
+  .two-col { columns: 2; column-gap: 2.2em; }
+  .two-col > * { break-inside: avoid; }
+
+  p.lede { color: var(--ink-2); font-size: 9.6pt; margin-bottom: 6pt; }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div>
+    <h1>Michael S. Fischer</h1>
+    <p class="position">
+      <strong>Assistant Professor of Atmospheric Sciences</strong>, University of Miami<br>
+      Rosenstiel School of Marine, Atmospheric, and Earth Science<br>
+      Core Faculty, Frost Institute for Data Science and Computing
+    </p>
+  </div>
+  <div class="contact">
+    4600 Rickenbacker Causeway<br>
+    Miami, FL 33149<br>
+    <a href="mailto:mike.fischer@miami.edu">mike.fischer@miami.edu</a><br>
+    <a href="https://michaelfischerwx.github.io/">michaelfischerwx.github.io</a><br>
+    ORCID <a href="https://orcid.org/0000-0001-6896-3450">0000-0001-6896-3450</a>
+  </div>
+</header>
+
+<p class="interests"><b>Research</b>Tropical cyclone structure and intensity change · rapid intensification ·
+  vortex tilt and alignment · airborne Doppler radar · satellite remote sensing · machine learning</p>
+
+<!-- ============================================================ education -->
+<section>
+  <h2>Education</h2>
+  <div class="entry">
+    <div>
+      <div class="what">Ph.D., Atmospheric Science</div>
+      <div class="where">University at Albany, State University of New York</div>
+      <div class="note">Dissertation: <em>Tropical cyclone rapid intensification in environments of
+        upper-tropospheric troughs: Environmental influences and convective characteristics.</em>
+        Advisors: Brian H. Tang and Kristen L. Corbosiero</div>
+    </div>
+    <div class="when">2018</div>
+  </div>
+  <div class="entry">
+    <div>
+      <div class="what">B.S., Geosciences (Atmospheric Science), <span style="font-weight:400">magna cum laude</span></div>
+      <div class="where">Florida International University</div>
+    </div>
+    <div class="when">2013</div>
+  </div>
+</section>
+
+<!-- ============================================================ appointments -->
+<section>
+  <h2>Appointments</h2>
+  <div class="entry">
+    <div><span class="what">Assistant Professor</span>, Department of Atmospheric Sciences<br>
+      <span class="where">Rosenstiel School of Marine, Atmospheric, and Earth Science, University of Miami</span><br>
+      <span class="where">Joint appointment: Core Faculty, Frost Institute for Data Science and Computing</span></div>
+    <div class="when">2024–present</div>
+  </div>
+  <div class="entry">
+    <div><span class="what">Associate Scientist</span><br>
+      <span class="where">Cooperative Institute for Marine and Atmospheric Studies (CIMAS), University of Miami</span></div>
+    <div class="when">2023–2024</div>
+  </div>
+  <div class="entry">
+    <div><span class="what">Assistant Scientist</span><br>
+      <span class="where">Cooperative Institute for Marine and Atmospheric Studies (CIMAS), University of Miami</span></div>
+    <div class="when">2020–2023</div>
+  </div>
+  <div class="entry">
+    <div><span class="what">National Research Council Postdoctoral Research Associate</span><br>
+      <span class="where">NOAA Atlantic Oceanographic and Meteorological Laboratory, Hurricane Research Division</span></div>
+    <div class="when">2018–2020</div>
+  </div>
+  <div class="entry">
+    <div><span class="what">Scientific Programmer</span><br>
+      <span class="where">Innovim, at the NOAA National Hurricane Center</span></div>
+    <div class="when">2018</div>
+  </div>
+</section>
+
+<!-- ============================================================ honors -->
+<section>
+  <h2>Honors and Awards</h2>
+  <div class="entry tight"><div>Editor’s Award, <cite>Advances in Atmospheric Sciences</cite></div><div class="when">2026</div></div>
+  <div class="entry tight"><div>Editor’s Award, <cite>Journal of the Atmospheric Sciences</cite></div><div class="when">2024</div></div>
+  <div class="entry tight"><div>Reviewer’s Certificate, <cite>Quarterly Journal of the Royal Meteorological Society</cite> Prize</div><div class="when">2020</div></div>
+  <div class="entry tight"><div>Distinguished Dissertation Award, University at Albany</div><div class="when">2019</div></div>
+  <div class="entry tight"><div>Narayan R. Gokhale Distinguished Research Scholarship Award, University at Albany</div><div class="when">2018</div></div>
+  <div class="entry tight"><div>Outstanding Student Oral Presentation Award, 33rd Conference on Hurricanes and Tropical Meteorology</div><div class="when">2018</div></div>
+  <div class="entry tight"><div>Top graduate student forecaster for Green Bay, WI, national WxChallenge competition</div><div class="when">2015</div></div>
+</section>
+
+<!-- ============================================================ funding -->
+<section>
+  <h2>Research Funding</h2>
+  <h3>Current</h3>
+  <div class="entry">
+    <div>
+      <div>Application of machine learning techniques to generate three-dimensional tropical cyclone wind
+        analyses, including surface wind estimates</div>
+      <div class="note">NOAA Weather Program Office, Testbeds (NOAA-OAR-WPO-2025-28601) ·
+        <b>PI</b>, with Co-PI G. R. Alvey III and Co-Is A. Aksoy and S. D. Ditchek</div>
+    </div>
+    <div class="when">2026–2029<span class="amt">$747,137</span></div>
+  </div>
+  <div class="entry">
+    <div>
+      <div>Collaborative Research: Tropical cyclones from 400 to 40 hPa</div>
+      <div class="note">National Science Foundation · <b>Co-PI</b>, with D. S. Nolan and M. E. O’Neill</div>
+    </div>
+    <div class="when">2024–2027<span class="amt">$777,109</span></div>
+  </div>
+
+  <h3>Completed</h3>
+  <div class="entry">
+    <div>
+      <div>A comprehensive observational examination of the physical processes that link tropical
+        cyclone vortex alignment to future intensity change</div>
+      <div class="note">National Science Foundation · <b>Co-PI</b>, with G. R. Alvey III and D. S. Nolan</div>
+    </div>
+    <div class="when">2023–2026<span class="amt">$539,622</span></div>
+  </div>
+  <div class="entry">
+    <div>
+      <div>Application of machine learning techniques to the automated quality control of airborne
+        Doppler radar data used in operational analysis of hurricane winds and reflectivity</div>
+      <div class="note">NOAA Weather Program Office (NOAA-OAR-WPO-2023-2007516) · <b>PI</b>, with Co-PI M. M. Bell</div>
+    </div>
+    <div class="when">2023–2025<span class="amt">$400,686</span></div>
+  </div>
+</section>
+
+<!-- ============================================================ publications -->
+<section>
+  <h2>Publications</h2>
+
+  <h3>Refereed journal articles</h3>
+  <ol class="cites" style="--start: 21">
+    <li><span class="me">Fischer, M. S.</span>, G. R. Alvey III, D. Jariwala, and P. D. Reasor, 2026: To align or not to align? That is the question. <cite>J. Geophys. Res. Atmos.</cite>, <span class="vol">131</span>, e2025JD045986.</li>
+    <li>Nolan, D. S., <span class="me">M. S. Fischer</span>, and M. E. O’Neill, 2025: Reconsideration of the mass and condensate sources for the tropical cyclone outflow. <cite>Bull. Amer. Meteor. Soc.</cite>, <span class="vol">106</span>, E1342–E1359.</li>
+    <li><span class="me">Fischer, M. S.</span>, P. D. Reasor, J. P. Dunion, and R. F. Rogers, 2025: Are rapidly intensifying tropical cyclones associated with unique vortex and convective characteristics? <cite>Mon. Wea. Rev.</cite>, <span class="vol">153</span>, 183–203.</li>
+    <li>Rios-Berrios, R., P. M. Finocchio, J. J. Alland, X. Chen, <span class="me">M. S. Fischer</span>, S. Stevenson, and D. Tao, 2024: A review of the interactions between tropical cyclones and environmental vertical wind shear. <cite>J. Atmos. Sci.</cite>, <span class="vol">81</span>, 713–741.</li>
+    <li>Shimada, U., P. D. Reasor, R. F. Rogers, <span class="me">M. S. Fischer</span>, F. Marks, J. Zawislak, and J. Zhang, 2024: Shear-relative asymmetric kinematic characteristics of intensifying hurricanes as observed by airborne Doppler radar. <cite>Mon. Wea. Rev.</cite>, <span class="vol">152</span>, 491–512.</li>
+    <li><span class="me">Fischer, M. S.</span>, R. F. Rogers, P. D. Reasor, and J. P. Dunion, 2024: An observational analysis of the relationship between tropical cyclone vortex tilt, precipitation structure, and intensity change. <cite>Mon. Wea. Rev.</cite>, <span class="vol">152</span>, 203–225.</li>
+    <li>Wadler, J. B., J. J. Cione, R. F. Rogers, and <span class="me">M. S. Fischer</span>, 2023: On the distribution of convective and stratiform precipitation in tropical cyclones from airborne Doppler radar and its relationship to intensity change and environmental wind shear direction. <cite>Mon. Wea. Rev.</cite>, <span class="vol">151</span>, 3209–3233.</li>
+    <li>Wadler, J. B., J. E. Rudzin, B. J. de la Cruz, J. Chen, <span class="me">M. S. Fischer</span>, G. Chen, N. Qin, B. Tang, and Q. Li, 2023: A review of recent research progress on the effect of external influences on tropical cyclone intensity change. <cite>Trop. Cyclone Res. Rev.</cite>, <span class="vol">12</span>, 200–215.</li>
+    <li>DesRosiers, A. J., M. M. Bell, P. J. Klotzbach, <span class="me">M. S. Fischer</span>, and P. D. Reasor, 2023: Observed relationships between tropical cyclone vortex height, intensity, and intensification rate. <cite>Geophys. Res. Lett.</cite>, <span class="vol">50</span>, e2022GL101877.</li>
+    <li>Stone, Z., G. R. Alvey III, J. P. Dunion, <span class="me">M. S. Fischer</span>, D. J. Raymond, R. F. Rogers, S. Sentić, and J. Zawislak, 2023: Thermodynamic contribution to vortex alignment and rapid intensification of Hurricane Sally (2020). <cite>Mon. Wea. Rev.</cite>, <span class="vol">151</span>, 931–951.</li>
+    <li><span class="me">Fischer, M. S.</span>, P. D. Reasor, B. H. Tang, K. L. Corbosiero, R. D. Torn, and X. Chen, 2023: A tale of two vortex evolutions: Using a high-resolution ensemble to assess the impacts of ventilation on a tropical cyclone rapid intensification event. <cite>Mon. Wea. Rev.</cite>, <span class="vol">151</span>, 297–320.</li>
+    <li>Hazelton, A., G. J. Alaka, <span class="me">M. S. Fischer</span>, R. D. Torn, and S. Gopalakrishnan, 2023: Factors influencing the track of Hurricane Dorian (2019) in the West Atlantic: Analysis of a HAFS ensemble. <cite>Mon. Wea. Rev.</cite>, <span class="vol">151</span>, 175–192.</li>
+    <li><span class="me">Fischer, M. S.</span>, P. D. Reasor, R. F. Rogers, and J. F. Gamache, 2022: An analysis of tropical cyclone vortex and convective characteristics in relation to storm intensity using a novel airborne Doppler radar database. <cite>Mon. Wea. Rev.</cite>, <span class="vol">150</span>, 2255–2278.</li>
+    <li>Alvey, G. R., III, <span class="me">M. S. Fischer</span>, P. D. Reasor, J. Zawislak, and R. F. Rogers, 2022: Processes underlying the vortex repositioning during Dorian’s (2019) early stages that increased its favorability for rapid intensification. <cite>Mon. Wea. Rev.</cite>, <span class="vol">150</span>, 193–213.</li>
+    <li>Zawislak, J., R. Rogers, S. Aberson, G. Alaka, G. Alvey, A. Aksoy, L. Bucci, J. Cione, N. Dorst, J. Dunion, <span class="me">M. S. Fischer</span>, J. Gamache, S. Gopalakrishnan, A. Hazelton, H. Holbach, J. Kaplan, H. Leighton, F. Marks, S. Murillo, P. Reasor, K. Ryan, K. Sellwood, J. Sippel, and J. Zhang, 2022: Accomplishments of NOAA’s Airborne Hurricane Field Program and a broader future approach to forecast improvement. <cite>Bull. Amer. Meteor. Soc.</cite>, <span class="vol">103</span>, E311–E338.</li>
+    <li>Hazelton, A., G. J. Alaka, L. Cowan, <span class="me">M. S. Fischer</span>, and S. Gopalakrishnan, 2021: Understanding the processes causing the early intensification of Hurricane Dorian through an ensemble of the Hurricane Analysis and Forecast System (HAFS). <cite>Atmosphere</cite>, <span class="vol">12</span>, 93.</li>
+    <li><span class="me">Fischer, M. S.</span>, R. F. Rogers, and P. D. Reasor, 2020: The rapid intensification and eyewall replacement cycles of Hurricane Irma (2017). <cite>Mon. Wea. Rev.</cite>, <span class="vol">148</span>, 981–1004.</li>
+    <li><span class="me">Fischer, M. S.</span>, B. H. Tang, and K. L. Corbosiero, 2019: A climatological analysis of tropical cyclone rapid intensification in environments of upper-tropospheric troughs. <cite>Mon. Wea. Rev.</cite>, <span class="vol">147</span>, 3693–3719.</li>
+    <li><span class="me">Fischer, M. S.</span>, B. H. Tang, K. L. Corbosiero, and C. M. Rozoff, 2018: Normalized convective characteristics of tropical cyclone rapid intensification events in the North Atlantic and eastern North Pacific. <cite>Mon. Wea. Rev.</cite>, <span class="vol">146</span>, 1133–1155.</li>
+    <li><span class="me">Fischer, M. S.</span>, B. H. Tang, and K. L. Corbosiero, 2017: Assessing the influence of upper-tropospheric troughs on tropical cyclone intensification rates after genesis. <cite>Mon. Wea. Rev.</cite>, <span class="vol">145</span>, 1295–1313.</li>
+  </ol>
+
+  <h3>Submitted</h3>
+  <ul class="cites">
+    <li><span class="me">Fischer, M. S.</span>, E. Danto, D. S. Nolan, W. G. Bouza, and E. Siman: Mid-level outflow in tropical cyclones observed by airborne Doppler radar. <cite>Mon. Wea. Rev.</cite>, submitted.</li>
+  </ul>
+
+  <h3>In preparation</h3>
+  <ul class="cites">
+    <li><span class="me">Fischer, M. S.</span>, W. G. Bouza, D. Jariwala, and M. Reardon: Estimating tropical cyclone vortex tilt from geostationary satellite imagery using a random forest. <cite>Wea. Forecasting</cite>.</li>
+    <li>Alvey, G. R., III, J. Zhang, J. Dunion, B. Dahl, and <span class="me">M. S. Fischer</span>: The path to alignment: Dual-Doppler and SAMURAI observations of Tropical Cyclone Fiona (2022). <cite>Mon. Wea. Rev.</cite></li>
+  </ul>
+
+  <h3>Book chapters</h3>
+  <ul class="cites">
+    <li>Sippel, J. A., and <span class="me">M. S. Fischer</span>, 2026: Tropical cyclone intensity predictability. <cite>Encyclopedia of Atmospheric Sciences</cite>, 3rd ed., Vol. 1, Elsevier, 446–459.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ software & data -->
+<section>
+  <h2>Research Data and Software</h2>
+  <div class="entry">
+    <div><span class="what">TC-RADAR</span>, Tropical Cyclone Radar Archive of Doppler Analyses with Recentering.
+      <span class="where">Developer and data steward of a database of more than 1,600 airborne Doppler radar
+      analyses from storms sampled by NOAA’s WP-3D aircraft, 1997–2025.</span></div>
+    <div class="when">2019–present</div>
+  </div>
+  <div class="entry">
+    <div><span class="what">TC-ATLAS</span>, <a href="https://tcatlas.org">tcatlas.org</a>.
+      <span class="where">Developer of an open-source, interactive web platform for real-time monitoring and
+      historical analysis of tropical cyclone structure and intensity change.</span></div>
+    <div class="when">2025–present</div>
+  </div>
+</section>
+
+<!-- ============================================================ presentations -->
+<section>
+  <h2>Presentations</h2>
+
+  <h3>Invited talks and seminars</h3>
+  <ul class="cites">
+    <li><span class="me">Fischer, M. S.</span>: Seeing the unseen: Revealing tropical cyclone structure with observations and AI. DAES/ASRC Joint Colloquium, University at Albany, Albany, NY, November 2026. <span class="tag">Invited</span></li>
+    <li><span class="me">Fischer, M. S.</span>: Tropical cyclone structure and intensity change: What observations reveal, and how machine learning fills the gaps. COMPASS Seminar, October 2026.</li>
+    <li><span class="me">Fischer, M. S.</span>: A machine learning approach to estimate the three-dimensional tropical cyclone kinematic structure. NSF IPAM Workshop on Mathematics and Machine Learning for Earth System Simulation, Los Angeles, CA, February 2026. <span class="tag">Invited</span></li>
+    <li><span class="me">Fischer, M. S.</span>: A machine learning approach to estimate the three-dimensional tropical cyclone wind field. AGU Annual Meeting, New Orleans, LA, December 2025. <span class="tag">Invited</span></li>
+    <li><span class="me">Fischer, M. S.</span>: Exploring tropical cyclone structural precursors to rapid intensification. Symposium for Tropical Cyclone Risk in a Changing Climate, Clearwater, FL, June 2025. <span class="tag">Invited</span></li>
+    <li><span class="me">Fischer, M. S.</span>: Using machine learning to better understand tropical cyclone structure and intensity change. Frost Institute for Data Science and Computing Seminar, University of Miami, Miami, FL, April 2025.</li>
+    <li><span class="me">Fischer, M. S.</span>: Data-driven insights into tropical cyclone rapid intensification. Department seminar, University of Alabama in Huntsville, Huntsville, AL, March 2025.</li>
+    <li><span class="me">Fischer, M. S.</span>, P. D. Reasor, R. F. Rogers, J. P. Dunion, B. H. Tang, K. L. Corbosiero, R. D. Torn, and X. Chen: Exploring the relationship between vortex misalignment and tropical cyclone intensity change. Hurricane Forecast Improvement Project Seminar, April 2023.</li>
+  </ul>
+
+  <h3>Conference presentations</h3>
+  <ul class="cites">
+    <li><span class="me">Fischer, M. S.</span>, W. G. Bouza, D. Jariwala, and M. Reardon: A machine learning approach to estimate the three-dimensional tropical cyclone wind field. 37th Conf. on Hurricanes and Tropical Meteorology, San Diego, CA, April 2026.</li>
+    <li><span class="me">Fischer, M. S.</span>: A machine learning approach to estimate tropical cyclone structure using geostationary satellite observations. Working Group on Tropical Meteorology Research Annual Meeting, virtual, May 2025.</li>
+    <li><span class="me">Fischer, M. S.</span>, P. D. Reasor, J. P. Dunion, and R. F. Rogers: Are rapidly intensifying tropical cyclones associated with unique vortex characteristics? 36th Conf. on Hurricanes and Tropical Meteorology, Long Beach, CA, May 2024.</li>
+    <li><span class="me">Fischer, M. S.</span>, R. F. Rogers, P. D. Reasor, and J. P. Dunion: The relationship between tropical cyclone vortex tilt, precipitation structure, and intensity change. 104th AMS Annual Meeting, Baltimore, MD, January 2024.</li>
+    <li><span class="me">Fischer, M. S.</span>, P. D. Reasor, R. F. Rogers, and J. F. Gamache: An analysis of tropical cyclone vortex and convective characteristics in relation to storm intensity using a novel airborne Doppler radar database. 35th Conf. on Hurricanes and Tropical Meteorology, New Orleans, LA, May 2022.</li>
+    <li><span class="me">Fischer, M. S.</span>, R. F. Rogers, P. D. Reasor, and J. P. Dunion: Relationships between vortex tilt, convective structure, and intensity change in early-stage tropical cyclones. 34th Conf. on Hurricanes and Tropical Meteorology, virtual, May 2021.</li>
+    <li><span class="me">Fischer, M. S.</span>, R. F. Rogers, P. D. Reasor, and J. P. Dunion: How is tropical cyclone vortex tilt related to precipitation structure and intensity change? 14th International Conf. on Mesoscale Convective Systems and High-Impact Weather in East Asia, virtual, April 2021.</li>
+    <li><span class="me">Fischer, M. S.</span>, R. F. Rogers, and P. D. Reasor: An examination of local shear, vortex tilt, and tropical cyclone intensity change using airborne radar observations. 100th AMS Annual Meeting, Boston, MA, January 2020.</li>
+    <li><span class="me">Fischer, M. S.</span>, R. F. Rogers, and P. D. Reasor: The rapid intensification and eyewall replacement cycles of Hurricane Irma (2017). 19th Cyclone Workshop, Seeon, Germany, October 2019.</li>
+    <li><span class="me">Fischer, M. S.</span>, B. H. Tang, and K. L. Corbosiero: Characteristics of tropical cyclone rapid intensification in environments of upper-tropospheric troughs. 33rd Conf. on Hurricanes and Tropical Meteorology, Ponte Vedra Beach, FL, April 2018.</li>
+    <li><span class="me">Fischer, M. S.</span>, B. H. Tang, and K. L. Corbosiero: Convective characteristics of tropical cyclone rapid intensification in environments of upper-tropospheric troughs. 8th Northeast Tropical Meteorology Workshop, Rensselaerville, NY, June 2017.</li>
+    <li><span class="me">Fischer, M. S.</span>, B. H. Tang, and K. L. Corbosiero: The influence of an upper-tropospheric potential vorticity anomaly on rapid tropical cyclogenesis. 32nd Conf. on Hurricanes and Tropical Meteorology, San Juan, Puerto Rico, April 2016.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ teaching -->
+<section>
+  <h2>Teaching</h2>
+  <h3>University of Miami, instructor</h3>
+  <div class="entry tight"><div>RSM 780: Machine Learning Applications in the Atmospheric Sciences (graduate)</div><div class="when">Fall 2026</div></div>
+  <div class="entry tight"><div>ATM 102: Introduction to Weather and Climate</div><div class="when">Fall 2025</div></div>
+  <div class="entry tight"><div>RSM 780: Directed Readings in Tropical Weather and Climate (graduate)</div><div class="when">Spring 2025</div></div>
+  <div class="entry tight"><div>ATM 411/412: Research in Atmospheric Science (undergraduate thesis)</div><div class="when">2025–2026</div></div>
+
+  <h3>Guest lectures</h3>
+  <div class="entry tight"><div>ATM 652: Introduction to Atmospheric Physics, University of Miami</div><div class="when">2024, 2025</div></div>
+  <div class="entry tight"><div>ATM 536: Hurricanes, University of Miami</div><div class="when">2024</div></div>
+  <div class="entry tight"><div>ATM 303: Meteorological Instrumentation and Observation, University of Miami</div><div class="when">2022, 2025</div></div>
+  <div class="entry tight"><div>Weather Discussion I, St. Cloud State University</div><div class="when"></div></div>
+
+  <h3>Teaching assistant, University at Albany</h3>
+  <div class="entry tight"><div>Dynamic Meteorology I and II; Tropical Meteorology; Natural Disasters; Understanding the Earth</div><div class="when">2013–2016</div></div>
+</section>
+
+<!-- ============================================================ mentoring -->
+<section>
+  <h2>Advising and Mentoring</h2>
+  <h3>Graduate students, primary advisor</h3>
+  <div class="entry tight"><div>Kelly Neighbour, Ph.D., University of Miami</div><div class="when">2025–present</div></div>
+  <div class="entry tight"><div>Helena Tsigos, Ph.D., University of Miami</div><div class="when">2025–present</div></div>
+  <div class="entry tight"><div>Cameron Pine, Ph.D., University of Miami. <span class="where">Co-advised with D. S. Nolan and G. R. Alvey III</span></div><div class="when">2023–present</div></div>
+  <div class="entry tight"><div>Shannon McCloskey, M.P.S., University of Miami. <span class="where">Thesis: <em>An observational analysis of rapidly intensifying tropical cyclones undergoing eyewall replacement cycles</em></span></div><div class="when">2026</div></div>
+  <div class="entry tight"><div>Amanda Keane, M.P.S., University of Miami. <span class="where">Thesis: <em>Using NOAA Tail Doppler Radar observations to examine the evolution of vortex tilt in rapidly intensifying Hurricane Ida (2021)</em></span></div><div class="when">2022</div></div>
+
+  <h3>Graduate committees</h3>
+  <div class="entry tight"><div>Aidan Mahoney, Ph.D., University of Miami</div><div class="when">Defended 2026</div></div>
+  <div class="entry tight"><div>Matthew Donahue, M.S., University of Miami</div><div class="when">Defended 2026</div></div>
+
+  <h3>Undergraduate thesis advisor</h3>
+  <div class="entry tight"><div>Arielle Jorge, University of Miami</div><div class="when">2025–present</div></div>
+  <div class="entry tight"><div>Deelan Jariwala, University of Miami</div><div class="when">2026</div></div>
+  <div class="entry tight"><div>Matthew Reardon, University of Miami</div><div class="when">2026</div></div>
+</section>
+
+<!-- ============================================================ service -->
+<section>
+  <h2>Service</h2>
+
+  <h3>University</h3>
+  <div class="entry tight"><div>Chair, Rosenstiel Award Committee (2027 award), Rosenstiel School</div><div class="when">2026–2027</div></div>
+
+  <h3>Editorial and review</h3>
+  <div class="entry tight"><div>Associate Editor, <cite>Monthly Weather Review</cite></div><div class="when">2020–present</div></div>
+  <div class="entry tight"><div>Proposal reviewer, National Science Foundation and NASA</div><div class="when">2023–present</div></div>
+  <div class="entry tight"><div>Journal reviewer: <cite>J. Atmos. Sci.</cite>, <cite>Mon. Wea. Rev.</cite>, <cite>J. Appl. Meteor. Climatol.</cite>, <cite>Quart. J. Roy. Meteor. Soc.</cite>, <cite>J. Geophys. Res. Atmos.</cite>, <cite>Geophys. Res. Lett.</cite>, <cite>npj Climate Atmos. Sci.</cite>, <cite>Wea. Climate Dyn.</cite>, <cite>Dyn. Atmos. Oceans</cite>, <cite>Atmosphere</cite></div><div class="when">2017–present</div></div>
+
+  <h3>Research programs</h3>
+  <div class="entry tight"><div>NOAA Hurricane Research Division Field Program science team; PI of the Vortex Alignment Module</div><div class="when">2018–present</div></div>
+  <div class="entry tight"><div>Rapid Intensification in Tropical Cyclones (TCRI) science team</div><div class="when">2020–2024</div></div>
+  <div class="entry tight"><div>NOAA Hurricane and Ocean Testbed collaborator</div><div class="when">2021–2024</div></div>
+
+  <h3>Conferences and workshops</h3>
+  <div class="entry tight"><div>Rapporteur, 11th WMO International Workshop on Tropical Cyclones</div><div class="when">2026</div></div>
+  <div class="entry tight"><div>Session co-convener, 37th Conf. on Hurricanes and Tropical Meteorology</div><div class="when">2025–2026</div></div>
+  <div class="entry tight"><div>Session chair, Tropical Cyclone Rapid Intensification, 35th–37th Conf. on Hurricanes and Tropical Meteorology</div><div class="when">2022–2026</div></div>
+  <div class="entry tight"><div>Working group member, 10th WMO International Workshop on Tropical Cyclones</div><div class="when">2022</div></div>
+  <div class="entry tight"><div>Max Eaton Award committee, 34th and 35th Conf. on Hurricanes and Tropical Meteorology</div><div class="when">2021, 2022</div></div>
+  <div class="entry tight"><div>Student poster award committee, 34th Conf. on Hurricanes and Tropical Meteorology</div><div class="when">2022</div></div>
+  <div class="entry tight"><div>Session co-chair, Rapid Intensification of Tropical Cyclones, 101st AMS Annual Meeting</div><div class="when">2021</div></div>
+
+  <h3>Outreach</h3>
+  <div class="entry tight"><div>“A career in hurricane science,” South Miami Heights Elementary School</div><div class="when">2024–present</div></div>
+</section>
+
+<!-- ============================================================ memberships -->
+<section>
+  <h2>Professional Memberships</h2>
+  <p>American Meteorological Society (2014–present) · American Geophysical Union (2025–present)</p>
+</section>
+
+</body>
+</html>
