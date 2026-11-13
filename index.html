@@ -607,18 +607,38 @@ html[data-theme="light"] .moon { display: none; }
 .media-thumb { position: relative; aspect-ratio: 16 / 9; background: #0a0e14; }
 .media-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .media-thumb .play {
-  position: absolute; inset: 0; margin: auto; width: 68px; height: 68px; border-radius: 50%;
+  position: absolute; left: .9rem; bottom: .9rem; width: 54px; height: 54px; border-radius: 50%;
   display: grid; place-items: center;
   background: rgba(10, 14, 20, .72); color: #fff;
   box-shadow: 0 6px 24px rgba(0, 0, 0, .35);
   transition: background .2s ease, transform .2s ease;
 }
-.media-thumb .play svg { width: 26px; height: 26px; margin-left: 4px; }
+.media-thumb .play svg { width: 22px; height: 22px; margin-left: 3px; }
 .media-feature:hover .play { background: var(--brand); transform: scale(1.06); }
 .media-feature-body { padding: 1.5rem 1.6rem 1.7rem; }
 .media-feature-body h3 { font-size: 1.32rem; line-height: 1.3; margin: .45rem 0 .6rem; }
 .media-feature-body p { color: var(--ink-2); font-size: .96rem; }
 .media-feature-body .link-arrow { margin-top: 1rem; }
+
+.media-videos { display: flex; flex-direction: column; gap: 1.25rem; }
+.media-thumb .duration {
+  position: absolute; right: .6rem; bottom: .6rem;
+  padding: .12rem .45rem; border-radius: 5px;
+  background: rgba(10, 14, 20, .78); color: #fff;
+  font-family: var(--font-sans); font-size: .74rem; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.media-feature.compact { display: grid; grid-template-columns: minmax(0, 42%) 1fr; }
+.media-feature.compact .media-thumb { aspect-ratio: auto; min-height: 100%; }
+.media-feature.compact .play { width: 40px; height: 40px; left: .6rem; bottom: .6rem; }
+.media-feature.compact .play svg { width: 16px; height: 16px; margin-left: 2px; }
+.media-feature.compact .media-feature-body { padding: 1.05rem 1.25rem 1.15rem; }
+.media-feature.compact h3 { font-size: 1.06rem; margin: .35rem 0 .4rem; }
+.media-feature.compact p:not(.media-meta) { font-size: .88rem; }
+@media (max-width: 560px) {
+  .media-feature.compact { grid-template-columns: 1fr; }
+  .media-feature.compact .media-thumb { aspect-ratio: 16 / 9; }
+}
 
 .media-meta {
   font-family: var(--font-sans); font-size: .72rem; font-weight: 600;
@@ -1412,26 +1432,45 @@ footer.site {
       <div class="rule"></div>
       <p class="eyebrow">Media</p>
       <h2>In the news</h2>
-      <p>Television and press coverage of recent research, and commentary on storms as they develop.</p>
+      <p>Video features, television interviews, and press coverage of recent research, and commentary on storms as they develop.</p>
     </div>
 
     <div class="media-grid">
-      <a class="media-feature reveal" href="https://www.youtube.com/watch?v=d0-ux7N1QU8" target="_blank" rel="noopener">
-        <div class="media-thumb">
-          <img src="https://i.ytimg.com/vi/d0-ux7N1QU8/hqdefault.jpg" width="480" height="360" loading="lazy"
-               alt="FOX Weather segment: The four signs of a growing hurricane.">
-          <span class="play" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10.5-6.5z"/></svg>
-          </span>
-        </div>
-        <div class="media-feature-body">
-          <p class="media-meta"><span class="outlet">FOX Weather</span> · Television · October 2026</p>
-          <h3>The four signs of a growing hurricane</h3>
-          <p>Interview on new research showing how Hurricane Hunter radar observations reveal, about a
-            day in advance, that a tilted storm is about to align and strengthen.</p>
-          <span class="link-arrow">Watch on YouTube <span class="arrow" aria-hidden="true">↗</span></span>
-        </div>
-      </a>
+      <div class="media-videos reveal">
+        <a class="media-feature" href="https://www.youtube.com/watch?v=SZ0dbNB_4NI" target="_blank" rel="noopener">
+          <div class="media-thumb">
+            <img src="assets/media-rosenstiel-feature.webp" width="1280" height="720" loading="lazy"
+                 alt="Rosenstiel School video feature on Michael Fischer’s hurricane research.">
+            <span class="play" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10.5-6.5z"/></svg>
+            </span>
+            <span class="duration">1:30</span>
+          </div>
+          <div class="media-feature-body">
+            <p class="media-meta"><span class="outlet">Rosenstiel School</span> · Video feature · November 2026</p>
+            <h3>Finding the next breakthrough in 30 years of hurricane data</h3>
+            <p>A short feature on using machine learning and three decades of aircraft observations to
+              fill gaps in what we know about hurricane structure and intensity.</p>
+            <span class="link-arrow">Watch on YouTube <span class="arrow" aria-hidden="true">↗</span></span>
+          </div>
+        </a>
+
+        <a class="media-feature compact" href="https://www.youtube.com/watch?v=d0-ux7N1QU8" target="_blank" rel="noopener">
+          <div class="media-thumb">
+            <img src="https://i.ytimg.com/vi/d0-ux7N1QU8/maxresdefault.jpg" width="1280" height="720" loading="lazy"
+                 alt="FOX Weather segment: The four signs of a growing hurricane.">
+            <span class="play" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10.5-6.5z"/></svg>
+            </span>
+          </div>
+          <div class="media-feature-body">
+            <p class="media-meta"><span class="outlet">FOX Weather</span> · Television · October 2026</p>
+            <h3>The four signs of a growing hurricane</h3>
+            <p>Interview on how Hurricane Hunter radar reveals, about a day ahead, that a tilted storm is
+              about to align and strengthen.</p>
+          </div>
+        </a>
+      </div>
 
       <div class="media-stories reveal">
         <article class="media-story">
